@@ -2,7 +2,7 @@
     color: var(--color-text-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
     transition: opacity 140ms linear;
-    font-family: var(--pear-font-pixel);
+    font-family: var(--legacy-font-pixel);
     font-size: 12px;
     font-weight: 400;
     letter-spacing: normal;
@@ -2215,18 +2215,18 @@ li.active-sub-filter {
    glyph before its name. Both live inline inside the name spans (the
    rows are strict named-area grids — loose children auto-place into
    phantom cells) and speak in ink-3: legible, never loud. */
-.pear-repo-mark {
+.legacy-repo-mark {
     margin-left: 5px;
-    color: var(--pear-ink-3);
-    font-family: var(--pear-font-pixel);
+    color: var(--legacy-ink-3);
+    font-family: var(--legacy-font-pixel);
     /* Pinned px by design; see the pixel-type rule in the design spec. */
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
 }
 
-.pear-worktree-mark {
+.legacy-worktree-mark {
     margin-right: 4px;
-    color: var(--pear-ink-3);
+    color: var(--legacy-ink-3);
     vertical-align: -0.1em;
     /* 12px at 14px em */
     font-size: 0.8571em;

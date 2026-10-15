@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# Give Armada's agent queues a consumer timeout of six hours.
+#
+# An agent run keeps its queue message unacknowledged until the run
+# ends, so that a dead worker's run is delivered again.  RabbitMQ
+# cancels a consumer that holds a message for longer than its consumer
+# timeout, 30 minutes by default, and the run then starts over; the
+# server sets no other limit on a run's length (see "Long runs and
+# RabbitMQ" in docs/armada/deploy.md).  puppet runs this on every
+# install and upgrade; with --check, it only exits 0 when the policy is
+# already in place.
+set -eu
+
+RABBITMQ_VHOST=$("$(dirname "$0")/../get-django-setting" RABBITMQ_VHOST)
+
+name=armada-consumer-timeout
+pattern='^armada_(worker(_[0-9]+)?|monitor_worker)$'
+definition='{"consumer-timeout":21600000}'
+priority=10
+
+if [ "${1:-}" = --check ]; then
+    expected="$(printf '%s\t' "$RABBITMQ_VHOST" "$name" "$pattern" queues "$definition")$priority"
+    rabbitmqctl list_policies -p "$RABBITMQ_VHOST" --quiet --no-table-headers | grep -qxF "$expected"
+    exit
+fi
+
+rabbitmqctl set_policy -p "$RABBITMQ_VHOST" --priority "$priority" --apply-to queues \
+    "$name" "$pattern" "$definition"

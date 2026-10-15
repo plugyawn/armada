@@ -10,31 +10,31 @@ from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
 from zerver.lib.armada import (
-    PearEmbeddedBotHandler,
-    PearWorkerLeaseLostError,
-    PearWorkerRuntime,
-    pear_message_id,
-    pear_message_stream,
-    pear_message_topic,
+    ArmadaEmbeddedBotHandler,
+    ArmadaWorkerLeaseLostError,
+    ArmadaWorkerRuntime,
+    armada_message_id,
+    armada_message_stream,
+    armada_message_topic,
 )
-from zerver.lib.armada_agent import PearProcessIsolation
-from zerver.lib.armada_monitor import pear_apply_monitor_setup_result
+from zerver.lib.armada_agent import ArmadaProcessIsolation
+from zerver.lib.armada_monitor import armada_apply_monitor_setup_result
 from zerver.lib.armada_worker import (
-    PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS,
-    PEAR_WORKER_QUEUE_NAMES,
-    PearDatabaseWorkerRunStore,
-    build_pear_worker_runtime_from_settings,
-    load_pear_active_session_from_zulip,
-    maintain_pear_worker_run_liveness,
-    pear_topic_process_isolation,
-    pear_worker_home_slot,
-    pear_worker_model_for_topic,
-    pear_worker_process_isolation_error,
-    pear_worker_reasoning_effort_for_topic,
-    pear_worker_sandbox_for_workdir,
-    pear_worker_workdir_for_topic,
-    reap_stale_pear_worker_runs,
-    wait_for_redelivered_pear_worker_run,
+    ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS,
+    ARMADA_WORKER_QUEUE_NAMES,
+    ArmadaDatabaseWorkerRunStore,
+    armada_topic_process_isolation,
+    armada_worker_home_slot,
+    armada_worker_model_for_topic,
+    armada_worker_process_isolation_error,
+    armada_worker_reasoning_effort_for_topic,
+    armada_worker_sandbox_for_workdir,
+    armada_worker_workdir_for_topic,
+    build_armada_worker_runtime_from_settings,
+    load_armada_active_session_from_zulip,
+    maintain_armada_worker_run_liveness,
+    reap_stale_armada_worker_runs,
+    wait_for_redelivered_armada_worker_run,
 )
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.message_cache import MessageDict
@@ -46,105 +46,105 @@ from zerver.worker.base import QueueProcessingWorker, assign_queue
 
 logger = logging.getLogger(__name__)
 
-PEAR_WORKER_RUNTIME_CACHE_LIMIT = 4
-PEAR_WORKER_RUNTIME_IDLE_SECONDS = 30 * 60
-PEAR_SIDE_PUMP_INTERVAL_SECONDS = 0.2
-PearWorkerRuntimeKey = tuple[str, str, str]
-pear_worker_runtimes: OrderedDict[PearWorkerRuntimeKey, PearWorkerRuntime] = OrderedDict()
-pear_worker_runtime_last_used: dict[PearWorkerRuntimeKey, float] = {}
+ARMADA_WORKER_RUNTIME_CACHE_LIMIT = 4
+ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 30 * 60
+ARMADA_SIDE_PUMP_INTERVAL_SECONDS = 0.2
+ArmadaWorkerRuntimeKey = tuple[str, str, str]
+armada_worker_runtimes: OrderedDict[ArmadaWorkerRuntimeKey, ArmadaWorkerRuntime] = OrderedDict()
+armada_worker_runtime_last_used: dict[ArmadaWorkerRuntimeKey, float] = {}
 
 
-def pear_worker_slot_should_warm(
+def armada_worker_slot_should_warm(
     worker_slot: int,
     bot_profile_id: int,
     *,
     stream: str,
     topic: str,
 ) -> bool:
-    return worker_slot == pear_worker_home_slot(
+    return worker_slot == armada_worker_home_slot(
         bot_profile_id,
         stream=stream,
         topic=topic,
     )
 
 
-def close_pear_worker_runtime(runtime: PearWorkerRuntime) -> None:
+def close_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
     try:
         runtime.close()
     except Exception:
         logger.exception("Failed to close Pear worker runtime.")
 
 
-def close_pear_worker_runtimes() -> None:
-    runtimes = list(pear_worker_runtimes.values())
-    pear_worker_runtimes.clear()
-    pear_worker_runtime_last_used.clear()
+def close_armada_worker_runtimes() -> None:
+    runtimes = list(armada_worker_runtimes.values())
+    armada_worker_runtimes.clear()
+    armada_worker_runtime_last_used.clear()
     for runtime in runtimes:
-        close_pear_worker_runtime(runtime)
+        close_armada_worker_runtime(runtime)
 
 
-def evict_pear_worker_runtime(runtime: PearWorkerRuntime) -> None:
+def evict_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
     """Close one runtime and remove every process-local cache reference to it."""
-    for runtime_key, candidate in list(pear_worker_runtimes.items()):
+    for runtime_key, candidate in list(armada_worker_runtimes.items()):
         if candidate is not runtime:
             continue
-        pear_worker_runtimes.pop(runtime_key, None)
-        pear_worker_runtime_last_used.pop(runtime_key, None)
+        armada_worker_runtimes.pop(runtime_key, None)
+        armada_worker_runtime_last_used.pop(runtime_key, None)
     # Isolation failures are deliberately uncached, but stolen workers still
     # own and must close those app-server processes after the turn.
-    close_pear_worker_runtime(runtime)
+    close_armada_worker_runtime(runtime)
 
 
-def cache_pear_worker_runtime(
-    runtime_key: PearWorkerRuntimeKey,
-    runtime: PearWorkerRuntime,
+def cache_armada_worker_runtime(
+    runtime_key: ArmadaWorkerRuntimeKey,
+    runtime: ArmadaWorkerRuntime,
     *,
     current_time: float | None = None,
 ) -> None:
-    existing_runtime = pear_worker_runtimes.pop(runtime_key, None)
+    existing_runtime = armada_worker_runtimes.pop(runtime_key, None)
     if existing_runtime is not None and existing_runtime is not runtime:
-        close_pear_worker_runtime(existing_runtime)
-    pear_worker_runtimes[runtime_key] = runtime
-    pear_worker_runtime_last_used[runtime_key] = (
+        close_armada_worker_runtime(existing_runtime)
+    armada_worker_runtimes[runtime_key] = runtime
+    armada_worker_runtime_last_used[runtime_key] = (
         time.monotonic() if current_time is None else current_time
     )
-    while len(pear_worker_runtimes) > PEAR_WORKER_RUNTIME_CACHE_LIMIT:
-        evicted_key, evicted_runtime = pear_worker_runtimes.popitem(last=False)
-        pear_worker_runtime_last_used.pop(evicted_key, None)
-        close_pear_worker_runtime(evicted_runtime)
+    while len(armada_worker_runtimes) > ARMADA_WORKER_RUNTIME_CACHE_LIMIT:
+        evicted_key, evicted_runtime = armada_worker_runtimes.popitem(last=False)
+        armada_worker_runtime_last_used.pop(evicted_key, None)
+        close_armada_worker_runtime(evicted_runtime)
 
 
-def reap_idle_pear_worker_runtimes(*, current_time: float | None = None) -> None:
+def reap_idle_armada_worker_runtimes(*, current_time: float | None = None) -> None:
     now = time.monotonic() if current_time is None else current_time
-    for runtime_key, last_used in list(pear_worker_runtime_last_used.items()):
-        if now - last_used < PEAR_WORKER_RUNTIME_IDLE_SECONDS:
+    for runtime_key, last_used in list(armada_worker_runtime_last_used.items()):
+        if now - last_used < ARMADA_WORKER_RUNTIME_IDLE_SECONDS:
             continue
-        runtime = pear_worker_runtimes.pop(runtime_key, None)
-        pear_worker_runtime_last_used.pop(runtime_key, None)
+        runtime = armada_worker_runtimes.pop(runtime_key, None)
+        armada_worker_runtime_last_used.pop(runtime_key, None)
         if runtime is not None:
-            close_pear_worker_runtime(runtime)
+            close_armada_worker_runtime(runtime)
 
 
-def get_pear_worker_runtime(
+def get_armada_worker_runtime(
     model: str,
     workdir: str,
     reasoning_effort: str,
-    process_isolation: PearProcessIsolation | None,
+    process_isolation: ArmadaProcessIsolation | None,
     isolation_error: str | None,
-) -> PearWorkerRuntime:
-    sandbox = pear_worker_sandbox_for_workdir(workdir)
+) -> ArmadaWorkerRuntime:
+    sandbox = armada_worker_sandbox_for_workdir(workdir)
     isolation_label = process_isolation.label() if process_isolation is not None else ""
     runtime_key = (workdir, sandbox, isolation_label)
     current_time = time.monotonic()
-    reap_idle_pear_worker_runtimes(current_time=current_time)
+    reap_idle_armada_worker_runtimes(current_time=current_time)
     if isolation_error is None:
-        runtime = pear_worker_runtimes.get(runtime_key)
+        runtime = armada_worker_runtimes.get(runtime_key)
         if runtime is not None:
-            pear_worker_runtimes.move_to_end(runtime_key)
-            pear_worker_runtime_last_used[runtime_key] = current_time
+            armada_worker_runtimes.move_to_end(runtime_key)
+            armada_worker_runtime_last_used[runtime_key] = current_time
             runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
             return runtime
-    runtime = build_pear_worker_runtime_from_settings(
+    runtime = build_armada_worker_runtime_from_settings(
         model_override=model,
         workdir_override=workdir,
         reasoning_effort_override=reasoning_effort,
@@ -154,18 +154,18 @@ def get_pear_worker_runtime(
     )
     runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
     if isolation_error is None:
-        cache_pear_worker_runtime(runtime_key, runtime, current_time=current_time)
+        cache_armada_worker_runtime(runtime_key, runtime, current_time=current_time)
     return runtime
 
 
-@assign_queue("pear_worker")
-class PearWorker(QueueProcessingWorker):
+@assign_queue("armada_worker")
+class ArmadaWorker(QueueProcessingWorker):
     # Codex turns can legitimately take minutes; the embedded_bots queue should
     # only dispatch to this worker, not own the runtime budget.
     MAX_CONSUME_SECONDS = None
     RERAISE_CONSUME_EXCEPTIONS = True
     PREFETCH = 1
-    POOL_QUEUE_NAMES: tuple[str, ...] = PEAR_WORKER_QUEUE_NAMES
+    POOL_QUEUE_NAMES: tuple[str, ...] = ARMADA_WORKER_QUEUE_NAMES
 
     # The session kinds this consumer owns; boot reaping must never
     # touch the other consumer's RUNNING rows.
@@ -188,12 +188,12 @@ class PearWorker(QueueProcessingWorker):
         super().setup()
         # The two worker slots share ownership.  Startup therefore obeys the
         # heartbeat lease instead of declaring another slot's fresh run dead.
-        reap_stale_pear_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
+        reap_stale_armada_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
         self.active_run_id: int | None = None
         self.active_run_attempt: int | None = None
         self.active_side_run_id: int | None = None
         self.active_side_run_attempt: int | None = None
-        self.active_runtime: PearWorkerRuntime | None = None
+        self.active_runtime: ArmadaWorkerRuntime | None = None
         self.side_pump_stop: threading.Event | None = None
         self.side_pump_thread: threading.Thread | None = None
         self.run_liveness_stop = threading.Event()
@@ -223,7 +223,7 @@ class PearWorker(QueueProcessingWorker):
         )
 
     def run_liveness_pass(self) -> int:
-        reaped_count = maintain_pear_worker_run_liveness(
+        reaped_count = maintain_armada_worker_run_liveness(
             active_run_id=self.active_run_id,
             active_run_attempt=self.active_run_attempt,
             session_kinds=(),
@@ -231,12 +231,12 @@ class PearWorker(QueueProcessingWorker):
         side_run_id = getattr(self, "active_side_run_id", None)
         side_run_attempt = getattr(self, "active_side_run_attempt", None)
         try:
-            maintain_pear_worker_run_liveness(
+            maintain_armada_worker_run_liveness(
                 active_run_id=side_run_id,
                 active_run_attempt=side_run_attempt,
                 session_kinds=(),
             )
-        except PearWorkerLeaseLostError as error:
+        except ArmadaWorkerLeaseLostError as error:
             # A side turn has an independent durable lease. Its fenced run
             # store will suppress every stale write when the turn unwinds;
             # never abort the parent app-server merely because one /btw lost
@@ -245,15 +245,15 @@ class PearWorker(QueueProcessingWorker):
                 self.active_side_run_id = None
                 self.active_side_run_attempt = None
             logger.warning("Pear side-run lease was lost: %s", error)
-        return reaped_count + reap_stale_pear_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
+        return reaped_count + reap_stale_armada_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
 
     def run_liveness_loop(self) -> None:  # nocoverage
         close_old_connections()
         try:
-            while not self.run_liveness_stop.wait(PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS):
+            while not self.run_liveness_stop.wait(ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS):
                 try:
                     self.run_liveness_pass()
-                except PearWorkerLeaseLostError as error:
+                except ArmadaWorkerLeaseLostError as error:
                     runtime = self.active_runtime
                     if runtime is not None:
                         runtime.abort(error)
@@ -272,7 +272,7 @@ class PearWorker(QueueProcessingWorker):
         if not hasattr(self, "run_liveness_stop") or not hasattr(self, "run_liveness_thread"):
             return
         self.run_liveness_stop.set()
-        self.run_liveness_thread.join(timeout=PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS)
+        self.run_liveness_thread.join(timeout=ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS)
         if self.run_liveness_thread.is_alive():
             logger.warning("Pear run liveness thread did not stop before worker shutdown.")
 
@@ -303,7 +303,7 @@ class PearWorker(QueueProcessingWorker):
                 runtime.abort(RuntimeError("Pear worker is shutting down."))
         finally:
             try:
-                close_pear_worker_runtimes()
+                close_armada_worker_runtimes()
             finally:
                 try:
                     self.stop_side_pump(wait=True, timeout=2)
@@ -331,7 +331,7 @@ class PearWorker(QueueProcessingWorker):
         self,
         event: dict[str, Any],
         *,
-        side_runtime: PearWorkerRuntime | None = None,
+        side_runtime: ArmadaWorkerRuntime | None = None,
     ) -> None:
         redelivered = event.pop(QUEUE_REDELIVERED_EVENT_KEY, False) is True
         user_profile_id = event.get("user_profile_id")
@@ -354,11 +354,11 @@ class PearWorker(QueueProcessingWorker):
         content = str(event.get("content", "")).strip()
         message_id = event.get("message_id")
         if not isinstance(message_id, int):
-            message_id = pear_message_id(message)
+            message_id = armada_message_id(message)
         if message_id <= 0:
             raise QueueEventDiscardError("Pear worker event has no valid trigger message id.")
-        stream = str(event.get("stream") or pear_message_stream(message))
-        topic = str(event.get("topic") or pear_message_topic(message))
+        stream = str(event.get("stream") or armada_message_stream(message))
+        topic = str(event.get("topic") or armada_message_topic(message))
         requesting_user_id = event.get("requesting_user_id")
         if not isinstance(requesting_user_id, int):
             requesting_user_id = None
@@ -383,7 +383,7 @@ class PearWorker(QueueProcessingWorker):
             # Never let an orphaned shared lease suppress this delivery. If
             # the parent really is live, its in-process pump owns the durable
             # side row and will use the exact same app-server instance.
-            reap_stale_pear_worker_runs(
+            reap_stale_armada_worker_runs(
                 bot_profile=user_profile,
                 stream=context_stream,
                 topic=context_topic,
@@ -401,50 +401,50 @@ class PearWorker(QueueProcessingWorker):
                 # for the same worktree. The parent's still-unacked delivery
                 # is the crash-recovery wakeup for this durable side row.
                 return
-        worker_run_store = PearDatabaseWorkerRunStore()
+        worker_run_store = ArmadaDatabaseWorkerRunStore()
         if event.get("warm_only") is True:
             # Low-priority consumers may steal real turns to avoid head-of-line
             # blocking.  A speculative warm has no latency value once stolen,
             # and would create a duplicate process-local app-server instead.
-            if not pear_worker_slot_should_warm(
+            if not armada_worker_slot_should_warm(
                 self.worker_slot,
                 user_profile.id,
                 stream=context_stream,
                 topic=context_topic,
             ):
                 return
-            model = pear_worker_model_for_topic(
+            model = armada_worker_model_for_topic(
                 user_profile,
                 stream=context_stream,
                 topic=context_topic,
             )
-            reasoning_effort = pear_worker_reasoning_effort_for_topic(
+            reasoning_effort = armada_worker_reasoning_effort_for_topic(
                 user_profile,
                 stream=context_stream,
                 topic=context_topic,
             )
-            workdir = pear_worker_workdir_for_topic(
+            workdir = armada_worker_workdir_for_topic(
                 user_profile,
                 stream=context_stream,
                 topic=context_topic,
             )
-            process_isolation = pear_topic_process_isolation(
+            process_isolation = armada_topic_process_isolation(
                 user_profile,
                 stream=context_stream,
                 topic=context_topic,
             )
-            isolation_error = pear_worker_process_isolation_error(
+            isolation_error = armada_worker_process_isolation_error(
                 process_isolation,
                 workdir=workdir,
             )
-            runtime = get_pear_worker_runtime(
+            runtime = get_armada_worker_runtime(
                 model,
                 workdir,
                 reasoning_effort,
                 process_isolation,
                 isolation_error,
             )
-            active_session = load_pear_active_session_from_zulip(message, bot_handler)
+            active_session = load_armada_active_session_from_zulip(message, bot_handler)
             try:
                 runtime.warm(active_session)
             except Exception:
@@ -456,7 +456,7 @@ class PearWorker(QueueProcessingWorker):
                 )
             return
         if redelivered:
-            wait_for_redelivered_pear_worker_run(
+            wait_for_redelivered_armada_worker_run(
                 bot_profile_id=user_profile.id,
                 trigger_message_id=message_id,
             )
@@ -487,29 +487,29 @@ class PearWorker(QueueProcessingWorker):
         else:
             self.active_side_run_attempt = active_run_attempt
             self.active_side_run_id = active_run_id
-        model = pear_worker_model_for_topic(
+        model = armada_worker_model_for_topic(
             user_profile, stream=context_stream, topic=context_topic
         )
-        reasoning_effort = pear_worker_reasoning_effort_for_topic(
+        reasoning_effort = armada_worker_reasoning_effort_for_topic(
             user_profile,
             stream=context_stream,
             topic=context_topic,
         )
-        workdir = pear_worker_workdir_for_topic(
+        workdir = armada_worker_workdir_for_topic(
             user_profile,
             stream=context_stream,
             topic=context_topic,
         )
-        process_isolation = pear_topic_process_isolation(
+        process_isolation = armada_topic_process_isolation(
             user_profile,
             stream=context_stream,
             topic=context_topic,
         )
-        isolation_error = pear_worker_process_isolation_error(
+        isolation_error = armada_worker_process_isolation_error(
             process_isolation,
             workdir=workdir,
         )
-        runtime = side_runtime or get_pear_worker_runtime(
+        runtime = side_runtime or get_armada_worker_runtime(
             model,
             workdir,
             reasoning_effort,
@@ -522,7 +522,7 @@ class PearWorker(QueueProcessingWorker):
             side_runtime is not None
             or not self.POOL_QUEUE_NAMES
             or (
-                pear_worker_slot_should_warm(
+                armada_worker_slot_should_warm(
                     self.worker_slot,
                     user_profile.id,
                     stream=context_stream,
@@ -530,15 +530,15 @@ class PearWorker(QueueProcessingWorker):
                 )
             )
         )
-        pear_handler = PearEmbeddedBotHandler(
+        armada_handler = ArmadaEmbeddedBotHandler(
             worker_runtime=runtime,
-            active_session_loader=load_pear_active_session_from_zulip,
+            active_session_loader=load_armada_active_session_from_zulip,
             worker_run_store=worker_run_store,
         )
 
         def run_parent_turn() -> None:
-            active_session = pear_handler.load_active_session(message, bot_handler, content)
-            pear_handler.run_worker_turn(
+            active_session = armada_handler.load_active_session(message, bot_handler, content)
+            armada_handler.run_worker_turn(
                 message,
                 bot_handler,
                 content=content,
@@ -558,7 +558,7 @@ class PearWorker(QueueProcessingWorker):
                 # The setup agent wrote its spec file in the worktree; read
                 # it and bring the monitor live (or record why not).
                 try:
-                    pear_apply_monitor_setup_result(
+                    armada_apply_monitor_setup_result(
                         user_profile,
                         message_id,
                         workdir=workdir,
@@ -587,7 +587,7 @@ class PearWorker(QueueProcessingWorker):
             if not keep_runtime_warm:
                 # A stolen turn may resume the native thread on this slot, but
                 # only its stable home slot is allowed to retain a warm process.
-                evict_pear_worker_runtime(runtime)
+                evict_armada_worker_runtime(runtime)
 
     def next_queued_side_run(
         self,
@@ -617,7 +617,7 @@ class PearWorker(QueueProcessingWorker):
                 run.id,
                 run.trigger_message_id,
             )
-            PearDatabaseWorkerRunStore().fail_unreconstructable_side_run(
+            ArmadaDatabaseWorkerRunStore().fail_unreconstructable_side_run(
                 run.id,
                 error=error,
             )
@@ -641,7 +641,7 @@ class PearWorker(QueueProcessingWorker):
         self,
         *,
         stop: threading.Event,
-        runtime: PearWorkerRuntime,
+        runtime: ArmadaWorkerRuntime,
         bot_profile_id: int,
         stream: str,
         topic: str,
@@ -658,7 +658,7 @@ class PearWorker(QueueProcessingWorker):
                 if run is None:
                     if stop.is_set():
                         return
-                    stop.wait(PEAR_SIDE_PUMP_INTERVAL_SECONDS)
+                    stop.wait(ARMADA_SIDE_PUMP_INTERVAL_SECONDS)
                     continue
                 event = self.side_event_for_run(run)
                 if event is None:
@@ -680,7 +680,7 @@ class PearWorker(QueueProcessingWorker):
     def start_side_pump(
         self,
         *,
-        runtime: PearWorkerRuntime,
+        runtime: ArmadaWorkerRuntime,
         bot_profile_id: int,
         stream: str,
         topic: str,
@@ -706,7 +706,7 @@ class PearWorker(QueueProcessingWorker):
     def run_parent_with_side_pump(
         self,
         *,
-        runtime: PearWorkerRuntime,
+        runtime: ArmadaWorkerRuntime,
         bot_profile_id: int,
         stream: str,
         topic: str,

@@ -12,7 +12,7 @@
     padding: 0.25em 0.625em;
     color: var(--color-text-neutral-subtle-action-button);
     background-color: var(--color-background-neutral-subtle-action-button);
-    border-radius: var(--pear-radius-chip);
+    border-radius: var(--legacy-radius-chip);
     white-space: nowrap;
     user-select: none;
     border: none;

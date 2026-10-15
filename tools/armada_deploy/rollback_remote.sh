@@ -15,7 +15,7 @@ DEPLOY_RECORD_PATH="$4"
 SNAPSHOT_DIR="$5"
 REMOTE_PATH="$6"
 REMOTE_GIT_COMMON_DIR="$7"
-REMOTE_PEAR_SKILLS_DIR="$8"
+REMOTE_ARMADA_SKILLS_DIR="$8"
 PREDEPLOY_SERVICES="$9"
 PREDEPLOY_QUEUES="${10}"
 FQDN="${11}"
@@ -80,24 +80,24 @@ trap record_rollback_exit EXIT
 write_rollback_status running -
 
 set_rollback_stage stop-services
-systemctl stop caddy pear-worker pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev
-systemctl stop pear-worker-1 2>/dev/null || true
-if [[ " $PREDEPLOY_SERVICES " != *" pear-worker-1 "* ]]; then
-    systemctl disable pear-worker-1 2>/dev/null || true
+systemctl stop caddy armada-worker armada-monitor-worker armada-embedded-bots armada-thumbnail armada-zulip-dev
+systemctl stop armada-worker-1 2>/dev/null || true
+if [[ " $PREDEPLOY_SERVICES " != *" armada-worker-1 "* ]]; then
+    systemctl disable armada-worker-1 2>/dev/null || true
 fi
-systemctl stop pear-addressing 2>/dev/null || true
-systemctl stop pear-presentation 2>/dev/null || true
+systemctl stop armada-addressing 2>/dev/null || true
+systemctl stop armada-presentation 2>/dev/null || true
 
 # The pre-release Workspace is disposable, but queue deliveries must never be
 # left pointing at RUNNING rows that the restored single-slot runtime cannot
 # consume. Settle every active row while the new source is still present, then
 # purge both worker queues before restoring code and units.
 set_rollback_stage settle-runs
-sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && .venv/bin/python3 manage.py shell" <<'PY'
+sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/armada.env && set +a && .venv/bin/python3 manage.py shell" <<'PY'
 from django.db import transaction
 from django.utils.timezone import now
 
-from zerver.lib.armada_worker import settle_orphaned_pear_run_message
+from zerver.lib.armada_worker import settle_orphaned_armada_run_message
 from zerver.models.bots import AgentRun
 
 rollback_error = "Run interrupted by deployment rollback."
@@ -128,19 +128,19 @@ with transaction.atomic():
             ]
         )
 for run in runs:
-    settle_orphaned_pear_run_message(run)
+    settle_orphaned_armada_run_message(run)
 print(f"rollback_settled_runs={len(runs)}")
 PY
 
 set_rollback_stage purge-queues
 worker_queues="$(
     rabbitmqctl list_queues -p / name --formatter json |
-        python3 -c 'import json, sys; expected = {"pear_worker", "pear_worker_1"}; rows = json.load(sys.stdin); print("\n".join(row["name"] for row in rows if isinstance(row, dict) and row.get("name") in expected))'
+        python3 -c 'import json, sys; expected = {"armada_worker", "armada_worker_1"}; rows = json.load(sys.stdin); print("\n".join(row["name"] for row in rows if isinstance(row, dict) and row.get("name") in expected))'
 )"
 while IFS= read -r queue; do
     if [[ -n "$queue" ]]; then
         rabbitmqctl purge_queue -p / "$queue"
-        if [[ "$queue" == "pear_worker_1" ]]; then
+        if [[ "$queue" == "armada_worker_1" ]]; then
             rabbitmqctl delete_queue -p / "$queue"
         fi
     fi
@@ -155,11 +155,11 @@ if [[ -d "$SNAPSHOT_DIR/git-common" ]]; then
     install -d -m 755 "$(dirname "$REMOTE_GIT_COMMON_DIR")"
     rsync -a --delete "$SNAPSHOT_DIR/git-common/" "$REMOTE_GIT_COMMON_DIR/"
 fi
-if [[ -f "$SNAPSHOT_DIR/pear-skills.exists" ]]; then
-    install -d -m 755 "$REMOTE_PEAR_SKILLS_DIR"
-    rsync -a --delete "$SNAPSHOT_DIR/pear-skills/" "$REMOTE_PEAR_SKILLS_DIR/"
+if [[ -f "$SNAPSHOT_DIR/armada-skills.exists" ]]; then
+    install -d -m 755 "$REMOTE_ARMADA_SKILLS_DIR"
+    rsync -a --delete "$SNAPSHOT_DIR/armada-skills/" "$REMOTE_ARMADA_SKILLS_DIR/"
 else
-    rm -rf "$REMOTE_PEAR_SKILLS_DIR"
+    rm -rf "$REMOTE_ARMADA_SKILLS_DIR"
 fi
 
 set_rollback_stage restore-generated-output
@@ -190,7 +190,7 @@ if [[ -s "$SNAPSHOT_DIR/runtime-config.paths" ]]; then
 fi
 
 # Source and deployment-record agreement is checked only after every snapshot
-# domain, including /var/lib/pear, has been restored.
+# domain, including /var/lib/armada, has been restored.
 set_rollback_stage verify-restored-source
 restored_sha="$(sudo -Hu zulipdev git -C "$REMOTE_PATH" rev-parse HEAD)"
 if [[ "$restored_sha" != "$EXPECTED_PREV_SHA" ]]; then
@@ -211,16 +211,16 @@ fi
 set_rollback_stage restart-services
 systemctl daemon-reload
 ROLLBACK_SERVICES=()
-for service in caddy pear-worker pear-worker-1 pear-monitor-worker pear-embedded-bots pear-thumbnail pear-zulip-dev; do
+for service in caddy armada-worker armada-worker-1 armada-monitor-worker armada-embedded-bots armada-thumbnail armada-zulip-dev; do
     if systemctl cat "$service" >/dev/null 2>&1; then
         ROLLBACK_SERVICES+=("$service")
     fi
 done
-if systemctl cat pear-addressing >/dev/null 2>&1; then
-    ROLLBACK_SERVICES+=(pear-addressing)
+if systemctl cat armada-addressing >/dev/null 2>&1; then
+    ROLLBACK_SERVICES+=(armada-addressing)
 fi
-if systemctl cat pear-presentation >/dev/null 2>&1; then
-    ROLLBACK_SERVICES+=(pear-presentation)
+if systemctl cat armada-presentation >/dev/null 2>&1; then
+    ROLLBACK_SERVICES+=(armada-presentation)
 fi
 if [[ "${#ROLLBACK_SERVICES[@]}" -gt 0 ]]; then
     systemctl restart "${ROLLBACK_SERVICES[@]}"
@@ -271,7 +271,7 @@ rollback_service_generation_snapshot=""
 rollback_public_status=""
 for _ in $(seq 1 45); do
     if systemctl is-active caddy $PREDEPLOY_SERVICES >/dev/null 2>&1 &&
-        sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
+        sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/armada.env && set +a && tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
         rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers 2>/dev/null |
             validate_predeploy_queues; then
         rollback_public_status="$(
@@ -307,7 +307,7 @@ if [[ "$rollback_ready" != true ]]; then
     echo "restored Pear runtime did not remain healthy after rollback" >&2
     echo "stable rollback samples: $rollback_stable_samples/10; public HTTPS: ${rollback_public_status:-unavailable}" >&2
     systemctl --no-pager --full status caddy $PREDEPLOY_SERVICES || true
-    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/pear.env && set +a && tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
+    sudo -Hu zulipdev bash -lc "cd '$REMOTE_PATH' && set -a && . /home/zulipdev/armada.env && set +a && tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
     rabbitmqctl list_queues -p / name messages_ready messages_unacknowledged consumers |
         validate_predeploy_queues || true
     exit 1

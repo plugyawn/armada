@@ -55,8 +55,8 @@
         }
     }
 
-    :is(&.pear-message, .pear-message-surface.pear-message) {
-        background-color: var(--color-background-pear-message-content);
+    :is(&.legacy-message, .legacy-message-surface.legacy-message) {
+        background-color: var(--color-background-legacy-message-content);
 
         /* The agent speaks in the same face as people; Geist Mono is
            reserved for actual code blocks. */
@@ -69,7 +69,7 @@
         /* The ordinary collapsed flag is the durable per-user hiding
            mechanism. Native artifacts sit beside message_content, so
            collapse them with the prose instead of leaving an orphan card. */
-        .message_content.collapsed ~ .pear-artifact-message-host {
+        .message_content.collapsed ~ .legacy-artifact-message-host {
             display: none;
         }
 
@@ -80,7 +80,7 @@
         .message_embed .data-container::after {
             background: linear-gradient(
                 0deg,
-                var(--color-background-pear-message-content),
+                var(--color-background-legacy-message-content),
                 transparent 100%
             );
         }
@@ -92,7 +92,7 @@
                anywhere shredded ordinary words ("refere\ne") in narrow
                contexts like the thread pane. */
             overflow-wrap: break-word;
-            font-family: var(--pear-font-pixel);
+            font-family: var(--legacy-font-pixel);
             font-synthesis: none;
             font-size: var(--base-font-size-px);
 
@@ -102,7 +102,7 @@
                    rule pads only the top and leaves the bottom to the
                    last paragraph's margin, which reads lopsided on a
                    filled surface. */
-                padding-block: var(--pear-space-1);
+                padding-block: var(--legacy-space-1);
             }
 
             > p {
@@ -120,10 +120,10 @@
             > p > code,
             li > code {
                 padding: 0.05em 0.28em;
-                border-radius: var(--pear-radius-chip);
+                border-radius: var(--legacy-radius-chip);
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 76%,
+                    var(--color-background-legacy-message-content) 76%,
                     var(--color-text-message-default) 24%
                 );
                 font-family: inherit;
@@ -144,10 +144,10 @@
                         var(--color-message-content-container-border) 78%,
                         transparent
                     );
-                border-radius: var(--pear-radius-chip);
+                border-radius: var(--legacy-radius-chip);
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 94%,
+                    var(--color-background-legacy-message-content) 94%,
                     var(--color-text-message-default) 6%
                 );
                 font-size: 0.72em;
@@ -163,11 +163,11 @@
                 border-bottom: 1px solid transparent;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 82%,
+                    var(--color-background-legacy-message-content) 82%,
                     var(--color-text-message-default) 18%
                 );
                 color: var(--color-text-message-default);
-                font-family: var(--pear-font-pixel);
+                font-family: var(--legacy-font-pixel);
                 font-synthesis: none;
                 font-weight: 400;
             }
@@ -175,7 +175,7 @@
             .spoiler-header:hover {
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 76%,
+                    var(--color-background-legacy-message-content) 76%,
                     var(--color-text-message-default) 24%
                 );
             }
@@ -188,68 +188,69 @@
                 white-space: nowrap;
             }
 
-            .pear-tool-spoiler-block {
+            .legacy-tool-spoiler-block {
                 width: 100%;
                 min-width: 0;
                 max-width: 100%;
                 /* Even air on both sides of the tool disclosure — the old em
                    pair resolved to 10.8px above and 6px below through
                    two font-size contexts. */
-                margin: var(--pear-space-3) 0;
+                margin: var(--legacy-space-3) 0;
                 border: 0;
                 border-radius: 0;
                 background: transparent;
             }
 
-            .pear-tool-spoiler-block .spoiler-header {
+            .legacy-tool-spoiler-block .spoiler-header {
                 box-sizing: border-box;
                 width: 100%;
                 max-width: 100%;
                 min-height: 23px;
                 gap: 6px;
                 padding: 3px 8px;
-                border: 1px solid var(--pear-hairline);
-                border-radius: var(--pear-radius-px);
+                border: 1px solid var(--legacy-hairline);
+                border-radius: var(--legacy-radius-px);
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 82%,
+                    var(--color-background-legacy-message-content) 82%,
                     var(--color-text-message-default) 18%
                 );
                 color: var(--color-text-message-default);
-                font-family: var(--pear-font-pixel);
+                font-family: var(--legacy-font-pixel);
                 font-synthesis: none;
                 font-size: 1em;
                 font-weight: 400;
                 line-height: 1.25;
-                transition: background-color var(--pear-dur-1) var(--pear-ease);
+                transition: background-color var(--legacy-dur-1)
+                    var(--legacy-ease);
             }
 
-            .pear-tool-header-glyph {
+            .legacy-tool-header-glyph {
                 display: inline-flex;
                 flex: none;
                 width: 1em;
                 align-items: center;
                 justify-content: center;
-                color: var(--pear-ink-3);
-                font-family: var(--pear-font-pixel);
+                color: var(--legacy-ink-3);
+                font-family: var(--legacy-font-pixel);
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
                 font-size: 11px;
                 font-weight: 400;
                 text-align: center;
             }
 
-            .pear-tool-header-glyph.pear-tool-row-active {
-                color: var(--pear-warn);
+            .legacy-tool-header-glyph.legacy-tool-row-active {
+                color: var(--legacy-warn);
             }
 
-            .pear-tool-header-glyph.pear-tool-row-blocked {
-                color: var(--pear-danger);
+            .legacy-tool-header-glyph.legacy-tool-row-blocked {
+                color: var(--legacy-danger);
             }
 
-            .pear-tool-spoiler-block .spoiler-header:hover {
+            .legacy-tool-spoiler-block .spoiler-header:hover {
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 76%,
+                    var(--color-background-legacy-message-content) 76%,
                     var(--color-text-message-default) 24%
                 );
                 color: var(--color-text-message-default);
@@ -259,68 +260,68 @@
                completed turn — hairline above, pixel voice, stats
                said once. While the run settles, the same slot holds
                the micro ticker. */
-            .pear-run-footer {
+            .legacy-run-footer {
                 display: flex;
                 flex-wrap: wrap;
                 align-items: baseline;
-                gap: var(--pear-space-2);
-                margin-top: var(--pear-space-3);
-                padding-top: var(--pear-space-2);
-                border-top: 1px solid var(--pear-hairline);
-                color: var(--pear-ink-3);
-                font-family: var(--pear-font-pixel);
+                gap: var(--legacy-space-2);
+                margin-top: var(--legacy-space-3);
+                padding-top: var(--legacy-space-2);
+                border-top: 1px solid var(--legacy-hairline);
+                color: var(--legacy-ink-3);
+                font-family: var(--legacy-font-pixel);
                 font-synthesis: none;
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
                 font-size: 11px;
                 line-height: 1.2;
             }
 
-            .pear-run-footer-status {
-                color: var(--pear-accent-ink);
+            .legacy-run-footer-status {
+                color: var(--legacy-accent-ink);
             }
 
-            .pear-run-footer-status.pear-run-footer-failed {
-                color: var(--pear-danger);
+            .legacy-run-footer-status.legacy-run-footer-failed {
+                color: var(--legacy-danger);
             }
 
             /* Settled footers read as one quiet meta line that wraps like
                ordinary prose: meta and glyph flow inline (the glyph can
                never detach from its last token), and the trace chip
                floats at the top right. */
-            .pear-run-footer:not(.pear-run-footer-ticker) {
+            .legacy-run-footer:not(.legacy-run-footer-ticker) {
                 display: block;
 
-                .pear-run-footer-meta,
-                .pear-run-footer-status {
+                .legacy-run-footer-meta,
+                .legacy-run-footer-status {
                     display: inline;
                 }
 
-                .pear-run-footer-status {
-                    margin-left: var(--pear-space-2);
+                .legacy-run-footer-status {
+                    margin-left: var(--legacy-space-2);
                 }
 
-                .pear-run-trace-toggle {
+                .legacy-run-trace-toggle {
                     float: right;
-                    margin-left: var(--pear-space-2);
+                    margin-left: var(--legacy-space-2);
                 }
             }
 
-            .pear-run-footer-ticker .pear-run-elapsed {
-                color: var(--pear-ink-3);
+            .legacy-run-footer-ticker .legacy-run-elapsed {
+                color: var(--legacy-ink-3);
                 font-variant-numeric: tabular-nums;
             }
 
-            .pear-run-footer-ticker .pear-run-footer-status {
-                color: var(--pear-interaction);
+            .legacy-run-footer-ticker .legacy-run-footer-status {
+                color: var(--legacy-interaction);
             }
 
-            .pear-live-progress {
+            .legacy-live-progress {
                 position: relative;
                 display: grid;
                 gap: 1px;
-                margin: 0 0 var(--pear-space-2);
+                margin: 0 0 var(--legacy-space-2);
                 padding: 2px 0 4px;
-                font-family: var(--pear-font-pixel);
+                font-family: var(--legacy-font-pixel);
                 font-synthesis: none;
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
                 font-size: 14px;
@@ -328,134 +329,134 @@
                 -webkit-font-smoothing: none;
             }
 
-            .pear-live-progress-planless {
+            .legacy-live-progress-planless {
                 min-height: 30px;
                 padding-block: 4px 6px;
 
-                .pear-live-plan-step {
+                .legacy-live-plan-step {
                     grid-template-columns: 20px minmax(0, 1fr);
                     min-height: 26px;
                     align-items: center;
                 }
 
-                .pear-live-plan-current {
+                .legacy-live-plan-current {
                     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
                     font-size: 17px;
                 }
             }
 
-            .pear-live-plan-step {
+            .legacy-live-plan-step {
                 display: grid;
                 grid-template-columns: 14px minmax(0, 1fr);
                 align-items: baseline;
                 min-height: 18px;
                 padding: 1px 8px 1px 3px;
-                border-radius: var(--pear-radius-chip);
+                border-radius: var(--legacy-radius-chip);
             }
 
-            .pear-live-plan-glyph {
-                color: var(--pear-interaction);
-                font-family: var(--pear-font-pixel);
+            .legacy-live-plan-glyph {
+                color: var(--legacy-interaction);
+                font-family: var(--legacy-font-pixel);
                 text-align: center;
             }
 
-            .pear-live-plan-label {
+            .legacy-live-plan-label {
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
 
-            .pear-live-plan-context {
-                color: var(--pear-ink-3);
+            .legacy-live-plan-context {
+                color: var(--legacy-ink-3);
             }
 
-            .pear-live-plan-ellipsis {
+            .legacy-live-plan-ellipsis {
                 display: block;
                 min-height: 8px;
                 padding-left: 5px;
                 line-height: 0.6;
             }
 
-            .pear-live-plan-completed .pear-live-plan-glyph {
-                color: var(--pear-accent-ink);
+            .legacy-live-plan-completed .legacy-live-plan-glyph {
+                color: var(--legacy-accent-ink);
             }
 
-            .pear-live-plan-current {
+            .legacy-live-plan-current {
                 color: var(--color-text-message-default);
                 font-size: 15px;
             }
 
-            .pear-live-plan-current .pear-live-plan-label {
+            .legacy-live-plan-current .legacy-live-plan-label {
                 background: linear-gradient(
                     100deg,
-                    var(--pear-ink-1) 0%,
-                    var(--pear-ink-1) 40%,
+                    var(--legacy-ink-1) 0%,
+                    var(--legacy-ink-1) 40%,
                     color-mix(
                             in srgb,
-                            var(--pear-surface-0) 92%,
-                            var(--pear-ink-1)
+                            var(--legacy-surface-0) 92%,
+                            var(--legacy-ink-1)
                         )
                         50%,
-                    var(--pear-ink-1) 60%,
-                    var(--pear-ink-1) 100%
+                    var(--legacy-ink-1) 60%,
+                    var(--legacy-ink-1) 100%
                 );
                 background-position: 120% 0;
                 background-size: 240% 100%;
                 background-clip: text;
                 color: transparent;
                 font-weight: 400;
-                animation: pear-live-current-shimmer 2s linear infinite;
+                animation: legacy-live-current-shimmer 2s linear infinite;
             }
 
-            .pear-live-overview {
+            .legacy-live-overview {
                 overflow: hidden;
                 margin: 1px 8px 3px 17px;
-                color: var(--pear-ink-1);
-                font-family: var(--pear-font-pixel);
+                color: var(--legacy-ink-1);
+                font-family: var(--legacy-font-pixel);
                 /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
                 font-size: 14px;
                 font-weight: 400;
                 line-height: 1.4;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-                animation: pear-live-overview-in 160ms ease-out both;
+                animation: legacy-live-overview-in 160ms ease-out both;
 
                 &::before {
                     margin-right: 0.4em;
-                    color: var(--pear-interaction);
+                    color: var(--legacy-interaction);
                     content: "∙";
                 }
             }
 
-            .pear-run-settled-overview {
+            .legacy-run-settled-overview {
                 flex-basis: 100%;
             }
 
-            &.pear-live-placeholder
+            &.legacy-live-placeholder
                 > :not(
-                    .pear-live-progress,
-                    .pear-run-footer,
-                    .pear-run-trace-reveal
+                    .legacy-live-progress,
+                    .legacy-run-footer,
+                    .legacy-run-trace-reveal
                 ) {
                 display: none;
             }
 
-            > .pear-live-thought {
-                color: var(--pear-ink-2);
-                font-family: var(--pear-font-pixel);
+            > .legacy-live-thought {
+                color: var(--legacy-ink-2);
+                font-family: var(--legacy-font-pixel);
             }
 
-            .pear-stream-chunk {
-                animation: pear-stream-chunk-in 180ms ease-out both;
+            .legacy-stream-chunk {
+                animation: legacy-stream-chunk-in 180ms ease-out both;
             }
 
-            .pear-live-progress:has(> .pear-live-progress-disclosure) {
+            .legacy-live-progress:has(> .legacy-live-progress-disclosure) {
                 isolation: isolate;
                 padding-right: 28px;
-                border-radius: var(--pear-radius-px);
+                border-radius: var(--legacy-radius-px);
                 transition:
-                    background-color var(--pear-dur-1) var(--pear-ease),
-                    box-shadow var(--pear-dur-1) var(--pear-ease);
+                    background-color var(--legacy-dur-1) var(--legacy-ease),
+                    box-shadow var(--legacy-dur-1) var(--legacy-ease);
 
                 &::before {
                     position: absolute;
@@ -467,7 +468,7 @@
                             ellipse at 28% 48%,
                             color-mix(
                                     in srgb,
-                                    var(--pear-interaction) 9%,
+                                    var(--legacy-interaction) 9%,
                                     transparent
                                 )
                                 0%,
@@ -477,7 +478,7 @@
                             90deg,
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 3%,
+                                var(--legacy-interaction) 3%,
                                 transparent
                             ),
                             transparent 52%
@@ -485,28 +486,30 @@
                     content: "";
                     opacity: 0;
                     pointer-events: none;
-                    transition: opacity var(--pear-dur-1) var(--pear-ease);
+                    transition: opacity var(--legacy-dur-1) var(--legacy-ease);
                 }
 
                 &:hover,
-                &:has(> .pear-live-progress-disclosure:focus-visible),
-                &:has(> .pear-live-progress-disclosure[aria-expanded="true"]) {
+                &:has(> .legacy-live-progress-disclosure:focus-visible),
+                &:has(
+                        > .legacy-live-progress-disclosure[aria-expanded="true"]
+                    ) {
                     background: color-mix(
                         in srgb,
-                        var(--pear-interaction) 2%,
+                        var(--legacy-interaction) 2%,
                         transparent
                     );
                     box-shadow:
                         inset 0 0 0 1px
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 11%,
+                                var(--legacy-interaction) 11%,
                                 transparent
                             ),
                         0 0 10px -5px
                             color-mix(
                                 in srgb,
-                                var(--pear-interaction) 12%,
+                                var(--legacy-interaction) 12%,
                                 transparent
                             );
 
@@ -516,7 +519,7 @@
                 }
             }
 
-            .pear-live-progress-disclosure {
+            .legacy-live-progress-disclosure {
                 position: absolute;
                 z-index: 2;
                 top: 0;
@@ -525,12 +528,12 @@
                 width: 28px;
                 appearance: none;
                 border: 0;
-                border-radius: var(--pear-radius-px);
+                border-radius: var(--legacy-radius-px);
                 background: transparent;
                 padding: 0;
-                color: var(--pear-interaction);
+                color: var(--legacy-interaction);
                 cursor: pointer;
-                font-family: var(--pear-font-pixel);
+                font-family: var(--legacy-font-pixel);
 
                 &::after {
                     box-sizing: border-box;
@@ -547,8 +550,8 @@
                     transform: translateY(-1px) rotate(45deg);
                     transform-origin: center;
                     transition:
-                        opacity var(--pear-dur-1) var(--pear-ease),
-                        transform var(--pear-dur-1) var(--pear-ease);
+                        opacity var(--legacy-dur-1) var(--legacy-ease),
+                        transform var(--legacy-dur-1) var(--legacy-ease);
                 }
 
                 &[aria-expanded="true"]::after {
@@ -558,22 +561,22 @@
 
                 &:focus-visible {
                     outline: none;
-                    box-shadow: inset 0 0 0 2px var(--pear-interaction);
+                    box-shadow: inset 0 0 0 2px var(--legacy-interaction);
                 }
             }
 
-            .pear-run-trace-toggle {
+            .legacy-run-trace-toggle {
                 display: inline-grid;
                 width: 24px;
                 height: 24px;
                 margin-left: auto;
                 border: 0;
-                border-radius: var(--pear-radius-chip);
-                background: var(--pear-interaction-fill);
+                border-radius: var(--legacy-radius-chip);
+                background: var(--legacy-interaction-fill);
                 padding: 0;
                 place-items: center;
-                color: var(--pear-interaction);
-                font-family: var(--pear-font-pixel);
+                color: var(--legacy-interaction);
+                font-family: var(--legacy-font-pixel);
                 font-size: 13px;
                 font-synthesis: none;
                 font-weight: 400;
@@ -595,26 +598,26 @@
                 }
 
                 &:hover {
-                    background: var(--pear-interaction-fill-strong);
-                    color: var(--pear-ink-1);
+                    background: var(--legacy-interaction-fill-strong);
+                    color: var(--legacy-ink-1);
                 }
             }
 
-            &:has(> .pear-live-progress > .pear-live-progress-disclosure)
-                > .pear-run-footer
-                .pear-run-trace-toggle {
+            &:has(> .legacy-live-progress > .legacy-live-progress-disclosure)
+                > .legacy-run-footer
+                .legacy-run-trace-toggle {
                 display: none;
             }
 
-            .pear-run-trace-reveal {
+            .legacy-run-trace-reveal {
                 position: relative;
                 display: grid;
                 min-width: 0;
                 grid-template-rows: 0fr;
                 opacity: 0;
                 transition:
-                    grid-template-rows 180ms var(--pear-ease),
-                    opacity 120ms var(--pear-ease);
+                    grid-template-rows 180ms var(--legacy-ease),
+                    opacity 120ms var(--legacy-ease);
 
                 &[data-expanded="true"] {
                     grid-template-rows: 1fr;
@@ -622,7 +625,7 @@
                 }
             }
 
-            .pear-run-trace-status {
+            .legacy-run-trace-status {
                 position: absolute;
                 width: 1px;
                 height: 1px;
@@ -631,14 +634,14 @@
                 white-space: nowrap;
             }
 
-            .pear-run-trace {
+            .legacy-run-trace {
                 display: grid;
                 min-width: 0;
                 min-height: 0;
-                gap: var(--pear-space-2);
-                padding-inline: var(--pear-space-2);
-                color: var(--pear-ink-2);
-                font-family: var(--pear-font-pixel);
+                gap: var(--legacy-space-2);
+                padding-inline: var(--legacy-space-2);
+                color: var(--legacy-ink-2);
+                font-family: var(--legacy-font-pixel);
                 font-synthesis: none;
                 font-size: 14px;
                 line-height: 1.5;
@@ -648,8 +651,8 @@
                     background: linear-gradient(
                         90deg,
                         transparent,
-                        var(--pear-hairline) 8%,
-                        var(--pear-hairline) 92%,
+                        var(--legacy-hairline) 8%,
+                        var(--legacy-hairline) 92%,
                         transparent
                     );
                     content: "";
@@ -659,42 +662,42 @@
                     margin: 0;
                 }
 
-                > .pear-tool-spoiler-block {
+                > .legacy-tool-spoiler-block {
                     margin: 0;
                 }
 
-                > .pear-run-trace-error {
+                > .legacy-run-trace-error {
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    gap: var(--pear-space-2);
+                    gap: var(--legacy-space-2);
                     min-width: 0;
                 }
 
-                .pear-run-trace-retry {
+                .legacy-run-trace-retry {
                     min-height: 24px;
                     flex: none;
-                    border: 1px solid var(--pear-hairline);
-                    border-radius: var(--pear-radius-chip);
+                    border: 1px solid var(--legacy-hairline);
+                    border-radius: var(--legacy-radius-chip);
                     background: transparent;
                     padding: 2px 8px;
-                    color: var(--pear-interaction);
+                    color: var(--legacy-interaction);
                     font: inherit;
                     cursor: pointer;
 
                     &:hover {
-                        background: var(--pear-interaction-fill);
-                        color: var(--pear-ink-1);
+                        background: var(--legacy-interaction-fill);
+                        color: var(--legacy-ink-1);
                     }
 
                     &:focus-visible {
                         outline: none;
-                        box-shadow: inset 0 0 0 2px var(--pear-interaction);
+                        box-shadow: inset 0 0 0 2px var(--legacy-interaction);
                     }
                 }
             }
 
-            .pear-tool-spoiler-block:has(.spoiler-content-open)
+            .legacy-tool-spoiler-block:has(.spoiler-content-open)
                 .spoiler-header {
                 width: auto;
                 border: 0;
@@ -704,16 +707,17 @@
                         var(--color-message-content-container-border) 66%,
                         transparent
                     );
-                border-radius: var(--pear-radius-px) var(--pear-radius-px) 0 0;
+                border-radius: var(--legacy-radius-px) var(--legacy-radius-px) 0
+                    0;
                 padding: 5px 10px;
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 90%,
+                    var(--color-background-legacy-message-content) 90%,
                     var(--color-text-message-default) 10%
                 );
             }
 
-            .pear-tool-spoiler-block:has(.spoiler-content-open) {
+            .legacy-tool-spoiler-block:has(.spoiler-content-open) {
                 width: 100%;
                 border: 1px solid
                     color-mix(
@@ -721,39 +725,39 @@
                         var(--color-message-content-container-border) 54%,
                         transparent
                     );
-                border-radius: var(--pear-radius-px);
+                border-radius: var(--legacy-radius-px);
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 94%,
+                    var(--color-background-legacy-message-content) 94%,
                     var(--color-text-message-default) 6%
                 );
             }
 
-            .pear-tool-spoiler-block:has(.spoiler-content-open)
+            .legacy-tool-spoiler-block:has(.spoiler-content-open)
                 .spoiler-header:hover {
                 background: color-mix(
                     in srgb,
-                    var(--color-background-pear-message-content) 86%,
+                    var(--color-background-legacy-message-content) 86%,
                     var(--color-text-message-default) 14%
                 );
             }
 
-            .pear-tool-spoiler-block:not(:has(.spoiler-content-open)) {
+            .legacy-tool-spoiler-block:not(:has(.spoiler-content-open)) {
                 display: block;
             }
 
-            .pear-tool-spoiler-block:not(:has(.spoiler-content-open))
+            .legacy-tool-spoiler-block:not(:has(.spoiler-content-open))
                 .spoiler-button {
                 width: 12px;
                 height: 12px;
             }
 
-            .pear-tool-spoiler-block .spoiler-header-text {
+            .legacy-tool-spoiler-block .spoiler-header-text {
                 color: var(--color-text-item);
                 font-weight: 400;
             }
 
-            .pear-tool-spoiler-block .spoiler-content {
+            .legacy-tool-spoiler-block .spoiler-content {
                 background: transparent;
             }
 
@@ -829,20 +833,20 @@
                     overflow: hidden;
                     text-overflow: ellipsis;
                     white-space: nowrap;
-                    font-family: var(--pear-font-pixel);
+                    font-family: var(--legacy-font-pixel);
                     font-synthesis: none;
                     /* 11.5px at the default 14px base font size. */
                     font-size: calc(11.5 / 14 * var(--base-font-size-px));
                     line-height: 1.25;
                 }
 
-                li > .pear-tool-row-glyph {
+                li > .legacy-tool-row-glyph {
                     display: inline-flex;
                     width: 1.15em;
                     flex: none;
                     align-items: center;
                     justify-content: center;
-                    border-radius: var(--pear-radius-chip);
+                    border-radius: var(--legacy-radius-chip);
                     color: var(--color-text-item);
                     /* 11px at the default 14px base font size. */
                     font-size: calc(11 / 14 * var(--base-font-size-px));
@@ -852,19 +856,19 @@
                     white-space: nowrap;
                 }
 
-                li > .pear-tool-row-active {
-                    color: var(--pear-warn);
+                li > .legacy-tool-row-active {
+                    color: var(--legacy-warn);
                 }
 
-                li > .pear-tool-row-blocked {
-                    color: var(--pear-danger);
+                li > .legacy-tool-row-blocked {
+                    color: var(--legacy-danger);
                 }
 
-                li > .pear-tool-row-pending {
+                li > .legacy-tool-row-pending {
                     color: var(--color-text-item);
                 }
 
-                li > .pear-tool-row-content {
+                li > .legacy-tool-row-content {
                     min-width: 0;
                     overflow: hidden;
                     color: var(--color-text-message-default);
@@ -894,7 +898,7 @@
             }
         }
 
-        &.pear-active-message {
+        &.legacy-active-message {
             .message_content:not(.status-message) {
                 overflow: visible;
             }

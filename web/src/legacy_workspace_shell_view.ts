@@ -1,16 +1,16 @@
-import type {PearWorkspaceDescriptor, PearWorkspaceEntry} from "./legacy_workspace_api.ts";
-import type {PearWorkspaceEditorSnapshot} from "./legacy_workspace_editor_contract.ts";
+import type {ArmadaWorkspaceDescriptor, ArmadaWorkspaceEntry} from "./legacy_workspace_api.ts";
+import type {ArmadaWorkspaceEditorSnapshot} from "./legacy_workspace_editor_contract.ts";
 
-export type PearWorkspaceShellTab = {
+export type ArmadaWorkspaceShellTab = {
     path: string;
-    entry: PearWorkspaceEntry;
+    entry: ArmadaWorkspaceEntry;
     preview: boolean;
     dirty: boolean;
     workspaceRevision: number;
     previousPath?: string;
 };
 
-export type PearWorkspaceShellSurfaceElements = {
+export type ArmadaWorkspaceShellSurfaceElements = {
     editorRoot: HTMLElement;
     nontextRoot: HTMLElement;
     conflictRoot: HTMLElement;
@@ -36,29 +36,29 @@ function format_bytes(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
-export function render_pear_workspace_tabs(
+export function render_armada_workspace_tabs(
     root: HTMLElement,
-    tabs: PearWorkspaceShellTab[],
+    tabs: ArmadaWorkspaceShellTab[],
     active_path: string | undefined,
 ): void {
     const fragment = document.createDocumentFragment();
     for (const tab of tabs) {
         const item = document.createElement("div");
-        item.className = "pear-workspace-file-tab-item";
+        item.className = "legacy-workspace-file-tab-item";
         const button = document.createElement("button");
         button.type = "button";
         button.dataset["tabPath"] = tab.path;
         button.setAttribute("role", "tab");
-        button.setAttribute("aria-controls", "pear-workspace-document-panel");
+        button.setAttribute("aria-controls", "legacy-workspace-document-panel");
         button.setAttribute("aria-selected", String(tab.path === active_path));
         button.tabIndex = tab.path === active_path ? 0 : -1;
         button.className = tab.preview
-            ? "pear-workspace-file-tab pear-workspace-file-tab--preview"
-            : "pear-workspace-file-tab";
+            ? "legacy-workspace-file-tab legacy-workspace-file-tab--preview"
+            : "legacy-workspace-file-tab";
         button.textContent = `${tab.entry.name}${tab.dirty ? " •" : ""}`;
         const close = document.createElement("button");
         close.type = "button";
-        close.className = "pear-workspace-file-tab-close";
+        close.className = "legacy-workspace-file-tab-close";
         close.dataset["closeTabPath"] = tab.path;
         close.setAttribute("aria-label", `Close ${tab.entry.name}`);
         const close_icon = document.createElement("i");
@@ -71,9 +71,9 @@ export function render_pear_workspace_tabs(
     root.replaceChildren(fragment);
 }
 
-export function render_pear_workspace_breadcrumb(
+export function render_armada_workspace_breadcrumb(
     root: HTMLElement,
-    tab: PearWorkspaceShellTab | undefined,
+    tab: ArmadaWorkspaceShellTab | undefined,
 ): void {
     root.replaceChildren();
     if (tab === undefined) {
@@ -87,7 +87,7 @@ export function render_pear_workspace_breadcrumb(
         if (index > 0) {
             const separator = document.createElement("span");
             separator.setAttribute("aria-hidden", "true");
-            separator.className = "pear-workspace-breadcrumb-separator";
+            separator.className = "legacy-workspace-breadcrumb-separator";
             separator.textContent = "/";
             fragment.append(separator);
         }
@@ -108,10 +108,10 @@ export function render_pear_workspace_breadcrumb(
     root.append(fragment);
 }
 
-export function render_pear_workspace_descriptor(
+export function render_armada_workspace_descriptor(
     title: HTMLElement,
     meta: HTMLElement,
-    descriptor: PearWorkspaceDescriptor,
+    descriptor: ArmadaWorkspaceDescriptor,
 ): void {
     title.textContent = descriptor.display_root;
     meta.textContent = `${descriptor.branch || "detached"} · ${descriptor.head.slice(0, 8)} · ${
@@ -120,10 +120,10 @@ export function render_pear_workspace_descriptor(
 }
 
 function render_links(
-    elements: PearWorkspaceShellSurfaceElements,
+    elements: ArmadaWorkspaceShellSurfaceElements,
     workspace_id: string,
-    tab: PearWorkspaceShellTab | undefined,
-    snapshot: PearWorkspaceEditorSnapshot | undefined,
+    tab: ArmadaWorkspaceShellTab | undefined,
+    snapshot: ArmadaWorkspaceEditorSnapshot | undefined,
     raw_url: (workspaceId: string, entryId: string, download?: boolean) => string,
 ): void {
     const identity = snapshot?.activeIdentity;
@@ -145,12 +145,12 @@ function render_links(
     elements.downloadLink.removeAttribute("aria-disabled");
 }
 
-export function render_pear_workspace_surface(options: {
-    elements: PearWorkspaceShellSurfaceElements;
+export function render_armada_workspace_surface(options: {
+    elements: ArmadaWorkspaceShellSurfaceElements;
     workspaceId: string;
-    descriptor: PearWorkspaceDescriptor | undefined;
-    activeTab: PearWorkspaceShellTab | undefined;
-    snapshot: PearWorkspaceEditorSnapshot | undefined;
+    descriptor: ArmadaWorkspaceDescriptor | undefined;
+    activeTab: ArmadaWorkspaceShellTab | undefined;
+    snapshot: ArmadaWorkspaceEditorSnapshot | undefined;
     // Read-only Markdown rendering: `available` shows the control,
     // `active` puts the rendering in place of the editor.
     preview: {available: boolean; active: boolean};
@@ -177,14 +177,14 @@ export function render_pear_workspace_surface(options: {
     const rich_loading = snapshot?.richModeLoading ?? false;
     elements.editorRoot.setAttribute("aria-busy", String(rich_loading));
     const existing_loading = elements.editorRoot.querySelector<HTMLElement>(
-        ":scope > .pear-workspace-rich-loading",
+        ":scope > .legacy-workspace-rich-loading",
     );
     if (!rich_loading) {
         existing_loading?.remove();
     }
     if (rich_loading && elements.editorRoot.childElementCount === 0) {
         const loading = document.createElement("div");
-        loading.className = "pear-workspace-rich-loading";
+        loading.className = "legacy-workspace-rich-loading";
         loading.setAttribute("role", "status");
         loading.setAttribute("aria-label", "Loading Rich editor");
         for (let index = 0; index < 3; index += 1) {
@@ -348,15 +348,15 @@ export function render_pear_workspace_surface(options: {
     render_links(elements, options.workspaceId, options.activeTab, snapshot, options.rawUrl);
 }
 
-export function set_pear_workspace_mobile_explorer_open(
+export function set_armada_workspace_mobile_explorer_open(
     root: HTMLElement,
     button: HTMLButtonElement,
     open: boolean,
 ): void {
-    const shell = root.querySelector<HTMLElement>(".pear-workspace-shell");
+    const shell = root.querySelector<HTMLElement>(".legacy-workspace-shell");
     if (shell === null) {
         return;
     }
-    shell.classList.toggle("pear-workspace-shell--explorer-open", open);
+    shell.classList.toggle("legacy-workspace-shell--explorer-open", open);
     button.setAttribute("aria-expanded", String(open));
 }

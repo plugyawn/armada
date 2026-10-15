@@ -1,4 +1,4 @@
-export type PearWorkspaceSourceLanguage =
+export type ArmadaWorkspaceSourceLanguage =
     | "plain"
     | "markdown"
     | "javascript"
@@ -9,7 +9,9 @@ export type PearWorkspaceSourceLanguage =
     | "html"
     | "yaml";
 
-export function pear_workspace_source_language_for_path(path: string): PearWorkspaceSourceLanguage {
+export function armada_workspace_source_language_for_path(
+    path: string,
+): ArmadaWorkspaceSourceLanguage {
     const extension = path.split("/").at(-1)?.toLowerCase().split(".").at(-1);
     switch (extension) {
         case "md":

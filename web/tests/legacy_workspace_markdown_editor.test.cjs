@@ -275,7 +275,7 @@ run_test("normalizes safe br tags for Rich without touching protected source", a
     document.body.append(root);
     const serialized_results = [];
     const result = await with_timeout(
-        markdown_editor.create_pear_workspace_markdown_editor({
+        markdown_editor.create_armada_workspace_markdown_editor({
             root,
             markdown,
             editRevision: 0,
@@ -357,7 +357,7 @@ run_test("rejects unsupported input before touching the target root", async () =
     document.body.append(root);
 
     const result = await with_timeout(
-        markdown_editor.create_pear_workspace_markdown_editor({
+        markdown_editor.create_armada_workspace_markdown_editor({
             root,
             markdown: "# Title\n\n<div>unsafe</div>\n",
             editRevision: 1,
@@ -387,7 +387,7 @@ run_test(
         const dirty_events = [];
         const serialized_results = [];
         const result = await with_timeout(
-            markdown_editor.create_pear_workspace_markdown_editor({
+            markdown_editor.create_armada_workspace_markdown_editor({
                 root,
                 markdown: "# Start\n\nBody with $x^2$.\n",
                 editRevision: 7,
@@ -460,7 +460,7 @@ run_test("maps Rich selections to rendered line numbers in both directions", asy
     const root = document.createElement("div");
     document.body.append(root);
     const result = await with_timeout(
-        markdown_editor.create_pear_workspace_markdown_editor({
+        markdown_editor.create_armada_workspace_markdown_editor({
             root,
             markdown: "# First\n\nSecond paragraph.\n\nThird paragraph.\n",
             editRevision: 1,
@@ -490,7 +490,7 @@ run_test("remote hydration clears undo history across the document boundary", as
     document.body.append(root);
     const dirty_events = [];
     const result = await with_timeout(
-        markdown_editor.create_pear_workspace_markdown_editor({
+        markdown_editor.create_armada_workspace_markdown_editor({
             root,
             markdown: "# Original\n",
             editRevision: 1,
@@ -543,7 +543,7 @@ run_test("hydration is non-dirty, fail-closed, and read-only is live", async () 
     const dirty_events = [];
     const serialized_results = [];
     const result = await with_timeout(
-        markdown_editor.create_pear_workspace_markdown_editor({
+        markdown_editor.create_armada_workspace_markdown_editor({
             root,
             markdown: "# Old\n",
             editRevision: 2,

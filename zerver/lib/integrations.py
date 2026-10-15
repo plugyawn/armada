@@ -488,7 +488,7 @@ EMBEDDED_BOTS: list[EmbeddedBotIntegration] = [
     EmbeddedBotIntegration("virtual_fs", []),
     EmbeddedBotIntegration("giphy", []),
     EmbeddedBotIntegration("followup", []),
-    EmbeddedBotIntegration("pear", []),
+    EmbeddedBotIntegration("armada", []),
 ]
 
 INCOMING_WEBHOOK_INTEGRATIONS: list[IncomingWebhookIntegration] = [

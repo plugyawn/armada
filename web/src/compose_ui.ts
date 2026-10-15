@@ -19,7 +19,7 @@ import * as common from "./common.ts";
 import * as compose_state from "./compose_state.ts";
 import type {TypeaheadSuggestion} from "./composebox_typeahead.ts";
 import {$t, $t_html} from "./i18n.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import * as linkifiers from "./linkifiers.ts";
 import * as loading from "./loading.ts";
 import * as markdown from "./markdown.ts";
@@ -532,7 +532,7 @@ export function compute_placeholder_text(opts: ComposePlaceholderOptions): strin
         }
 
         if (stream_name && topic_display_name !== undefined) {
-            if (pear_run_state.topic_has_active_run(stream_name, opts.topic)) {
+            if (legacy_run_state.topic_has_active_run(stream_name, opts.topic)) {
                 // Steering already works by just typing (the worker
                 // threads mid-run messages into the turn); while a run
                 // is live, the surface says so (design §8.3).

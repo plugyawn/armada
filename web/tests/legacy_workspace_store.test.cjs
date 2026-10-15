@@ -8,12 +8,12 @@ const {run_test} = require("./lib/test.cjs");
 const workspace_store = zrequire("legacy_workspace_store");
 
 function reduce(state, action) {
-    return workspace_store.reduce_pear_workspace_store(state, action);
+    return workspace_store.reduce_armada_workspace_store(state, action);
 }
 
 function source_edit(state, id, text) {
     const changed = reduce(state, {type: "source_changed", ...id});
-    const document = workspace_store.get_pear_workspace_document(changed, id);
+    const document = workspace_store.get_armada_workspace_document(changed, id);
     assert.ok(document !== undefined);
     return reduce(changed, {
         type: "source_flushed",
@@ -39,7 +39,7 @@ function open_document(state, workspace_id, path) {
         entryId: entry_id,
         path,
     });
-    const workspace = workspace_store.get_pear_workspace(next, workspace_id);
+    const workspace = workspace_store.get_armada_workspace(next, workspace_id);
     assert.ok(workspace !== undefined);
     return {state: next, request_generation: workspace.requestGeneration};
 }
@@ -69,7 +69,7 @@ function identity(workspace_id, path, request_generation) {
 }
 
 function get_document(state, workspace_id, path, request_generation) {
-    const document = workspace_store.get_pear_workspace_document(
+    const document = workspace_store.get_armada_workspace_document(
         state,
         identity(workspace_id, path, request_generation),
     );
@@ -78,13 +78,13 @@ function get_document(state, workspace_id, path, request_generation) {
 }
 
 function get_document_by_identity(state, id) {
-    const document = workspace_store.get_pear_workspace_document(state, id);
+    const document = workspace_store.get_armada_workspace_document(state, id);
     assert.ok(document !== undefined);
     return document;
 }
 
 function loaded_store(workspace_id = "workspace-a", path = "README.md") {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     state = activate(state, workspace_id);
     const opened = open_document(state, workspace_id, path);
     state = load_document(opened.state, workspace_id, path, opened.request_generation);
@@ -92,7 +92,7 @@ function loaded_store(workspace_id = "workspace-a", path = "README.md") {
 }
 
 run_test("stale document read cannot replace a new workspace", () => {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     state = activate(state, "workspace-a");
     const old_request = open_document(state, "workspace-a", "README.md");
 
@@ -115,30 +115,30 @@ run_test("stale document read cannot replace a new workspace", () => {
         get_document(state, "workspace-b", "notes.md", new_request.request_generation).currentText,
         "workspace b\n",
     );
-    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").documents.size, 0);
+    assert.equal(workspace_store.get_armada_workspace(state, "workspace-a").documents.size, 0);
     assert.equal(state.ignoredStaleResponses, 1);
 });
 
 run_test("a superseded path response is ignored in the same workspace", () => {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     state = activate(state, "workspace-a");
     const first = open_document(state, "workspace-a", "first.md");
     const second = open_document(first.state, "workspace-a", "second.md");
 
     state = load_document(second.state, "workspace-a", "first.md", first.request_generation);
-    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").documents.size, 0);
+    assert.equal(workspace_store.get_armada_workspace(state, "workspace-a").documents.size, 0);
     assert.equal(state.ignoredStaleResponses, 1);
 });
 
 run_test("leaving and returning still invalidates the old read generation", () => {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     state = activate(state, "workspace-a");
     const old_request = open_document(state, "workspace-a", "README.md");
     state = activate(old_request.state, "workspace-b");
     state = activate(state, "workspace-a");
     state = load_document(state, "workspace-a", "README.md", old_request.request_generation);
 
-    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").documents.size, 0);
+    assert.equal(workspace_store.get_armada_workspace(state, "workspace-a").documents.size, 0);
     assert.equal(state.ignoredStaleResponses, 1);
 });
 
@@ -310,7 +310,7 @@ run_test("a revision advance preserves sessions and marks unresolved identities 
         workspaceRevision: 3,
         currentEntryIds: ["entry:A.md:v2"],
     });
-    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    const workspace = workspace_store.get_armada_workspace(state, "workspace-a");
     assert.deepEqual([...workspace.documents.keys()], ["entry:B.md", "entry:A.md:v2"]);
     assert.equal(workspace.activeEntryId, "entry:B.md");
     assert.equal(workspace.pendingDocumentRequest, undefined);
@@ -325,13 +325,13 @@ run_test("a revision advance preserves sessions and marks unresolved identities 
 });
 
 run_test("workspace mode preference is restored without creating a document session", () => {
-    let state = activate(workspace_store.create_pear_workspace_store(), "workspace-a");
+    let state = activate(workspace_store.create_armada_workspace_store(), "workspace-a");
     state = reduce(state, {
         type: "set_workspace_mode_preference",
         workspaceId: "workspace-a",
         mode: "rich",
     });
-    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    const workspace = workspace_store.get_armada_workspace(state, "workspace-a");
     assert.equal(workspace.markdownModePreference, "rich");
     assert.equal(workspace.documents.size, 0);
 });
@@ -346,7 +346,7 @@ run_test(
             workspaceId: "workspace-a",
             workspaceRevision: 2,
         });
-        const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+        const workspace = workspace_store.get_armada_workspace(state, "workspace-a");
         assert.equal(workspace.activeEntryId, "entry:A.md");
         assert.equal(workspace.documents.size, 1);
         assert.equal(workspace.pendingDocumentRequest, undefined);
@@ -389,7 +389,7 @@ run_test("a rename rebind preserves a dirty buffer under the new identity", () =
     assert.equal(rebound.state, "dirty");
     assert.equal(rebound.authority, "current");
     assert.equal(
-        workspace_store.get_pear_workspace(state, "workspace-a").activeEntryId,
+        workspace_store.get_armada_workspace(state, "workspace-a").activeEntryId,
         "entry:renamed.md:v2",
     );
 });
@@ -544,7 +544,7 @@ run_test("conflict Overwrite keeps the latest edit and adopts only the remote ba
     assert.equal(document.savedText, "remote edit\n");
     assert.equal(document.currentText, "edited after conflict\n");
     assert.equal(document.state, "dirty");
-    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").workspaceRevision, 7);
+    assert.equal(workspace_store.get_armada_workspace(state, "workspace-a").workspaceRevision, 7);
 
     state = reduce(state, {type: "save_started", ...id});
     document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
@@ -703,7 +703,7 @@ run_test("the authoritative byte limit blocks a save visibly", () => {
     const loaded = loaded_store();
     let {state} = loaded;
     const id = identity("workspace-a", "README.md", loaded.request_generation);
-    const workspace = workspace_store.get_pear_workspace(state, "workspace-a");
+    const workspace = workspace_store.get_armada_workspace(state, "workspace-a");
     const document = get_document(state, "workspace-a", "README.md", loaded.request_generation);
     const documents = new Map(workspace.documents);
     documents.set("entry:README.md", {...document, maxBytes: 3});
@@ -752,9 +752,9 @@ run_test("Source reports dirty immediately but cannot save before an exact flush
 });
 
 run_test("stale and no-op transitions fail closed", () => {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     const missing_id = identity("missing", "README.md", 1);
-    assert.equal(workspace_store.get_pear_workspace_document(state, missing_id), undefined);
+    assert.equal(workspace_store.get_armada_workspace_document(state, missing_id), undefined);
     state = reduce(state, {type: "open_document", workspaceId: "missing", path: "README.md"});
     assert.equal(state.ignoredStaleResponses, 1);
 
@@ -867,7 +867,7 @@ run_test("2,000 seeded save schedules never cross workspace or document authorit
             );
             other_identity = identity(other_workspace, other_path, opened.request_generation);
             other_before = structuredClone(
-                workspace_store.get_pear_workspace_document(state, other_identity),
+                workspace_store.get_armada_workspace_document(state, other_identity),
             );
         }
 
@@ -884,7 +884,10 @@ run_test("2,000 seeded save schedules never cross workspace or document authorit
 
         assert.deepEqual(save, immutable_save, `seed ${seed}: PUT snapshot mutated`);
         if (other_identity !== undefined) {
-            const other_after = workspace_store.get_pear_workspace_document(state, other_identity);
+            const other_after = workspace_store.get_armada_workspace_document(
+                state,
+                other_identity,
+            );
             assert.deepEqual(
                 other_same_workspace && valid_callback
                     ? {...other_after, authority: other_before.authority}
@@ -896,7 +899,7 @@ run_test("2,000 seeded save schedules never cross workspace or document authorit
                 assert.equal(other_after.authority, "stale");
             }
         }
-        const original_workspace = workspace_store.get_pear_workspace(state, workspace_id);
+        const original_workspace = workspace_store.get_armada_workspace(state, workspace_id);
         assert.ok(original_workspace !== undefined);
         const original = [...original_workspace.documents.values()].find(
             (document) => document.path === path,
@@ -935,7 +938,7 @@ run_test("a dirty document rejects a late reload", () => {
 
     assert.equal(state.ignoredStaleResponses, 1);
     assert.equal(
-        workspace_store.get_pear_workspace(state, "workspace-a").documents.get("entry:README.md")
+        workspace_store.get_armada_workspace(state, "workspace-a").documents.get("entry:README.md")
             .currentText,
         "dirty\n",
     );
@@ -1037,24 +1040,27 @@ run_test("a successful save adopts the revision-bound entry identity", () => {
         workspaceRevision: 2,
     });
 
-    assert.equal(workspace_store.get_pear_workspace_document(state, old_id), undefined);
+    assert.equal(workspace_store.get_armada_workspace_document(state, old_id), undefined);
     const new_id = {...old_id, entryId: "revision-2-readme"};
-    const document = workspace_store.get_pear_workspace_document(state, new_id);
+    const document = workspace_store.get_armada_workspace_document(state, new_id);
     assert.ok(document !== undefined);
     assert.equal(document.entryId, "revision-2-readme");
     assert.equal(document.state, "clean");
     assert.equal(
-        workspace_store.get_pear_workspace(state, "workspace-a").activeEntryId,
+        workspace_store.get_armada_workspace(state, "workspace-a").activeEntryId,
         "revision-2-readme",
     );
 
     state = reduce(state, {type: "source_changed", ...old_id});
     assert.equal(state.ignoredStaleResponses, 1);
-    assert.equal(workspace_store.get_pear_workspace_document(state, new_id).currentText, "saved\n");
+    assert.equal(
+        workspace_store.get_armada_workspace_document(state, new_id).currentText,
+        "saved\n",
+    );
 });
 
 run_test("a stale snapshot cannot load bytes under a current entry identity", () => {
-    let state = workspace_store.create_pear_workspace_store();
+    let state = workspace_store.create_armada_workspace_store();
     state = activate(state, "workspace-a", 2);
     const opened = open_document(state, "workspace-a", "README.md");
     state = load_document(opened.state, "workspace-a", "README.md", opened.request_generation, {
@@ -1063,5 +1069,5 @@ run_test("a stale snapshot cannot load bytes under a current entry identity", ()
     });
 
     assert.equal(state.ignoredStaleResponses, 1);
-    assert.equal(workspace_store.get_pear_workspace(state, "workspace-a").documents.size, 0);
+    assert.equal(workspace_store.get_armada_workspace(state, "workspace-a").documents.size, 0);
 });

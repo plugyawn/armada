@@ -41,7 +41,7 @@ from typing import BinaryIO, Literal
 
 from typing_extensions import override
 
-PEAR_ISOLATION_USERNAME_RE = re.compile(r"pear-[0-9a-f]{24}\Z")
+ARMADA_ISOLATION_USERNAME_RE = re.compile(r"armada-[0-9a-f]{24}\Z")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 MAX_WORKSPACE_PATH_BYTES = 4096
@@ -50,7 +50,7 @@ MAX_CLI_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_CLI_RESPONSE_BYTES = 16 * 1024 * 1024
 MAX_STREAM_HEADER_BYTES = 64 * 1024
 
-DEFAULT_ISOLATED_HELPER_PATH = Path("/usr/local/lib/pear-workspace-io")
+DEFAULT_ISOLATED_HELPER_PATH = Path("/usr/local/lib/armada-workspace-io")
 
 _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 _ANCESTOR_DIRECTORY_OPEN_FLAGS = (
@@ -655,7 +655,7 @@ def inspect_empty_workspace_directory(
 
 def _raw_cache_token(file_stat: os.stat_result) -> str:
     revision = ":".join(str(value) for value in _stat_revision(file_stat)).encode("ascii")
-    return hashlib.sha256(b"pear-workspace-raw-v1\0" + revision).hexdigest()
+    return hashlib.sha256(b"armada-workspace-raw-v1\0" + revision).hexdigest()
 
 
 class WorkspaceRawFileStream(Iterator[bytes]):
@@ -1074,7 +1074,7 @@ def _rename_exchange(
 
 
 def _quarantine_name(operation: str) -> str:
-    return f".pear-{operation}-{os.getpid()}-{secrets.token_hex(12)}"
+    return f".armada-{operation}-{os.getpid()}-{secrets.token_hex(12)}"
 
 
 def _restore_quarantined_entry(
@@ -1460,7 +1460,7 @@ def atomic_write_workspace_file(
                         )
                     target_mode = current.mode
 
-                temporary_name = f".pear-write-{os.getpid()}-{secrets.token_hex(12)}"
+                temporary_name = f".armada-write-{os.getpid()}-{secrets.token_hex(12)}"
                 temporary_fd: int | None = None
                 temporary_exists = False
                 published_file: WorkspaceFile | None = None
@@ -2093,7 +2093,7 @@ def _helper_command(
     python_executable: str | Path | None,
 ) -> list[str]:
     if isolation_username is not None:
-        if PEAR_ISOLATION_USERNAME_RE.fullmatch(isolation_username) is None:
+        if ARMADA_ISOLATION_USERNAME_RE.fullmatch(isolation_username) is None:
             raise ValueError("Invalid Pear isolation username")
         executable = os.fspath(python_executable or "python3")
         path = os.fspath(helper_path or DEFAULT_ISOLATED_HELPER_PATH)
@@ -2423,7 +2423,7 @@ def stage_workspace_raw_stream(
         raise WorkspaceFileTooLargeError("Workspace file exceeds the raw stream limit.")
 
     try:
-        staged_file = tempfile.TemporaryFile(prefix="pear-workspace-raw-")  # noqa: SIM115
+        staged_file = tempfile.TemporaryFile(prefix="armada-workspace-raw-")  # noqa: SIM115
     except OSError as error:
         source.close()
         raise WorkspaceIOError("Could not stage the workspace raw file.") from error

@@ -27,7 +27,7 @@ const LONG_TASK_MS = 50;
 function install_stream_probe(message_id) {
     const ac = window.__ac;
     const CHROME =
-        ".pear-live-progress, .pear-run-trace-reveal, .pear-run-footer, [data-run-chrome]";
+        ".legacy-live-progress, .legacy-run-trace-reveal, .legacy-run-footer, [data-run-chrome]";
     const text_of = (root) => {
         const copy = root.cloneNode(true);
         for (const element of copy.querySelectorAll(CHROME)) {

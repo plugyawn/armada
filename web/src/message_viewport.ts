@@ -393,7 +393,7 @@ export function stop_auto_scrolling(): void {
     }
 }
 
-// Matches --pear-dur-2: jQuery's default 400ms reads as lag on a
+// Matches --legacy-dur-2: jQuery's default 400ms reads as lag on a
 // keyboard-driven feed.
 const ANIMATED_SCROLL_DURATION_MS = 220;
 

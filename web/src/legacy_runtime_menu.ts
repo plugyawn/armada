@@ -2,13 +2,13 @@ import $ from "jquery";
 import type * as tippy from "tippy.js";
 import * as z from "zod/mini";
 
-import render_pear_runtime_menu_popover from "../templates/legacy_runtime_menu_popover.hbs";
+import render_legacy_runtime_menu_popover from "../templates/legacy_runtime_menu_popover.hbs";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
-import * as pear_panel from "./legacy_panel.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_panel from "./legacy_panel.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import {
     model_reasoning_efforts,
     context_key as narrow_context_key,
@@ -17,19 +17,19 @@ import * as narrow_state from "./narrow_state.ts";
 import * as popover_menus from "./popover_menus.ts";
 import {parse_html} from "./ui_util.ts";
 
-const pear_reasoning_effort_schema = z.object({
+const armada_reasoning_effort_schema = z.object({
     effort: z.string(),
     label: z.string(),
 });
 
-const pear_model_catalog_entry_schema = z.object({
+const armada_model_catalog_entry_schema = z.object({
     slug: z.string(),
     display_name: z.string(),
     default_reasoning_level: z.optional(z.string()),
-    supported_reasoning_levels: z.optional(z.array(pear_reasoning_effort_schema)),
+    supported_reasoning_levels: z.optional(z.array(armada_reasoning_effort_schema)),
 });
 
-const pear_runtime_usage_schema = z.object({
+const armada_runtime_usage_schema = z.object({
     input_tokens: z.optional(z.number()),
     cached_input_tokens: z.optional(z.number()),
     output_tokens: z.optional(z.number()),
@@ -40,50 +40,50 @@ const pear_runtime_usage_schema = z.object({
     summary: z.optional(z.string()),
 });
 
-const pear_runtime_run_schema = z.object({
+const armada_runtime_run_schema = z.object({
     status: z.string(),
-    usage: z.nullish(pear_runtime_usage_schema),
+    usage: z.nullish(armada_runtime_usage_schema),
 });
 
-// Subset of the `pear_topic_context` object returned by the
-// `GET /json/pear/runs` and `POST /json/pear/topic-context`
+// Subset of the `armada_topic_context` object returned by the
+// `GET /json/armada/runs` and `POST /json/armada/topic-context`
 // endpoints; see web/src/legacy_panel.ts for the full shape.
-const pear_runtime_context_schema = z.object({
+const armada_runtime_context_schema = z.object({
     stream: z.string(),
     topic: z.string(),
     model: z.string(),
     model_choices: z.optional(z.array(z.string())),
-    model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
+    model_catalog: z.optional(z.array(armada_model_catalog_entry_schema)),
     reasoning_effort: z.string(),
-    reasoning_efforts: z.optional(z.array(pear_reasoning_effort_schema)),
+    reasoning_efforts: z.optional(z.array(armada_reasoning_effort_schema)),
     response_policy: z.union([z.literal("ambient"), z.literal("mentions_only")]),
 });
 
-const pear_runtime_response_schema = z.object({
-    pear_runs: z.optional(z.array(pear_runtime_run_schema)),
-    pear_topic_context: z.nullish(pear_runtime_context_schema),
+const armada_runtime_response_schema = z.object({
+    armada_runs: z.optional(z.array(armada_runtime_run_schema)),
+    armada_topic_context: z.nullish(armada_runtime_context_schema),
 });
 
-export type PearReasoningEffort = z.infer<typeof pear_reasoning_effort_schema>;
+export type ArmadaReasoningEffort = z.infer<typeof armada_reasoning_effort_schema>;
 
 export {model_reasoning_efforts} from "./legacy_runtime_shared.ts";
-export type PearRuntimeContext = z.infer<typeof pear_runtime_context_schema>;
+export type ArmadaRuntimeContext = z.infer<typeof armada_runtime_context_schema>;
 
-export type PearRuntimeMenuChoice = {
+export type ArmadaRuntimeMenuChoice = {
     value: string;
     label: string;
     selected: boolean;
 };
 
-export type PearRuntimeUsage = z.infer<typeof pear_runtime_usage_schema>;
-export type PearRuntimeRun = z.infer<typeof pear_runtime_run_schema>;
+export type ArmadaRuntimeUsage = z.infer<typeof armada_runtime_usage_schema>;
+export type ArmadaRuntimeRun = z.infer<typeof armada_runtime_run_schema>;
 
-export type PearRuntimeUsageRow = {
+export type ArmadaRuntimeUsageRow = {
     label: string;
     value: string;
 };
 
-export type PearRuntimeUsageMeter = {
+export type ArmadaRuntimeUsageMeter = {
     has_meter: boolean;
     label: string;
     value: string;
@@ -91,14 +91,14 @@ export type PearRuntimeUsageMeter = {
     is_hot: boolean;
 };
 
-export type PearRuntimeStatus = {
+export type ArmadaRuntimeStatus = {
     glyph: string;
     label: string;
     class_name: string;
     is_active: boolean;
 };
 
-export type PearRuntimeSummary = {
+export type ArmadaRuntimeSummary = {
     model_label: string;
     effort_label: string;
     compact_label: string;
@@ -112,8 +112,8 @@ type RuntimeSave = {
     response_policy: "ambient" | "mentions_only";
 };
 
-let topic_context: PearRuntimeContext | undefined;
-let latest_runs: PearRuntimeRun[] = [];
+let topic_context: ArmadaRuntimeContext | undefined;
+let latest_runs: ArmadaRuntimeRun[] = [];
 let context_key = "";
 let last_error = "";
 let request_in_flight = false;
@@ -121,8 +121,8 @@ let pending_runtime_save: RuntimeSave | undefined;
 let initialized = false;
 
 const runtime_menu_selectors = [
-    "#pear-panel .pear-runtime-menu-trigger",
-    ".message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger",
+    "#legacy-panel .legacy-runtime-menu-trigger",
+    ".message_header_stream .legacy-topic-header-runtime-control.legacy-runtime-menu-trigger",
 ];
 const runtime_menu_selector = runtime_menu_selectors.join(", ");
 const forbidden_header_mount_selectors = [
@@ -143,7 +143,9 @@ function current_narrow(): {stream: string | undefined; topic: string | undefine
     };
 }
 
-export function model_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+export function model_choices(
+    context: ArmadaRuntimeContext | undefined,
+): ArmadaRuntimeMenuChoice[] {
     if (context === undefined) {
         return [];
     }
@@ -174,7 +176,9 @@ export function model_choices(context: PearRuntimeContext | undefined): PearRunt
     return choices;
 }
 
-export function effort_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+export function effort_choices(
+    context: ArmadaRuntimeContext | undefined,
+): ArmadaRuntimeMenuChoice[] {
     if (context === undefined) {
         return [];
     }
@@ -185,7 +189,9 @@ export function effort_choices(context: PearRuntimeContext | undefined): PearRun
     }));
 }
 
-export function presence_choices(context: PearRuntimeContext | undefined): PearRuntimeMenuChoice[] {
+export function presence_choices(
+    context: ArmadaRuntimeContext | undefined,
+): ArmadaRuntimeMenuChoice[] {
     if (context === undefined) {
         return [];
     }
@@ -203,7 +209,7 @@ export function presence_choices(context: PearRuntimeContext | undefined): PearR
     ];
 }
 
-export function runtime_summary(context: PearRuntimeContext | undefined): PearRuntimeSummary {
+export function runtime_summary(context: ArmadaRuntimeContext | undefined): ArmadaRuntimeSummary {
     if (context === undefined) {
         return {
             model_label: $t({defaultMessage: "Pear"}),
@@ -236,7 +242,7 @@ function format_count(value: number | undefined): string {
     return value === undefined ? "0" : value.toLocaleString();
 }
 
-function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined {
+function active_runtime_run(runs: ArmadaRuntimeRun[]): ArmadaRuntimeRun | undefined {
     return (
         runs.find((run) => run.status === "running" || run.status === "queued") ??
         runs.find((run) => run.status === "paused") ??
@@ -244,34 +250,34 @@ function active_runtime_run(runs: PearRuntimeRun[]): PearRuntimeRun | undefined 
     );
 }
 
-export function runtime_status_for_testing(run: {status: string} | undefined): PearRuntimeStatus {
+export function runtime_status_for_testing(run: {status: string} | undefined): ArmadaRuntimeStatus {
     switch (run?.status.toLowerCase()) {
         case "running":
             return {
                 glyph: "·",
                 label: $t({defaultMessage: "working"}),
-                class_name: "pear-runtime-status-active",
+                class_name: "legacy-runtime-status-active",
                 is_active: true,
             };
         case "queued":
             return {
                 glyph: "·",
                 label: $t({defaultMessage: "queued"}),
-                class_name: "pear-runtime-status-active",
+                class_name: "legacy-runtime-status-active",
                 is_active: true,
             };
         case "loading":
             return {
                 glyph: "·",
                 label: $t({defaultMessage: "loading"}),
-                class_name: "pear-runtime-status-active",
+                class_name: "legacy-runtime-status-active",
                 is_active: true,
             };
         case "paused":
             return {
                 glyph: "✧",
                 label: $t({defaultMessage: "paused"}),
-                class_name: "pear-runtime-status-paused",
+                class_name: "legacy-runtime-status-paused",
                 is_active: false,
             };
         case "failed":
@@ -280,7 +286,7 @@ export function runtime_status_for_testing(run: {status: string} | undefined): P
             return {
                 glyph: "✷",
                 label: $t({defaultMessage: "failed"}),
-                class_name: "pear-runtime-status-blocked",
+                class_name: "legacy-runtime-status-blocked",
                 is_active: false,
             };
         case "cancelled":
@@ -288,26 +294,26 @@ export function runtime_status_for_testing(run: {status: string} | undefined): P
             return {
                 glyph: "✷",
                 label: $t({defaultMessage: "cancelled"}),
-                class_name: "pear-runtime-status-blocked",
+                class_name: "legacy-runtime-status-blocked",
                 is_active: false,
             };
         default:
             return {
                 glyph: "·",
                 label: $t({defaultMessage: "idle"}),
-                class_name: "pear-runtime-status-idle",
+                class_name: "legacy-runtime-status-idle",
                 is_active: false,
             };
     }
 }
 
 export function build_runtime_usage_rows(
-    usage: PearRuntimeUsage | null | undefined,
-): PearRuntimeUsageRow[] {
+    usage: ArmadaRuntimeUsage | null | undefined,
+): ArmadaRuntimeUsageRow[] {
     if (usage === undefined || usage === null) {
         return [];
     }
-    const rows: PearRuntimeUsageRow[] = [];
+    const rows: ArmadaRuntimeUsageRow[] = [];
     if (usage.cache_percent !== undefined) {
         rows.push({
             label: $t({defaultMessage: "cache"}),
@@ -341,8 +347,8 @@ export function build_runtime_usage_rows(
 }
 
 export function runtime_usage_meter_for_testing(
-    usage: PearRuntimeUsage | null | undefined,
-): PearRuntimeUsageMeter {
+    usage: ArmadaRuntimeUsage | null | undefined,
+): ArmadaRuntimeUsageMeter {
     if (usage?.cache_percent === undefined) {
         return {
             has_meter: false,
@@ -367,14 +373,14 @@ function popover_context(): {
     status_message: string;
     runtime_model_label: string;
     runtime_effort_label: string;
-    runtime_status: PearRuntimeStatus;
+    runtime_status: ArmadaRuntimeStatus;
     has_runtime_usage: boolean;
     runtime_usage_title: string;
-    runtime_usage_rows: PearRuntimeUsageRow[];
-    runtime_usage_meter: PearRuntimeUsageMeter;
-    model_choices: PearRuntimeMenuChoice[];
-    effort_choices: PearRuntimeMenuChoice[];
-    presence_choices: PearRuntimeMenuChoice[];
+    runtime_usage_rows: ArmadaRuntimeUsageRow[];
+    runtime_usage_meter: ArmadaRuntimeUsageMeter;
+    model_choices: ArmadaRuntimeMenuChoice[];
+    effort_choices: ArmadaRuntimeMenuChoice[];
+    presence_choices: ArmadaRuntimeMenuChoice[];
 } {
     const {stream, topic} = current_narrow();
     let status_message = "";
@@ -434,29 +440,29 @@ function render_popover_content(instance: tippy.Instance): void {
     if (focused instanceof HTMLElement && instance.popper.contains(focused)) {
         const choice = focused.closest<HTMLElement>("[data-model], [data-effort], [data-policy]");
         if (choice?.dataset["model"] !== undefined) {
-            refocus_selector = `.pear-runtime-model-menu-choice[data-model='${CSS.escape(choice.dataset["model"])}']`;
+            refocus_selector = `.legacy-runtime-model-menu-choice[data-model='${CSS.escape(choice.dataset["model"])}']`;
         } else if (choice?.dataset["effort"] !== undefined) {
-            refocus_selector = `.pear-runtime-effort-menu-choice[data-effort='${CSS.escape(choice.dataset["effort"])}']`;
+            refocus_selector = `.legacy-runtime-effort-menu-choice[data-effort='${CSS.escape(choice.dataset["effort"])}']`;
         } else if (choice?.dataset["policy"] !== undefined) {
-            refocus_selector = `.pear-runtime-presence-menu-choice[data-policy='${CSS.escape(choice.dataset["policy"])}']`;
+            refocus_selector = `.legacy-runtime-presence-menu-choice[data-policy='${CSS.escape(choice.dataset["policy"])}']`;
         }
     }
     const context = popover_context();
-    instance.setContent(parse_html(render_pear_runtime_menu_popover(context)));
+    instance.setContent(parse_html(render_legacy_runtime_menu_popover(context)));
     // The meter width is set here rather than through a style attribute in
     // the template, which the repo's template lint forbids.
-    const meter_fill = instance.popper.querySelector<HTMLElement>(".pear-runtime-meter-fill");
+    const meter_fill = instance.popper.querySelector<HTMLElement>(".legacy-runtime-meter-fill");
     if (meter_fill !== null) {
         meter_fill.style.width = `${context.runtime_usage_meter.percent}%`;
     }
     if (refocus_selector !== undefined) {
         instance.popper.querySelector<HTMLElement>(refocus_selector)?.focus({preventScroll: true});
     }
-    pear_run_state.notify_liveness_markers_changed();
+    legacy_run_state.notify_liveness_markers_changed();
 }
 
 function rerender_popover_if_open(): void {
-    const instance = popover_menus.popover_instances.pear_runtime_menu;
+    const instance = popover_menus.popover_instances.legacy_runtime_menu;
     if (instance?.state.isVisible) {
         render_popover_content(instance);
     }
@@ -508,22 +514,22 @@ function update_runtime_button_label(): void {
     }
     $button.attr("aria-label", label);
     $button.attr("data-tippy-content", label);
-    $button.find(".pear-runtime-menu-label").text(compact_label);
+    $button.find(".legacy-runtime-menu-label").text(compact_label);
     if (model_label !== "" || effort_label !== "") {
-        $button.find(".pear-runtime-menu-model-label").text(model_label || compact_label);
-        $button.find(".pear-runtime-menu-effort-label").text(effort_label);
+        $button.find(".legacy-runtime-menu-model-label").text(model_label || compact_label);
+        $button.find(".legacy-runtime-menu-effort-label").text(effort_label);
     }
-    $button.toggleClass("pear-liveness-active", runtime_status.is_active);
+    $button.toggleClass("legacy-liveness-active", runtime_status.is_active);
     $button
-        .find(".pear-runtime-menu-glyph")
+        .find(".legacy-runtime-menu-glyph")
         .text(runtime_status.glyph)
         .attr(
             "class",
-            `pear-ui-glyph pear-runtime-menu-glyph ${runtime_status.class_name}${
-                runtime_status.is_active ? " pear-thinking-glyph" : ""
+            `legacy-ui-glyph legacy-runtime-menu-glyph ${runtime_status.class_name}${
+                runtime_status.is_active ? " legacy-thinking-glyph" : ""
             }`,
         );
-    pear_run_state.notify_liveness_markers_changed();
+    legacy_run_state.notify_liveness_markers_changed();
 }
 
 function apply_shared_topic_context(): boolean {
@@ -543,13 +549,13 @@ function apply_shared_topic_context(): boolean {
         // A save is in flight; its completion handler owns local state.
         return true;
     }
-    const cached = pear_panel.shared_topic_context(stream, topic);
+    const cached = legacy_panel.shared_topic_context(stream, topic);
     if (cached === undefined) {
         return false;
     }
     last_error = "";
     topic_context = cached;
-    latest_runs = pear_panel.shared_runs();
+    latest_runs = legacy_panel.shared_runs();
     context_key = narrow_context_key(stream, topic);
     update_runtime_button_label();
     rerender_popover_if_open();
@@ -562,7 +568,7 @@ function fetch_topic_context(): void {
         // applies the result when it lands. This path is only reachable
         // from user-initiated entry points (open, init, hashchange), so
         // it cannot recurse through the listener.
-        pear_panel.refresh({force_context: true});
+        legacy_panel.refresh({force_context: true});
     }
 }
 
@@ -596,13 +602,13 @@ function same_runtime_save(a: RuntimeSave, b: RuntimeSave): boolean {
 
 function post_runtime_save(
     save: RuntimeSave,
-    previous_context: PearRuntimeContext | undefined,
+    previous_context: ArmadaRuntimeContext | undefined,
 ): void {
     request_in_flight = true;
-    $("#pear-runtime-menu-popover").addClass("pear-runtime-saving");
-    // Same endpoint and payload shape as pear_panel.save_topic_context.
+    $("#legacy-runtime-menu-popover").addClass("legacy-runtime-saving");
+    // Same endpoint and payload shape as legacy_panel.save_topic_context.
     void channel.post({
-        url: "/json/pear/topic-context",
+        url: "/json/armada/topic-context",
         data: {
             stream: save.stream,
             topic: save.topic,
@@ -612,14 +618,14 @@ function post_runtime_save(
             include_git: false,
         },
         success(raw_data) {
-            const data = pear_runtime_response_schema.parse(raw_data);
+            const data = armada_runtime_response_schema.parse(raw_data);
             last_error = "";
-            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+            if (data.armada_topic_context !== undefined && data.armada_topic_context !== null) {
                 topic_context =
                     pending_runtime_save === undefined
-                        ? data.pear_topic_context
+                        ? data.armada_topic_context
                         : {
-                              ...data.pear_topic_context,
+                              ...data.armada_topic_context,
                               model: pending_runtime_save.model,
                               reasoning_effort: pending_runtime_save.reasoning_effort,
                               response_policy: pending_runtime_save.response_policy,
@@ -628,9 +634,9 @@ function post_runtime_save(
                 // Push the saved context into the shared store so the
                 // header pill and panel update immediately rather than on
                 // their next context refresh.
-                pear_panel.remember_saved_topic_context(topic_context);
+                legacy_panel.remember_saved_topic_context(topic_context);
             }
-            latest_runs = data.pear_runs ?? latest_runs;
+            latest_runs = data.armada_runs ?? latest_runs;
             update_runtime_button_label();
             rerender_popover_if_open();
         },
@@ -647,7 +653,7 @@ function post_runtime_save(
         },
         complete() {
             request_in_flight = false;
-            $("#pear-runtime-menu-popover").removeClass("pear-runtime-saving");
+            $("#legacy-runtime-menu-popover").removeClass("legacy-runtime-saving");
             const pending_save = pending_runtime_save;
             pending_runtime_save = undefined;
             if (pending_save !== undefined && !same_runtime_save(pending_save, save)) {
@@ -677,11 +683,11 @@ function save_runtime(
 }
 
 function selected_choice(name: string): string | undefined {
-    const select_value = $(`#pear-runtime-menu-popover select[name='${name}']`).val();
+    const select_value = $(`#legacy-runtime-menu-popover select[name='${name}']`).val();
     if (typeof select_value === "string") {
         return select_value;
     }
-    const value = $(`#pear-runtime-menu-popover input[name='${name}']:checked`).val();
+    const value = $(`#legacy-runtime-menu-popover input[name='${name}']:checked`).val();
     return typeof value === "string" ? value : undefined;
 }
 
@@ -696,7 +702,7 @@ function on_model_change(model: string): void {
 }
 
 function on_effort_change(effort: string): void {
-    const model = selected_choice("pear-runtime-model") ?? topic_context?.model;
+    const model = selected_choice("legacy-runtime-model") ?? topic_context?.model;
     if (model === undefined) {
         return;
     }
@@ -747,12 +753,12 @@ export function initialize(): void {
             ],
         },
         onMount(instance) {
-            popover_menus.popover_instances.pear_runtime_menu = instance;
+            popover_menus.popover_instances.legacy_runtime_menu = instance;
             // Start keyboard focus on the selected choice so Tab and the
             // arrow keys operate inside the menu instead of walking the
             // header controls behind it.
             instance.popper
-                .querySelector<HTMLElement>(".pear-runtime-menu-choice-selected")
+                .querySelector<HTMLElement>(".legacy-runtime-menu-choice-selected")
                 ?.focus({preventScroll: true});
         },
         onShow(instance) {
@@ -772,7 +778,7 @@ export function initialize(): void {
         onHidden(instance) {
             const reference = instance.reference;
             instance.destroy();
-            popover_menus.popover_instances.pear_runtime_menu = null;
+            popover_menus.popover_instances.legacy_runtime_menu = null;
             $(reference).removeClass("active-right-sidebar-menu");
             // Escape (or selecting with the keyboard) tears down the popper
             // that held focus; hand focus back to the trigger rather than
@@ -798,7 +804,7 @@ export function initialize(): void {
 
     $("body").on(
         "click keydown",
-        "#pear-runtime-menu-popover .pear-runtime-model-menu-choice",
+        "#legacy-runtime-menu-popover .legacy-runtime-model-menu-choice",
         function (this: HTMLElement, e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
                 return;
@@ -814,7 +820,7 @@ export function initialize(): void {
 
     $("body").on(
         "click keydown",
-        "#pear-runtime-menu-popover .pear-runtime-presence-menu-choice",
+        "#legacy-runtime-menu-popover .legacy-runtime-presence-menu-choice",
         function (this: HTMLElement, e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
                 return;
@@ -833,7 +839,7 @@ export function initialize(): void {
 
     $("body").on(
         "click keydown",
-        "#pear-runtime-menu-popover .pear-runtime-effort-menu-choice",
+        "#legacy-runtime-menu-popover .legacy-runtime-effort-menu-choice",
         function (this: HTMLElement, e) {
             if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") {
                 return;
@@ -854,7 +860,7 @@ export function initialize(): void {
     // whenever it changes instead of running a second interval against
     // the same endpoint. Read-only: a fetch here could recurse through
     // the store notification.
-    pear_panel.on_topic_context_changed(() => {
+    legacy_panel.on_topic_context_changed(() => {
         apply_shared_topic_context();
     });
 }

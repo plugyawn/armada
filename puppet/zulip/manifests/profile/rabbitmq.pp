@@ -92,4 +92,12 @@ class zulip::profile::rabbitmq {
     refreshonly => true,
     require     => Service['rabbitmq-server'],
   }
+
+  # Armada's agent runs hold their queue message for as long as a run
+  # takes; the script says why.
+  exec { 'configure-armada-rabbitmq-policy':
+    command => "${facts['zulip_scripts_path']}/setup/configure-armada-rabbitmq-policy",
+    unless  => "${facts['zulip_scripts_path']}/setup/configure-armada-rabbitmq-policy --check",
+    require => Exec['configure-rabbitmq'],
+  }
 }

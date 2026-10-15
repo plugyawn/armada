@@ -1,54 +1,54 @@
-import render_pear_workspace_shell from "../templates/legacy_workspace_shell.hbs";
+import render_legacy_workspace_shell from "../templates/legacy_workspace_shell.hbs";
 
-import type {PearWorkspaceDescriptor, PearWorkspaceEntry} from "./legacy_workspace_api.ts";
-import * as pear_workspace_api from "./legacy_workspace_api.ts";
-import type {fill_pear_compose_with_workspace_context} from "./legacy_workspace_compose.ts";
+import type {ArmadaWorkspaceDescriptor, ArmadaWorkspaceEntry} from "./legacy_workspace_api.ts";
+import * as legacy_workspace_api from "./legacy_workspace_api.ts";
+import type {fill_armada_compose_with_workspace_context} from "./legacy_workspace_compose.ts";
 import type {
-    PearWorkspaceEditorController,
-    PearWorkspaceEditorOptions,
-    PearWorkspaceEditorPreferences,
-    PearWorkspaceEditorSnapshot,
+    ArmadaWorkspaceEditorController,
+    ArmadaWorkspaceEditorOptions,
+    ArmadaWorkspaceEditorPreferences,
+    ArmadaWorkspaceEditorSnapshot,
 } from "./legacy_workspace_editor.ts";
-import {create_pear_workspace_editor} from "./legacy_workspace_editor.ts";
-import {on_pear_workspace_changed} from "./legacy_workspace_events.ts";
-import type {PearWorkspaceExplorerController} from "./legacy_workspace_explorer.ts";
-import {create_pear_workspace_explorer} from "./legacy_workspace_explorer.ts";
+import {create_armada_workspace_editor} from "./legacy_workspace_editor.ts";
+import {on_armada_workspace_changed} from "./legacy_workspace_events.ts";
+import type {ArmadaWorkspaceExplorerController} from "./legacy_workspace_explorer.ts";
+import {create_armada_workspace_explorer} from "./legacy_workspace_explorer.ts";
 import type {
-    PearWorkspaceFileMutationEvent,
-    PearWorkspaceFilesController,
-    PearWorkspaceFilesOptions,
-    PearWorkspaceReadmeState,
+    ArmadaWorkspaceFileMutationEvent,
+    ArmadaWorkspaceFilesController,
+    ArmadaWorkspaceFilesOptions,
+    ArmadaWorkspaceReadmeState,
 } from "./legacy_workspace_files.ts";
-import {create_pear_workspace_files} from "./legacy_workspace_files.ts";
+import {create_armada_workspace_files} from "./legacy_workspace_files.ts";
 import {
-    read_pear_workspace_location,
-    write_pear_workspace_location,
+    read_armada_workspace_location,
+    write_armada_workspace_location,
 } from "./legacy_workspace_location.ts";
-import type * as pear_workspace_markdown_preview from "./legacy_workspace_markdown_preview.ts";
+import type * as legacy_workspace_markdown_preview from "./legacy_workspace_markdown_preview.ts";
 import {
-    begin_pear_workspace_metric,
-    finish_pear_workspace_metric,
-    pear_workspace_metrics_snapshot,
-    record_pear_workspace_error,
+    armada_workspace_metrics_snapshot,
+    begin_armada_workspace_metric,
+    finish_armada_workspace_metric,
+    record_armada_workspace_error,
 } from "./legacy_workspace_metrics.ts";
-import type {PearWorkspaceShellTab} from "./legacy_workspace_shell_view.ts";
+import type {ArmadaWorkspaceShellTab} from "./legacy_workspace_shell_view.ts";
 import {
-    render_pear_workspace_breadcrumb,
-    render_pear_workspace_descriptor,
-    render_pear_workspace_surface,
-    render_pear_workspace_tabs,
-    set_pear_workspace_mobile_explorer_open,
+    render_armada_workspace_breadcrumb,
+    render_armada_workspace_descriptor,
+    render_armada_workspace_surface,
+    render_armada_workspace_tabs,
+    set_armada_workspace_mobile_explorer_open,
 } from "./legacy_workspace_shell_view.ts";
-import type {PearWorkspaceTreeState} from "./legacy_workspace_tree.ts";
+import type {ArmadaWorkspaceTreeState} from "./legacy_workspace_tree.ts";
 import {
-    begin_pear_workspace_directory_request,
-    create_pear_workspace_tree,
-    fail_pear_workspace_directory_request,
-    receive_pear_workspace_directory_page,
-    replace_pear_workspace_tree_revision,
-    reveal_pear_workspace_search_result,
-    select_pear_workspace_entry,
-    set_pear_workspace_directory_expanded,
+    begin_armada_workspace_directory_request,
+    create_armada_workspace_tree,
+    fail_armada_workspace_directory_request,
+    receive_armada_workspace_directory_page,
+    replace_armada_workspace_tree_revision,
+    reveal_armada_workspace_search_result,
+    select_armada_workspace_entry,
+    set_armada_workspace_directory_expanded,
 } from "./legacy_workspace_tree.ts";
 
 type AbortableRequest = {abort: () => unknown};
@@ -58,29 +58,29 @@ const shell_styles_ready: Promise<unknown> =
         ? Promise.resolve()
         : import("../styles/legacy_workspace.css");
 
-export type PearWorkspaceShellDependencies = {
-    getWorkspace: typeof pear_workspace_api.get_pear_workspace;
-    getTree: typeof pear_workspace_api.get_pear_workspace_tree;
-    search: typeof pear_workspace_api.search_pear_workspace;
-    refresh: typeof pear_workspace_api.refresh_pear_workspace;
-    rawUrl: typeof pear_workspace_api.pear_workspace_raw_url;
-    createEditor: (options: PearWorkspaceEditorOptions) => PearWorkspaceEditorController;
-    createFiles: (options: PearWorkspaceFilesOptions) => PearWorkspaceFilesController;
+export type ArmadaWorkspaceShellDependencies = {
+    getWorkspace: typeof legacy_workspace_api.get_armada_workspace;
+    getTree: typeof legacy_workspace_api.get_armada_workspace_tree;
+    search: typeof legacy_workspace_api.search_armada_workspace;
+    refresh: typeof legacy_workspace_api.refresh_armada_workspace;
+    rawUrl: typeof legacy_workspace_api.armada_workspace_raw_url;
+    createEditor: (options: ArmadaWorkspaceEditorOptions) => ArmadaWorkspaceEditorController;
+    createFiles: (options: ArmadaWorkspaceFilesOptions) => ArmadaWorkspaceFilesController;
     loadComposeIntegration: () => Promise<{
-        fill_pear_compose_with_workspace_context: typeof fill_pear_compose_with_workspace_context;
+        fill_armada_compose_with_workspace_context: typeof fill_armada_compose_with_workspace_context;
     }>;
 };
 
-export type PearWorkspaceShellOptions = {
+export type ArmadaWorkspaceShellOptions = {
     root: HTMLElement;
     workspaceId: string;
-    initialRoom: PearWorkspaceRoom;
-    dependencies?: Partial<PearWorkspaceShellDependencies>;
+    initialRoom: ArmadaWorkspaceRoom;
+    dependencies?: Partial<ArmadaWorkspaceShellDependencies>;
 };
 
-export type PearWorkspaceRoom = "readme" | "files";
+export type ArmadaWorkspaceRoom = "readme" | "files";
 
-type WorkspaceTab = PearWorkspaceShellTab;
+type WorkspaceTab = ArmadaWorkspaceShellTab;
 type LocationHistoryMode = "none" | "push" | "replace";
 
 type CachedWorkspaceShellState = {
@@ -88,7 +88,7 @@ type CachedWorkspaceShellState = {
     activePath: string | undefined;
     lastFilesPath: string | undefined;
     expandedPaths: string[];
-    editor: PearWorkspaceEditorPreferences;
+    editor: ArmadaWorkspaceEditorPreferences;
 };
 
 const shell_state_cache = new Map<string, CachedWorkspaceShellState>();
@@ -100,7 +100,7 @@ const directory_prefetch_limit = 24;
 const explorer_width_min = 180;
 const explorer_width_max = 480;
 
-const explorer_collapsed_storage_key = "pear-workspace-explorer-collapsed";
+const explorer_collapsed_storage_key = "legacy-workspace-explorer-collapsed";
 
 function restored_explorer_collapsed(): boolean {
     try {
@@ -111,7 +111,7 @@ function restored_explorer_collapsed(): boolean {
 }
 
 function explorer_width_storage_key(workspace_id: string): string {
-    return `pear-workspace-explorer-width:${workspace_id}`;
+    return `legacy-workspace-explorer-width:${workspace_id}`;
 }
 
 function restored_explorer_width(workspace_id: string): number {
@@ -136,35 +136,35 @@ function cache_shell_state(workspace_id: string, state: CachedWorkspaceShellStat
     }
 }
 
-export type PearWorkspaceShellDebugState = {
-    descriptor: PearWorkspaceDescriptor | undefined;
-    tree: PearWorkspaceTreeState | undefined;
+export type ArmadaWorkspaceShellDebugState = {
+    descriptor: ArmadaWorkspaceDescriptor | undefined;
+    tree: ArmadaWorkspaceTreeState | undefined;
     tabs: readonly WorkspaceTab[];
     activePath: string | undefined;
     renderedTreeRows: number;
     explorerWidth: number;
-    room: PearWorkspaceRoom;
-    metrics: ReturnType<typeof pear_workspace_metrics_snapshot>;
+    room: ArmadaWorkspaceRoom;
+    metrics: ReturnType<typeof armada_workspace_metrics_snapshot>;
 };
 
-export type PearWorkspaceShellController = {
+export type ArmadaWorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
     openQuickOpen: () => void;
     applyLocation: () => void;
-    setRoom: (room: PearWorkspaceRoom) => void;
-    getDebugState: () => PearWorkspaceShellDebugState;
+    setRoom: (room: ArmadaWorkspaceRoom) => void;
+    getDebugState: () => ArmadaWorkspaceShellDebugState;
     destroy: () => Promise<void>;
 };
 
-const default_dependencies: PearWorkspaceShellDependencies = {
-    getWorkspace: pear_workspace_api.get_pear_workspace,
-    getTree: pear_workspace_api.get_pear_workspace_tree,
-    search: pear_workspace_api.search_pear_workspace,
-    refresh: pear_workspace_api.refresh_pear_workspace,
-    rawUrl: pear_workspace_api.pear_workspace_raw_url,
-    createEditor: create_pear_workspace_editor,
-    createFiles: create_pear_workspace_files,
+const default_dependencies: ArmadaWorkspaceShellDependencies = {
+    getWorkspace: legacy_workspace_api.get_armada_workspace,
+    getTree: legacy_workspace_api.get_armada_workspace_tree,
+    search: legacy_workspace_api.search_armada_workspace,
+    refresh: legacy_workspace_api.refresh_armada_workspace,
+    rawUrl: legacy_workspace_api.armada_workspace_raw_url,
+    createEditor: create_armada_workspace_editor,
+    createFiles: create_armada_workspace_files,
     async loadComposeIntegration() {
         return import("./legacy_workspace_compose.ts");
     },
@@ -206,23 +206,23 @@ function is_anchor(element: HTMLElement): element is HTMLAnchorElement {
     return element.tagName === "A";
 }
 
-function error_message(error: pear_workspace_api.PearWorkspaceApiError): string {
+function error_message(error: legacy_workspace_api.ArmadaWorkspaceApiError): string {
     return error.kind === "server" ? error.error.msg : error.message;
 }
 
-function record_api_error(error: pear_workspace_api.PearWorkspaceApiError): void {
-    record_pear_workspace_error(error.kind === "server" ? error.status : undefined);
+function record_api_error(error: legacy_workspace_api.ArmadaWorkspaceApiError): void {
+    record_armada_workspace_error(error.kind === "server" ? error.status : undefined);
 }
 
-export function create_pear_workspace_shell(
-    options: PearWorkspaceShellOptions,
-): PearWorkspaceShellController {
+export function create_armada_workspace_shell(
+    options: ArmadaWorkspaceShellOptions,
+): ArmadaWorkspaceShellController {
     const dependencies = {...default_dependencies, ...options.dependencies};
     const restored_state = shell_state_cache.get(options.workspaceId);
     if (globalThis.process?.env["NODE_ENV"] !== "test") {
         options.root.hidden = true;
     }
-    options.root.innerHTML = render_pear_workspace_shell({});
+    options.root.innerHTML = render_legacy_workspace_shell({});
     const title = required_element(options.root, "[data-role='workspace-title']");
     const meta = required_element(options.root, "[data-role='workspace-meta']");
     const tree_root = required_element(options.root, "[data-role='tree']");
@@ -233,12 +233,12 @@ export function create_pear_workspace_shell(
         is_input,
     );
     const search_results = required_element(options.root, "[data-role='search-results']");
-    const explorer_root = required_element(options.root, "#pear-workspace-explorer");
-    const body = required_element(options.root, ".pear-workspace-shell__body");
+    const explorer_root = required_element(options.root, "#legacy-workspace-explorer");
+    const body = required_element(options.root, ".legacy-workspace-shell__body");
     const explorer_splitter = required_element(options.root, "[data-role='explorer-splitter']");
     const tabs_root = required_element(options.root, "[data-role='tabs']");
     const breadcrumb = required_element(options.root, "[data-role='breadcrumb']");
-    const document_panel = required_element(options.root, "#pear-workspace-document-panel");
+    const document_panel = required_element(options.root, "#legacy-workspace-document-panel");
     const editor_root = required_element(options.root, "[data-role='editor']");
     const nontext_root = required_element(options.root, "[data-role='nontext']");
     const conflict_root = required_element(options.root, "[data-role='conflict']");
@@ -262,9 +262,9 @@ export function create_pear_workspace_shell(
         is_button,
     );
     const preview_root = required_element(options.root, "[data-role='preview']");
-    const ask_pear_button = required_typed_element(
+    const ask_armada_button = required_typed_element(
         options.root,
-        "[data-action='ask-pear']",
+        "[data-action='ask-armada']",
         is_button,
     );
     const raw_link = required_typed_element(options.root, "[data-role='raw-link']", is_anchor);
@@ -285,11 +285,11 @@ export function create_pear_workspace_shell(
     );
     const file_menu = required_element(options.root, "[data-role='file-menu']");
     const file_dialog_layer = required_element(options.root, "[data-role='file-dialog-layer']");
-    const shell_root = required_element(options.root, ".pear-workspace-shell");
+    const shell_root = required_element(options.root, ".legacy-workspace-shell");
     const readme_empty = required_element(options.root, "[data-role='readme-empty']");
 
-    let descriptor: PearWorkspaceDescriptor | undefined;
-    let tree: PearWorkspaceTreeState | undefined;
+    let descriptor: ArmadaWorkspaceDescriptor | undefined;
+    let tree: ArmadaWorkspaceTreeState | undefined;
     let destroyed = false;
     let filter = "";
     let active_path = restored_state?.activePath;
@@ -297,7 +297,7 @@ export function create_pear_workspace_shell(
     let room = options.initialRoom;
     const tabs: WorkspaceTab[] =
         restored_state?.tabs.map((tab) => ({...tab, entry: {...tab.entry}, dirty: false})) ?? [];
-    let editor_snapshot: PearWorkspaceEditorSnapshot | undefined;
+    let editor_snapshot: ArmadaWorkspaceEditorSnapshot | undefined;
     let authority_stale = false;
     let restored_preferences_applied = false;
     let descriptor_request: AbortableRequest | undefined;
@@ -325,12 +325,12 @@ export function create_pear_workspace_shell(
     // Files edits.
     const preview_choices = new Map<string, boolean>();
     let rendered_preview: {path: string; text: string} | undefined;
-    let preview_module: typeof pear_workspace_markdown_preview | undefined;
+    let preview_module: typeof legacy_workspace_markdown_preview | undefined;
     let preview_module_loading = false;
     let resize_pointer_id: number | undefined;
     const directory_requests = new Map<string, AbortableRequest>();
     const rebind_requests = new Map<string, AbortableRequest>();
-    let files: PearWorkspaceFilesController | undefined;
+    let files: ArmadaWorkspaceFilesController | undefined;
     let ready_resolve: (() => void) | undefined;
     const descriptor_ready = new Promise<void>((resolve) => {
         ready_resolve = resolve;
@@ -359,7 +359,7 @@ export function create_pear_workspace_shell(
 
     const sync_location = (history_mode: Exclude<LocationHistoryMode, "none">): void => {
         const mode = editor_snapshot?.activeDocument?.editorMode ?? editor.getPreferences().mode;
-        write_pear_workspace_location(
+        write_armada_workspace_location(
             {
                 view: room,
                 workspaceId: options.workspaceId,
@@ -375,7 +375,7 @@ export function create_pear_workspace_shell(
             explorer_width_max,
             Math.max(explorer_width_min, Math.round(width)),
         );
-        body.style.setProperty("--pear-workspace-explorer-width", `${explorer_width}px`);
+        body.style.setProperty("--legacy-workspace-explorer-width", `${explorer_width}px`);
         explorer_splitter.setAttribute("aria-valuenow", String(explorer_width));
         if (persist) {
             try {
@@ -455,12 +455,12 @@ export function create_pear_workspace_shell(
     // guess at breakpoints (or at anything when styles are absent).
     const explorer_is_drawer = (): boolean =>
         typeof getComputedStyle !== "function" ||
-        getComputedStyle(shell_root).getPropertyValue("--pear-workspace-explorer-mode").trim() !==
+        getComputedStyle(shell_root).getPropertyValue("--legacy-workspace-explorer-mode").trim() !==
             "docked";
 
     const set_explorer_collapsed = (collapsed: boolean): void => {
         explorer_collapsed = collapsed;
-        shell_root.classList.toggle("pear-workspace-shell--explorer-collapsed", collapsed);
+        shell_root.classList.toggle("legacy-workspace-shell--explorer-collapsed", collapsed);
         explorer_toggle.setAttribute("aria-expanded", String(!collapsed));
         try {
             localStorage.setItem(explorer_collapsed_storage_key, String(collapsed));
@@ -470,12 +470,12 @@ export function create_pear_workspace_shell(
     };
 
     if (explorer_collapsed) {
-        shell_root.classList.add("pear-workspace-shell--explorer-collapsed");
+        shell_root.classList.add("legacy-workspace-shell--explorer-collapsed");
     }
 
     const set_mobile_explorer_open = (open: boolean, restore_focus: boolean): void => {
         mobile_explorer_open = open;
-        set_pear_workspace_mobile_explorer_open(options.root, explorer_toggle, open);
+        set_armada_workspace_mobile_explorer_open(options.root, explorer_toggle, open);
         if (!open && restore_focus && !destroyed) {
             explorer_toggle.focus();
         }
@@ -528,7 +528,7 @@ export function create_pear_workspace_shell(
         search_input.select();
     };
 
-    const readme_state = (): PearWorkspaceReadmeState => {
+    const readme_state = (): ArmadaWorkspaceReadmeState => {
         if (
             [...(tree?.entries.values() ?? [])].some(
                 (entry) => entry.kind === "file" && entry.path.toLowerCase() === "readme.md",
@@ -576,12 +576,12 @@ export function create_pear_workspace_shell(
     };
 
     const render_tabs = (): void => {
-        render_pear_workspace_tabs(tabs_root, tabs, active_path);
+        render_armada_workspace_tabs(tabs_root, tabs, active_path);
         update_files_context();
     };
 
     const render_breadcrumb = (): void => {
-        render_pear_workspace_breadcrumb(breadcrumb, active_tab());
+        render_armada_workspace_breadcrumb(breadcrumb, active_tab());
     };
 
     const preview_state = (): {available: boolean; active: boolean} => {
@@ -629,7 +629,7 @@ export function create_pear_workspace_shell(
         }
         const scroll_top = rendered_preview?.path === path ? preview_root.scrollTop : 0;
         preview_root.replaceChildren(
-            preview_module.render_pear_workspace_markdown_preview(text, {
+            preview_module.render_armada_workspace_markdown_preview(text, {
                 path,
                 rawUrlForPath(workspace_path) {
                     const entry = [...(tree?.entries.values() ?? [])].find(
@@ -647,7 +647,7 @@ export function create_pear_workspace_shell(
     };
 
     const render_surface = (): void => {
-        render_pear_workspace_surface({
+        render_armada_workspace_surface({
             elements: {
                 editorRoot: editor_root,
                 nontextRoot: nontext_root,
@@ -671,8 +671,8 @@ export function create_pear_workspace_shell(
             rawUrl: dependencies.rawUrl,
         });
         render_preview();
-        ask_pear_button.hidden = active_tab() === undefined;
-        ask_pear_button.disabled = compose_integration_loading;
+        ask_armada_button.hidden = active_tab() === undefined;
+        ask_armada_button.disabled = compose_integration_loading;
     };
 
     const render_links = render_surface;
@@ -682,7 +682,7 @@ export function create_pear_workspace_shell(
         onUpdate(snapshot) {
             editor_snapshot = snapshot;
             if (snapshot.surface.kind !== "empty" && snapshot.surface.kind !== "loading") {
-                finish_pear_workspace_metric("workspace_file_interactive");
+                finish_armada_workspace_metric("workspace_file_interactive");
             }
             const document = snapshot.activeDocument;
             if (document !== undefined) {
@@ -719,7 +719,7 @@ export function create_pear_workspace_shell(
         },
     });
 
-    const open_entry = async (entry: PearWorkspaceEntry): Promise<void> => {
+    const open_entry = async (entry: ArmadaWorkspaceEntry): Promise<void> => {
         const requested_mode = location_mode_request;
         location_mode_request = undefined;
         await editor.open(entry, requested_mode);
@@ -729,7 +729,7 @@ export function create_pear_workspace_shell(
     };
 
     const activate_entry = (
-        entry: PearWorkspaceEntry,
+        entry: ArmadaWorkspaceEntry,
         pin: boolean,
         history_mode: LocationHistoryMode = "push",
     ): void => {
@@ -745,7 +745,7 @@ export function create_pear_workspace_shell(
             }
             return;
         }
-        tree = select_pear_workspace_entry(tree, entry.entry_id);
+        tree = select_armada_workspace_entry(tree, entry.entry_id);
         active_path = entry.path;
         if (room === "files" && entry.path.toLowerCase() !== "readme.md") {
             last_files_path = entry.path;
@@ -779,7 +779,7 @@ export function create_pear_workspace_shell(
             }
         }
         // Selection and tab chrome must paint before the document request starts.
-        begin_pear_workspace_metric("workspace_file_interactive");
+        begin_armada_workspace_metric("workspace_file_interactive");
         render_tree();
         render_tabs();
         render_breadcrumb();
@@ -907,7 +907,7 @@ export function create_pear_workspace_shell(
         if (first_page_only && (directory?.childIds.length ?? 0) > 0) {
             return;
         }
-        const started = begin_pear_workspace_directory_request(tree, directory_id);
+        const started = begin_armada_workspace_directory_request(tree, directory_id);
         tree = started.state;
         render_tree();
         const request_state = started.request;
@@ -927,7 +927,7 @@ export function create_pear_workspace_shell(
                     if (tree === undefined) {
                         return;
                     }
-                    tree = receive_pear_workspace_directory_page(tree, request_state, response);
+                    tree = receive_armada_workspace_directory_page(tree, request_state, response);
                     for (const tab of tabs) {
                         const rebound = [...tree.entries.values()].find(
                             (entry) => entry.path === tab.path && entry.kind === "file",
@@ -940,7 +940,7 @@ export function create_pear_workspace_shell(
                     render_tree();
                     render_tabs();
                     if (tree.rootId === directory_id) {
-                        finish_pear_workspace_metric("workspace_tree_usable");
+                        finish_armada_workspace_metric("workspace_tree_usable");
                     }
                     const expanded_unloaded = [...tree.entries.values()].filter(
                         (entry) =>
@@ -958,7 +958,7 @@ export function create_pear_workspace_shell(
                     if (tree === undefined) {
                         return;
                     }
-                    tree = fail_pear_workspace_directory_request(
+                    tree = fail_armada_workspace_directory_request(
                         tree,
                         request_state,
                         error_message(error),
@@ -974,14 +974,14 @@ export function create_pear_workspace_shell(
         }
     };
 
-    const explorer: PearWorkspaceExplorerController = create_pear_workspace_explorer({
+    const explorer: ArmadaWorkspaceExplorerController = create_armada_workspace_explorer({
         treeRoot: tree_root,
         searchResultsRoot: search_results,
         onSelect(entry_id) {
             if (tree === undefined) {
                 return;
             }
-            tree = select_pear_workspace_entry(tree, entry_id);
+            tree = select_armada_workspace_entry(tree, entry_id);
             render_tree();
         },
         onActivate(entry_id, pin) {
@@ -997,7 +997,7 @@ export function create_pear_workspace_shell(
             if (tree === undefined) {
                 return;
             }
-            tree = set_pear_workspace_directory_expanded(tree, entry_id, expanded);
+            tree = set_armada_workspace_directory_expanded(tree, entry_id, expanded);
             render_tree();
             if (expanded) {
                 load_directory(entry_id, true);
@@ -1011,7 +1011,7 @@ export function create_pear_workspace_shell(
             if (tree === undefined) {
                 return;
             }
-            tree = reveal_pear_workspace_search_result(tree, response, entry_id);
+            tree = reveal_armada_workspace_search_result(tree, response, entry_id);
             search_results.hidden = true;
             filter = "";
             search_input.value = "";
@@ -1040,7 +1040,7 @@ export function create_pear_workspace_shell(
         }
         const cached = [...tree.entries.values()].find((entry) => entry.path === path);
         if (cached !== undefined) {
-            tree = select_pear_workspace_entry(tree, cached.entry_id);
+            tree = select_armada_workspace_entry(tree, cached.entry_id);
             render_tree();
             explorer.focusEntry(cached.entry_id);
             if (activate && cached.kind === "file") {
@@ -1070,7 +1070,7 @@ export function create_pear_workspace_shell(
                     status.textContent = `${path} is not in this workspace`;
                     return;
                 }
-                tree = reveal_pear_workspace_search_result(tree, response, exact.entry_id);
+                tree = reveal_armada_workspace_search_result(tree, response, exact.entry_id);
                 render_tree();
                 explorer.focusEntry(exact.entry_id);
                 if (activate && exact.kind === "file") {
@@ -1115,7 +1115,7 @@ export function create_pear_workspace_shell(
         reveal_path("README.md", true);
     };
 
-    const set_room = (next_room: PearWorkspaceRoom): void => {
+    const set_room = (next_room: ArmadaWorkspaceRoom): void => {
         if (destroyed || room === next_room) {
             return;
         }
@@ -1142,7 +1142,7 @@ export function create_pear_workspace_shell(
     };
 
     const apply_location = (): void => {
-        const location = read_pear_workspace_location();
+        const location = read_armada_workspace_location();
         if (location.view !== room || location.workspaceId !== options.workspaceId) {
             return;
         }
@@ -1176,7 +1176,7 @@ export function create_pear_workspace_shell(
     const renamed_path = (path: string, source_path: string, destination_path: string): string =>
         `${destination_path}${path.slice(source_path.length)}`;
 
-    const reconcile_file_mutation = (event: PearWorkspaceFileMutationEvent): void => {
+    const reconcile_file_mutation = (event: ArmadaWorkspaceFileMutationEvent): void => {
         authority_stale = true;
         required_workspace_revision = Math.max(
             required_workspace_revision ?? event.mutation.workspace_revision,
@@ -1305,7 +1305,7 @@ export function create_pear_workspace_shell(
                     status.textContent = `${requested_path} was deleted; its local buffer is preserved`;
                     return;
                 }
-                tree = reveal_pear_workspace_search_result(tree, response, rebound.entry_id);
+                tree = reveal_armada_workspace_search_result(tree, response, rebound.entry_id);
                 const had_session = [...editor.getSnapshot().store.workspaces.values()].some(
                     (workspace) =>
                         [...workspace.documents.values()].some(
@@ -1348,7 +1348,7 @@ export function create_pear_workspace_shell(
         }
     };
 
-    const apply_descriptor = (next: PearWorkspaceDescriptor): void => {
+    const apply_descriptor = (next: ArmadaWorkspaceDescriptor): void => {
         for (const request of directory_requests.values()) {
             request.abort();
         }
@@ -1356,13 +1356,13 @@ export function create_pear_workspace_shell(
         descriptor = next;
         tree =
             tree === undefined
-                ? create_pear_workspace_tree(next)
-                : replace_pear_workspace_tree_revision(tree, next);
+                ? create_armada_workspace_tree(next)
+                : replace_armada_workspace_tree_revision(tree, next);
         if (restored_state !== undefined && !restored_preferences_applied) {
             tree = {...tree, expandedPaths: new Set(restored_state.expandedPaths)};
         }
         authority_stale = false;
-        render_pear_workspace_descriptor(title, meta, next);
+        render_armada_workspace_descriptor(title, meta, next);
         editor.activateWorkspace(
             next.uuid,
             next.workspace_revision,
@@ -1378,7 +1378,7 @@ export function create_pear_workspace_shell(
         render_tabs();
         render_breadcrumb();
         load_directory(tree.rootId, true);
-        const location = read_pear_workspace_location();
+        const location = read_armada_workspace_location();
         const restored_active = active_tab();
         const active_document = editor.getSnapshot().activeDocument;
         const active_requires_rebind =
@@ -1444,7 +1444,7 @@ export function create_pear_workspace_shell(
         status.textContent =
             descriptor === undefined ? "Loading workspace…" : "Reloading workspace…";
         if (descriptor === undefined) {
-            begin_pear_workspace_metric("workspace_tree_usable");
+            begin_armada_workspace_metric("workspace_tree_usable");
         }
         descriptor_request = dependencies.getWorkspace(options.workspaceId, {
             success(response) {
@@ -1525,7 +1525,7 @@ export function create_pear_workspace_shell(
         refresh_request = request;
     };
 
-    const unsubscribe_workspace_changed = on_pear_workspace_changed((event) => {
+    const unsubscribe_workspace_changed = on_armada_workspace_changed((event) => {
         if (
             destroyed ||
             event.workspace_id !== options.workspaceId ||
@@ -1648,7 +1648,7 @@ export function create_pear_workspace_shell(
             if (destroyed) {
                 return;
             }
-            module.fill_pear_compose_with_workspace_context(context);
+            module.fill_armada_compose_with_workspace_context(context);
             feedback = "Added workspace context to compose";
         } catch {
             if (!destroyed) {
@@ -1724,7 +1724,7 @@ export function create_pear_workspace_shell(
 
                 break;
             }
-            case "ask-pear": {
+            case "ask-armada": {
                 void add_selection_to_compose();
 
                 break;
@@ -1930,7 +1930,7 @@ export function create_pear_workspace_shell(
         openQuickOpen: open_quick_open,
         applyLocation: apply_location,
         setRoom: set_room,
-        getDebugState(): PearWorkspaceShellDebugState {
+        getDebugState(): ArmadaWorkspaceShellDebugState {
             return {
                 descriptor,
                 tree,
@@ -1939,7 +1939,7 @@ export function create_pear_workspace_shell(
                 renderedTreeRows: explorer.getRenderedRowCount(),
                 explorerWidth: explorer_width,
                 room,
-                metrics: pear_workspace_metrics_snapshot(),
+                metrics: armada_workspace_metrics_snapshot(),
             };
         },
         async destroy(): Promise<void> {

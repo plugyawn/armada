@@ -1,4 +1,4 @@
-{$PEAR_CADDY_FQDN} {
+{$ARMADA_CADDY_FQDN} {
 	encode zstd gzip
 
 	handle_path /static/webpack-bundles/* {

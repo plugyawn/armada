@@ -6,7 +6,7 @@ import {$t} from "./i18n.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as ui_util from "./ui_util.ts";
 
-const pear_trace_response_schema = z.object({
+const armada_trace_response_schema = z.object({
     rendered: z.string(),
     has_more: z.optional(z.boolean()),
     trace: z.array(
@@ -21,7 +21,7 @@ const pear_trace_response_schema = z.object({
 });
 
 export function rendered_for_testing(raw_data: unknown): string | undefined {
-    const result = pear_trace_response_schema.safeParse(raw_data);
+    const result = armada_trace_response_schema.safeParse(raw_data);
     return result.success ? result.data.rendered : undefined;
 }
 
@@ -53,9 +53,9 @@ export function duplicate_tail_count_for_testing(
     return count;
 }
 
-export type PearRunTraceRequestState = "idle" | "loading" | "ready" | "failed";
+export type ArmadaRunTraceRequestState = "idle" | "loading" | "ready" | "failed";
 
-export type PearRunTraceController = {
+export type ArmadaRunTraceController = {
     destroy: () => void;
     load: () => void;
     mark_dirty: (load_now: boolean) => void;
@@ -63,27 +63,29 @@ export type PearRunTraceController = {
     readonly failed: boolean;
     readonly in_flight: boolean;
     readonly loaded: boolean;
-    readonly request_state: PearRunTraceRequestState;
+    readonly request_state: ArmadaRunTraceRequestState;
 };
 
-type PearRunTraceControllerOptions = {
+type ArmadaRunTraceControllerOptions = {
     run_id: number;
     thread_id?: string | undefined;
     host: HTMLElement;
     status?: HTMLElement | undefined;
     after_render?: (() => void) | undefined;
-    on_state_change?: ((controller: PearRunTraceController) => void) | undefined;
+    on_state_change?: ((controller: ArmadaRunTraceController) => void) | undefined;
 };
 
-export function create_controller(options: PearRunTraceControllerOptions): PearRunTraceController {
+export function create_controller(
+    options: ArmadaRunTraceControllerOptions,
+): ArmadaRunTraceController {
     let request: JQuery.jqXHR<unknown> | undefined;
     let request_generation = 0;
     let destroyed = false;
     let dirty = false;
     let loaded = false;
-    let request_state: PearRunTraceRequestState = "idle";
+    let request_state: ArmadaRunTraceRequestState = "idle";
 
-    const controller: PearRunTraceController = {
+    const controller: ArmadaRunTraceController = {
         destroy() {
             destroyed = true;
             request_generation += 1;
@@ -111,7 +113,7 @@ export function create_controller(options: PearRunTraceControllerOptions): PearR
             }
             options.on_state_change?.(controller);
             request = channel.get({
-                url: `/json/pear/runs/${options.run_id}/trace`,
+                url: `/json/armada/runs/${options.run_id}/trace`,
                 data: {
                     limit: 100,
                     ...(options.thread_id === undefined ? {} : {thread_id: options.thread_id}),
@@ -136,9 +138,9 @@ export function create_controller(options: PearRunTraceControllerOptions): PearR
                             return;
                         }
                         const fragment = ui_util.parse_html(rendered);
-                        if (pear_trace_response_schema.parse(raw_data).has_more === true) {
+                        if (armada_trace_response_schema.parse(raw_data).has_more === true) {
                             const notice = document.createElement("div");
-                            notice.className = "pear-run-trace-truncated";
+                            notice.className = "legacy-run-trace-truncated";
                             notice.textContent = $t({
                                 defaultMessage: "Earlier work is available in the run trace.",
                             });
@@ -213,11 +215,11 @@ export function create_controller(options: PearRunTraceControllerOptions): PearR
             : $t({defaultMessage: "Could not load work."});
         if (!had_loaded_trace) {
             const error_row = document.createElement("div");
-            error_row.className = "pear-run-trace-error";
+            error_row.className = "legacy-run-trace-error";
             const error_text = document.createElement("span");
             error_text.textContent = error;
             const retry = document.createElement("button");
-            retry.className = "pear-run-trace-retry";
+            retry.className = "legacy-run-trace-retry";
             retry.type = "button";
             retry.textContent = $t({defaultMessage: "Retry"});
             retry.addEventListener("click", controller.load);

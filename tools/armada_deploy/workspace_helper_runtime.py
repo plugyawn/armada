@@ -21,11 +21,11 @@ from pathlib import Path
 from typing import Literal, NoReturn
 
 HELPER_SOURCE_RELATIVE = Path("zerver/lib/armada_workspace_io.py")
-DEFAULT_HELPER_PATH = Path("/usr/local/lib/pear-workspace-io")
+DEFAULT_HELPER_PATH = Path("/usr/local/lib/armada-workspace-io")
 HELPER_MODE = 0o555
-ISOLATION_USERNAME_RE = re.compile(r"pear-[0-9a-f]{24}\Z")
+ISOLATION_USERNAME_RE = re.compile(r"armada-[0-9a-f]{24}\Z")
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
-SMOKE_CONTENT = b"pear-workspace-helper-smoke\n"
+SMOKE_CONTENT = b"armada-workspace-helper-smoke\n"
 
 
 class WorkspaceHelperDeploymentError(RuntimeError):
@@ -288,7 +288,7 @@ def smoke_helper_as_existing_isolation_user(helper_path: Path) -> str | None:
     if os.geteuid() != 0:
         _fail("workspace helper isolation-user smoke must run as root")
 
-    smoke_root = Path(tempfile.mkdtemp(prefix="pear-workspace-helper-smoke-", dir="/tmp"))
+    smoke_root = Path(tempfile.mkdtemp(prefix="armada-workspace-helper-smoke-", dir="/tmp"))
     smoke_file = smoke_root / "probe.txt"
     try:
         file_descriptor = os.open(

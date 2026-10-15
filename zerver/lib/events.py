@@ -22,12 +22,12 @@ from zerver.actions.user_settings import do_change_user_setting
 from zerver.actions.users import get_owned_bot_dicts
 from zerver.lib import emoji
 from zerver.lib.alert_words import user_alert_words
-from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
 from zerver.lib.armada_identity import (
-    pear_bot_user_id_has_pear_service,
-    pear_bot_user_ids_for_realm,
+    armada_bot_user_id_has_armada_service,
+    armada_bot_user_ids_for_realm,
 )
-from zerver.lib.armada_workspace_map import pear_project_stream_ids_for_realm
+from zerver.lib.armada_workspace_map import armada_project_stream_ids_for_realm
 from zerver.lib.avatar import avatar_url
 from zerver.lib.bot_config import load_bot_config_template
 from zerver.lib.channel_folders import (
@@ -133,35 +133,35 @@ from zerver.tornado.django_api import get_user_events, request_event_queue
 from zproject.backends import email_auth_enabled, password_auth_enabled
 
 
-def pear_bot_event_services_are_definitive(services: object) -> bool:
+def armada_bot_event_services_are_definitive(services: object) -> bool:
     return isinstance(services, list) and any(
         isinstance(service, dict) and "service_name" in service for service in services
     )
 
 
-def pear_bot_event_services_include_pear(services: object) -> bool:
+def armada_bot_event_services_include_armada(services: object) -> bool:
     return isinstance(services, list) and any(
-        isinstance(service, dict) and service.get("service_name") == PEAR_EMBEDDED_BOT_SERVICE
+        isinstance(service, dict) and service.get("service_name") == ARMADA_EMBEDDED_BOT_SERVICE
         for service in services
     )
 
 
-def add_pear_bot_user_id(state: dict[str, Any], user_id: int) -> None:
-    if "pear_bot_user_ids" not in state:
+def add_armada_bot_user_id(state: dict[str, Any], user_id: int) -> None:
+    if "agent_user_ids" not in state:
         return
-    pear_bot_user_ids = state["pear_bot_user_ids"]
-    if user_id not in pear_bot_user_ids:
-        pear_bot_user_ids.append(user_id)
-        pear_bot_user_ids.sort()
+    agent_user_ids = state["agent_user_ids"]
+    if user_id not in agent_user_ids:
+        agent_user_ids.append(user_id)
+        agent_user_ids.sort()
 
 
-def remove_pear_bot_user_id(state: dict[str, Any], user_id: int) -> None:
-    if "pear_bot_user_ids" not in state:
+def remove_armada_bot_user_id(state: dict[str, Any], user_id: int) -> None:
+    if "agent_user_ids" not in state:
         return
-    state["pear_bot_user_ids"] = [
-        pear_bot_user_id
-        for pear_bot_user_id in state["pear_bot_user_ids"]
-        if pear_bot_user_id != user_id
+    state["agent_user_ids"] = [
+        armada_bot_user_id
+        for armada_bot_user_id in state["agent_user_ids"]
+        if armada_bot_user_id != user_id
     ]
 
 
@@ -803,7 +803,7 @@ def fetch_initial_state_data(
 
     if want("realm_bot"):
         state["realm_bots"] = [] if user_profile is None else get_owned_bot_dicts(user_profile)
-        state["pear_bot_user_ids"] = pear_bot_user_ids_for_realm(realm)
+        state["agent_user_ids"] = armada_bot_user_ids_for_realm(realm)
 
     # This does not yet have an apply_event counterpart, since currently,
     # new entries for EMBEDDED_BOTS can only be added directly in the codebase.
@@ -892,9 +892,9 @@ def fetch_initial_state_data(
             for group in (sub_info.subscriptions, sub_info.unsubscribed, sub_info.never_subscribed)
             for sub in group
         }
-        state["pear_project_stream_ids"] = [
+        state["repository_stream_ids"] = [
             stream_id
-            for stream_id in pear_project_stream_ids_for_realm(realm)
+            for stream_id in armada_project_stream_ids_for_realm(realm)
             if stream_id in accessible_stream_ids
         ]
 
@@ -1433,25 +1433,25 @@ def apply_event(
         if event["op"] == "add":
             state["realm_bots"].append(event["bot"])
             services = event["bot"].get("services")
-            if pear_bot_event_services_include_pear(services) or (
-                not pear_bot_event_services_are_definitive(services)
-                and pear_bot_user_id_has_pear_service(event["bot"]["user_id"])
+            if armada_bot_event_services_include_armada(services) or (
+                not armada_bot_event_services_are_definitive(services)
+                and armada_bot_user_id_has_armada_service(event["bot"]["user_id"])
             ):
-                add_pear_bot_user_id(state, event["bot"]["user_id"])
+                add_armada_bot_user_id(state, event["bot"]["user_id"])
         elif event["op"] == "delete":
             state["realm_bots"] = [
                 item for item in state["realm_bots"] if item["user_id"] != event["bot"]["user_id"]
             ]
-            remove_pear_bot_user_id(state, event["bot"]["user_id"])
+            remove_armada_bot_user_id(state, event["bot"]["user_id"])
         elif event["op"] == "update":
             for bot in state["realm_bots"]:
                 if bot["user_id"] == event["bot"]["user_id"]:
                     bot.update(event["bot"])
-            if pear_bot_event_services_are_definitive(event["bot"].get("services")):
-                if pear_bot_event_services_include_pear(event["bot"]["services"]):
-                    add_pear_bot_user_id(state, event["bot"]["user_id"])
+            if armada_bot_event_services_are_definitive(event["bot"].get("services")):
+                if armada_bot_event_services_include_armada(event["bot"]["services"]):
+                    add_armada_bot_user_id(state, event["bot"]["user_id"])
                 else:
-                    remove_pear_bot_user_id(state, event["bot"]["user_id"])
+                    remove_armada_bot_user_id(state, event["bot"]["user_id"])
         else:
             raise AssertionError("Unexpected event type {type}/{op}".format(**event))
     elif event["type"] == "stream":
@@ -2108,7 +2108,7 @@ def apply_event(
     elif event["type"] == "restart":
         # The Tornado process restarted.  This has no effect; we ignore it.
         pass
-    elif event["type"] in {"pear_run", "pear_workspace_changed"}:
+    elif event["type"] in {"agent_run", "workspace_changed"}:
         # Pear deltas update dedicated client-side reducers; they do not mutate
         # the initial-state payload assembled by this module.
         pass

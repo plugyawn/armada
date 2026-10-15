@@ -26,7 +26,7 @@ from zerver.actions.message_send import (
 from zerver.actions.uploads import AttachmentChangeResult, check_attachment_reference_change
 from zerver.actions.user_topics import bulk_do_set_user_topic_visibility_policy
 from zerver.lib import utils
-from zerver.lib.armada_worker import maybe_refactor_pear_workspace_on_move
+from zerver.lib.armada_worker import maybe_refactor_armada_workspace_on_move
 from zerver.lib.cache import cache_delete_many, to_dict_cache_key_id
 from zerver.lib.exceptions import (
     JsonableError,
@@ -1480,9 +1480,9 @@ def do_update_message(
             )
         )
 
-    pear_context_refactor = None
+    armada_context_refactor = None
     if message_edit_request.is_nontrivial_move:
-        pear_context_refactor = maybe_refactor_pear_workspace_on_move(
+        armada_context_refactor = maybe_refactor_armada_workspace_on_move(
             user_profile,
             old_stream=stream_being_edited,
             old_topic=orig_topic_name,
@@ -1564,13 +1564,13 @@ def do_update_message(
             new_thread_notification_string,
             changed_messages_count,
         )
-        if pear_context_refactor is not None:
+        if armada_context_refactor is not None:
             sender = get_system_bot(settings.NOTIFICATION_BOT, realm.id)
             internal_send_stream_message(
                 sender,
                 message_edit_request.target_stream,
-                pear_context_refactor.topic_name,
-                pear_context_refactor.message,
+                armada_context_refactor.topic_name,
+                armada_context_refactor.message,
                 mark_as_read_for_acting_user=True,
                 acting_user=user_profile,
             )

@@ -30,8 +30,8 @@ from tools.armada_deploy.production_assets import (
     validate_production_assets,
 )
 from tools.armada_deploy.runtime_config import (
+    ARMADA_ENV_PATH,
     LEGACY_RUNTIME_FILES,
-    PEAR_ENV_PATH,
     RuntimeConfigError,
     install,
 )
@@ -48,7 +48,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class AssetReusePolicyTest(unittest.TestCase):
-    def test_backend_only_pear_changes_reuse_assets(self) -> None:
+    def test_backend_only_armada_changes_reuse_assets(self) -> None:
         self.assertIsNone(
             asset_rebuild_trigger(
                 [
@@ -58,7 +58,7 @@ class AssetReusePolicyTest(unittest.TestCase):
                     "tools/armada_deploy/bootstrap_remote.sh",
                     "tools/armada_deploy/deploy_common.sh",
                     "tools/armada_deploy/runtime/Caddyfile",
-                    "tools/armada_deploy/runtime/caddy-pear-basic-auth.conf",
+                    "tools/armada_deploy/runtime/caddy-armada-basic-auth.conf",
                     "tools/armada_deploy/runtime_config.py",
                     "tools/armada_deploy/test_production_runtime.py",
                     "tools/armada_deploy/update_remote.sh",
@@ -105,7 +105,7 @@ class DeploymentCapacityTest(unittest.TestCase):
             estimate = estimate_capacity(
                 remote_path=remote_path,
                 git_common_dir=Path("/remote/git"),
-                pear_skills_dir=Path("/remote/skills"),
+                armada_skills_dir=Path("/remote/skills"),
                 snapshot_root=Path("/remote/snapshots"),
                 asset_build_dir=Path("/remote/asset-build"),
                 build_swap_bytes=2 * GIB,
@@ -130,7 +130,7 @@ class DeploymentCapacityTest(unittest.TestCase):
             estimate = estimate_capacity(
                 remote_path=Path("/remote/zulip"),
                 git_common_dir=Path("/remote/git"),
-                pear_skills_dir=Path("/remote/skills"),
+                armada_skills_dir=Path("/remote/skills"),
                 snapshot_root=Path("/remote/snapshots"),
                 asset_build_dir=Path("/remote/asset-build"),
                 build_swap_bytes=0,
@@ -242,19 +242,19 @@ class RuntimeConfigTest(unittest.TestCase):
         values: dict[str, object] = {
             "repo_root": REPO_ROOT,
             "root_prefix": root,
-            "fqdn": "pear.example.com",
+            "fqdn": "armada.example.com",
             "skip_caddy_validate": True,
         }
         values.update(overrides)
         return argparse.Namespace(**values)
 
-    def test_install_removes_legacy_auth_and_preserves_pear_env(self) -> None:
+    def test_install_removes_legacy_auth_and_preserves_armada_env(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            pear_env = root / PEAR_ENV_PATH.relative_to("/")
-            pear_env.parent.mkdir(parents=True)
-            pear_env.write_text("EXTERNAL_HOST=pear.example.com\nKEEP=value\n")
-            pear_env.chmod(0o600)
+            armada_env = root / ARMADA_ENV_PATH.relative_to("/")
+            armada_env.parent.mkdir(parents=True)
+            armada_env.write_text("EXTERNAL_HOST=armada.example.com\nKEEP=value\n")
+            armada_env.chmod(0o600)
             for absolute_path in LEGACY_RUNTIME_FILES:
                 legacy_path = root / absolute_path.relative_to("/")
                 legacy_path.parent.mkdir(parents=True, exist_ok=True)
@@ -264,9 +264,9 @@ class RuntimeConfigTest(unittest.TestCase):
 
             for absolute_path in LEGACY_RUNTIME_FILES:
                 self.assertFalse((root / absolute_path.relative_to("/")).exists())
-            pear_env_text = pear_env.read_text()
-            self.assertIn("KEEP=value", pear_env_text)
-            self.assertEqual(pear_env_text.count("ZULIP_DEV_PRODUCTION_ASSETS=1"), 1)
+            armada_env_text = armada_env.read_text()
+            self.assertIn("KEEP=value", armada_env_text)
+            self.assertEqual(armada_env_text.count("ZULIP_DEV_PRODUCTION_ASSETS=1"), 1)
             self.assertIn(
                 "--production-assets",
                 (root / "usr/local/bin/armada-run-zulip-dev").read_text(),
@@ -276,16 +276,16 @@ class RuntimeConfigTest(unittest.TestCase):
                 0o755,
             )
             installed_caddy = (root / "etc/caddy/Caddyfile").read_text()
-            self.assertTrue(installed_caddy.startswith("pear.example.com {\n"))
-            self.assertNotIn("PEAR_CADDY_FQDN", installed_caddy)
+            self.assertTrue(installed_caddy.startswith("armada.example.com {\n"))
+            self.assertNotIn("ARMADA_CADDY_FQDN", installed_caddy)
 
     def test_install_rejects_symlinked_legacy_auth_before_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            pear_env = root / PEAR_ENV_PATH.relative_to("/")
-            pear_env.parent.mkdir(parents=True)
-            pear_env.write_text("EXTERNAL_HOST=pear.example.com\n", encoding="utf-8")
-            pear_env.chmod(0o600)
+            armada_env = root / ARMADA_ENV_PATH.relative_to("/")
+            armada_env.parent.mkdir(parents=True)
+            armada_env.write_text("EXTERNAL_HOST=armada.example.com\n", encoding="utf-8")
+            armada_env.chmod(0o600)
             victim = root / "victim"
             victim.write_text("keep\n", encoding="utf-8")
             legacy = root / LEGACY_RUNTIME_FILES[0].relative_to("/")
@@ -298,8 +298,8 @@ class RuntimeConfigTest(unittest.TestCase):
             self.assertEqual(victim.read_text(encoding="utf-8"), "keep\n")
             self.assertFalse((root / "etc/caddy/Caddyfile").exists())
 
-    def test_install_rejects_symlinked_pear_env_and_runtime_destination(self) -> None:
-        for hostile_target in ("pear-env", "runtime-file"):
+    def test_install_rejects_symlinked_armada_env_and_runtime_destination(self) -> None:
+        for hostile_target in ("armada-env", "runtime-file"):
             with (
                 self.subTest(hostile_target=hostile_target),
                 tempfile.TemporaryDirectory() as temporary_directory,
@@ -308,13 +308,13 @@ class RuntimeConfigTest(unittest.TestCase):
                 victim = root / "victim"
                 victim.write_text("do not read or overwrite\n", encoding="utf-8")
                 victim.chmod(0o600)
-                pear_env = root / PEAR_ENV_PATH.relative_to("/")
-                pear_env.parent.mkdir(parents=True)
-                if hostile_target == "pear-env":
-                    pear_env.symlink_to(victim)
+                armada_env = root / ARMADA_ENV_PATH.relative_to("/")
+                armada_env.parent.mkdir(parents=True)
+                if hostile_target == "armada-env":
+                    armada_env.symlink_to(victim)
                 else:
-                    pear_env.write_text("EXTERNAL_HOST=pear.example.com\n", encoding="utf-8")
-                    pear_env.chmod(0o600)
+                    armada_env.write_text("EXTERNAL_HOST=armada.example.com\n", encoding="utf-8")
+                    armada_env.chmod(0o600)
                     caddyfile = root / "etc/caddy/Caddyfile"
                     caddyfile.parent.mkdir(parents=True)
                     caddyfile.symlink_to(victim)
@@ -407,7 +407,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
                 [
                     "preflight",
                     "--destination",
-                    "/usr/local/lib/pear-workspace-io",
+                    "/usr/local/lib/armada-workspace-io",
                     "--expected-sha256",
                     expected_sha256,
                 ]
@@ -415,7 +415,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
 
         self.assertEqual(status, 0)
         inspect.assert_called_once_with(
-            Path("/usr/local/lib/pear-workspace-io"),
+            Path("/usr/local/lib/armada-workspace-io"),
             expected_sha256=expected_sha256,
         )
         install.assert_not_called()
@@ -442,7 +442,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
     def test_atomic_install_is_nonwritable_and_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            destination = root / "pear-workspace-io"
+            destination = root / "armada-workspace-io"
             owner_uid = os.getuid()
             owner_gid = os.getgid()
             first_payload = b"first helper\n"
@@ -468,7 +468,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
             self.assertEqual(destination.read_bytes(), first_payload)
             self.assertEqual(stat.S_IMODE(destination.stat().st_mode), HELPER_MODE)
             self.assertFalse(stat.S_IMODE(destination.stat().st_mode) & 0o222)
-            self.assertEqual(list(root.glob(".pear-workspace-io.tmp-*")), [])
+            self.assertEqual(list(root.glob(".armada-workspace-io.tmp-*")), [])
 
             second_payload = b"second helper\n"
             second = HelperSource(
@@ -483,7 +483,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
             )
             self.assertEqual(replaced.state, "current")
             self.assertEqual(destination.read_bytes(), second_payload)
-            self.assertEqual(list(root.glob(".pear-workspace-io.tmp-*")), [])
+            self.assertEqual(list(root.glob(".armada-workspace-io.tmp-*")), [])
 
             with self.assertRaisesRegex(
                 WorkspaceHelperDeploymentError,
@@ -499,7 +499,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
     def test_inspection_rejects_unsafe_destination_types_and_modes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            destination = root / "pear-workspace-io"
+            destination = root / "armada-workspace-io"
             owner_uid = os.getuid()
             owner_gid = os.getgid()
             payload = b"helper\n"
@@ -529,7 +529,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
     def test_inspection_distinguishes_current_and_outdated_content(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            destination = root / "pear-workspace-io"
+            destination = root / "armada-workspace-io"
             owner_uid = os.getuid()
             owner_gid = os.getgid()
             destination.write_bytes(b"old helper\n")
@@ -562,7 +562,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
         )
         request = {
             "operation": "inspect",
-            "root": "/srv/pear-workspaces/smoke",
+            "root": "/srv/armada-workspaces/smoke",
             "entries": [],
             "skip_unsafe": False,
         }
@@ -571,8 +571,8 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
             return_value=response,
         ) as run:
             result = workspace_helper_runtime._run_smoke_request(
-                "pear-" + "a" * 24,
-                Path("/usr/local/lib/pear-workspace-io"),
+                "armada-" + "a" * 24,
+                Path("/usr/local/lib/armada-workspace-io"),
                 request,
             )
 
@@ -584,10 +584,10 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
                 "sudo",
                 "-n",
                 "-u",
-                "pear-" + "a" * 24,
+                "armada-" + "a" * 24,
                 "/usr/bin/env",
                 "python3",
-                "/usr/local/lib/pear-workspace-io",
+                "/usr/local/lib/armada-workspace-io",
                 "--stdio",
             ],
         )
@@ -605,7 +605,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
                 root = Path(temporary_directory)
                 snapshot = root / "snapshot"
                 filesystem = root / "filesystem"
-                helper = filesystem / "usr/local/lib/pear-workspace-io"
+                helper = filesystem / "usr/local/lib/armada-workspace-io"
                 helper.parent.mkdir(parents=True)
                 snapshot.mkdir()
                 paths_file = snapshot / "runtime-config.paths"
@@ -616,7 +616,7 @@ class WorkspaceHelperRuntimeTest(unittest.TestCase):
                     helper.chmod(HELPER_MODE)
                     before = helper.stat()
                     paths_file.write_text(
-                        "usr/local/lib/pear-workspace-io\n",
+                        "usr/local/lib/armada-workspace-io\n",
                         encoding="utf-8",
                     )
                     subprocess.run(
@@ -788,7 +788,7 @@ class DeploymentRecordTest(unittest.TestCase):
     def test_atomic_record_replaces_hostile_symlink_without_following_it(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            destination = root / "pear-deployed-sha"
+            destination = root / "armada-deployed-sha"
             victim = root / "victim"
             victim.write_bytes(b"do not overwrite\n")
             destination.symlink_to(victim)
@@ -811,10 +811,10 @@ class DeploymentRecordTest(unittest.TestCase):
     def test_atomic_record_ignores_preplanted_predictable_temp_symlink(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
-            destination = root / "pear-deployed-sha"
+            destination = root / "armada-deployed-sha"
             victim = root / "victim"
             victim.write_bytes(b"safe\n")
-            predictable = root / ".pear-deployed-sha.tmp"
+            predictable = root / ".armada-deployed-sha.tmp"
             predictable.symlink_to(victim)
 
             atomic_write_deployment_record(
@@ -839,7 +839,7 @@ class DeploymentRecordTest(unittest.TestCase):
             linked_parent.symlink_to(real_parent, target_is_directory=True)
             with self.assertRaisesRegex(DeploymentRecordError, "parent must be a real directory"):
                 atomic_write_deployment_record(
-                    linked_parent / "pear-deployed-sha",
+                    linked_parent / "armada-deployed-sha",
                     b"record\n",
                     owner_uid=os.getuid(),
                     owner_gid=os.getgid(),
@@ -877,12 +877,12 @@ class StaticRuntimeContractTest(unittest.TestCase):
             run_dev,
         )
         self.assertIn("--production-assets", wrapper)
-        self.assertNotIn("PEAR_CADDY_BASICAUTH_HASH:-", reset)
+        self.assertNotIn("ARMADA_CADDY_BASICAUTH_HASH:-", reset)
         self.assertIn("webpack-stats-production.json", common)
         self.assertIn("staticfiles.json", common)
         self.assertIn("--exclude '*.mo'", common)
         self.assertNotIn("basicauth", caddyfile)
-        self.assertNotIn("PEAR_CADDY_BASICAUTH", caddyfile)
+        self.assertNotIn("ARMADA_CADDY_BASICAUTH", caddyfile)
         self.assertIn("handle_path /static/webpack-bundles/*", caddyfile)
         self.assertIn("root * /home/zulipdev/zulip/prod-static/serve/webpack-bundles", caddyfile)
         self.assertIn('header Cache-Control "public, max-age=31536000, immutable"', caddyfile)
@@ -895,7 +895,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("request_header -Authorization", caddyfile)
         self.assertIn("handle {", caddyfile)
         self.assertEqual(caddyfile.count("reverse_proxy 127.0.0.1:9991"), 2)
-        self.assertNotIn("X-Pear-Upstream-Authorization", caddyfile)
+        self.assertNotIn("X-Armada-Upstream-Authorization", caddyfile)
         self.assertNotIn("header_up Authorization", caddyfile)
         for script in (common, update, verify, bootstrap):
             self.assertNotIn("CADDY_BASICAUTH", script)
@@ -907,42 +907,42 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("checkout-index --force", update)
         self.assertIn("verify_remote_deployed_source_clean", update)
         self.assertIn("install_remote_gemini_config", update)
-        self.assertIn("PEAR_GEMINI_INTERACTIONS_API_KEY", update)
+        self.assertIn("ARMADA_GEMINI_INTERACTIONS_API_KEY", update)
         self.assertIn("zerver.tests.test_armada_presentation", update)
-        self.assertIn("PEAR_WORKER_CONSUMER_TIMEOUT_MS=21600000", common)
+        self.assertIn("ARMADA_WORKER_CONSUMER_TIMEOUT_MS=21600000", common)
         self.assertIn("--apply-to\n    queues", common)
-        self.assertIn("install_remote_pear_worker_consumer_timeout_policy", bootstrap)
-        self.assertIn("install_remote_pear_worker_consumer_timeout_policy", update)
-        self.assertIn("wait_for_remote_pear_worker_consumer_timeout_queues", bootstrap)
-        self.assertIn("wait_for_remote_pear_worker_consumer_timeout_queues", update)
-        self.assertIn("wait_for_remote_pear_worker_pool_topology", bootstrap)
-        self.assertIn("wait_for_remote_pear_worker_pool_topology", update)
-        self.assertIn("verify_remote_pear_worker_consumer_timeout_policy", update)
-        self.assertIn("verify_remote_pear_worker_consumer_timeout_policy", verify)
-        self.assertIn("validate_pear_worker_pool_snapshot", update)
-        self.assertIn("validate_pear_worker_pool_snapshot", verify)
+        self.assertIn("install_remote_armada_worker_consumer_timeout_policy", bootstrap)
+        self.assertIn("install_remote_armada_worker_consumer_timeout_policy", update)
+        self.assertIn("wait_for_remote_armada_worker_consumer_timeout_queues", bootstrap)
+        self.assertIn("wait_for_remote_armada_worker_consumer_timeout_queues", update)
+        self.assertIn("wait_for_remote_armada_worker_pool_topology", bootstrap)
+        self.assertIn("wait_for_remote_armada_worker_pool_topology", update)
+        self.assertIn("verify_remote_armada_worker_consumer_timeout_policy", update)
+        self.assertIn("verify_remote_armada_worker_consumer_timeout_policy", verify)
+        self.assertIn("validate_armada_worker_pool_snapshot", update)
+        self.assertIn("validate_armada_worker_pool_snapshot", verify)
         self.assertLess(
-            bootstrap.index("install_remote_pear_worker_consumer_timeout_policy"),
+            bootstrap.index("install_remote_armada_worker_consumer_timeout_policy"),
             bootstrap.index(
-                "systemctl daemon-reload && systemctl enable caddy ${PEAR_DEPLOY_SERVICES[*]}"
+                "systemctl daemon-reload && systemctl enable caddy ${ARMADA_DEPLOY_SERVICES[*]}"
             ),
         )
         self.assertLess(
-            update.rindex("install_remote_pear_worker_consumer_timeout_policy"),
-            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
+            update.rindex("install_remote_armada_worker_consumer_timeout_policy"),
+            update.rindex("systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"),
         )
         self.assertLess(
-            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
-            update.rindex("wait_for_remote_pear_worker_consumer_timeout_queues"),
+            update.rindex("systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"),
+            update.rindex("wait_for_remote_armada_worker_consumer_timeout_queues"),
         )
         self.assertIn("intentionally additive broker state", deploy_readme)
         self.assertIn("tools/armada_deploy/rollback_remote.sh", common)
         self.assertIn(
-            "systemctl stop caddy pear-worker pear-monitor-worker",
+            "systemctl stop caddy armada-worker armada-monitor-worker",
             rollback,
         )
-        self.assertIn("systemctl stop pear-worker-1 2>/dev/null || true", rollback)
-        self.assertIn("systemctl disable pear-worker-1 2>/dev/null || true", rollback)
+        self.assertIn("systemctl stop armada-worker-1 2>/dev/null || true", rollback)
+        self.assertIn("systemctl disable armada-worker-1 2>/dev/null || true", rollback)
         self.assertIn("accepted =", update)
         self.assertIn("0806_pear_workspace_scope_casefold", update)
         self.assertIn(
@@ -950,7 +950,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update,
         )
         self.assertNotIn(
-            'if ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"',
+            'if ssh_root "systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"',
             update,
         )
         rollback_handler = update.index("rollback_on_error()")
@@ -975,7 +975,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertIn("independent rollback queue check failed", update)
         self.assertIn("independent public HTTPS rollback check", update)
 
-        rollback_stop = rollback.index("systemctl stop caddy pear-worker pear-monitor-worker")
+        rollback_stop = rollback.index("systemctl stop caddy armada-worker armada-monitor-worker")
         rollback_settle = rollback.index("rollback_settled_runs=")
         rollback_purge = rollback.index('rabbitmqctl purge_queue -p / "$queue"')
         rollback_delete = rollback.index('rabbitmqctl delete_queue -p / "$queue"')
@@ -995,11 +995,11 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertLess(rollback_record_check, rollback_restart)
         self.assertLess(rollback_restore, rollback_health)
         self.assertIn(
-            "for service in caddy pear-worker pear-worker-1 pear-monitor-worker",
+            "for service in caddy armada-worker armada-worker-1 armada-monitor-worker",
             rollback,
         )
         self.assertNotIn(
-            "ROLLBACK_SERVICES=(caddy pear-worker pear-monitor-worker",
+            "ROLLBACK_SERVICES=(caddy armada-worker armada-monitor-worker",
             rollback,
         )
         rollback_stability = rollback.index("rollback_stable_samples=0", rollback_restore)
@@ -1050,13 +1050,13 @@ class StaticRuntimeContractTest(unittest.TestCase):
         self.assertLess(
             update.rindex(disk_preflight), update.index("Snapshotting the drained remote tree")
         )
-        helper_path = "/usr/local/lib/pear-workspace-io"
-        runtime_paths_start = common.index("PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(")
+        helper_path = "/usr/local/lib/armada-workspace-io"
+        runtime_paths_start = common.index("ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS=(")
         runtime_paths_end = common.index("\n)", runtime_paths_start)
         self.assertIn(helper_path, common[runtime_paths_start:runtime_paths_end])
-        self.assertNotIn("pear-rebaseline-schema", common)
-        self.assertNotIn("pear-rebaseline-schema", update)
-        self.assertNotIn("PEAR_SCHEMA_REBASELINE", update)
+        self.assertNotIn("armada-rebaseline-schema", common)
+        self.assertNotIn("armada-rebaseline-schema", update)
+        self.assertNotIn("ARMADA_SCHEMA_REBASELINE", update)
         self.assertIn("names in accepted", update)
         self.assertIn("superseded or mixed Pear migration baseline", update)
         self.assertIn('workspace_helper_runtime.py" install', bootstrap)
@@ -1087,7 +1087,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         )
         self.assertLess(
             update.rindex("build_remote_production_assets"),
-            update.rindex("systemctl stop pear-zulip-dev"),
+            update.rindex("systemctl stop armada-zulip-dev"),
         )
         self.assertIn("$REMOTE_ASSET_BUILD_DIR/static/generated", update)
         self.assertLess(
@@ -1099,7 +1099,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
             update.rindex("disable_remote_build_swap"),
         )
         self.assertLess(
-            update.rindex("systemctl stop pear-zulip-dev"), update.rindex("wait_for_remote_drain")
+            update.rindex("systemctl stop armada-zulip-dev"), update.rindex("wait_for_remote_drain")
         )
         self.assertLess(
             update.rindex("wait_for_remote_drain"),
@@ -1111,7 +1111,7 @@ class StaticRuntimeContractTest(unittest.TestCase):
         )
         self.assertLess(
             update.rindex("SERVICE_RESTART_REQUIRED=true"),
-            update.rindex("systemctl stop pear-zulip-dev"),
+            update.rindex("systemctl stop armada-zulip-dev"),
         )
         self.assertLess(
             update.index("Snapshotting the drained remote tree"),
@@ -1119,10 +1119,10 @@ class StaticRuntimeContractTest(unittest.TestCase):
         )
         self.assertLess(
             update.rindex("install_and_verify_remote_workspace_helper"),
-            update.rindex("systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"),
+            update.rindex("systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"),
         )
         for script in (update, verify, bootstrap, reset):
-            self.assertIn("stage_remote_pear_deploy_bundle", script)
+            self.assertIn("stage_remote_armada_deploy_bundle", script)
             self.assertNotIn(
                 "python3 /home/zulipdev/zulip/tools/armada_deploy/runtime_config.py",
                 script,
@@ -1209,7 +1209,7 @@ sys.stdout.write(status)
             fake_curl.chmod(0o755)
             script = (
                 'source "$1"; verify_caddy_https_runtime '
-                "pear.example.test "
+                "armada.example.test "
                 "app.0123456789abcdef.js app.fedcba9876543210.css "
                 "images/logo.2222222222222222.svg"
             )
@@ -1257,14 +1257,14 @@ sys.stdout.write(status)
         script = (
             "source tools/armada_deploy/deploy_common.sh; "
             "printf '%s\\n' "
-            "'pear_worker 0 0 1' "
-            "'pear_worker_1 0 0 1' "
-            "'pear_monitor_worker 0 0 1' "
-            "'pear_addressing 0 0 1' "
-            "'pear_presentation 0 0 1' "
+            "'armada_worker 0 0 1' "
+            "'armada_worker_1 0 0 1' "
+            "'armada_monitor_worker 0 0 1' "
+            "'armada_addressing 0 0 1' "
+            "'armada_presentation 0 0 1' "
             "'embedded_bots 0 0 1' "
             "'thumbnail 0 0 1' | "
-            "validate_pear_deploy_queue_snapshot"
+            "validate_armada_deploy_queue_snapshot"
         )
         result = subprocess.run(
             ["bash", "-c", script],
@@ -1279,12 +1279,12 @@ sys.stdout.write(status)
         script = (
             "source tools/armada_deploy/deploy_common.sh; "
             "printf '%s\\n' "
-            "'pear_worker 0 0 1' "
-            "'pear_monitor_worker 0 0 1' "
+            "'armada_worker 0 0 1' "
+            "'armada_monitor_worker 0 0 1' "
             "'embedded_bots 0 0 1' "
             "'thumbnail 0 0 1' | "
-            "validate_pear_deploy_queue_snapshot "
-            "'pear_worker pear_monitor_worker embedded_bots thumbnail'"
+            "validate_armada_deploy_queue_snapshot "
+            "'armada_worker armada_monitor_worker embedded_bots thumbnail'"
         )
         result = subprocess.run(
             ["bash", "-c", script],
@@ -1299,10 +1299,10 @@ sys.stdout.write(status)
         script = (
             "source tools/armada_deploy/deploy_common.sh; "
             "printf '%s\\n' "
-            "'pear_worker 2 1 1' "
-            "'pear_monitor_worker 0 3 2' | "
-            "validate_pear_deploy_queue_ready_snapshot "
-            "'pear_worker pear_monitor_worker'"
+            "'armada_worker 2 1 1' "
+            "'armada_monitor_worker 0 3 2' | "
+            "validate_armada_deploy_queue_ready_snapshot "
+            "'armada_worker armada_monitor_worker'"
         )
         result = subprocess.run(
             ["bash", "-c", script],
@@ -1316,8 +1316,8 @@ sys.stdout.write(status)
     def test_queue_readiness_validator_requires_consumers(self) -> None:
         script = (
             "source tools/armada_deploy/deploy_common.sh; "
-            "printf '%s\\n' 'pear_worker 1 0 0' | "
-            "validate_pear_deploy_queue_ready_snapshot 'pear_worker'"
+            "printf '%s\\n' 'armada_worker 1 0 0' | "
+            "validate_armada_deploy_queue_ready_snapshot 'armada_worker'"
         )
         result = subprocess.run(
             ["bash", "-c", script],
@@ -1327,7 +1327,7 @@ sys.stdout.write(status)
             text=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("queue has no active consumer: pear_worker", result.stderr)
+        self.assertIn("queue has no active consumer: armada_worker", result.stderr)
 
     def test_worker_pool_validator_requires_exactly_two_consumers_per_queue(self) -> None:
         valid = subprocess.run(
@@ -1335,8 +1335,8 @@ sys.stdout.write(status)
                 "bash",
                 "-c",
                 "source tools/armada_deploy/deploy_common.sh; "
-                "printf '%s\\n' 'pear_worker 2 1 2' 'pear_worker_1 0 0 2' | "
-                "validate_pear_worker_pool_snapshot",
+                "printf '%s\\n' 'armada_worker 2 1 2' 'armada_worker_1 0 0 2' | "
+                "validate_armada_worker_pool_snapshot",
             ],
             cwd=REPO_ROOT,
             check=False,
@@ -1346,17 +1346,17 @@ sys.stdout.write(status)
         self.assertEqual(valid.returncode, 0, valid.stderr)
 
         for rows in (
-            ("pear_worker 0 0 1", "pear_worker_1 0 0 2"),
-            ("pear_worker 0 0 3", "pear_worker_1 0 0 2"),
-            ("pear_worker 0 0 2",),
-            ("pear_worker 0 0 2", "pear_worker 0 0 2", "pear_worker_1 0 0 2"),
+            ("armada_worker 0 0 1", "armada_worker_1 0 0 2"),
+            ("armada_worker 0 0 3", "armada_worker_1 0 0 2"),
+            ("armada_worker 0 0 2",),
+            ("armada_worker 0 0 2", "armada_worker 0 0 2", "armada_worker_1 0 0 2"),
         ):
             payload = "\n".join(rows) + "\n"
             invalid = subprocess.run(
                 [
                     "bash",
                     "-c",
-                    "source tools/armada_deploy/deploy_common.sh; validate_pear_worker_pool_snapshot",
+                    "source tools/armada_deploy/deploy_common.sh; validate_armada_worker_pool_snapshot",
                 ],
                 cwd=REPO_ROOT,
                 input=payload,
@@ -1378,7 +1378,9 @@ sys.stdout.write(status)
                 "arguments": {"x-priority": priority},
             }
             for pid, priorities in (("<slot.0>", (10, 0)), ("<slot.1>", (0, 10)))
-            for queue, priority in zip(("pear_worker", "pear_worker_1"), priorities, strict=True)
+            for queue, priority in zip(
+                ("armada_worker", "armada_worker_1"), priorities, strict=True
+            )
         ]
         channels = [
             {
@@ -1397,7 +1399,7 @@ sys.stdout.write(status)
         ) -> subprocess.CompletedProcess[str]:
             payload = (
                 json.dumps(consumer_rows)
-                + "\n-- pear-worker-channels --\n"
+                + "\n-- armada-worker-channels --\n"
                 + json.dumps(channel_rows)
             )
             return subprocess.run(
@@ -1405,7 +1407,7 @@ sys.stdout.write(status)
                     "bash",
                     "-c",
                     "source tools/armada_deploy/deploy_common.sh; "
-                    "validate_pear_worker_pool_topology_snapshot",
+                    "validate_armada_worker_pool_topology_snapshot",
                 ],
                 cwd=REPO_ROOT,
                 input=payload,
@@ -1439,8 +1441,8 @@ sys.stdout.write(status)
             [
                 {
                     "vhost": "/",
-                    "name": "pear-worker-consumer-timeout",
-                    "pattern": "^pear_worker(_1)?$",
+                    "name": "armada-worker-consumer-timeout",
+                    "pattern": "^armada_worker(_1)?$",
                     "apply-to": "queues",
                     "definition": {"consumer-timeout": 21_600_000},
                     "priority": 10,
@@ -1453,16 +1455,16 @@ sys.stdout.write(status)
                     "name": name,
                     "type": "classic",
                     "durable": True,
-                    "policy": "pear-worker-consumer-timeout",
+                    "policy": "armada-worker-consumer-timeout",
                     "effective_policy_definition": {"consumer-timeout": 21_600_000},
                     "arguments": [],
                 }
-                for name in ("pear_worker", "pear_worker_1")
+                for name in ("armada_worker", "armada_worker_1")
             ]
         )
         for validator, payload in (
-            ("validate_pear_worker_consumer_timeout_policy_snapshot", policy),
-            ("validate_pear_worker_consumer_timeout_queue_snapshot", queues),
+            ("validate_armada_worker_consumer_timeout_policy_snapshot", policy),
+            ("validate_armada_worker_consumer_timeout_queue_snapshot", queues),
         ):
             result = subprocess.run(
                 [
@@ -1485,11 +1487,11 @@ sys.stdout.write(status)
                     "name": name,
                     "type": "classic",
                     "durable": True,
-                    "policy": "pear-worker-consumer-timeout",
+                    "policy": "armada-worker-consumer-timeout",
                     "effective_policy_definition": {},
                     "arguments": [],
                 }
-                for name in ("pear_worker", "pear_worker_1")
+                for name in ("armada_worker", "armada_worker_1")
             ]
         )
         result = subprocess.run(
@@ -1497,7 +1499,7 @@ sys.stdout.write(status)
                 "bash",
                 "-c",
                 "source tools/armada_deploy/deploy_common.sh; "
-                "validate_pear_worker_consumer_timeout_queue_snapshot",
+                "validate_armada_worker_consumer_timeout_queue_snapshot",
             ],
             cwd=REPO_ROOT,
             input=queues,

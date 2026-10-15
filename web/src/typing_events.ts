@@ -8,7 +8,7 @@ import render_typing_notifications from "../templates/typing_notifications.hbs";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as people from "./people.ts";
-import {current_user, is_pear_bot_user_id, realm} from "./state_data.ts";
+import {current_user, is_armada_bot_user_id, realm} from "./state_data.ts";
 import * as typing_data from "./typing_data.ts";
 
 // See docs/subsystems/typing-indicators.md for details on typing indicators.
@@ -112,7 +112,7 @@ export function render_notifications_for_narrow(): void {
     // animated "Thinking ✦" line and the topic header shows the active
     // state, so a "Pear is working…" row would just say it a third time.
     const users_typing = get_users_typing_for_narrow()
-        .filter((user_id) => !is_pear_bot_user_id(user_id))
+        .filter((user_id) => !is_armada_bot_user_id(user_id))
         .map((user_id) => people.get_user_by_id_assert_valid(user_id))
         .filter((person) => !person.is_inaccessible_user);
     const num_of_users_typing = users_typing.length;
@@ -131,7 +131,7 @@ export function render_notifications_for_narrow(): void {
 }
 
 function apply_message_edit_notifications($row: JQuery, is_typing: boolean): void {
-    if ($row.hasClass("pear-message") || $row.hasClass("pear-active-message")) {
+    if ($row.hasClass("legacy-message") || $row.hasClass("legacy-active-message")) {
         return;
     }
     const $editing_notifications = $row.find(".edit-notifications");
@@ -204,7 +204,7 @@ export function display_notification(event: TypingEvent): void {
 }
 
 export function display_message_edit_notification(event: TypingMessageEditEvent): void {
-    if (is_pear_bot_user_id(event.sender_id)) {
+    if (is_armada_bot_user_id(event.sender_id)) {
         return;
     }
     const message_id = event.message_id;
@@ -220,7 +220,7 @@ export function display_message_edit_notification(event: TypingMessageEditEvent)
     );
 }
 
-export function clear_pear_typists_for_topic(stream_id: number, topic: string): void {
+export function clear_armada_typists_for_topic(stream_id: number, topic: string): void {
     // The Pear worker signals a typing stop when its run ends, but the
     // "Pear is working…" line must not outlive the run if that event is
     // lost — the client-side expiry is 45s of false status. The panel
@@ -228,7 +228,7 @@ export function clear_pear_typists_for_topic(stream_id: number, topic: string): 
     const key = typing_data.get_topic_key(stream_id, topic);
     let removed = false;
     for (const user_id of typing_data.get_topic_typists(stream_id, topic)) {
-        if (is_pear_bot_user_id(user_id)) {
+        if (is_armada_bot_user_id(user_id)) {
             removed = typing_data.remove_typist(key, user_id) || removed;
         }
     }

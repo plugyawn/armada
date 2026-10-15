@@ -25,7 +25,7 @@ from zerver.actions.user_topics import (
 )
 from zerver.lib.addressee import Addressee
 from zerver.lib.alert_words import get_alert_word_automaton
-from zerver.lib.armada_gate import get_pear_followup_service_bot_event
+from zerver.lib.armada_gate import get_armada_followup_service_bot_event
 from zerver.lib.cache import cache_with_key, user_profile_delivery_email_cache_key
 from zerver.lib.create_user import create_user
 from zerver.lib.exceptions import (
@@ -593,7 +593,7 @@ def get_service_bot_events(
     stream_name: str | None = None,
     topic_name: str | None = None,
     content: str = "",
-    pear_followup: bool = False,
+    agent_followup: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     event_dict: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
@@ -652,7 +652,7 @@ def get_service_bot_events(
             bot_type=bot_type,
         )
 
-    pear_followup_event = get_pear_followup_service_bot_event(
+    armada_followup_event = get_armada_followup_service_bot_event(
         realm_id=sender.realm_id,
         recipient_id=recipient_id,
         recipient_type=recipient_type,
@@ -660,10 +660,10 @@ def get_service_bot_events(
         topic_name=topic_name,
         content=content,
         mentioned_user_ids=mentioned_user_ids,
-        pear_followup=pear_followup,
+        agent_followup=agent_followup,
     )
-    if pear_followup_event is not None:
-        event_dict["embedded_bots"].append(pear_followup_event)
+    if armada_followup_event is not None:
+        event_dict["embedded_bots"].append(armada_followup_event)
 
     return event_dict
 
@@ -681,7 +681,7 @@ def build_message_send_dict(
     recipients_for_user_creation_events: dict[UserProfile, set[int]] | None = None,
     acting_user: UserProfile | None = None,
     no_previews: bool = False,
-    pear_followup: bool = False,
+    agent_followup: bool = False,
 ) -> SendMessageRequest:
     """Returns a dictionary that can be passed into do_send_messages.  In
     production, this is always called by check_message, but some
@@ -814,7 +814,7 @@ def build_message_send_dict(
         disable_external_notifications=disable_external_notifications,
         topic_participant_user_ids=topic_participant_user_ids,
         recipients_for_user_creation_events=recipients_for_user_creation_events,
-        pear_followup=pear_followup,
+        agent_followup=agent_followup,
     )
 
     return message_send_dict
@@ -1080,7 +1080,7 @@ def do_send_messages(
             if send_request.message.is_channel_message
             else None,
             content=send_request.message.content,
-            pear_followup=send_request.pear_followup,
+            agent_followup=send_request.agent_followup,
         )
 
     bulk_insert_ums(ums)
@@ -1568,7 +1568,7 @@ def check_send_message(
     *,
     skip_stream_access_check: bool = False,
     read_by_sender: bool = False,
-    pear_followup: bool = False,
+    agent_followup: bool = False,
     thread_root_message: Message | None = None,
 ) -> SentMessageResult:
     addressee = Addressee.legacy_build(sender, recipient_type_name, message_to, topic_name)
@@ -1585,7 +1585,7 @@ def check_send_message(
         sender_queue_id,
         widget_content,
         skip_stream_access_check=skip_stream_access_check,
-        pear_followup=pear_followup,
+        agent_followup=agent_followup,
         thread_root_message=thread_root_message,
     )
     return do_send_messages(
@@ -1851,7 +1851,7 @@ def check_message(
     archived_channel_notice: bool = False,
     no_previews: bool = False,
     acting_user: UserProfile | None = None,
-    pear_followup: bool = False,
+    agent_followup: bool = False,
     thread_root_message: Message | None = None,
 ) -> SendMessageRequest:
     """See
@@ -2025,7 +2025,7 @@ def check_message(
         recipients_for_user_creation_events=recipients_for_user_creation_events,
         acting_user=acting_user,
         no_previews=no_previews,
-        pear_followup=pear_followup,
+        agent_followup=agent_followup,
     )
 
     if (

@@ -558,7 +558,7 @@ test("late message payload preserves append-only submessages", () => {
         id: 12,
         message_id: 600,
         sender_id: 25,
-        msg_type: "pear_artifact",
+        msg_type: "artifact",
         content: '{"version":1,"blocks":[]}',
     };
     const widget = {
@@ -585,7 +585,7 @@ test("late message payload without submessages preserves append-only submessages
         id: 13,
         message_id: 601,
         sender_id: 25,
-        msg_type: "pear_artifact",
+        msg_type: "artifact",
         content: '{"version":1,"blocks":[]}',
     };
     message_store.update_message_cache({

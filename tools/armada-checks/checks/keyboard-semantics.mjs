@@ -641,7 +641,7 @@ async function mac_conventions(ctx) {
             const stops = await ctx.route(
                 (request) =>
                     request.method !== "GET" &&
-                    request.url.startsWith("/json/pear/") &&
+                    request.url.startsWith("/json/armada/") &&
                     /cancel|stop|interrupt/.test(request.url),
                 {answer: () => ({result: "success", msg: ""})},
             );

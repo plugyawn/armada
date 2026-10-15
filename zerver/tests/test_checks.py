@@ -1,6 +1,7 @@
 import os
 import re
 from contextlib import ExitStack
+from io import StringIO
 from typing import Any
 from unittest import mock
 
@@ -200,6 +201,36 @@ class TestChecks(ZulipTestCase):
                 }
             },
         )
+
+    def test_checks_renamed_armada_settings(self) -> None:
+        # The agent's settings had another prefix before the rename;
+        # see RENAMED_ARMADA_SETTING_PREFIX in zerver/checks.py.
+        old_prefix = "P" + "EAR_"
+        trusted_users_only = old_prefix + "WORKER_TRUSTED_USERS_ONLY"
+        trusted_user_ids = old_prefix + "WORKER_TRUSTED_USER_IDS"
+        sandbox = old_prefix + "WORKER_SANDBOX"
+        with (
+            mock.patch.dict(os.environ, {sandbox: "workspace-write"}),
+            override_settings(**{trusted_users_only: True, trusted_user_ids: [8]}),
+            self.assertRaises(SystemCheckError) as error,
+        ):
+            call_command("check", stdout=StringIO())
+        message = str(error.exception)
+        self.assertEqual(message.count("(armada.E001)"), 3)
+        for expected in [
+            f"settings.{trusted_users_only}: (armada.E001) {trusted_users_only} is no longer "
+            "read; it is now ARMADA_WORKER_TRUSTED_USERS_ONLY\n"
+            "\tHINT: Rename it to ARMADA_WORKER_TRUSTED_USERS_ONLY in /etc/zulip/settings.py",
+            f"settings.{trusted_user_ids}: (armada.E001) {trusted_user_ids} is no longer "
+            "read; it is now ARMADA_WORKER_TRUSTED_USER_IDS",
+            f"os.environ['{sandbox}']: (armada.E001) The environment variable {sandbox} "
+            "is no longer read; it is now ARMADA_WORKER_SANDBOX\n"
+            "\tHINT: Rename it to ARMADA_WORKER_SANDBOX where it is exported",
+        ]:
+            self.assertIn(expected, message)
+
+        # The new names, and the server's other settings, pass.
+        self.assert_check_with_error(None, ARMADA_WORKER_TRUSTED_USERS_ONLY=True)
 
     def test_checks_uploads_s3_missing_buckets(self) -> None:
         self.assert_check_with_error(

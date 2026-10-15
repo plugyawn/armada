@@ -8978,7 +8978,7 @@ paths:
                                 edit_history: {}
                                 id: {}
                                 is_me_message: {}
-                                is_pear_message: {}
+                                is_agent_message: {}
                                 reply_summary: {}
                                 thread_root_message_id: {}
                                 last_edit_timestamp: {}
@@ -9067,7 +9067,7 @@ paths:
                                 ],
                               "content_type": "text/html",
                               "is_me_message": false,
-                              "is_pear_message": false,
+                              "is_agent_message": false,
                               "timestamp": 1527921326,
                               "sender_id": 4,
                               "sender_full_name": "King Hamlet",
@@ -9090,7 +9090,7 @@ paths:
                               "display_recipient": "Verona",
                               "content_type": "text/html",
                               "is_me_message": false,
-                              "is_pear_message": false,
+                              "is_agent_message": false,
                               "timestamp": 1527939746,
                               "sender_id": 4,
                               "sender_full_name": "King Hamlet",
@@ -10380,7 +10380,7 @@ paths:
                               edit_history: {}
                               id: {}
                               is_me_message: {}
-                              is_pear_message: {}
+                              is_agent_message: {}
                               reply_summary: {}
                               thread_root_message_id: {}
                               last_edit_timestamp: {}
@@ -10450,7 +10450,7 @@ paths:
                               ],
                             "content_type": "text/html",
                             "is_me_message": false,
-                            "is_pear_message": false,
+                            "is_agent_message": false,
                             "timestamp": 1527921326,
                             "sender_id": 4,
                             "sender_full_name": "King Hamlet",
@@ -27109,7 +27109,7 @@ paths:
                           edit_history: {}
                           id: {}
                           is_me_message: {}
-                          is_pear_message: {}
+                          is_agent_message: {}
                           reply_summary: {}
                           thread_root_message_id: {}
                           last_edit_timestamp: {}
@@ -27156,7 +27156,7 @@ paths:
                         "type": "stream",
                         "id": 112,
                         "is_me_message": false,
-                        "is_pear_message": false,
+                        "is_agent_message": false,
                         "reactions": [],
                         "sender_realm_str": "zulip",
                       },
@@ -28993,7 +28993,7 @@ components:
             edit_history: {}
             id: {}
             is_me_message: {}
-            is_pear_message: {}
+            is_agent_message: {}
             reply_summary: {}
             thread_root_message_id: {}
             last_edit_timestamp: {}
@@ -29268,10 +29268,13 @@ components:
             Whether the message is a [/me status message][status-messages]
 
             [status-messages]: /help/format-your-message-using-markdown#status-messages
-        is_pear_message:
+        is_agent_message:
           type: boolean
           description: |
-            Whether the message was sent by the Pear embedded bot.
+            Whether the message was sent by the agent's embedded bot.
+
+            **Changes**: In Zulip 13.0 (feature level ZF-092e84), renamed
+            from a name that carried the agent's old code name.
         reply_summary:
           $ref: "#/components/schemas/MessageThreadSummary"
         thread_root_message_id:

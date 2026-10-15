@@ -21,21 +21,21 @@ const rich_styles_ready =
               import("@milkdown/crepe/theme/frame.css"),
           ]).then(() => undefined);
 
-export type PearWorkspaceRichSelection = {
+export type ArmadaWorkspaceRichSelection = {
     anchor: number;
     head: number;
 };
 
-export type PearWorkspaceRichViewState = {
-    selection: PearWorkspaceRichSelection;
+export type ArmadaWorkspaceRichViewState = {
+    selection: ArmadaWorkspaceRichSelection;
     scrollTop: number;
 };
 
-export type PearWorkspaceRichSelectionContext = {
+export type ArmadaWorkspaceRichSelectionContext = {
     selectedText: string;
 };
 
-export type PearWorkspaceRichEligibility =
+export type ArmadaWorkspaceRichEligibility =
     | {eligible: true}
     | {
           eligible: false;
@@ -53,12 +53,12 @@ export type PearWorkspaceRichEligibility =
           reason: string;
       };
 
-export type PearWorkspaceRichDirtyEvent = {
+export type ArmadaWorkspaceRichDirtyEvent = {
     origin: "user";
     editRevision: number;
 };
 
-export type PearWorkspaceRichSerializationResult =
+export type ArmadaWorkspaceRichSerializationResult =
     | {
           status: "serialized";
           editRevision: number;
@@ -75,57 +75,57 @@ export type PearWorkspaceRichSerializationResult =
           message: string;
       };
 
-export type PearWorkspaceMarkdownEditorOptions = {
+export type ArmadaWorkspaceMarkdownEditorOptions = {
     root: HTMLElement;
     markdown: string;
     editRevision: number;
     readOnly?: boolean;
     placeholder?: string;
-    selection?: PearWorkspaceRichSelection | undefined;
+    selection?: ArmadaWorkspaceRichSelection | undefined;
     scrollTop?: number;
-    onDirty: (event: PearWorkspaceRichDirtyEvent) => void;
+    onDirty: (event: ArmadaWorkspaceRichDirtyEvent) => void;
     onSerialized: (
-        result: Extract<PearWorkspaceRichSerializationResult, {status: "serialized"}>,
+        result: Extract<ArmadaWorkspaceRichSerializationResult, {status: "serialized"}>,
     ) => void;
     onSerializationError?: (
-        result: Extract<PearWorkspaceRichSerializationResult, {status: "error"}>,
+        result: Extract<ArmadaWorkspaceRichSerializationResult, {status: "error"}>,
     ) => void;
 };
 
-export type PearWorkspaceMarkdownHydration = {
+export type ArmadaWorkspaceMarkdownHydration = {
     markdown: string;
     editRevision: number;
-    selection?: PearWorkspaceRichSelection | undefined;
+    selection?: ArmadaWorkspaceRichSelection | undefined;
     scrollTop?: number;
 };
 
-export type PearWorkspaceMarkdownEditorStats = {
+export type ArmadaWorkspaceMarkdownEditorStats = {
     serializations: number;
 };
 
-export type PearWorkspaceMarkdownEditor = {
-    flush: (expected_revision?: number) => Promise<PearWorkspaceRichSerializationResult>;
-    hydrate: (hydration: PearWorkspaceMarkdownHydration) => PearWorkspaceRichEligibility;
+export type ArmadaWorkspaceMarkdownEditor = {
+    flush: (expected_revision?: number) => Promise<ArmadaWorkspaceRichSerializationResult>;
+    hydrate: (hydration: ArmadaWorkspaceMarkdownHydration) => ArmadaWorkspaceRichEligibility;
     setReadOnly: (read_only: boolean) => void;
-    getViewState: () => PearWorkspaceRichViewState;
-    getSelectionContext: () => PearWorkspaceRichSelectionContext;
+    getViewState: () => ArmadaWorkspaceRichViewState;
+    getSelectionContext: () => ArmadaWorkspaceRichSelectionContext;
     getCursorLine: () => number;
     setCursorLine: (line: number) => void;
     getEditRevision: () => number;
-    getStats: () => PearWorkspaceMarkdownEditorStats;
+    getStats: () => ArmadaWorkspaceMarkdownEditorStats;
     focus: () => void;
     hasFocus: () => boolean;
     destroy: () => Promise<void>;
 };
 
-export type PearWorkspaceMarkdownEditorResult =
-    | {ok: true; editor: PearWorkspaceMarkdownEditor}
-    | {ok: false; eligibility: Exclude<PearWorkspaceRichEligibility, {eligible: true}>};
+export type ArmadaWorkspaceMarkdownEditorResult =
+    | {ok: true; editor: ArmadaWorkspaceMarkdownEditor}
+    | {ok: false; eligibility: Exclude<ArmadaWorkspaceRichEligibility, {eligible: true}>};
 
 type TransactionOrigin = "hydrate";
 type TransactionTracker = {userChanges: number};
 
-const transaction_origin_key = new PluginKey<TransactionTracker>("pear-workspace-rich-origin");
+const transaction_origin_key = new PluginKey<TransactionTracker>("legacy-workspace-rich-origin");
 
 const rich_code_languages = [
     LanguageDescription.of({
@@ -385,20 +385,20 @@ export function normalize_safe_rich_breaks(markdown: string): string {
 }
 
 function source_only(
-    code: Exclude<PearWorkspaceRichEligibility, {eligible: true}>["code"],
+    code: Exclude<ArmadaWorkspaceRichEligibility, {eligible: true}>["code"],
     reason: string,
-): Exclude<PearWorkspaceRichEligibility, {eligible: true}> {
+): Exclude<ArmadaWorkspaceRichEligibility, {eligible: true}> {
     return {eligible: false, code, reason};
 }
 
-function parse_failure(error: unknown): Exclude<PearWorkspaceRichEligibility, {eligible: true}> {
+function parse_failure(error: unknown): Exclude<ArmadaWorkspaceRichEligibility, {eligible: true}> {
     const detail = error instanceof Error ? ` ${error.message}` : "";
     return source_only("parse_error", `Rich mode could not parse this Markdown safely.${detail}`);
 }
 
 export function rich_source_only_reason(
     markdown: string,
-): Exclude<PearWorkspaceRichEligibility, {eligible: true}> | undefined {
+): Exclude<ArmadaWorkspaceRichEligibility, {eligible: true}> | undefined {
     const normalized = markdown.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
     const without_bom = normalized.startsWith("\uFEFF") ? normalized.slice(1) : normalized;
     const lines = without_bom.split("\n");
@@ -527,7 +527,7 @@ function build_editor(
 function semantic_round_trip(
     builder: CrepeBuilder,
     markdown: string,
-): PearWorkspaceRichEligibility {
+): ArmadaWorkspaceRichEligibility {
     try {
         let equivalent = false;
         builder.editor.action((ctx) => {
@@ -599,7 +599,7 @@ function documents_are_semantically_equal(left: unknown, right: unknown): boolea
     return JSON.stringify(semantic_json(left)) === JSON.stringify(semantic_json(right));
 }
 
-export async function can_enter_rich(markdown: string): Promise<PearWorkspaceRichEligibility> {
+export async function can_enter_rich(markdown: string): Promise<ArmadaWorkspaceRichEligibility> {
     const unsupported = rich_source_only_reason(markdown);
     if (unsupported !== undefined) {
         return unsupported;
@@ -633,9 +633,9 @@ function clamp_position(position: number, document_size: number): number {
     return Math.max(0, Math.min(Math.trunc(position), document_size));
 }
 
-export async function create_pear_workspace_markdown_editor(
-    options: PearWorkspaceMarkdownEditorOptions,
-): Promise<PearWorkspaceMarkdownEditorResult> {
+export async function create_armada_workspace_markdown_editor(
+    options: ArmadaWorkspaceMarkdownEditorOptions,
+): Promise<ArmadaWorkspaceMarkdownEditorResult> {
     const unsupported = rich_source_only_reason(options.markdown);
     if (unsupported !== undefined) {
         return {ok: false, eligibility: unsupported};
@@ -654,14 +654,14 @@ export async function create_pear_workspace_markdown_editor(
     }
 
     const host = document.createElement("div");
-    host.className = "pear-workspace-rich-editor";
+    host.className = "legacy-workspace-rich-editor";
     let current_revision = options.editRevision;
     let destroyed = false;
     let scheduled:
         | {kind: "idle"; handle: number}
         | {kind: "timeout"; handle: ReturnType<typeof setTimeout>}
         | undefined;
-    let cached_result: PearWorkspaceRichSerializationResult | undefined;
+    let cached_result: ArmadaWorkspaceRichSerializationResult | undefined;
     let serialization_count = 0;
     let accept_user_changes = false;
 
@@ -674,7 +674,7 @@ export async function create_pear_workspace_markdown_editor(
         scheduled = undefined;
     };
 
-    let flush_current: () => Promise<PearWorkspaceRichSerializationResult>;
+    let flush_current: () => Promise<ArmadaWorkspaceRichSerializationResult>;
     const schedule_serialization = (): void => {
         if (destroyed || scheduled !== undefined) {
             return;
@@ -725,7 +725,7 @@ export async function create_pear_workspace_markdown_editor(
     }
 
     const view = builder.editor.action((ctx) => ctx.get(editorViewCtx));
-    const apply_selection = (selection: PearWorkspaceRichSelection | undefined): void => {
+    const apply_selection = (selection: ArmadaWorkspaceRichSelection | undefined): void => {
         if (selection === undefined) {
             return;
         }
@@ -776,7 +776,7 @@ export async function create_pear_workspace_markdown_editor(
     options.root.replaceChildren(host);
     accept_user_changes = true;
 
-    const serialize_revision = (revision: number): PearWorkspaceRichSerializationResult => {
+    const serialize_revision = (revision: number): ArmadaWorkspaceRichSerializationResult => {
         if (
             cached_result !== undefined &&
             cached_result.status !== "stale" &&
@@ -785,7 +785,7 @@ export async function create_pear_workspace_markdown_editor(
             return cached_result;
         }
         serialization_count += 1;
-        let result: PearWorkspaceRichSerializationResult;
+        let result: ArmadaWorkspaceRichSerializationResult;
         try {
             let markdown = "";
             let equivalent = false;
@@ -829,7 +829,7 @@ export async function create_pear_workspace_markdown_editor(
     /* eslint-disable @typescript-eslint/promise-function-async */
     const flush = (
         expected_revision = current_revision,
-    ): Promise<PearWorkspaceRichSerializationResult> => {
+    ): Promise<ArmadaWorkspaceRichSerializationResult> => {
         if (destroyed) {
             return Promise.resolve({
                 status: "error",
@@ -850,7 +850,9 @@ export async function create_pear_workspace_markdown_editor(
     /* eslint-enable @typescript-eslint/promise-function-async */
     flush_current = flush;
 
-    const hydrate = (hydration: PearWorkspaceMarkdownHydration): PearWorkspaceRichEligibility => {
+    const hydrate = (
+        hydration: ArmadaWorkspaceMarkdownHydration,
+    ): ArmadaWorkspaceRichEligibility => {
         if (destroyed) {
             throw new Error("Cannot hydrate a destroyed Rich Markdown editor.");
         }

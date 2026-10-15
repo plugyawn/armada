@@ -27,9 +27,9 @@ import * as inbox_ui from "./inbox_ui.ts";
 import * as inbox_util from "./inbox_util.ts";
 import * as information_density from "./information_density.ts";
 import * as left_sidebar_navigation_area from "./left_sidebar_navigation_area.ts";
-import * as pear_panel from "./legacy_panel.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
-import * as pear_workspace_events from "./legacy_workspace_events.ts";
+import * as legacy_panel from "./legacy_panel.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
+import * as legacy_workspace_events from "./legacy_workspace_events.ts";
 import * as linkifiers from "./linkifiers.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_events from "./message_events.ts";
@@ -83,7 +83,12 @@ import * as settings_streams from "./settings_streams.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
 import * as starred_messages from "./starred_messages.ts";
 import * as starred_messages_ui from "./starred_messages_ui.ts";
-import {add_pear_bot_user_id, current_user, realm, remove_pear_bot_user_id} from "./state_data.ts";
+import {
+    add_armada_bot_user_id,
+    current_user,
+    realm,
+    remove_armada_bot_user_id,
+} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import * as stream_events from "./stream_events.ts";
 import * as stream_list from "./stream_list.ts";
@@ -108,7 +113,7 @@ import * as user_status from "./user_status.ts";
 import * as user_topics from "./user_topics.ts";
 import * as user_topics_ui from "./user_topics_ui.ts";
 
-const PEAR_EMBEDDED_BOT_SERVICE = "pear";
+const ARMADA_EMBEDDED_BOT_SERVICE = "armada";
 
 function event_services_are_definitive(services) {
     return (
@@ -120,14 +125,14 @@ function event_services_are_definitive(services) {
     );
 }
 
-function event_services_include_pear(services) {
+function event_services_include_armada(services) {
     return (
         Array.isArray(services) &&
         services.some(
             (service) =>
                 typeof service === "object" &&
                 service !== null &&
-                service.service_name === PEAR_EMBEDDED_BOT_SERVICE,
+                service.service_name === ARMADA_EMBEDDED_BOT_SERVICE,
         )
     );
 }
@@ -187,13 +192,13 @@ export function dispatch_normal_event(event) {
             }
             break;
 
-        case "pear_run":
-            pear_run_state.apply_pear_run_event(event);
-            pear_panel.handle_pear_run_event(event);
+        case "agent_run":
+            legacy_run_state.apply_armada_run_event(event);
+            legacy_panel.handle_armada_run_event(event);
             break;
 
-        case "pear_workspace_changed":
-            pear_workspace_events.apply_pear_workspace_changed_event(event);
+        case "workspace_changed":
+            legacy_workspace_events.apply_armada_workspace_changed_event(event);
             break;
 
         case "custom_profile_fields":
@@ -539,8 +544,8 @@ export function dispatch_normal_event(event) {
             switch (event.op) {
                 case "add": {
                     bot_data.add(event.bot);
-                    if (event_services_include_pear(event.bot.services)) {
-                        add_pear_bot_user_id(event.bot.user_id);
+                    if (event_services_include_armada(event.bot.services)) {
+                        add_armada_bot_user_id(event.bot.user_id);
                     }
                     const user = people.get_by_user_id(event.bot.user_id);
                     if (user.bot_owner_id === current_user.user_id) {
@@ -552,7 +557,7 @@ export function dispatch_normal_event(event) {
                 }
                 case "delete":
                     bot_data.del(event.bot.user_id);
-                    remove_pear_bot_user_id(event.bot.user_id);
+                    remove_armada_bot_user_id(event.bot.user_id);
                     settings_bots.redraw_your_bots_list();
                     settings_bots.toggle_bot_config_download_container();
                     settings_bots.update_lock_icon_in_sidebar();
@@ -560,10 +565,10 @@ export function dispatch_normal_event(event) {
                 case "update":
                     bot_data.update(event.bot.user_id, event.bot);
                     if (event_services_are_definitive(event.bot.services)) {
-                        if (event_services_include_pear(event.bot.services)) {
-                            add_pear_bot_user_id(event.bot.user_id);
+                        if (event_services_include_armada(event.bot.services)) {
+                            add_armada_bot_user_id(event.bot.user_id);
                         } else {
-                            remove_pear_bot_user_id(event.bot.user_id);
+                            remove_armada_bot_user_id(event.bot.user_id);
                         }
                     }
                     break;

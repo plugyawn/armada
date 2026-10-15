@@ -4,9 +4,9 @@ Armada's agent surfaces (live runs, plans, traces, sub-agents, artifacts,
 wall monitors, threads) only have something to render after a Codex run,
 and the Codex runtime is disabled in development.  This module produces
 that state without a model: it posts ordinary messages, then drives the
-*real* admission path (`PearEmbeddedBotHandler.handle_message`), the real
-run store (`PearDatabaseWorkerRunStore`) and the real turn
-(`PearWorkerTurn`) with a scripted tool runner standing in for the Codex
+*real* admission path (`ArmadaEmbeddedBotHandler.handle_message`), the real
+run store (`ArmadaDatabaseWorkerRunStore`) and the real turn
+(`ArmadaWorkerTurn`) with a scripted tool runner standing in for the Codex
 app-server.  Every row, event, cache entry and message edit is therefore
 written by product code; the fixture only decides what the "agent" says.
 
@@ -36,25 +36,25 @@ from zerver.actions.message_delete import do_delete_messages
 from zerver.actions.message_send import do_send_messages, internal_prep_stream_message
 from zerver.actions.streams import bulk_add_subscriptions, bulk_remove_subscriptions
 from zerver.lib.armada import (
-    PEAR_EXPLICIT_MENTION_MESSAGE_KEY,
-    PEAR_TRIGGER_MESSAGE_KEY,
-    PearEmbeddedBotHandler,
-    PearWorkerRuntime,
-    PearWorkerToolResult,
-    PearWorkerTranscriptCallback,
-    get_pear_live_run_state,
-    pear_live_run_cache_key,
-    pear_topic_scope,
+    ARMADA_EXPLICIT_MENTION_MESSAGE_KEY,
+    ARMADA_TRIGGER_MESSAGE_KEY,
+    ArmadaEmbeddedBotHandler,
+    ArmadaWorkerRuntime,
+    ArmadaWorkerToolResult,
+    ArmadaWorkerTranscriptCallback,
+    armada_live_run_cache_key,
+    armada_topic_scope,
+    get_armada_live_run_state,
 )
-from zerver.lib.armada_agent import build_pear_runtime_value, pear_thread_session_event
+from zerver.lib.armada_agent import armada_thread_session_event, build_armada_runtime_value
 from zerver.lib.armada_artifact import artifact_tool_result
-from zerver.lib.armada_monitor import pear_create_monitor_from_spec, pear_monitor_apply_tick
+from zerver.lib.armada_monitor import armada_create_monitor_from_spec, armada_monitor_apply_tick
 from zerver.lib.armada_worker import (
-    PearDatabaseWorkerRunStore,
-    ensure_pear_workspace_node,
-    load_pear_active_session_from_zulip,
-    pear_worker_model_for_topic,
-    pear_worker_reasoning_effort_for_topic,
+    ArmadaDatabaseWorkerRunStore,
+    armada_worker_model_for_topic,
+    armada_worker_reasoning_effort_for_topic,
+    ensure_armada_workspace_node,
+    load_armada_active_session_from_zulip,
 )
 from zerver.lib.armada_workspace_resources import refresh_workspace_snapshot
 from zerver.lib.bot_lib import EmbeddedBotHandler
@@ -65,7 +65,7 @@ from zerver.models import Message, Realm, Stream, UserMessage, UserProfile
 from zerver.models.bots import AgentMonitor, AgentRun, Service, Workspace
 from zerver.models.streams import get_stream
 from zerver.models.users import get_user_by_delivery_email
-from zerver.views.armada import update_pear_run_control_event
+from zerver.views.armada import update_armada_run_control_event
 
 DEMO_STREAM = "click"
 DEMO_TOPIC_PREFIX = "demo-"
@@ -91,13 +91,13 @@ Script = Callable[["ScriptedTurn"], str]
 class FreezeRunError(BaseException):
     """Abandon a scripted turn mid-flight.
 
-    Deliberately not an `Exception`: `PearWorkerTurn.run` settles a turn as
+    Deliberately not an `Exception`: `ArmadaWorkerTurn.run` settles a turn as
     failed on any `Exception`, and a frozen turn must stay exactly as a live
     one looks from outside: RUNNING, with its last events and partial text.
     """
 
 
-class DemoRunStore(PearDatabaseWorkerRunStore):
+class DemoRunStore(ArmadaDatabaseWorkerRunStore):
     """The real run store, able to freeze a turn that waits on a human."""
 
     freeze_on_steering_poll = False
@@ -122,7 +122,7 @@ class CapturingDispatcher:
 
     def dispatch(
         self,
-        pear_handler: Any,
+        armada_handler: Any,
         bot_handler: Any,
         message: dict[str, Any],
         **kwargs: Any,
@@ -150,7 +150,7 @@ class ScriptedTurn:
         self,
         seeder: "DemoSeeder",
         runner: "ScriptedRunner",
-        emit: PearWorkerTranscriptCallback,
+        emit: ArmadaWorkerTranscriptCallback,
     ) -> None:
         self.seeder = seeder
         self.runner = runner
@@ -158,7 +158,7 @@ class ScriptedTurn:
         self.root = runner.root_thread_id
         self.turn_id = seeder.new_id(self.root, f"turn:{runner.ordinal}")
         self.agents: dict[str, DemoAgent] = {}
-        self.artifacts: list[PearWorkerToolResult] = []
+        self.artifacts: list[ArmadaWorkerToolResult] = []
         self.items = 0
         self.usage_totals = {"input": 0, "cached": 0, "output": 0, "reasoning": 0}
 
@@ -228,7 +228,7 @@ class ScriptedTurn:
 
     def begin(self) -> None:
         self.emit(
-            pear_thread_session_event(
+            armada_thread_session_event(
                 {
                     "id": self.root,
                     "parent_thread_id": None,
@@ -379,8 +379,8 @@ class ScriptedTurn:
         )
 
     def artifact(self, document: dict[str, Any]) -> None:
-        """Hand an artifact to the turn as the `pear_artifact` tool would."""
-        self.tool("pear_artifact")
+        """Hand an artifact to the turn as the `armada_artifact` tool would."""
+        self.tool("armada_artifact")
         self.artifacts.append(self.seeder.artifact_result(document))
 
     # --- native sub-agents ---------------------------------------------
@@ -399,7 +399,7 @@ class ScriptedTurn:
             receiver_thread_ids=[thread_id],
         )
         self.emit(
-            pear_thread_session_event(
+            armada_thread_session_event(
                 {
                     "id": thread_id,
                     "parent_thread_id": self.root,
@@ -475,7 +475,9 @@ class ScriptedTurn:
     def cancel(self, by: str) -> None:
         """The panel's cancel control, pressed while the turn is working."""
         run = self.runner.run()
-        update_pear_run_control_event(self.seeder.user(by), run.id, "cancel", "Cancelled by user.")
+        update_armada_run_control_event(
+            self.seeder.user(by), run.id, "cancel", "Cancelled by user."
+        )
 
     def ask(self, questions: list[dict[str, Any]]) -> None:
         """The engine's request_user_input; the run then waits on a human."""
@@ -490,7 +492,7 @@ class ScriptedTurn:
 
 
 class ScriptedRunner:
-    """A `PearWorkerToolRunner` that replays a script instead of calling Codex."""
+    """A `ArmadaWorkerToolRunner` that replays a script instead of calling Codex."""
 
     def __init__(
         self,
@@ -524,11 +526,11 @@ class ScriptedRunner:
         active_session: Any,
         task: str,
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
         user_input_provider: Any = None,
-    ) -> Sequence[PearWorkerToolResult]:
+    ) -> Sequence[ArmadaWorkerToolResult]:
         assert event_callback is not None
-        # The callback is `PearWorkerTurn.handle_transcript_event`; the turn
+        # The callback is `ArmadaWorkerTurn.handle_transcript_event`; the turn
         # is what a script needs for the two things only it can do (flush
         # the live message, ask the humans a question).
         self.turn = event_callback.__self__  # type: ignore[attr-defined] # bound method
@@ -544,9 +546,9 @@ class ScriptedRunner:
         task: str,
         *,
         conversation_key: str | None = None,
-        event_callback: PearWorkerTranscriptCallback | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
         user_input_provider: Any = None,
-    ) -> Sequence[PearWorkerToolResult]:
+    ) -> Sequence[ArmadaWorkerToolResult]:
         return self(active_session, task, event_callback=event_callback)
 
     def steer(self, instruction: str) -> bool:
@@ -560,16 +562,16 @@ class ScriptedRunner:
 
     def runtime_value(self) -> str:
         run = self.run()
-        return build_pear_runtime_value(
+        return build_armada_runtime_value(
             "codex-app-server",
             workdir=run.workdir,
             sandbox="workspace-write",
             approval_policy=run.approval_policy,
-            model=pear_worker_model_for_topic(
+            model=armada_worker_model_for_topic(
                 self.seeder.bot, stream=DEMO_STREAM, topic=self.topic
             ),
             service_tier="fast",
-            reasoning_effort=pear_worker_reasoning_effort_for_topic(
+            reasoning_effort=armada_worker_reasoning_effort_for_topic(
                 self.seeder.bot, stream=DEMO_STREAM, topic=self.topic
             ),
         )
@@ -583,7 +585,7 @@ class DemoSeeder:
         self.stream: Stream = get_stream(DEMO_STREAM, realm)
         service = (
             Service.objects.select_related("user_profile")
-            .filter(name="pear", user_profile__realm=realm, user_profile__is_active=True)
+            .filter(name="armada", user_profile__realm=realm, user_profile__is_active=True)
             .order_by("user_profile_id")
             .first()
         )
@@ -603,7 +605,7 @@ class DemoSeeder:
 
     def new_id(self, *parts: str) -> str:
         """A stable Codex-style id, so agent sigils survive reloading."""
-        return str(uuid.uuid5(uuid.NAMESPACE_URL, "/".join(["pear-demo", *parts])))
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, "/".join(["armada-demo", *parts])))
 
     def _next_ordinal(self, topic: str) -> int:
         self.runs_by_topic[topic] = self.runs_by_topic.get(topic, 0) + 1
@@ -624,7 +626,7 @@ class DemoSeeder:
 
     def workspace(self, topic: str) -> Workspace:
         """The topic's worktree, through the same call a first run makes."""
-        return ensure_pear_workspace_node(self.bot, stream=DEMO_STREAM, topic=topic)
+        return ensure_armada_workspace_node(self.bot, stream=DEMO_STREAM, topic=topic)
 
     # --- messages -------------------------------------------------------------
 
@@ -677,13 +679,13 @@ class DemoSeeder:
         message = self.post(sender, topic, f"@**Pear** {content}", thread_root=thread_root, wait=1)
         bot_handler = EmbeddedBotHandler(self.bot)
         service_message = MessageDict.wide_dict(message, self.realm.id)
-        service_message[PEAR_TRIGGER_MESSAGE_KEY] = "mention"
+        service_message[ARMADA_TRIGGER_MESSAGE_KEY] = "mention"
         service_message["content"] = extract_query_without_mention(service_message, bot_handler)
-        service_message[PEAR_EXPLICIT_MENTION_MESSAGE_KEY] = True
+        service_message[ARMADA_EXPLICIT_MENTION_MESSAGE_KEY] = True
         dispatcher = CapturingDispatcher()
-        PearEmbeddedBotHandler(
-            active_session_loader=load_pear_active_session_from_zulip,
-            worker_run_store=PearDatabaseWorkerRunStore(),
+        ArmadaEmbeddedBotHandler(
+            active_session_loader=load_armada_active_session_from_zulip,
+            worker_run_store=ArmadaDatabaseWorkerRunStore(),
             worker_dispatcher=dispatcher,
         ).handle_message(service_message, bot_handler)
         self._remember_bot_messages(topic)
@@ -713,9 +715,9 @@ class DemoSeeder:
             root_thread_id=self.new_id(topic, "thread"),
             ordinal=self._next_ordinal(topic),
         )
-        handler = PearEmbeddedBotHandler(
-            worker_runtime=PearWorkerRuntime(runner),
-            active_session_loader=load_pear_active_session_from_zulip,
+        handler = ArmadaEmbeddedBotHandler(
+            worker_runtime=ArmadaWorkerRuntime(runner),
+            active_session_loader=load_armada_active_session_from_zulip,
             worker_run_store=store,
         )
         worker_message = delivery.pop("message")
@@ -756,7 +758,7 @@ class DemoSeeder:
         """Keep a frozen run's volatile state for as long as its lease.
 
         A frozen run stays RUNNING because of the lease taken in `request`:
-        the pear_worker liveness thread (`reap_stale_pear_worker_runs`)
+        the armada_worker liveness thread (`reap_stale_armada_worker_runs`)
         fails RUNNING runs whose `heartbeat_at` is older than 60 seconds,
         and real writers only move a heartbeat forward once it is 15
         seconds old, so one dated 2099 is never touched and never stale.
@@ -765,10 +767,10 @@ class DemoSeeder:
         "has visible text"): a cache entry with a one-hour TTL.  Rewrite it
         with a long one.
         """
-        state = get_pear_live_run_state(run.trigger_message_id)
+        state = get_armada_live_run_state(run.trigger_message_id)
         if state is not None:
             cache.set(
-                pear_live_run_cache_key(run.trigger_message_id),
+                armada_live_run_cache_key(run.trigger_message_id),
                 state,
                 timeout=DEMO_LIVE_STATE_TTL_SECONDS,
             )
@@ -780,7 +782,7 @@ class DemoSeeder:
 
     # --- artifacts ----------------------------------------------------------------
 
-    def artifact_result(self, document: dict[str, Any]) -> PearWorkerToolResult:
+    def artifact_result(self, document: dict[str, Any]) -> ArmadaWorkerToolResult:
         return {"label": "Artifact", "value": artifact_tool_result(json.dumps(document))["value"]}
 
     def write_media(self, topic: str, relative_path: str, data: bytes) -> None:
@@ -811,8 +813,8 @@ class DemoSeeder:
         last_error: str = "",
     ) -> AgentMonitor:
         """A wall monitor, created the way pinning an artifact creates one."""
-        stream_name, topic_name = pear_topic_scope(DEMO_STREAM, topic)
-        monitor = pear_create_monitor_from_spec(
+        stream_name, topic_name = armada_topic_scope(DEMO_STREAM, topic)
+        monitor = armada_create_monitor_from_spec(
             realm=self.realm,
             bot_profile=self.bot,
             creator=self.user(DEMO_CHANNEL_OWNER),
@@ -827,7 +829,7 @@ class DemoSeeder:
         # One sample, as the scheduler's first tick would take it.  The
         # recipe is static, so later real ticks re-publish the same data
         # and keep `last_ok_at` fresh without running any command.
-        pear_monitor_apply_tick(
+        armada_monitor_apply_tick(
             monitor, workdir=self.workspace(topic).workdir, process_isolation=None
         )
         if status == AgentMonitor.PAUSED:
@@ -843,7 +845,7 @@ class DemoSeeder:
 
     def provisioning_monitor(self, topic: str, ask: str) -> AgentMonitor:
         """A monitor whose setup agent has not written its spec yet."""
-        stream_name, topic_name = pear_topic_scope(DEMO_STREAM, topic)
+        stream_name, topic_name = armada_topic_scope(DEMO_STREAM, topic)
         return AgentMonitor.objects.create(
             realm=self.realm,
             bot_profile=self.bot,
@@ -923,7 +925,7 @@ def remove_demo_data(realm: Realm, *, remove_workspaces: bool) -> dict[str, int]
         topic_name__istartswith=DEMO_TOPIC_PREFIX,
     )
     for trigger_message_id in runs.values_list("trigger_message_id", flat=True):
-        cache.delete(pear_live_run_cache_key(trigger_message_id))
+        cache.delete(armada_live_run_cache_key(trigger_message_id))
     counts = {"runs": runs.count()}
     runs.delete()
     monitors = AgentMonitor.objects.filter(
@@ -1019,7 +1021,7 @@ def animate_live_run(realm: Realm, topic: str, *, interval_seconds: float = 4.0)
     """
     import time
 
-    from zerver.lib.armada import send_pear_worker_typing_notification
+    from zerver.lib.armada import send_armada_worker_typing_notification
 
     run = (
         AgentRun.objects.filter(
@@ -1033,7 +1035,7 @@ def animate_live_run(realm: Realm, topic: str, *, interval_seconds: float = 4.0)
     )
     if run is None:
         raise RuntimeError(f"No live fixture run in {topic}; load the fixtures first.")
-    store = PearDatabaseWorkerRunStore()
+    store = ArmadaDatabaseWorkerRunStore()
     bot_handler = EmbeddedBotHandler(run.bot_profile)
     step = 0
     while True:
@@ -1060,7 +1062,7 @@ def animate_live_run(realm: Realm, topic: str, *, interval_seconds: float = 4.0)
                 },
             )
             store.update_metadata(bot_handler, run.trigger_message_id, current_activity=command)
-            send_pear_worker_typing_notification(
+            send_armada_worker_typing_notification(
                 bot_handler, stream=run.stream_name, topic=run.topic_name, operator="start"
             )
             time.sleep(interval_seconds / 2)

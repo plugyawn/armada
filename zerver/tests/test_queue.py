@@ -49,7 +49,7 @@ class TestQueueImplementation(ZulipTestCase):
             callbacks[queue] = (on_message_callback, kwargs)
 
         def start_consuming() -> None:
-            callback, _kwargs = callbacks["pear_worker_1"]
+            callback, _kwargs = callbacks["armada_worker_1"]
             callback(
                 channel,
                 mock.Mock(delivery_tag=41, redelivered=True),
@@ -62,14 +62,14 @@ class TestQueueImplementation(ZulipTestCase):
         channel.start_consuming.side_effect = start_consuming
 
         client.start_json_consumers(
-            {"pear_worker": 0, "pear_worker_1": 10},
+            {"armada_worker": 0, "armada_worker_1": 10},
             lambda events: received.extend(events),
             annotate_redelivery=True,
         )
 
         channel.basic_qos.assert_called_once_with(prefetch_count=1, global_qos=True)
-        self.assertEqual(callbacks["pear_worker"][1]["arguments"], {"x-priority": 0})
-        self.assertEqual(callbacks["pear_worker_1"][1]["arguments"], {"x-priority": 10})
+        self.assertEqual(callbacks["armada_worker"][1]["arguments"], {"x-priority": 0})
+        self.assertEqual(callbacks["armada_worker_1"][1]["arguments"], {"x-priority": 10})
         self.assertEqual(
             received,
             [{"run_id": 9, QUEUE_REDELIVERED_EVENT_KEY: True}],
@@ -92,7 +92,7 @@ class TestQueueImplementation(ZulipTestCase):
             callbacks[queue] = (on_message_callback, kwargs)
 
         def start_consuming() -> None:
-            callback, _kwargs = callbacks["pear_worker"]
+            callback, _kwargs = callbacks["armada_worker"]
             callback(
                 channel,
                 mock.Mock(delivery_tag=42, redelivered=False),
@@ -109,7 +109,7 @@ class TestQueueImplementation(ZulipTestCase):
 
         with self.assertRaisesRegex(RuntimeError, "pre-turn setup failed"):
             client.start_json_consumers(
-                {"pear_worker": 10, "pear_worker_1": 0},
+                {"armada_worker": 10, "armada_worker_1": 0},
                 fail_before_turn,
                 annotate_redelivery=True,
             )
@@ -133,7 +133,7 @@ class TestQueueImplementation(ZulipTestCase):
             callbacks[queue] = on_message_callback
 
         def start_consuming() -> None:
-            callbacks["pear_worker"](
+            callbacks["armada_worker"](
                 channel,
                 mock.Mock(delivery_tag=43, redelivered=False),
                 mock.Mock(),
@@ -145,7 +145,7 @@ class TestQueueImplementation(ZulipTestCase):
         channel.start_consuming.side_effect = start_consuming
 
         client.start_json_consumers(
-            {"pear_worker": 10},
+            {"armada_worker": 10},
             lambda _events: (_ for _ in ()).throw(QueueEventDiscardError("invalid event")),
         )
 
@@ -180,7 +180,7 @@ class TestQueueImplementation(ZulipTestCase):
         channel.basic_consume.side_effect = basic_consume
         channel.start_consuming.side_effect = start_consuming
 
-        client.start_json_consumers({"pear_worker": 10}, lambda _events: None)
+        client.start_json_consumers({"armada_worker": 10}, lambda _events: None)
 
         channel.basic_ack.assert_not_called()
         channel.basic_nack.assert_called_once_with(44, requeue=False)

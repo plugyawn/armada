@@ -49,7 +49,7 @@ from zerver.lib.armada_workspace_io import (
 )
 
 
-class PearWorkspaceIOTest(TestCase):
+class ArmadaWorkspaceIOTest(TestCase):
     def setUp(self) -> None:
         self.temporary_directory = TemporaryDirectory()
         # macOS exposes /var through a symlink. The production helper refuses
@@ -319,7 +319,7 @@ class PearWorkspaceIOTest(TestCase):
         self.assertEqual(result.file.data, b"new\r\n")
         self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o750)
         self.assertEqual(path.read_bytes(), b"new\r\n")
-        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-write-*")), [])
 
         with self.assertRaises(WorkspaceVersionConflictError) as raised:
             atomic_write_workspace_file(
@@ -533,7 +533,7 @@ class PearWorkspaceIOTest(TestCase):
             )
 
         self.assertEqual(path.read_bytes(), b"original")
-        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-write-*")), [])
 
     def test_rename_race_restores_replacement_and_never_publishes_it(self) -> None:
         source = self.write("source.txt", b"authorized")
@@ -589,7 +589,7 @@ class PearWorkspaceIOTest(TestCase):
         self.assertEqual(source.read_bytes(), b"replacement")
         self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
         self.assertFalse((self.root / "destination.txt").exists())
-        self.assertEqual(list(self.root.glob(".pear-rename-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-rename-*")), [])
 
     def test_delete_race_restores_replacement_without_deleting_it(self) -> None:
         target = self.write("target.txt", b"authorized")
@@ -643,7 +643,7 @@ class PearWorkspaceIOTest(TestCase):
 
         self.assertEqual(target.read_bytes(), b"replacement")
         self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
-        self.assertEqual(list(self.root.glob(".pear-delete-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-delete-*")), [])
 
     def test_write_exchange_rolls_back_a_raced_replacement(self) -> None:
         target = self.write("target.txt", b"authorized")
@@ -690,7 +690,7 @@ class PearWorkspaceIOTest(TestCase):
 
         self.assertEqual(target.read_bytes(), b"replacement")
         self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
-        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-write-*")), [])
 
     def test_write_exchange_preserves_post_publish_replacement(self) -> None:
         target = self.write("target.txt", b"authorized")
@@ -727,7 +727,7 @@ class PearWorkspaceIOTest(TestCase):
         self.assertEqual(target.read_bytes(), b"concurrent replacement")
         # The exact authorized old inode may be retired, while the concurrent
         # target must never be exchanged into a cleanup name and unlinked.
-        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-write-*")), [])
 
     def test_write_exchange_preserves_unknown_displaced_entry(self) -> None:
         target = self.write("target.txt", b"authorized")
@@ -777,7 +777,7 @@ class PearWorkspaceIOTest(TestCase):
 
         self.assertEqual(target.read_bytes(), b"second replacement")
         self.assertEqual((self.root / "authorized-parked.txt").read_bytes(), b"authorized")
-        quarantined = list(self.root.glob(".pear-write-*"))
+        quarantined = list(self.root.glob(".armada-write-*"))
         self.assertEqual(len(quarantined), 1)
         self.assertEqual(quarantined[0].read_bytes(), b"first replacement")
 
@@ -823,7 +823,7 @@ class PearWorkspaceIOTest(TestCase):
             )
 
         self.assertEqual(target.read_bytes(), b"new content")
-        self.assertEqual(list(self.root.glob(".pear-write-*")), [])
+        self.assertEqual(list(self.root.glob(".armada-write-*")), [])
 
     def test_write_exchange_cleanup_error_preserves_exact_displacement_explicitly(self) -> None:
         target = self.write("target.txt", b"authorized")
@@ -846,7 +846,7 @@ class PearWorkspaceIOTest(TestCase):
                 os.replace(replacement, target)
 
         def reject_recovery_unlink(path: str, *, dir_fd: int | None = None) -> None:
-            if path.startswith(".pear-write-"):
+            if path.startswith(".armada-write-"):
                 raise PermissionError("simulated cleanup failure")
             original_unlink(path, dir_fd=dir_fd)
 
@@ -865,7 +865,7 @@ class PearWorkspaceIOTest(TestCase):
             )
 
         self.assertEqual(target.read_bytes(), b"concurrent replacement")
-        quarantined = list(self.root.glob(".pear-write-*"))
+        quarantined = list(self.root.glob(".armada-write-*"))
         self.assertEqual(len(quarantined), 1)
         self.assertEqual(quarantined[0].read_bytes(), b"authorized")
 
@@ -1024,8 +1024,8 @@ class PearWorkspaceIOTest(TestCase):
 
     def test_isolation_helper_command_is_fixed_and_username_is_validated(self) -> None:
         command = armada_workspace_io._helper_command(
-            isolation_username="pear-0123456789abcdef01234567",
-            helper_path="/usr/local/lib/pear-workspace-io",
+            isolation_username="armada-0123456789abcdef01234567",
+            helper_path="/usr/local/lib/armada-workspace-io",
             python_executable="python3",
         )
         self.assertEqual(
@@ -1034,17 +1034,17 @@ class PearWorkspaceIOTest(TestCase):
                 "sudo",
                 "-n",
                 "-u",
-                "pear-0123456789abcdef01234567",
+                "armada-0123456789abcdef01234567",
                 "/usr/bin/env",
                 "python3",
-                "/usr/local/lib/pear-workspace-io",
+                "/usr/local/lib/armada-workspace-io",
                 "--stdio",
             ],
         )
         with self.assertRaises(ValueError):
             armada_workspace_io._helper_command(
                 isolation_username="root",
-                helper_path="/usr/local/lib/invalid-pear-helper",
+                helper_path="/usr/local/lib/invalid-armada-helper",
                 python_executable="python3",
             )
 

@@ -1,7 +1,7 @@
 import $ from "jquery";
 import assert from "minimalistic-assert";
 
-import render_pear_topic_header_controls from "../templates/legacy_topic_header_controls.hbs";
+import render_legacy_topic_header_controls from "../templates/legacy_topic_header_controls.hbs";
 import render_message_view_header from "../templates/message_view_header.hbs";
 
 import * as armada_narrow from "./armada/hooks/narrow.ts"; // armada:
@@ -9,8 +9,8 @@ import type {Filter} from "./filter.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as inbox_util from "./inbox_util.ts";
-import * as pear_panel from "./legacy_panel.ts";
-import * as pear_workspace from "./legacy_workspace.ts";
+import * as legacy_panel from "./legacy_panel.ts";
+import * as legacy_workspace from "./legacy_workspace.ts";
 import * as narrow_state from "./narrow_state.ts";
 import {page_params} from "./page_params.ts";
 import * as peer_data from "./peer_data.ts";
@@ -152,7 +152,7 @@ function append_and_display_title_area(context: MessageViewHeaderContext): void 
         colorize_message_view_header();
     }
     $message_view_header_elem.removeClass("notdisplayed");
-    $(document).trigger("pear_message_view_header_rendered");
+    $(document).trigger("armada_message_view_header_rendered");
     const $content = $message_view_header_elem.find("span.rendered_markdown");
     if ($content) {
         // Update syntax like stream names, emojis, mentions, timestamps.
@@ -246,7 +246,7 @@ function current_place(filter: Filter | undefined): string {
     if (
         stream_id !== undefined &&
         topic !== undefined &&
-        state_data.stream_has_pear_project(stream_id)
+        state_data.stream_has_armada_project(stream_id)
     ) {
         return "worktree";
     }
@@ -262,25 +262,25 @@ function render_worktree_facts(filter: Filter | undefined, place: string): void 
     const topic = filter && narrow_state.topic(filter);
     if (place !== "worktree" || stream_id === undefined || topic === undefined) {
         $facts.removeAttr("data-stream-id data-topic-name");
-        $facts.find(".pear-topic-header-status").remove();
+        $facts.find(".legacy-topic-header-status").remove();
         // Leaving a worktree closes its document views: nothing of it is
         // left in the pane of the place in front.
-        pear_workspace.sync({stream: undefined, topic: undefined, workspaceId: undefined});
+        legacy_workspace.sync({stream: undefined, topic: undefined, workspaceId: undefined});
         return;
     }
     $facts.attr({"data-stream-id": stream_id, "data-topic-name": topic});
     const control_key = JSON.stringify({stream_id, topic});
     $facts
-        .find(".pear-topic-header-status")
-        .filter((_index, element) => $(element).attr("data-pear-header-key") !== control_key)
+        .find(".legacy-topic-header-status")
+        .filter((_index, element) => $(element).attr("data-legacy-header-key") !== control_key)
         .remove();
-    if ($facts.find(".pear-topic-header-status").length === 0) {
+    if ($facts.find(".legacy-topic-header-status").length === 0) {
         $facts
             .find(".recipient_bar_controls")
-            .before($(render_pear_topic_header_controls({control_key})));
-        pear_workspace.refresh_tab_strips();
+            .before($(render_legacy_topic_header_controls({control_key})));
+        legacy_workspace.refresh_tab_strips();
         // A worktree already known fills its values in the same task.
-        pear_panel.refresh_topic_header_controls();
+        legacy_panel.refresh_topic_header_controls();
     }
 }
 

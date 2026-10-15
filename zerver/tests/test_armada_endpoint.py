@@ -15,95 +15,95 @@ from django.db import transaction
 from django.utils.timezone import now as timezone_now
 from typing_extensions import override
 
-from zerver.actions.armada import send_pear_run_event, send_pear_workspace_changed_event
+from zerver.actions.armada import send_armada_run_event, send_armada_workspace_changed_event
 from zerver.lib.armada import (
-    PEAR_ACTIVE_SESSION_ENDPOINT,
-    PEAR_AGENT_RUNTIME_PACKAGES,
-    PEAR_CODEX_MCP_TOOLS,
-    PEAR_CONFIG_ENDPOINT,
-    PEAR_DEFAULT_STREAM,
-    PEAR_DEFAULT_TOPIC,
-    PEAR_EMBEDDED_BOT_SERVICE,
-    PEAR_FIRST_RUN_ENDPOINT,
-    PEAR_FIRST_RUN_STARTER_MESSAGE,
-    PEAR_FIRST_RUN_STREAM,
-    PEAR_FIRST_RUN_TOPIC,
-    PEAR_OFFICIAL_AGENT_RUNTIME,
-    PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
-    PEAR_OFFICIAL_CODEX_SDK_PACKAGES,
-    PEAR_RUNS_ENDPOINT,
-    PEAR_SESSION_ENDPOINT,
-    PEAR_TOPIC_CONTEXT_ENDPOINT,
-    PEAR_WORKING_MESSAGE,
-    PearEmbeddedBotHandler,
-    PearWorkerLeaseLostError,
-    PearWorkerRuntime,
-    build_pear_active_session_summary_from_messages,
-    get_pear_session_payload,
-    write_pear_live_run_state,
+    ARMADA_ACTIVE_SESSION_ENDPOINT,
+    ARMADA_AGENT_RUNTIME_PACKAGES,
+    ARMADA_CODEX_MCP_TOOLS,
+    ARMADA_CONFIG_ENDPOINT,
+    ARMADA_DEFAULT_STREAM,
+    ARMADA_DEFAULT_TOPIC,
+    ARMADA_EMBEDDED_BOT_SERVICE,
+    ARMADA_FIRST_RUN_ENDPOINT,
+    ARMADA_FIRST_RUN_STARTER_MESSAGE,
+    ARMADA_FIRST_RUN_STREAM,
+    ARMADA_FIRST_RUN_TOPIC,
+    ARMADA_OFFICIAL_AGENT_RUNTIME,
+    ARMADA_OFFICIAL_AGENT_RUNTIME_LABEL,
+    ARMADA_OFFICIAL_CODEX_SDK_PACKAGES,
+    ARMADA_RUNS_ENDPOINT,
+    ARMADA_SESSION_ENDPOINT,
+    ARMADA_TOPIC_CONTEXT_ENDPOINT,
+    ARMADA_WORKING_MESSAGE,
+    ArmadaEmbeddedBotHandler,
+    ArmadaWorkerLeaseLostError,
+    ArmadaWorkerRuntime,
+    build_armada_active_session_summary_from_messages,
+    get_armada_session_payload,
+    write_armada_live_run_state,
 )
-from zerver.lib.armada_agent import PearCodexAppServerToolRunner, PearProcessIsolation
+from zerver.lib.armada_agent import ArmadaCodexAppServerToolRunner, ArmadaProcessIsolation
 from zerver.lib.armada_gate import (
-    get_pear_followup_service_bot_event,
-    get_selected_pear_bot_user_id_for_realm,
-    invalidate_pear_selected_bot_cache,
-    pear_selected_bot_cache_key,
+    armada_selected_bot_cache_key,
+    get_armada_followup_service_bot_event,
+    get_selected_armada_bot_user_id_for_realm,
+    invalidate_armada_selected_bot_cache,
 )
 from zerver.lib.armada_monitor import (
-    PEAR_MONITOR_FAILURE_LIMIT,
-    PEAR_MONITOR_MAX_PER_TOPIC,
-    PearMonitorSpecError,
-    pear_apply_monitor_setup_result,
-    pear_monitor_apply_tick,
-    pear_monitor_bind_data,
-    pear_monitor_run_recipe_command,
-    pear_monitor_spec_relative_path,
-    pear_validate_monitor_spec,
+    ARMADA_MONITOR_FAILURE_LIMIT,
+    ARMADA_MONITOR_MAX_PER_TOPIC,
+    ArmadaMonitorSpecError,
+    armada_apply_monitor_setup_result,
+    armada_monitor_apply_tick,
+    armada_monitor_bind_data,
+    armada_monitor_run_recipe_command,
+    armada_monitor_spec_relative_path,
+    armada_validate_monitor_spec,
 )
 from zerver.lib.armada_worker import (
-    PearDatabaseWorkerRunStore,
-    PearQueueWorkerDispatcher,
-    build_pear_worker_runtime_from_settings,
-    build_pear_workspace_context,
-    configure_pear_channel_repository_workspace,
-    ensure_pear_project_origin,
-    ensure_pear_topic_workdir,
-    ensure_pear_workspace_node,
-    invalidate_pear_git_status_delta,
-    latest_pear_codex_run_for_topic,
-    load_pear_active_session_from_zulip,
-    load_pear_referenced_threads,
-    maintain_pear_worker_run_liveness,
-    maybe_refactor_pear_stream_workspaces_on_rename,
-    maybe_refactor_pear_workspace_on_move,
-    pear_expected_project_cache_path,
-    pear_expected_topic_workdir,
-    pear_git_current_branch_name,
-    pear_git_output,
-    pear_git_status_delta,
-    pear_initialize_bare_origin,
-    pear_read_text_path,
-    pear_referenced_conversations,
-    pear_run_git_checked,
-    pear_seed_empty_bare_origin,
-    pear_topic_branch_name,
-    pear_topic_isolation_user_exists,
-    pear_topic_isolation_username,
-    pear_topic_process_isolation,
-    pear_topic_workdir_root,
-    pear_worker_model_for_topic,
-    pear_worker_process_isolation_error,
-    pear_worker_reasoning_effort_for_topic,
-    pear_worker_runtime_isolation_error,
-    pear_worker_sandbox_for_topic,
-    pear_worker_workdir_for_topic,
-    pear_workspace_node_default_branch,
-    pear_workspace_relative_path,
-    reap_stale_pear_worker_runs,
-    wait_for_redelivered_pear_worker_run,
+    ArmadaDatabaseWorkerRunStore,
+    ArmadaQueueWorkerDispatcher,
+    armada_expected_project_cache_path,
+    armada_expected_topic_workdir,
+    armada_git_current_branch_name,
+    armada_git_output,
+    armada_git_status_delta,
+    armada_initialize_bare_origin,
+    armada_read_text_path,
+    armada_referenced_conversations,
+    armada_run_git_checked,
+    armada_seed_empty_bare_origin,
+    armada_topic_branch_name,
+    armada_topic_isolation_user_exists,
+    armada_topic_isolation_username,
+    armada_topic_process_isolation,
+    armada_topic_workdir_root,
+    armada_worker_model_for_topic,
+    armada_worker_process_isolation_error,
+    armada_worker_reasoning_effort_for_topic,
+    armada_worker_runtime_isolation_error,
+    armada_worker_sandbox_for_topic,
+    armada_worker_workdir_for_topic,
+    armada_workspace_node_default_branch,
+    armada_workspace_relative_path,
+    build_armada_worker_runtime_from_settings,
+    build_armada_workspace_context,
+    configure_armada_channel_repository_workspace,
+    ensure_armada_project_origin,
+    ensure_armada_topic_workdir,
+    ensure_armada_workspace_node,
+    invalidate_armada_git_status_delta,
+    latest_armada_codex_run_for_topic,
+    load_armada_active_session_from_zulip,
+    load_armada_referenced_threads,
+    maintain_armada_worker_run_liveness,
+    maybe_refactor_armada_stream_workspaces_on_rename,
+    maybe_refactor_armada_workspace_on_move,
+    reap_stale_armada_worker_runs,
+    wait_for_redelivered_armada_worker_run,
 )
 from zerver.lib.bot_lib import EmbeddedBotHandler
-from zerver.lib.event_schema import check_pear_run_event, check_pear_workspace_changed_event
+from zerver.lib.event_schema import check_armada_run_event, check_armada_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.test_classes import ZulipTestCase
@@ -111,32 +111,32 @@ from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
-    build_pear_git_context,
-    extract_pear_codex_model_catalog,
-    pear_worker_run_summary_events,
-    pear_workspace_isolation_username,
-    serialize_pear_worker_run,
-    serialize_pear_workspace_context,
-    update_pear_run_control_event,
+    armada_worker_run_summary_events,
+    armada_workspace_isolation_username,
+    build_armada_git_context,
+    extract_armada_codex_model_catalog,
+    serialize_armada_worker_run,
+    serialize_armada_workspace_context,
+    update_armada_run_control_event,
 )
-from zerver.worker import pear_worker as pear_worker_module
+from zerver.worker import armada_worker as armada_worker_module
 
 
-class PearSessionEndpointTest(ZulipTestCase):
+class ArmadaSessionEndpointTest(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
         # Every run/store path now resolves a per-channel Repository, which
         # requires the channel to exist; most tests in this class act on the
         # default Pear channel without creating it first.
-        self.subscribe(self.example_user("hamlet"), PEAR_DEFAULT_STREAM)
+        self.subscribe(self.example_user("hamlet"), ARMADA_DEFAULT_STREAM)
         # Topic workdirs would persist on disk across tests in this class while
         # the database resets, and the strict channel-repository attach check
         # then rejects the stale workdir. Each test gets its own root: the
         # default root sits next to the checkout, where a development server
         # keeps its real worktrees.
-        workdir_root = tempfile.mkdtemp(prefix="pear-test-workspaces-")
+        workdir_root = tempfile.mkdtemp(prefix="armada-test-workspaces-")
         self.addCleanup(shutil.rmtree, workdir_root, ignore_errors=True)
-        workdir_root_setting = self.settings(PEAR_TOPIC_WORKDIR_ROOT=workdir_root)
+        workdir_root_setting = self.settings(ARMADA_TOPIC_WORKDIR_ROOT=workdir_root)
         workdir_root_setting.enable()
         self.addCleanup(workdir_root_setting.disable)
 
@@ -151,7 +151,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "-C",
                 str(path),
                 "-c",
-                "user.email=pear@example.com",
+                "user.email=armada@example.com",
                 "-c",
                 "user.name=Pear",
                 "commit",
@@ -167,7 +167,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         source = root / "source"
         origin = root / "origin.git"
         self.create_git_repository(source)
-        branch = pear_git_current_branch_name(source)
+        branch = armada_git_current_branch_name(source)
         subprocess.run(
             ["git", "clone", "--quiet", "--bare", str(source), str(origin)],
             check=True,
@@ -175,15 +175,15 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         return origin, branch
 
-    def test_pear_run_push_event_is_typed_and_visibility_scoped(self) -> None:
+    def test_armada_run_push_event_is_typed_and_visibility_scoped(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
-            "pear-push",
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
+            "armada-push",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         # This test exercises the typed browser event contract directly.  Do
         # not also wake the embedded bot worker when creating its fixture
@@ -191,19 +191,19 @@ class PearSessionEndpointTest(ZulipTestCase):
         with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
             trigger_message_id = self.send_stream_message(
                 owner,
-                PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
                 content="@**Pear** check the repository",
             )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=trigger_message_id,
             result_message_id=trigger_message_id,
             status=AgentRun.RUNNING,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             current_activity="Running tests",
             tool_count=2,
         )
@@ -223,17 +223,17 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         with patch("zerver.actions.armada.send_event_on_commit") as send_event:
-            send_pear_run_event(run, run_event)
+            send_armada_run_event(run, run_event)
 
         send_event.assert_called_once()
         event = send_event.call_args.args[1]
-        check_pear_run_event("event", {**event, "id": 1})
+        check_armada_run_event("event", {**event, "id": 1})
         self.assertEqual(event["run_id"], run.id)
         self.assertEqual(event["sequence"], run_event.id)
         self.assertEqual(event["current_activity"], "Running tests")
         self.assertEqual(event["plan"][1], {"step": "Verify", "status": "in_progress"})
         self.assertIsNone(event["has_visible_assistant_text"])
-        check_pear_run_event(
+        check_armada_run_event(
             "event",
             {**event, "id": 2, "has_visible_assistant_text": True},
         )
@@ -259,10 +259,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             },
         )
         with patch("zerver.actions.armada.send_event_on_commit") as send_agent_event:
-            send_pear_run_event(run, agent_event)
+            send_armada_run_event(run, agent_event)
 
         agent_push = send_agent_event.call_args.args[1]
-        check_pear_run_event("event", {**agent_push, "id": 3})
+        check_armada_run_event("event", {**agent_push, "id": 3})
         self.assertEqual(agent_push["agent_thread_id"], "child-thread")
         self.assertEqual(
             agent_push["agents"],
@@ -295,13 +295,13 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         with (
             patch("zerver.actions.armada.send_event_on_commit") as send_activity_event,
-            patch("zerver.actions.armada.serialize_pear_agent_threads") as serialize_agents,
+            patch("zerver.actions.armada.serialize_armada_agent_threads") as serialize_agents,
         ):
-            send_pear_run_event(run, activity_event)
+            send_armada_run_event(run, activity_event)
         serialize_agents.assert_not_called()
 
         activity_push = send_activity_event.call_args.args[1]
-        check_pear_run_event("event", {**activity_push, "id": 4})
+        check_armada_run_event("event", {**activity_push, "id": 4})
         self.assertEqual(activity_push["agent_thread_id"], "child-thread")
         self.assertEqual(
             activity_push["agent"],
@@ -329,9 +329,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         with (
             patch("zerver.actions.armada.send_event_on_commit") as send_turn_event,
-            patch("zerver.actions.armada.serialize_pear_agent_threads") as serialize_agents,
+            patch("zerver.actions.armada.serialize_armada_agent_threads") as serialize_agents,
         ):
-            send_pear_run_event(run, turn_event)
+            send_armada_run_event(run, turn_event)
         serialize_agents.assert_not_called()
 
         turn_push = send_turn_event.call_args.args[1]
@@ -350,7 +350,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         node = SimpleNamespace(
             uuid="12345678-1234-5678-1234-567812345678",
             realm=owner.realm,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
         )
         stream = SimpleNamespace(id=42)
         with (
@@ -362,117 +362,117 @@ class PearSessionEndpointTest(ZulipTestCase):
             patch("zerver.actions.armada.send_event_on_commit") as send_event,
         ):
             stream_filter.return_value.first.return_value = stream
-            send_pear_workspace_changed_event(node, 7)  # type: ignore[arg-type]
+            send_armada_workspace_changed_event(node, 7)  # type: ignore[arg-type]
 
         send_event.assert_called_once()
         event = send_event.call_args.args[1]
-        check_pear_workspace_changed_event("event", {**event, "id": 1})
+        check_armada_workspace_changed_event("event", {**event, "id": 1})
         self.assertEqual(event["workspace_id"], str(node.uuid))
         self.assertEqual(event["revision"], 7)
         self.assertEqual(send_event.call_args.args[2], [owner.id])
 
-    def test_get_pear_session(self) -> None:
+    def test_get_armada_session(self) -> None:
         self.login("hamlet")
 
         result = self.client_get(
-            f"/json{PEAR_SESSION_ENDPOINT}",
+            f"/json{ARMADA_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
         result_dict = self.assert_json_success(result)
-        pear_session = result_dict["pear_session"]
-        self.assertEqual(pear_session["agent_name"], "Pear")
-        self.assertEqual(pear_session["stream"], PEAR_DEFAULT_STREAM)
-        self.assertEqual(pear_session["topic"], PEAR_DEFAULT_TOPIC)
-        self.assertIn("@**Pear**", pear_session["seed_message"])
-        self.assertIn("Fix bug:", pear_session["fix_bug_message"])
-        self.assertIn("Status check:", pear_session["status_check_message"])
-        self.assertIn("Handoff summary:", pear_session["handoff_message"])
-        self.assertIn("Catch up:", pear_session["catch_up_message"])
-        self.assertIn("Triage request:", pear_session["triage_message"])
-        self.assertIn("Find answer:", pear_session["find_answer_message"])
-        self.assertIn("Review changes:", pear_session["review_message"])
-        self.assertIn("Implementation plan:", pear_session["plan_message"])
-        self.assertIn("Checkpoint:", pear_session["checkpoint_message"])
-        self.assertIn("Apply plan:", pear_session["apply_plan_message"])
-        self.assertIn("Save work:", pear_session["save_work_message"])
-        self.assertIn("Verify changes:", pear_session["verify_changes_message"])
-        self.assertIn("Draft artifact:", pear_session["draft_artifact_message"])
+        armada_session = result_dict["armada_session"]
+        self.assertEqual(armada_session["agent_name"], "Pear")
+        self.assertEqual(armada_session["stream"], ARMADA_DEFAULT_STREAM)
+        self.assertEqual(armada_session["topic"], ARMADA_DEFAULT_TOPIC)
+        self.assertIn("@**Pear**", armada_session["seed_message"])
+        self.assertIn("Fix bug:", armada_session["fix_bug_message"])
+        self.assertIn("Status check:", armada_session["status_check_message"])
+        self.assertIn("Handoff summary:", armada_session["handoff_message"])
+        self.assertIn("Catch up:", armada_session["catch_up_message"])
+        self.assertIn("Triage request:", armada_session["triage_message"])
+        self.assertIn("Find answer:", armada_session["find_answer_message"])
+        self.assertIn("Review changes:", armada_session["review_message"])
+        self.assertIn("Implementation plan:", armada_session["plan_message"])
+        self.assertIn("Checkpoint:", armada_session["checkpoint_message"])
+        self.assertIn("Apply plan:", armada_session["apply_plan_message"])
+        self.assertIn("Save work:", armada_session["save_work_message"])
+        self.assertIn("Verify changes:", armada_session["verify_changes_message"])
+        self.assertIn("Draft artifact:", armada_session["draft_artifact_message"])
         self.assertEqual(
-            pear_session["official_agent_runtime"],
-            PEAR_OFFICIAL_AGENT_RUNTIME,
+            armada_session["official_agent_runtime"],
+            ARMADA_OFFICIAL_AGENT_RUNTIME,
         )
         self.assertEqual(
-            pear_session["official_agent_runtime_label"],
-            PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
+            armada_session["official_agent_runtime_label"],
+            ARMADA_OFFICIAL_AGENT_RUNTIME_LABEL,
         )
         self.assertEqual(
-            pear_session["agent_runtime_packages"],
-            list(PEAR_AGENT_RUNTIME_PACKAGES),
+            armada_session["agent_runtime_packages"],
+            list(ARMADA_AGENT_RUNTIME_PACKAGES),
         )
         self.assertEqual(
-            pear_session["official_codex_sdk_packages"],
-            list(PEAR_OFFICIAL_CODEX_SDK_PACKAGES),
+            armada_session["official_codex_sdk_packages"],
+            list(ARMADA_OFFICIAL_CODEX_SDK_PACKAGES),
         )
-        self.assertEqual(pear_session["codex_mcp_tools"], list(PEAR_CODEX_MCP_TOOLS))
+        self.assertEqual(armada_session["codex_mcp_tools"], list(ARMADA_CODEX_MCP_TOOLS))
 
-    def test_api_v1_pear_session(self) -> None:
+    def test_api_v1_armada_session(self) -> None:
         user = self.example_user("hamlet")
 
         result = self.client_get(
-            f"/api/v1{PEAR_SESSION_ENDPOINT}",
+            f"/api/v1{ARMADA_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
             HTTP_AUTHORIZATION=self.encode_user(user),
         )
 
         result_dict = self.assert_json_success(result)
-        self.assertEqual(result_dict["pear_session"]["agent_name"], "Pear")
+        self.assertEqual(result_dict["armada_session"]["agent_name"], "Pear")
 
-    def test_get_pear_config_without_bot(self) -> None:
+    def test_get_armada_config_without_bot(self) -> None:
         self.login("hamlet")
 
         result = self.client_get(
-            f"/json{PEAR_CONFIG_ENDPOINT}",
+            f"/json{ARMADA_CONFIG_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
         result_dict = self.assert_json_success(result)
-        pear_config = result_dict["pear_config"]
-        self.assertEqual(pear_config["bot_short_name"], "pear")
-        self.assertEqual(pear_config["embedded_bot_service"], PEAR_EMBEDDED_BOT_SERVICE)
-        self.assertFalse(pear_config["configured"])
-        self.assertEqual(pear_config["worker_agent_runtime"], "disabled")
-        self.assertFalse(pear_config["worker_runtime_ready"])
-        self.assertFalse(pear_config["worker_runtime_auth_ready"])
-        self.assertIsNone(pear_config["worker_runtime_login_method"])
-        self.assertIsNone(pear_config["worker_runtime_login_command"])
-        self.assertIsNone(pear_config["worker_runtime_login_target"])
-        self.assertIsNone(pear_config["worker_runtime_login_instructions"])
-        self.assertEqual(pear_config["bot_count"], 0)
-        self.assertIsNone(pear_config["bot_user_id"])
-        self.assertIsNone(pear_config["selected_bot_user_id"])
-        self.assertEqual(pear_config["bot_identities"], [])
+        armada_config = result_dict["armada_config"]
+        self.assertEqual(armada_config["bot_short_name"], "pear")
+        self.assertEqual(armada_config["embedded_bot_service"], ARMADA_EMBEDDED_BOT_SERVICE)
+        self.assertFalse(armada_config["configured"])
+        self.assertEqual(armada_config["worker_agent_runtime"], "disabled")
+        self.assertFalse(armada_config["worker_runtime_ready"])
+        self.assertFalse(armada_config["worker_runtime_auth_ready"])
+        self.assertIsNone(armada_config["worker_runtime_login_method"])
+        self.assertIsNone(armada_config["worker_runtime_login_command"])
+        self.assertIsNone(armada_config["worker_runtime_login_target"])
+        self.assertIsNone(armada_config["worker_runtime_login_instructions"])
+        self.assertEqual(armada_config["bot_count"], 0)
+        self.assertIsNone(armada_config["bot_user_id"])
+        self.assertIsNone(armada_config["selected_bot_user_id"])
+        self.assertEqual(armada_config["bot_identities"], [])
         self.assertEqual(
-            [step["key"] for step in pear_config["setup_steps"]],
-            ["embedded_bots", "pear_bot", "worker_runtime", "worker_auth"],
+            [step["key"] for step in armada_config["setup_steps"]],
+            ["embedded_bots", "armada_bot", "worker_runtime", "worker_auth"],
         )
 
-    def test_get_pear_config_with_bot(self) -> None:
+    def test_get_armada_config_with_bot(self) -> None:
         owner = self.example_user("hamlet")
         with (
             self.settings(
                 EMBEDDED_BOTS_ENABLED=True,
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
             ),
             patch(
-                "zerver.views.armada.pear_worker_runtime_dependency_status",
+                "zerver.views.armada.armada_worker_runtime_dependency_status",
                 return_value=(
                     True,
                     "codex app-server via /usr/local/bin/codex.",
                 ),
             ),
             patch(
-                "zerver.views.armada.pear_worker_runtime_auth_status",
+                "zerver.views.armada.armada_worker_runtime_auth_status",
                 return_value=(
                     True,
                     "Codex CLI is logged in.",
@@ -483,70 +483,70 @@ class PearSessionEndpointTest(ZulipTestCase):
                 ),
             ),
         ):
-            pear_bot = self.create_test_bot(
+            armada_bot = self.create_test_bot(
                 "pear",
                 owner,
                 full_name="Pear",
                 bot_type=UserProfile.EMBEDDED_BOT,
-                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
             self.login_user(owner)
 
             result = self.client_get(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 intentionally_undocumented=True,
             )
 
         result_dict = self.assert_json_success(result)
-        pear_config = result_dict["pear_config"]
-        self.assertTrue(pear_config["embedded_bots_enabled"])
-        self.assertTrue(pear_config["configured"])
-        self.assertTrue(pear_config["enabled"])
-        self.assertEqual(pear_config["bot_count"], 1)
-        self.assertEqual(pear_config["bot_user_id"], pear_bot.id)
-        self.assertEqual(pear_config["selected_bot_user_id"], pear_bot.id)
-        self.assertEqual(pear_config["selected_bot_full_name"], "Pear")
-        self.assertEqual(pear_config["bot_full_name"], "Pear")
-        self.assertEqual(pear_config["worker_agent_runtime"], "codex-app-server")
-        self.assertTrue(pear_config["worker_runtime_ready"])
-        self.assertTrue(pear_config["worker_runtime_auth_ready"])
-        self.assertEqual(pear_config["worker_runtime_login_method"], "codex-cli")
-        self.assertEqual(pear_config["worker_runtime_login_command"], "codex login")
-        self.assertEqual(pear_config["worker_runtime_login_target"], "worker-environment")
-        self.assertIn("worker environment", pear_config["worker_runtime_login_instructions"])
+        armada_config = result_dict["armada_config"]
+        self.assertTrue(armada_config["embedded_bots_enabled"])
+        self.assertTrue(armada_config["configured"])
+        self.assertTrue(armada_config["enabled"])
+        self.assertEqual(armada_config["bot_count"], 1)
+        self.assertEqual(armada_config["bot_user_id"], armada_bot.id)
+        self.assertEqual(armada_config["selected_bot_user_id"], armada_bot.id)
+        self.assertEqual(armada_config["selected_bot_full_name"], "Pear")
+        self.assertEqual(armada_config["bot_full_name"], "Pear")
+        self.assertEqual(armada_config["worker_agent_runtime"], "codex-app-server")
+        self.assertTrue(armada_config["worker_runtime_ready"])
+        self.assertTrue(armada_config["worker_runtime_auth_ready"])
+        self.assertEqual(armada_config["worker_runtime_login_method"], "codex-cli")
+        self.assertEqual(armada_config["worker_runtime_login_command"], "codex login")
+        self.assertEqual(armada_config["worker_runtime_login_target"], "worker-environment")
+        self.assertIn("worker environment", armada_config["worker_runtime_login_instructions"])
         self.assertEqual(
-            pear_config["setup_steps"][2]["detail"],
+            armada_config["setup_steps"][2]["detail"],
             "codex app-server via /usr/local/bin/codex.",
         )
         self.assertEqual(
-            pear_config["setup_steps"][3]["detail"],
+            armada_config["setup_steps"][3]["detail"],
             "Codex CLI is logged in.",
         )
         self.assertEqual(
-            pear_config["bot_identities"],
+            armada_config["bot_identities"],
             [
                 {
-                    "bot_user_id": pear_bot.id,
+                    "bot_user_id": armada_bot.id,
                     "bot_full_name": "Pear",
-                    "bot_email": pear_bot.email,
+                    "bot_email": armada_bot.email,
                     "selected": True,
                 }
             ],
         )
 
-    def test_get_pear_config_reports_missing_runtime_dependency(self) -> None:
+    def test_get_armada_config_reports_missing_runtime_dependency(self) -> None:
         owner = self.example_user("hamlet")
         with (
             self.settings(
                 EMBEDDED_BOTS_ENABLED=True,
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
             ),
             patch(
-                "zerver.views.armada.pear_worker_runtime_dependency_status",
+                "zerver.views.armada.armada_worker_runtime_dependency_status",
                 return_value=(False, "Missing codex executable."),
             ),
             patch(
-                "zerver.views.armada.pear_worker_runtime_auth_status",
+                "zerver.views.armada.armada_worker_runtime_auth_status",
                 return_value=(
                     True,
                     "Codex CLI is logged in.",
@@ -557,27 +557,27 @@ class PearSessionEndpointTest(ZulipTestCase):
                 ),
             ),
         ):
-            pear_bot = self.create_test_bot(
+            armada_bot = self.create_test_bot(
                 "pear",
                 owner,
                 full_name="Pear",
                 bot_type=UserProfile.EMBEDDED_BOT,
-                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
             self.login_user(owner)
 
             result = self.client_get(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 intentionally_undocumented=True,
             )
 
         result_dict = self.assert_json_success(result)
-        pear_config = result_dict["pear_config"]
-        self.assertEqual(pear_config["selected_bot_user_id"], pear_bot.id)
-        self.assertEqual(pear_config["worker_agent_runtime"], "codex-app-server")
-        self.assertFalse(pear_config["worker_runtime_ready"])
+        armada_config = result_dict["armada_config"]
+        self.assertEqual(armada_config["selected_bot_user_id"], armada_bot.id)
+        self.assertEqual(armada_config["worker_agent_runtime"], "codex-app-server")
+        self.assertFalse(armada_config["worker_runtime_ready"])
         self.assertEqual(
-            pear_config["setup_steps"][2],
+            armada_config["setup_steps"][2],
             {
                 "key": "worker_runtime",
                 "label": "Worker runtime dependencies",
@@ -586,7 +586,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             },
         )
         self.assertEqual(
-            pear_config["setup_steps"][3],
+            armada_config["setup_steps"][3],
             {
                 "key": "worker_auth",
                 "label": "Worker runtime login",
@@ -596,28 +596,28 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
     def test_worker_runtime_dependency_status_checks_official_surfaces(self) -> None:
-        from zerver.views.armada import pear_worker_runtime_dependency_status
+        from zerver.views.armada import armada_worker_runtime_dependency_status
 
         with patch("zerver.views.armada.which", return_value="/usr/local/bin/codex"):
             self.assertEqual(
-                pear_worker_runtime_dependency_status("codex-app-server"),
+                armada_worker_runtime_dependency_status("codex-app-server"),
                 (True, "codex app-server via /usr/local/bin/codex."),
             )
 
         with patch("zerver.views.armada.which", return_value=None):
-            available, detail = pear_worker_runtime_dependency_status("codex-app-server")
+            available, detail = armada_worker_runtime_dependency_status("codex-app-server")
             self.assertFalse(available)
             self.assertIn("codex executable", detail)
 
-        available, detail = pear_worker_runtime_dependency_status("codex-agents-mcp")
+        available, detail = armada_worker_runtime_dependency_status("codex-agents-mcp")
         self.assertFalse(available)
-        self.assertEqual(detail, "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server.")
+        self.assertEqual(detail, "Set ARMADA_WORKER_AGENT_RUNTIME to codex-app-server.")
 
     def test_worker_runtime_auth_status_reports_login_paths(self) -> None:
-        from zerver.views.armada import pear_worker_runtime_auth_status
+        from zerver.views.armada import armada_worker_runtime_auth_status
 
         with patch(
-            "zerver.views.armada.pear_codex_login_available",
+            "zerver.views.armada.armada_codex_login_available",
             return_value=True,
         ):
             (
@@ -627,7 +627,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 login_command,
                 login_target,
                 login_instructions,
-            ) = pear_worker_runtime_auth_status("codex-app-server")
+            ) = armada_worker_runtime_auth_status("codex-app-server")
             self.assertTrue(available)
             self.assertEqual(detail, "Codex CLI is logged in.")
             self.assertEqual(login_method, "codex-cli")
@@ -642,7 +642,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 login_command,
                 login_target,
                 login_instructions,
-            ) = pear_worker_runtime_auth_status("codex-agents-mcp")
+            ) = armada_worker_runtime_auth_status("codex-agents-mcp")
             self.assertFalse(available)
             self.assertEqual(detail, "Select a supported worker runtime before logging in.")
             self.assertIsNone(login_method)
@@ -650,19 +650,19 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIsNone(login_target)
             self.assertIsNone(login_instructions)
 
-    def test_serialize_pear_worker_run_includes_usage_summary(self) -> None:
+    def test_serialize_armada_worker_run_includes_usage_summary(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.addCleanup(invalidate_pear_selected_bot_cache, user.realm_id)
+        self.addCleanup(invalidate_armada_selected_bot_cache, user.realm_id)
         run = AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             trigger_message_id=1,
             requesting_user=user,
             status="running",
@@ -687,13 +687,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 }
             },
         )
-        write_pear_live_run_state(
+        write_armada_live_run_state(
             run.trigger_message_id,
             status="running",
             has_visible_assistant_text=True,
         )
 
-        serialized_run = serialize_pear_worker_run(run)
+        serialized_run = serialize_armada_worker_run(run)
         usage = serialized_run["usage"]
 
         self.assertIsNotNone(usage)
@@ -721,7 +721,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             summary="Codex turn completed.",
             payload={"kind": "status", "title": "Codex turn completed.", "status": "done"},
         )
-        usage_after_completion = serialize_pear_worker_run(run)["usage"]
+        usage_after_completion = serialize_armada_worker_run(run)["usage"]
         self.assertIsNotNone(usage_after_completion)
         assert usage_after_completion is not None
         self.assertEqual(usage_after_completion["total_tokens"], 106)
@@ -746,7 +746,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             summary="Malformed",
             payload={"tool_count": "nope"},
         )
-        self.assertEqual(serialize_pear_worker_run(run)["tool_count"], 5)
+        self.assertEqual(serialize_armada_worker_run(run)["tool_count"], 5)
 
         # The rail's plan card takes the newest plan_update; the scan
         # must skip past newer non-plan transcript events.
@@ -771,7 +771,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             summary="Codex turn completed.",
             payload={"kind": "status", "title": "Codex turn completed.", "status": "done"},
         )
-        plan = serialize_pear_worker_run(run)["plan"]
+        plan = serialize_armada_worker_run(run)["plan"]
         self.assertEqual(
             plan,
             [
@@ -789,7 +789,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "current_step": "Commit fix",
             },
         )
-        self.assertEqual(serialize_pear_worker_run(run)["overview"], "Committing focused fix")
+        self.assertEqual(serialize_armada_worker_run(run)["overview"], "Committing focused fix")
         AgentRunEvent.objects.create(
             run=run,
             event_type="transcript",
@@ -805,20 +805,20 @@ class PearSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        self.assertIsNone(serialize_pear_worker_run(run)["overview"])
+        self.assertIsNone(serialize_armada_worker_run(run)["overview"])
 
-    def test_serialize_pear_worker_run_hides_stale_active_live_state(self) -> None:
+    def test_serialize_armada_worker_run_hides_stale_active_live_state(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             trigger_message_id=1,
             requesting_user=user,
             status=AgentRun.DONE,
@@ -828,29 +828,29 @@ class PearSessionEndpointTest(ZulipTestCase):
             model="gpt-5.5",
             workdir="/workspace",
         )
-        write_pear_live_run_state(
+        write_armada_live_run_state(
             run.trigger_message_id,
             status=AgentRun.RUNNING,
         )
 
-        serialized_run = serialize_pear_worker_run(run)
+        serialized_run = serialize_armada_worker_run(run)
 
         self.assertEqual(serialized_run["status"], AgentRun.DONE)
         self.assertIsNone(serialized_run["live"])
 
     def test_run_summary_events_are_batched_for_polling(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         runs = [
             AgentRun.objects.create(
                 realm=user.realm,
-                bot_profile=pear_bot,
+                bot_profile=armada_bot,
                 trigger_message_id=100 + index,
                 requesting_user=user,
                 status=AgentRun.RUNNING,
@@ -884,10 +884,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         # Usage, display state, and the bounded child-session lookup are one
         # fixed batch each. With no child sessions, no reducer query is needed.
         with self.assert_database_query_count(3):
-            events_by_run_id = pear_worker_run_summary_events(runs)
+            events_by_run_id = armada_worker_run_summary_events(runs)
         with self.assert_database_query_count(0):
             serialized = [
-                serialize_pear_worker_run(run, summary_events=events_by_run_id[run.id])
+                serialize_armada_worker_run(run, summary_events=events_by_run_id[run.id])
                 for run in runs
             ]
 
@@ -903,16 +903,16 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_run_summary_keeps_each_agent_latest_lifecycle_event(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             trigger_message_id=710,
             requesting_user=user,
             status=AgentRun.RUNNING,
@@ -978,9 +978,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         # The fourth query is one latest lifecycle/activity reducer row per
         # native child, not a global tail that a noisy sibling can monopolize.
         with self.assert_database_query_count(4):
-            events_by_run_id = pear_worker_run_summary_events([run])
+            events_by_run_id = armada_worker_run_summary_events([run])
         with self.assert_database_query_count(0):
-            agents = serialize_pear_worker_run(run, summary_events=events_by_run_id[run.id])[
+            agents = serialize_armada_worker_run(run, summary_events=events_by_run_id[run.id])[
                 "agents"
             ]
         assert isinstance(agents, list)
@@ -997,33 +997,33 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(noisy["status"], "active")
         self.assertEqual(noisy["current_activity"], "Noisy activity 69")
 
-    def test_get_pear_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
+    def test_get_armada_runs_includes_requested_run_ids_outside_topic_window(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         requested_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=101,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="pinned older run",
             status=AgentRun.DONE,
         )
         topic_runs = [
             AgentRun.objects.create(
                 realm=owner.realm,
-                bot_profile=pear_bot,
+                bot_profile=armada_bot,
                 requesting_user=owner,
                 trigger_message_id=200 + index,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
                 status=AgentRun.DONE,
             )
             for index in range(25)
@@ -1031,10 +1031,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
 
         result = self.client_get(
-            f"/json{PEAR_RUNS_ENDPOINT}",
+            f"/json{ARMADA_RUNS_ENDPOINT}",
             {
-                "stream": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "stream": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "run_ids": orjson.dumps([requested_run.id]).decode(),
                 "include_context": orjson.dumps(False).decode(),
             },
@@ -1042,29 +1042,29 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         result_dict = self.assert_json_success(result)
-        run_ids = [run["id"] for run in result_dict["pear_runs"]]
+        run_ids = [run["id"] for run in result_dict["armada_runs"]]
         self.assertIn(requested_run.id, run_ids)
         self.assertIn(topic_runs[-1].id, run_ids)
         self.assertNotIn(topic_runs[0].id, run_ids)
-        self.assertIsNone(result_dict["pear_topic_context"])
+        self.assertIsNone(result_dict["armada_topic_context"])
 
-    def test_get_pear_runs_carries_authoritative_event_watermark(self) -> None:
+    def test_get_armada_runs_carries_authoritative_event_watermark(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
-            "pear-watermark",
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
+            "armada-watermark",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=251,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.RUNNING,
         )
         first_event = AgentRunEvent.objects.create(
@@ -1083,64 +1083,64 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
 
         result = self.client_get(
-            f"/json{PEAR_RUNS_ENDPOINT}",
+            f"/json{ARMADA_RUNS_ENDPOINT}",
             {
-                "stream": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "stream": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
             },
             intentionally_undocumented=True,
         )
 
-        serialized_run = self.assert_json_success(result)["pear_runs"][0]
+        serialized_run = self.assert_json_success(result)["armada_runs"][0]
         self.assertEqual(serialized_run["id"], run.id)
         self.assertEqual(serialized_run["snapshot_sequence"], latest_event.id)
 
-    def test_get_pear_runs_defaults_to_cheap_without_topic_context(self) -> None:
+    def test_get_armada_runs_defaults_to_cheap_without_topic_context(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
 
-        with patch("zerver.views.armada.ensure_pear_workspace_node") as ensure_context:
+        with patch("zerver.views.armada.ensure_armada_workspace_node") as ensure_context:
             result = self.client_get(
-                f"/json{PEAR_RUNS_ENDPOINT}",
+                f"/json{ARMADA_RUNS_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                 },
                 intentionally_undocumented=True,
             )
 
         result_dict = self.assert_json_success(result)
-        self.assertEqual(result_dict["pear_runs"], [])
-        self.assertIsNone(result_dict["pear_topic_context"])
+        self.assertEqual(result_dict["armada_runs"], [])
+        self.assertIsNone(result_dict["armada_topic_context"])
         ensure_context.assert_not_called()
 
-    def test_get_pear_runs_rejects_inaccessible_requested_run_id(self) -> None:
+    def test_get_armada_runs_rejects_inaccessible_requested_run_id(self) -> None:
         owner = self.example_user("hamlet")
         other_user = self.example_user("othello")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         other_side_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=other_user,
             trigger_message_id=301,
             stream_name="direct messages",
             topic_name="side",
             session_kind=AgentRun.SIDE,
-            source_stream_name=PEAR_DEFAULT_STREAM,
-            source_topic_name=PEAR_DEFAULT_TOPIC,
+            source_stream_name=ARMADA_DEFAULT_STREAM,
+            source_topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
         )
         self.login_user(owner)
 
         result = self.client_get(
-            f"/json{PEAR_RUNS_ENDPOINT}",
+            f"/json{ARMADA_RUNS_ENDPOINT}",
             {
                 "run_ids": orjson.dumps([other_side_run.id]).decode(),
                 "include_context": orjson.dumps(False).decode(),
@@ -1150,12 +1150,12 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assert_json_error(result, "Pear run not found.")
 
-    def test_get_pear_runs_limits_requested_run_ids(self) -> None:
+    def test_get_armada_runs_limits_requested_run_ids(self) -> None:
         owner = self.example_user("hamlet")
         self.login_user(owner)
 
         result = self.client_get(
-            f"/json{PEAR_RUNS_ENDPOINT}",
+            f"/json{ARMADA_RUNS_ENDPOINT}",
             {
                 "run_ids": orjson.dumps(list(range(1, 22))).decode(),
                 "include_context": orjson.dumps(False).decode(),
@@ -1165,44 +1165,44 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         self.assert_json_error(result, "Too many Pear runs requested.")
 
-    def test_post_pear_config_creates_bot(self) -> None:
+    def test_post_armada_config_creates_bot(self) -> None:
         owner = self.example_user("iago")
         self.login_user(owner)
         cache.set(
-            pear_selected_bot_cache_key(owner.realm_id),
+            armada_selected_bot_cache_key(owner.realm_id),
             {"user_profile_id": None},
         )
 
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
             result = self.client_post(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 {},
                 intentionally_undocumented=True,
             )
 
             result_dict = self.assert_json_success(result)
-            pear_config = result_dict["pear_config"]
+            armada_config = result_dict["armada_config"]
             self.assertTrue(result_dict["created"])
-            self.assertTrue(pear_config["enabled"])
-            self.assertEqual(pear_config["bot_short_name"], "pear")
-            self.assertEqual(pear_config["embedded_bot_service"], PEAR_EMBEDDED_BOT_SERVICE)
-            self.assertEqual(pear_config["bot_count"], 1)
-            self.assertEqual(pear_config["bot_full_name"], "Pear")
-            self.assertEqual(pear_config["worker_agent_runtime"], "disabled")
-            self.assertFalse(pear_config["worker_runtime_ready"])
+            self.assertTrue(armada_config["enabled"])
+            self.assertEqual(armada_config["bot_short_name"], "pear")
+            self.assertEqual(armada_config["embedded_bot_service"], ARMADA_EMBEDDED_BOT_SERVICE)
+            self.assertEqual(armada_config["bot_count"], 1)
+            self.assertEqual(armada_config["bot_full_name"], "Pear")
+            self.assertEqual(armada_config["worker_agent_runtime"], "disabled")
+            self.assertFalse(armada_config["worker_runtime_ready"])
             self.assertEqual(
-                pear_config["selected_bot_user_id"],
-                pear_config["bot_user_id"],
+                armada_config["selected_bot_user_id"],
+                armada_config["bot_user_id"],
             )
-            self.assertEqual(len(pear_config["bot_identities"]), 1)
-            self.assertTrue(pear_config["bot_identities"][0]["selected"])
+            self.assertEqual(len(armada_config["bot_identities"]), 1)
+            self.assertTrue(armada_config["bot_identities"][0]["selected"])
             self.assertEqual(
-                get_selected_pear_bot_user_id_for_realm(owner.realm_id),
-                pear_config["bot_user_id"],
+                get_selected_armada_bot_user_id_for_realm(owner.realm_id),
+                armada_config["bot_user_id"],
             )
 
             second_result = self.client_post(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 {},
                 intentionally_undocumented=True,
             )
@@ -1210,49 +1210,49 @@ class PearSessionEndpointTest(ZulipTestCase):
         second_result_dict = self.assert_json_success(second_result)
         self.assertFalse(second_result_dict["created"])
         self.assertEqual(
-            second_result_dict["pear_config"]["bot_user_id"],
-            pear_config["bot_user_id"],
+            second_result_dict["armada_config"]["bot_user_id"],
+            armada_config["bot_user_id"],
         )
         self.assertEqual(
-            second_result_dict["pear_config"]["selected_bot_user_id"],
-            pear_config["selected_bot_user_id"],
+            second_result_dict["armada_config"]["selected_bot_user_id"],
+            armada_config["selected_bot_user_id"],
         )
 
-    def test_pear_followup_gate_defaults_new_topics_to_ambient(self) -> None:
+    def test_armada_followup_gate_defaults_new_topics_to_ambient(self) -> None:
         owner = self.example_user("iago")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        cache.delete(pear_selected_bot_cache_key(owner.realm_id))
+        cache.delete(armada_selected_bot_cache_key(owner.realm_id))
 
         with self.settings(
             EMBEDDED_BOTS_ENABLED=True,
-            PEAR_ADDRESSING_ROUTER_RUNTIME="gemini-interactions",
+            ARMADA_ADDRESSING_ROUTER_RUNTIME="gemini-interactions",
         ):
-            missing_context_event = get_pear_followup_service_bot_event(
+            missing_context_event = get_armada_followup_service_bot_event(
                 realm_id=owner.realm_id,
                 recipient_id=123,
                 recipient_type=Recipient.STREAM,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="missing-context",
                 content="can someone check the failing test?",
                 mentioned_user_ids=set(),
             )
             Workspace.objects.create(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM.upper(),
+                stream_name=ARMADA_DEFAULT_STREAM.upper(),
                 topic_name="Quiet-Context",
                 response_policy="mentions_only",
             )
-            quiet_context_event = get_pear_followup_service_bot_event(
+            quiet_context_event = get_armada_followup_service_bot_event(
                 realm_id=owner.realm_id,
                 recipient_id=123,
                 recipient_type=Recipient.STREAM,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="quiet-context",
                 content="can someone check the failing test?",
                 mentioned_user_ids=set(),
@@ -1261,52 +1261,52 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             missing_context_event,
             {
-                "trigger": "pear_followup",
-                "user_profile_id": pear_bot.id,
+                "trigger": "agent_followup",
+                "user_profile_id": armada_bot.id,
             },
         )
         self.assertIsNone(quiet_context_event)
 
-    def test_post_pear_first_run_creates_sandbox_once(self) -> None:
+    def test_post_armada_first_run_creates_sandbox_once(self) -> None:
         owner = self.example_user("iago")
         self.login_user(owner)
         cache.set(
-            pear_selected_bot_cache_key(owner.realm_id),
+            armada_selected_bot_cache_key(owner.realm_id),
             {"user_profile_id": None},
         )
 
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
             result = self.client_post(
-                f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+                f"/json{ARMADA_FIRST_RUN_ENDPOINT}",
                 {},
                 intentionally_undocumented=True,
             )
             second_result = self.client_post(
-                f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+                f"/json{ARMADA_FIRST_RUN_ENDPOINT}",
                 {},
                 intentionally_undocumented=True,
             )
 
         result_dict = self.assert_json_success(result)
-        first_run = result_dict["pear_first_run"]
+        first_run = result_dict["armada_first_run"]
         self.assertEqual(result_dict["narrow_url"], first_run["narrow_url"])
-        self.assertEqual(first_run["stream"], PEAR_FIRST_RUN_STREAM)
-        self.assertEqual(first_run["topic"], PEAR_FIRST_RUN_TOPIC)
+        self.assertEqual(first_run["stream"], ARMADA_FIRST_RUN_STREAM)
+        self.assertEqual(first_run["topic"], ARMADA_FIRST_RUN_TOPIC)
         self.assertTrue(first_run["bot_created"])
         self.assertTrue(first_run["stream_created"])
         self.assertTrue(first_run["message_created"])
-        self.assertTrue(first_run["pear_config"]["enabled"])
+        self.assertTrue(first_run["armada_config"]["enabled"])
         self.assertEqual(
-            get_selected_pear_bot_user_id_for_realm(owner.realm_id),
-            first_run["pear_config"]["bot_user_id"],
+            get_selected_armada_bot_user_id_for_realm(owner.realm_id),
+            first_run["armada_config"]["bot_user_id"],
         )
         self.assertIn("/#narrow/channel/", first_run["narrow_url"])
         self.assertIn("/topic/", first_run["narrow_url"])
 
-        stream = get_stream(PEAR_FIRST_RUN_STREAM, owner.realm)
+        stream = get_stream(ARMADA_FIRST_RUN_STREAM, owner.realm)
         self.assertEqual(first_run["stream_id"], stream.id)
-        pear_bot = UserProfile.objects.get(id=first_run["pear_config"]["bot_user_id"])
-        for subscriber in (owner, pear_bot):
+        armada_bot = UserProfile.objects.get(id=first_run["armada_config"]["bot_user_id"])
+        for subscriber in (owner, armada_bot):
             self.assertTrue(
                 Subscription.objects.filter(
                     user_profile=subscriber,
@@ -1318,19 +1318,19 @@ class PearSessionEndpointTest(ZulipTestCase):
         message = Message.objects.get(id=first_run["message_id"])
         self.assertEqual(message.sender_id, owner.id)
         self.assertEqual(message.recipient_id, stream.recipient_id)
-        self.assertEqual(message.topic_name(), PEAR_FIRST_RUN_TOPIC)
-        self.assertEqual(message.content, PEAR_FIRST_RUN_STARTER_MESSAGE)
+        self.assertEqual(message.topic_name(), ARMADA_FIRST_RUN_TOPIC)
+        self.assertEqual(message.content, ARMADA_FIRST_RUN_STARTER_MESSAGE)
         self.assertEqual(
             Message.objects.filter(
                 realm=owner.realm,
                 recipient=stream.recipient,
-                content=PEAR_FIRST_RUN_STARTER_MESSAGE,
+                content=ARMADA_FIRST_RUN_STARTER_MESSAGE,
             ).count(),
             1,
         )
 
         second_result_dict = self.assert_json_success(second_result)
-        second_first_run = second_result_dict["pear_first_run"]
+        second_first_run = second_result_dict["armada_first_run"]
         self.assertFalse(second_first_run["bot_created"])
         self.assertFalse(second_first_run["stream_created"])
         self.assertFalse(second_first_run["message_created"])
@@ -1340,76 +1340,76 @@ class PearSessionEndpointTest(ZulipTestCase):
             Message.objects.filter(
                 realm=owner.realm,
                 recipient=stream.recipient,
-                content=PEAR_FIRST_RUN_STARTER_MESSAGE,
+                content=ARMADA_FIRST_RUN_STARTER_MESSAGE,
             ).count(),
             1,
         )
 
-    def test_post_pear_first_run_requires_admin(self) -> None:
+    def test_post_armada_first_run_requires_admin(self) -> None:
         self.login("hamlet")
 
         result = self.client_post(
-            f"/json{PEAR_FIRST_RUN_ENDPOINT}",
+            f"/json{ARMADA_FIRST_RUN_ENDPOINT}",
             {},
             intentionally_undocumented=True,
         )
 
         self.assert_json_error(result, "Must be an organization administrator")
 
-    def test_post_pear_config_selects_existing_bot(self) -> None:
+    def test_post_armada_config_selects_existing_bot(self) -> None:
         owner = self.example_user("iago")
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
-            pear_bot = self.create_test_bot(
+            armada_bot = self.create_test_bot(
                 "pear",
                 owner,
                 full_name="Pear",
                 bot_type=UserProfile.EMBEDDED_BOT,
-                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
-            pear_infra_bot = self.create_test_bot(
-                "pear-infra",
+            armada_infra_bot = self.create_test_bot(
+                "armada-infra",
                 owner,
                 full_name="Pear Infra",
                 bot_type=UserProfile.EMBEDDED_BOT,
-                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             )
             self.login_user(owner)
             self.assertEqual(
-                get_selected_pear_bot_user_id_for_realm(owner.realm_id),
-                pear_bot.id,
+                get_selected_armada_bot_user_id_for_realm(owner.realm_id),
+                armada_bot.id,
             )
 
             result = self.client_post(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
-                {"selected_bot_user_id": str(pear_infra_bot.id)},
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
+                {"selected_bot_user_id": str(armada_infra_bot.id)},
                 intentionally_undocumented=True,
             )
             followup_result = self.client_get(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 intentionally_undocumented=True,
             )
 
         result_dict = self.assert_json_success(result)
-        pear_config = result_dict["pear_config"]
+        armada_config = result_dict["armada_config"]
         self.assertFalse(result_dict["created"])
         self.assertTrue(result_dict["selection_changed"])
-        self.assertEqual(pear_config["bot_count"], 2)
-        self.assertEqual(pear_config["bot_user_id"], pear_infra_bot.id)
-        self.assertEqual(pear_config["selected_bot_user_id"], pear_infra_bot.id)
-        self.assertEqual(pear_config["selected_bot_full_name"], "Pear Infra")
+        self.assertEqual(armada_config["bot_count"], 2)
+        self.assertEqual(armada_config["bot_user_id"], armada_infra_bot.id)
+        self.assertEqual(armada_config["selected_bot_user_id"], armada_infra_bot.id)
+        self.assertEqual(armada_config["selected_bot_full_name"], "Pear Infra")
         self.assertEqual(
-            pear_config["bot_identities"],
+            armada_config["bot_identities"],
             [
                 {
-                    "bot_user_id": pear_bot.id,
+                    "bot_user_id": armada_bot.id,
                     "bot_full_name": "Pear",
-                    "bot_email": pear_bot.email,
+                    "bot_email": armada_bot.email,
                     "selected": False,
                 },
                 {
-                    "bot_user_id": pear_infra_bot.id,
+                    "bot_user_id": armada_infra_bot.id,
                     "bot_full_name": "Pear Infra",
-                    "bot_email": pear_infra_bot.email,
+                    "bot_email": armada_infra_bot.email,
                     "selected": True,
                 },
             ],
@@ -1417,53 +1417,53 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         followup_result_dict = self.assert_json_success(followup_result)
         self.assertEqual(
-            followup_result_dict["pear_config"]["selected_bot_user_id"],
-            pear_infra_bot.id,
+            followup_result_dict["armada_config"]["selected_bot_user_id"],
+            armada_infra_bot.id,
         )
         self.assertEqual(
-            get_selected_pear_bot_user_id_for_realm(owner.realm_id),
-            pear_infra_bot.id,
+            get_selected_armada_bot_user_id_for_realm(owner.realm_id),
+            armada_infra_bot.id,
         )
 
-    def test_post_pear_config_rejects_invalid_selection(self) -> None:
+    def test_post_armada_config_rejects_invalid_selection(self) -> None:
         owner = self.example_user("iago")
         self.login_user(owner)
 
         with self.settings(EMBEDDED_BOTS_ENABLED=True):
             result = self.client_post(
-                f"/json{PEAR_CONFIG_ENDPOINT}",
+                f"/json{ARMADA_CONFIG_ENDPOINT}",
                 {"selected_bot_user_id": "999999"},
                 intentionally_undocumented=True,
             )
 
         self.assert_json_error(result, "Invalid Pear bot selection.")
 
-    def test_get_pear_topic_context_is_read_only_without_existing_context(self) -> None:
+    def test_get_armada_topic_context_is_read_only_without_existing_context(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_WORKER_MODEL_CHOICES=["gpt-5.5", "gpt-5.5-mini"],
-                PEAR_WORKER_REASONING_EFFORT="medium",
-                PEAR_WORKER_WORKDIR="/workspace/base",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_MODEL="gpt-5.5",
+                ARMADA_WORKER_MODEL_CHOICES=["gpt-5.5", "gpt-5.5-mini"],
+                ARMADA_WORKER_REASONING_EFFORT="medium",
+                ARMADA_WORKER_WORKDIR="/workspace/base",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             result = self.client_get(
-                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                f"/json{ARMADA_TOPIC_CONTEXT_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                 },
                 intentionally_undocumented=True,
             )
 
             result_dict = self.assert_json_success(result)
-            context_payload = result_dict["pear_topic_context"]
+            context_payload = result_dict["armada_topic_context"]
 
             self.assertEqual(context_payload["model"], "gpt-5.5")
             self.assertIn("gpt-5.5", context_payload["model_choices"])
@@ -1476,78 +1476,78 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertFalse(
                 Workspace.objects.filter(
                     realm=owner.realm,
-                    stream_name=PEAR_DEFAULT_STREAM,
-                    topic_name=PEAR_DEFAULT_TOPIC,
+                    stream_name=ARMADA_DEFAULT_STREAM,
+                    topic_name=ARMADA_DEFAULT_TOPIC,
                 ).exists()
             )
 
     def test_topic_context_can_skip_git_status_for_runtime_picker(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
 
         with (
             self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_WORKER_REASONING_EFFORT="medium",
-                PEAR_WORKER_WORKDIR="/workspace/base",
+                ARMADA_WORKER_MODEL="gpt-5.5",
+                ARMADA_WORKER_REASONING_EFFORT="medium",
+                ARMADA_WORKER_WORKDIR="/workspace/base",
             ),
-            patch("zerver.views.armada.build_pear_git_context") as build_git_context,
+            patch("zerver.views.armada.build_armada_git_context") as build_git_context,
         ):
             topic_result = self.client_get(
-                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                f"/json{ARMADA_TOPIC_CONTEXT_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "include_git": orjson.dumps(False).decode(),
                 },
                 intentionally_undocumented=True,
             )
             runs_result = self.client_get(
-                f"/json{PEAR_RUNS_ENDPOINT}",
+                f"/json{ARMADA_RUNS_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "include_context": orjson.dumps(True).decode(),
                     "include_git": orjson.dumps(False).decode(),
                 },
                 intentionally_undocumented=True,
             )
 
-        topic_payload = self.assert_json_success(topic_result)["pear_topic_context"]
-        runs_payload = self.assert_json_success(runs_result)["pear_topic_context"]
+        topic_payload = self.assert_json_success(topic_result)["armada_topic_context"]
+        runs_payload = self.assert_json_success(runs_result)["armada_topic_context"]
         self.assertNotIn("git", topic_payload)
         self.assertNotIn("git", runs_payload)
         self.assertEqual(topic_payload["model"], "gpt-5.5")
         self.assertEqual(runs_payload["reasoning_effort"], "medium")
         build_git_context.assert_not_called()
 
-    def test_ensure_pear_workspace_node_does_not_create_readme(self) -> None:
+    def test_ensure_armada_workspace_node_does_not_create_readme(self) -> None:
         owner = self.example_user("hamlet")
         topic_name = "isolated topic"
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
             patch(
-                "zerver.lib.armada_worker.ensure_pear_topic_workdir",
+                "zerver.lib.armada_worker.ensure_armada_topic_workdir",
                 return_value="main",
             ),
         ):
-            context = ensure_pear_workspace_node(
+            context = ensure_armada_workspace_node(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic=topic_name,
             )
 
         self.assertFalse((Path(context.workdir) / "README.md").exists())
 
-    def test_pear_read_text_path_distinguishes_missing_from_unreadable(self) -> None:
+    def test_armada_read_text_path_distinguishes_missing_from_unreadable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            self.assertEqual(pear_read_text_path(Path(temp_dir) / "missing.md"), "")
+            self.assertEqual(armada_read_text_path(Path(temp_dir) / "missing.md"), "")
 
         with (
             patch(
@@ -1556,30 +1556,30 @@ class PearSessionEndpointTest(ZulipTestCase):
             ),
             self.assertRaises(OSError),
         ):
-            pear_read_text_path(Path("/unreadable/README.md"))
+            armada_read_text_path(Path("/unreadable/README.md"))
 
     def test_existing_base_workdir_topic_context_is_repaired(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = str(Path(temp_dir) / "base")
             topic_root = str(Path(temp_dir) / "topics")
             Workspace.objects.create(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
                 workdir=base_workdir,
             )
 
             with self.settings(
-                PEAR_WORKER_WORKDIR=base_workdir,
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_WORKER_WORKDIR=base_workdir,
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=PEAR_DEFAULT_TOPIC,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
                 )
 
             self.assertNotEqual(context.workdir, base_workdir)
@@ -1587,26 +1587,28 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertTrue(Path(context.workdir).exists())
 
     def test_topic_branch_name_uses_valid_topic_and_sanitizes_invalid_topic(self) -> None:
-        self.assertEqual(pear_topic_branch_name("pear-efficient-smoke"), "pear-efficient-smoke")
-        self.assertEqual(pear_topic_branch_name("Feature/Some Work!"), "Feature-Some-Work")
-        self.assertEqual(pear_topic_branch_name(""), "topic")
+        self.assertEqual(
+            armada_topic_branch_name("armada-efficient-smoke"), "armada-efficient-smoke"
+        )
+        self.assertEqual(armada_topic_branch_name("Feature/Some Work!"), "Feature-Some-Work")
+        self.assertEqual(armada_topic_branch_name(""), "topic")
 
     def test_workspace_default_branch_skips_blank_candidates(self) -> None:
-        # An unset project base ref must not surface pear_topic_branch_name's
+        # An unset project base ref must not surface armada_topic_branch_name's
         # literal "topic" fallback as the branch for every workspace.
-        self.assertEqual(pear_workspace_node_default_branch(), "main")
+        self.assertEqual(armada_workspace_node_default_branch(), "main")
         self.assertEqual(
-            pear_workspace_node_default_branch(topic="fable-ui-tour"),
+            armada_workspace_node_default_branch(topic="fable-ui-tour"),
             "fable-ui-tour",
         )
         self.assertEqual(
-            pear_workspace_node_default_branch(topic="Feature/Some Work!"),
+            armada_workspace_node_default_branch(topic="Feature/Some Work!"),
             "Feature-Some-Work",
         )
 
     def test_topic_workdir_uses_workspace_default_branch_when_created(self) -> None:
         owner = self.example_user("hamlet")
-        topic = "pear-efficient-smoke"
+        topic = "armada-efficient-smoke"
 
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = Path(temp_dir) / "base"
@@ -1614,12 +1616,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic=topic,
                 )
 
@@ -1635,7 +1637,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             # topic, so sibling topics never fight over the base branch.
             self.assertEqual(actual_branch, topic)
             context.refresh_from_db()
-            self.assertEqual(context.stream_name, PEAR_DEFAULT_STREAM)
+            self.assertEqual(context.stream_name, ARMADA_DEFAULT_STREAM)
             self.assertEqual(context.topic_name, topic)
             self.assertEqual(context.branch_name, actual_branch)
             self.assertEqual(
@@ -1651,7 +1653,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_topic_context_payload_exposes_managed_workspace_identity(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # A dedicated base repository keeps worktree/branch creation
@@ -1661,18 +1663,18 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             self.create_git_repository(base_workdir)
             with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=PEAR_DEFAULT_TOPIC,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
                 )
-                payload = serialize_pear_workspace_context(
+                payload = serialize_armada_workspace_context(
                     context,
-                    stream_name=PEAR_DEFAULT_STREAM,
-                    topic_name=PEAR_DEFAULT_TOPIC,
+                    stream_name=ARMADA_DEFAULT_STREAM,
+                    topic_name=ARMADA_DEFAULT_TOPIC,
                 )
 
         self.assertEqual(payload["workspace_id"], context.id)
@@ -1680,7 +1682,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(payload["branch"], context.branch_name)
         # Fresh workspaces work on the topic-derived branch, so clients can
         # collapse the redundant branch chip in the topic header.
-        self.assertEqual(payload["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC))
+        self.assertEqual(payload["branch"], armada_topic_branch_name(ARMADA_DEFAULT_TOPIC))
         self.assertTrue(payload["branch_is_topic_default"])
         # A freshly seeded local origin carries real provenance from day one:
         # the "main" base ref and the "Initialize workspace" seed commit.
@@ -1693,12 +1695,12 @@ class PearSessionEndpointTest(ZulipTestCase):
         context.save(update_fields=["branch_name"])
         with (
             tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+            self.settings(ARMADA_TOPIC_WORKDIR_ROOT=temp_dir),
         ):
-            legacy_payload = serialize_pear_workspace_context(
+            legacy_payload = serialize_armada_workspace_context(
                 context,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
             )
         self.assertEqual(legacy_payload["branch"], "master")
         self.assertFalse(legacy_payload["branch_is_topic_default"])
@@ -1710,11 +1712,11 @@ class PearSessionEndpointTest(ZulipTestCase):
         context.save(update_fields=["branch_name", "topic_name"])
         with (
             tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+            self.settings(ARMADA_TOPIC_WORKDIR_ROOT=temp_dir),
         ):
-            trunk_payload = serialize_pear_workspace_context(
+            trunk_payload = serialize_armada_workspace_context(
                 context,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="",
             )
         self.assertEqual(trunk_payload["branch"], "main")
@@ -1722,47 +1724,47 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_shared_pool_startup_reap_preserves_fresh_running_lease(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             trigger_message_id=4242,
             requesting_user=user,
             status=AgentRun.RUNNING,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             heartbeat_at=timezone_now(),
         )
 
         # Either slot may boot while the other is running.  A fresh shared
         # heartbeat lease must therefore survive every startup reap.
-        self.assertEqual(reap_stale_pear_worker_runs(), 0)
+        self.assertEqual(reap_stale_armada_worker_runs(), 0)
         run.refresh_from_db()
         self.assertEqual(run.status, AgentRun.RUNNING)
 
     def test_redelivered_run_waits_for_the_database_lease(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             trigger_message_id=4343,
             requesting_user=user,
             status=AgentRun.RUNNING,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             heartbeat_at=timezone_now(),
         )
 
@@ -1771,8 +1773,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             run.save(update_fields=["heartbeat_at"])
 
         with patch("zerver.lib.armada_worker.time.sleep", side_effect=expire_lease) as sleep:
-            wait_for_redelivered_pear_worker_run(
-                bot_profile_id=pear_bot.id,
+            wait_for_redelivered_armada_worker_run(
+                bot_profile_id=armada_bot.id,
                 trigger_message_id=run.trigger_message_id,
             )
 
@@ -1780,34 +1782,34 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_links_runs_to_workspace_node(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
-        store = PearDatabaseWorkerRunStore()
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
+        store = ArmadaDatabaseWorkerRunStore()
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             started = store.start(
-                SimpleNamespace(user_profile=pear_bot),
+                SimpleNamespace(user_profile=armada_bot),
                 9876,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
             run = AgentRun.objects.get(trigger_message_id=9876)
             context = Workspace.objects.get(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
             )
 
         self.assertTrue(started)
@@ -1815,40 +1817,40 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_starts_side_run_beside_active_shared_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
-        store = PearDatabaseWorkerRunStore()
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=4,
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=4,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
             ),
         ):
             self.assertTrue(
                 store.start(
                     bot_handler,
                     9876,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=PEAR_DEFAULT_TOPIC,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
                 )
             )
             self.assertIsNone(
                 store.side_start_blocked_reason(
                     bot_handler,
                     9877,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=PEAR_DEFAULT_TOPIC,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
                     requesting_user_id=owner.id,
                 )
             )
@@ -1856,8 +1858,8 @@ class PearSessionEndpointTest(ZulipTestCase):
                 store.start_side(
                     bot_handler,
                     9877,
-                    stream=PEAR_DEFAULT_STREAM,
-                    topic=PEAR_DEFAULT_TOPIC,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
                     requesting_user_id=owner.id,
                     source_message_id=9876,
                 )
@@ -1868,45 +1870,45 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(side_run.session_kind, AgentRun.SIDE)
         self.assertEqual(side_run.workspace_node_id, shared_run.workspace_node_id)
         self.assertEqual(side_run.workdir, shared_run.workdir)
-        self.assertEqual(side_run.source_stream_name, PEAR_DEFAULT_STREAM)
-        self.assertEqual(side_run.source_topic_name, PEAR_DEFAULT_TOPIC)
+        self.assertEqual(side_run.source_stream_name, ARMADA_DEFAULT_STREAM)
+        self.assertEqual(side_run.source_topic_name, ARMADA_DEFAULT_TOPIC)
         self.assertEqual(side_run.source_message_id, 9876)
         self.assertEqual(
             store.active_worker_run_message_id(
                 bot_handler,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             ),
             9876,
         )
 
     def test_shared_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             topic_name="shared-redelivery",
             content="@Pear inspect this",
         )
         trigger_message = Message.objects.get(id=trigger_message_id)
         message = MessageDict.wide_dict(trigger_message)
-        store = PearDatabaseWorkerRunStore()
-        bot_handler = EmbeddedBotHandler(pear_bot)
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = EmbeddedBotHandler(armada_bot)
 
         self.assertTrue(
             store.start(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="shared-redelivery",
             )
         )
@@ -1914,7 +1916,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start_blocked_reason(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="shared-redelivery",
                 requesting_user_id=owner.id,
             )
@@ -1924,7 +1926,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="shared-redelivery",
             )
         )
@@ -1932,9 +1934,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_handler,
             trigger_message_id,
             message=message,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="shared-redelivery",
-            content=PEAR_WORKING_MESSAGE,
+            content=ARMADA_WORKING_MESSAGE,
         )
         self.assertIsNotNone(progress_message_id)
 
@@ -1943,7 +1945,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="shared-redelivery",
             )
         )
@@ -1952,54 +1954,54 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 trigger_message_id,
                 message=message,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="shared-redelivery",
-                content=PEAR_WORKING_MESSAGE,
+                content=ARMADA_WORKING_MESSAGE,
             ),
             progress_message_id,
         )
         self.assertEqual(
             Message.objects.filter(
-                sender=pear_bot,
+                sender=armada_bot,
                 subject="shared-redelivery",
-                content=PEAR_WORKING_MESSAGE,
+                content=ARMADA_WORKING_MESSAGE,
             ).count(),
             1,
         )
 
     def test_side_run_redelivery_reuses_queued_run_and_progress_message(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         root_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             topic_name="side-redelivery",
             content="Root request",
         )
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             topic_name="side-redelivery",
             content="@Pear side question",
         )
         Message.objects.filter(id=trigger_message_id).update(thread_root_id=root_message_id)
         trigger_message = Message.objects.get(id=trigger_message_id)
         message = MessageDict.wide_dict(trigger_message)
-        store = PearDatabaseWorkerRunStore()
-        bot_handler = EmbeddedBotHandler(pear_bot)
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = EmbeddedBotHandler(armada_bot)
         self.assertTrue(
             store.start_side(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="side-redelivery",
                 requesting_user_id=owner.id,
                 source_message_id=root_message_id,
@@ -2009,7 +2011,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.side_start_blocked_reason(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="side-redelivery",
                 requesting_user_id=owner.id,
             )
@@ -2018,16 +2020,16 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start_side(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="side-redelivery",
                 requesting_user_id=owner.id,
                 source_message_id=root_message_id,
             )
         )
-        queued_side_run = pear_worker_module.PearWorker.next_queued_side_run(
-            object.__new__(pear_worker_module.PearWorker),
-            bot_profile_id=pear_bot.id,
-            stream=PEAR_DEFAULT_STREAM,
+        queued_side_run = armada_worker_module.ArmadaWorker.next_queued_side_run(
+            object.__new__(armada_worker_module.ArmadaWorker),
+            bot_profile_id=armada_bot.id,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="side-redelivery",
         )
         self.assertIsNotNone(queued_side_run)
@@ -2037,9 +2039,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_handler,
             trigger_message_id,
             message=message,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="side-redelivery",
-            content=PEAR_WORKING_MESSAGE,
+            content=ARMADA_WORKING_MESSAGE,
         )
         self.assertIsNotNone(progress_message_id)
 
@@ -2047,7 +2049,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start_side(
                 bot_handler,
                 trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="side-redelivery",
                 requesting_user_id=owner.id,
                 source_message_id=root_message_id,
@@ -2058,64 +2060,64 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 trigger_message_id,
                 message=message,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="side-redelivery",
-                content=PEAR_WORKING_MESSAGE,
+                content=ARMADA_WORKING_MESSAGE,
             ),
             progress_message_id,
         )
         self.assertEqual(
             Message.objects.filter(
-                sender=pear_bot,
+                sender=armada_bot,
                 subject="side-redelivery",
-                content=PEAR_WORKING_MESSAGE,
+                content=ARMADA_WORKING_MESSAGE,
             ).count(),
             1,
         )
 
     def test_side_parent_resolution_never_borrows_an_unrelated_topic_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         workspace_node = Workspace.objects.create(
             realm=owner.realm,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="exact-side-parent",
         )
         parent_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=9201,
             result_message_id=9202,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="exact-side-parent",
             workspace_node=workspace_node,
             status=AgentRun.DONE,
             codex_thread_id="thread-parent",
-            source_stream_name=PEAR_DEFAULT_STREAM,
+            source_stream_name=ARMADA_DEFAULT_STREAM,
             source_topic_name="exact-side-parent",
             source_message_id=9198,
         )
 
         self.assertIsNone(
-            latest_pear_codex_run_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
+            latest_armada_codex_run_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="exact-side-parent",
                 before_message_id=9300,
                 source_message_id=9199,
             )
         )
         self.assertEqual(
-            latest_pear_codex_run_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
+            latest_armada_codex_run_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="exact-side-parent",
                 before_message_id=9300,
                 source_message_id=parent_run.trigger_message_id,
@@ -2123,9 +2125,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             parent_run,
         )
         self.assertEqual(
-            latest_pear_codex_run_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
+            latest_armada_codex_run_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="exact-side-parent",
                 before_message_id=9300,
                 source_message_id=parent_run.source_message_id,
@@ -2133,9 +2135,9 @@ class PearSessionEndpointTest(ZulipTestCase):
             parent_run,
         )
         self.assertEqual(
-            latest_pear_codex_run_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
+            latest_armada_codex_run_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="exact-side-parent",
                 before_message_id=9300,
                 source_message_id=parent_run.result_message_id,
@@ -2145,47 +2147,47 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_side_pump_settles_result_when_queued_trigger_was_deleted(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear-missing-side-trigger",
+        armada_bot = self.create_test_bot(
+            "armada-missing-side-trigger",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         root_message_id = self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
             "The parent answer.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear what does that mean?",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         result_message_id = self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
-            PEAR_WORKING_MESSAGE,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
+            ARMADA_WORKING_MESSAGE,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         Message.objects.filter(id__in=[trigger_message_id, result_message_id]).update(
             thread_root_id=root_message_id
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=trigger_message_id,
             result_message_id=result_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             session_kind=AgentRun.SIDE,
-            source_stream_name=PEAR_DEFAULT_STREAM,
-            source_topic_name=PEAR_DEFAULT_TOPIC,
+            source_stream_name=ARMADA_DEFAULT_STREAM,
+            source_topic_name=ARMADA_DEFAULT_TOPIC,
             source_message_id=root_message_id,
             status=AgentRun.QUEUED,
         )
@@ -2198,16 +2200,16 @@ class PearSessionEndpointTest(ZulipTestCase):
         # connection cleanup is thread-local; running that cleanup here would
         # instead close this TestCase's transaction connection.
         with (
-            patch.object(pear_worker_module, "close_old_connections"),
-            patch.object(pear_worker_module, "reset_queries"),
+            patch.object(armada_worker_module, "close_old_connections"),
+            patch.object(armada_worker_module, "reset_queries"),
         ):
-            pear_worker_module.PearWorker.run_side_pump(
-                object.__new__(pear_worker_module.PearWorker),
+            armada_worker_module.ArmadaWorker.run_side_pump(
+                object.__new__(armada_worker_module.ArmadaWorker),
                 stop=stop,
-                runtime=PearWorkerRuntime(),
-                bot_profile_id=pear_bot.id,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                runtime=ArmadaWorkerRuntime(),
+                bot_profile_id=armada_bot.id,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
 
         run.refresh_from_db()
@@ -2221,7 +2223,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             result_message.content,
             "This side conversation could not start because its request message was deleted.",
         )
-        self.assertNotEqual(result_message.content, PEAR_WORKING_MESSAGE)
+        self.assertNotEqual(result_message.content, ARMADA_WORKING_MESSAGE)
         failure_event = AgentRunEvent.objects.get(run=run, event_type="failed")
         self.assertEqual(failure_event.payload["reason"], "missing_trigger_message")
 
@@ -2232,21 +2234,21 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             self.create_git_repository(base_workdir)
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="memories",
                 )
                 for enabled, expected in ((True, "true"), (False, "false")):
-                    with self.settings(PEAR_WORKER_CODEX_MEMORIES=enabled):
-                        runtime = build_pear_worker_runtime_from_settings(
+                    with self.settings(ARMADA_WORKER_CODEX_MEMORIES=enabled):
+                        runtime = build_armada_worker_runtime_from_settings(
                             workdir_override=context.workdir,
                         )
-                    assert isinstance(runtime.tool_runner, PearCodexAppServerToolRunner)
+                    assert isinstance(runtime.tool_runner, ArmadaCodexAppServerToolRunner)
                     command = runtime.tool_runner.build_command()
                     self.assertIn(f"features.memories={expected}", command)
                     self.assertNotIn(f"features.memories={'false' if enabled else 'true'}", command)
@@ -2260,27 +2262,27 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
-                PEAR_TOPIC_ISOLATION_BACKEND="codex-sandbox",
-                PEAR_WORKER_SANDBOX="danger-full-access",
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_TOPIC_ISOLATION_BACKEND="codex-sandbox",
+                ARMADA_WORKER_SANDBOX="danger-full-access",
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="isolated topic",
                 )
-                runtime = build_pear_worker_runtime_from_settings(
+                runtime = build_armada_worker_runtime_from_settings(
                     model_override="gpt-5.5",
                     workdir_override=context.workdir,
                 )
 
-                self.assertIsNone(pear_worker_runtime_isolation_error(context.workdir))
+                self.assertIsNone(armada_worker_runtime_isolation_error(context.workdir))
                 self.assertEqual(
-                    pear_worker_sandbox_for_topic(
+                    armada_worker_sandbox_for_topic(
                         owner,
-                        stream=PEAR_DEFAULT_STREAM,
+                        stream=ARMADA_DEFAULT_STREAM,
                         topic="isolated topic",
                     ),
                     "workspace-write",
@@ -2297,26 +2299,26 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_WORKER_SANDBOX="workspace-write",
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_WORKER_SANDBOX="workspace-write",
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="isolated topic",
                 )
-                runtime = build_pear_worker_runtime_from_settings(
+                runtime = build_armada_worker_runtime_from_settings(
                     model_override="gpt-5.5",
                     workdir_override=context.workdir,
                 )
 
                 self.assertEqual(
-                    pear_worker_sandbox_for_topic(
+                    armada_worker_sandbox_for_topic(
                         owner,
-                        stream=PEAR_DEFAULT_STREAM,
+                        stream=ARMADA_DEFAULT_STREAM,
                         topic="isolated topic",
                     ),
                     "danger-full-access",
@@ -2329,20 +2331,20 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             topic_root = str(Path(temp_dir) / "topics")
             self.create_git_repository(base_workdir)
-            active_session = build_pear_active_session_summary_from_messages(
-                pear_session=get_pear_session_payload(),
+            active_session = build_armada_active_session_summary_from_messages(
+                armada_session=get_armada_session_payload(),
                 source="server",
                 stream_exists=True,
                 messages=[(10, "@Pear edit the control plane", False)],
             )
 
             with self.settings(
-                PEAR_WORKER_AGENT_RUNTIME="codex-app-server",
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
-                PEAR_WORKER_SANDBOX="danger-full-access",
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_WORKER_SANDBOX="danger-full-access",
             ):
-                runtime = build_pear_worker_runtime_from_settings(
+                runtime = build_armada_worker_runtime_from_settings(
                     model_override="gpt-5.5",
                     workdir_override=str(base_workdir),
                 )
@@ -2360,16 +2362,16 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
-            channel_context = ensure_pear_workspace_node(
+            channel_context = ensure_armada_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="",
             )
-            topic_context = ensure_pear_workspace_node(
+            topic_context = ensure_armada_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
@@ -2379,7 +2381,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             assert channel_context.project is not None
             self.assertEqual(
                 channel_context.project.repo_cache_path,
-                str(pear_expected_project_cache_path(owner, stream="megatron-lm")),
+                str(armada_expected_project_cache_path(owner, stream="megatron-lm")),
             )
             self.assertTrue(Path(channel_context.project.repo_cache_path).is_dir())
             self.assertEqual(channel_context.branch_name, "main")
@@ -2393,17 +2395,17 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
-                PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_ISOLATION_HELPER="/usr/local/sbin/armada-topic-isolate",
+                ARMADA_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
             ),
         ):
             workdir = str(Path(temp_dir) / "topic")
             Path(workdir).mkdir()
-            process_isolation = pear_topic_process_isolation(
+            process_isolation = armada_topic_process_isolation(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="isolated topic",
             )
             calls = []
@@ -2413,7 +2415,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
             with patch("zerver.lib.armada_worker.subprocess.run", side_effect=fake_run):
-                error = pear_worker_process_isolation_error(
+                error = armada_worker_process_isolation_error(
                     process_isolation,
                     workdir=workdir,
                 )
@@ -2425,7 +2427,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             [
                 "sudo",
                 "-n",
-                "/usr/local/sbin/pear-topic-isolate",
+                "/usr/local/sbin/armada-topic-isolate",
                 "--user",
                 process_isolation.username,
                 "--workdir",
@@ -2440,17 +2442,17 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_ISOLATION_HELPER="/usr/local/sbin/pear-topic-isolate",
-                PEAR_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_ISOLATION_HELPER="/usr/local/sbin/armada-topic-isolate",
+                ARMADA_CODEX_SKILLS_DIR=str(Path(temp_dir) / "missing-skills"),
             ),
         ):
             workdir = Path(temp_dir) / "private-topic"
             workdir.mkdir()
-            process_isolation = pear_topic_process_isolation(
+            process_isolation = armada_topic_process_isolation(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="private topic",
             )
             with (
@@ -2463,7 +2465,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                     return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
                 ) as run_mock,
             ):
-                error = pear_worker_process_isolation_error(
+                error = armada_worker_process_isolation_error(
                     process_isolation,
                     workdir=str(workdir),
                 )
@@ -2477,8 +2479,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
             workdir = Path(temp_dir) / "legacy-worktree"
@@ -2487,13 +2489,13 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "gitdir: /home/zulipdev/zulip/.git/worktrees/legacy\n",
                 encoding="utf-8",
             )
-            process_isolation = pear_topic_process_isolation(
+            process_isolation = armada_topic_process_isolation(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="legacy worktree",
             )
             with patch("zerver.lib.armada_worker.subprocess.run") as run_mock:
-                error = pear_worker_process_isolation_error(
+                error = armada_worker_process_isolation_error(
                     process_isolation,
                     workdir=str(workdir),
                 )
@@ -2507,50 +2509,50 @@ class PearSessionEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = Path(temp_dir) / "base"
             self.create_git_repository(base_workdir)
-            unsafe_topic_root = base_workdir / "var" / "pear-workspaces"
+            unsafe_topic_root = base_workdir / "var" / "armada-workspaces"
 
             with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="outside-root",
                 )
 
             context_workdir = Path(context.workdir).resolve(strict=False)
             self.assertFalse(context_workdir.is_relative_to(base_workdir.resolve()))
-            self.assertIn("pear-workspaces", context.workdir)
+            self.assertIn("armada-workspaces", context.workdir)
             self.assertTrue((context_workdir / ".git").exists())
 
     def test_os_user_topic_workdir_root_inside_service_home_is_repaired(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service_home = Path(temp_dir) / "home" / "zulipdev"
             base_workdir = service_home / "zulip"
-            unsafe_topic_root = service_home / "pear-workspaces"
+            unsafe_topic_root = service_home / "armada-workspaces"
 
             with (
                 self.settings(
-                    PEAR_WORKER_WORKDIR=str(base_workdir),
-                    PEAR_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
-                    PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                    ARMADA_WORKER_WORKDIR=str(base_workdir),
+                    ARMADA_TOPIC_WORKDIR_ROOT=str(unsafe_topic_root),
+                    ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
                 ),
                 patch("zerver.lib.armada_worker.Path.home", return_value=service_home),
             ):
-                self.assertEqual(pear_topic_workdir_root(), Path("/srv/pear-workspaces"))
+                self.assertEqual(armada_topic_workdir_root(), Path("/srv/armada-workspaces"))
 
     def test_os_user_topic_workdir_initializes_independent_git_repository(self) -> None:
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
             origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "topic"
-            ensure_pear_topic_workdir(
+            ensure_armada_topic_workdir(
                 str(workdir),
                 origin=origin,
                 branch_name="topic",
@@ -2558,19 +2560,19 @@ class PearSessionEndpointTest(ZulipTestCase):
             )
 
             self.assertTrue((workdir / ".git").is_dir())
-            self.assertEqual(pear_git_current_branch_name(workdir), "topic")
+            self.assertEqual(armada_git_current_branch_name(workdir), "topic")
 
     def test_topic_workdir_provisions_git_author_identity(self) -> None:
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
             origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "fable-ui-tour"
-            ensure_pear_topic_workdir(
+            ensure_armada_topic_workdir(
                 str(workdir),
                 origin=origin,
                 branch_name="fable-ui-tour",
@@ -2598,13 +2600,13 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
             ),
         ):
             origin, base_ref = self.create_bare_origin(Path(temp_dir))
             workdir = Path(temp_dir) / "fable-ui-tour"
-            ensure_pear_topic_workdir(
+            ensure_armada_topic_workdir(
                 str(workdir),
                 origin=origin,
                 branch_name="fable-ui-tour",
@@ -2616,7 +2618,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=10,
             )
 
-            ensure_pear_topic_workdir(
+            ensure_armada_topic_workdir(
                 str(workdir),
                 origin=origin,
                 branch_name="fable-ui-tour",
@@ -2635,7 +2637,7 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_git_context_reports_status_delta_for_worktree(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             base_workdir = Path(temp_dir) / "base"
-            topic_workdir = Path(temp_dir) / "devel-pear-efficient-smoke"
+            topic_workdir = Path(temp_dir) / "devel-armada-efficient-smoke"
             self.create_git_repository(base_workdir)
             subprocess.run(
                 [
@@ -2666,12 +2668,12 @@ class PearSessionEndpointTest(ZulipTestCase):
                 timeout=30,
             )
 
-            git_context = build_pear_git_context(
+            git_context = build_armada_git_context(
                 str(topic_workdir),
-                topic="devel-pear-efficient-smoke",
+                topic="devel-armada-efficient-smoke",
             )
 
-            self.assertEqual(git_context["worktree_name"], "devel-pear-efficient-smoke")
+            self.assertEqual(git_context["worktree_name"], "devel-armada-efficient-smoke")
             self.assertEqual(git_context["branch"], "")
             self.assertEqual(git_context["ahead"], 0)
             self.assertEqual(git_context["behind"], 0)
@@ -2689,21 +2691,21 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertIsInstance(last_commit["timestamp"], int)
             self.assertGreaterEqual(int(str(git_context["commit_count"])), 1)
 
-    def test_pear_git_status_delta_uses_cache_until_invalidated(self) -> None:
-        invalidate_pear_git_status_delta()
+    def test_armada_git_status_delta_uses_cache_until_invalidated(self) -> None:
+        invalidate_armada_git_status_delta()
         clean_status = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.upstream origin/topic-a\n# branch.ab +2 -1"
         dirty_status = f"{clean_status}\n1 .M N... 100644 100644 100644 a b file.txt"
 
         # Each refresh issues three git commands (status, log -1,
         # rev-list --count); the commit-info calls return "" here.
         with patch(
-            "zerver.lib.armada_worker.pear_git_output",
+            "zerver.lib.armada_worker.armada_git_output",
             side_effect=[clean_status, "", "", dirty_status, "", ""],
         ) as git_output:
-            clean_delta = pear_git_status_delta("/repo", topic="topic-a")
-            cached_delta = pear_git_status_delta("/repo", topic="TOPIC-A")
-            invalidate_pear_git_status_delta("/repo")
-            dirty_delta = pear_git_status_delta("/repo", topic="topic-a")
+            clean_delta = armada_git_status_delta("/repo", topic="topic-a")
+            cached_delta = armada_git_status_delta("/repo", topic="TOPIC-A")
+            invalidate_armada_git_status_delta("/repo")
+            dirty_delta = armada_git_status_delta("/repo", topic="topic-a")
 
         self.assertEqual(git_output.call_count, 6)
         self.assertEqual(clean_delta["head"], "1234567")
@@ -2715,15 +2717,15 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(dirty_delta["dirty"])
         self.assertEqual(dirty_delta["changed_count"], 1)
 
-    def test_pear_git_status_delta_reports_structured_changed_files(self) -> None:
-        invalidate_pear_git_status_delta()
+    def test_armada_git_status_delta_reports_structured_changed_files(self) -> None:
+        invalidate_armada_git_status_delta()
         status_output = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n1 .M N... 100644 100644 100644 a b modified.txt\n1 A. N... 000000 100644 100644 a b added.txt\n1 D. N... 100644 000000 000000 a b deleted.txt\n2 R. N... 100644 100644 100644 a b R100 renamed.txt\told-name.txt\nu UU N... 100644 100644 100644 100644 a b c conflicted.txt\n? untracked.txt"
 
         with patch(
-            "zerver.lib.armada_worker.pear_git_output",
+            "zerver.lib.armada_worker.armada_git_output",
             return_value=status_output,
         ):
-            delta = pear_git_status_delta("/repo", topic="topic-a")
+            delta = armada_git_status_delta("/repo", topic="topic-a")
 
         self.assertEqual(delta["changed_count"], 6)
         self.assertFalse(delta["changed_files_truncated"])
@@ -2739,8 +2741,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             ],
         )
 
-    def test_pear_git_status_delta_runs_bounded_git_commands(self) -> None:
-        invalidate_pear_git_status_delta()
+    def test_armada_git_status_delta_runs_bounded_git_commands(self) -> None:
+        invalidate_armada_git_status_delta()
         status_output = (
             "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.ab +0 -0\n? new.txt"
         )
@@ -2755,7 +2757,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             patch("zerver.lib.armada_worker.subprocess.run", return_value=completed) as run_mock,
         ):
             Path(workdir, ".git").touch()
-            delta = pear_git_status_delta(workdir, topic="topic-b")
+            delta = armada_git_status_delta(workdir, topic="topic-b")
 
         # Exactly one porcelain status plus the two commit-info commands
         # per (cached) refresh — never N+1 per file or per commit.
@@ -2768,8 +2770,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(delta["changed_count"], 1)
         self.assertFalse(delta["branch_matches_topic"])
 
-    def test_pear_git_status_delta_skips_commit_reads_on_unborn_head(self) -> None:
-        invalidate_pear_git_status_delta()
+    def test_armada_git_status_delta_skips_commit_reads_on_unborn_head(self) -> None:
+        invalidate_armada_git_status_delta()
         status_output = "# branch.oid (initial)\n# branch.head topic-a\n? new.txt"
         completed = subprocess.CompletedProcess(
             ["git"],
@@ -2782,7 +2784,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             patch("zerver.lib.armada_worker.subprocess.run", return_value=completed) as run_mock,
         ):
             Path(workdir, ".git").touch()
-            delta = pear_git_status_delta(workdir, topic="topic-a")
+            delta = armada_git_status_delta(workdir, topic="topic-a")
 
         # A freshly initialized workspace has no HEAD yet; running the
         # commit-info commands would make git fail (and warn) on every
@@ -2793,7 +2795,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn("commit_count", delta)
         self.assertEqual(delta["head_short"], "")
 
-    def test_pear_git_output_logs_stderr_on_failure(self) -> None:
+    def test_armada_git_output_logs_stderr_on_failure(self) -> None:
         completed = subprocess.CompletedProcess(
             ["git"],
             128,
@@ -2807,71 +2809,71 @@ class PearSessionEndpointTest(ZulipTestCase):
                 patch("zerver.lib.armada_worker.subprocess.run", return_value=completed),
                 self.assertLogs("zerver.lib.armada_worker", level="WARNING") as logs,
             ):
-                self.assertEqual(pear_git_output(workdir, ["status"]), "")
+                self.assertEqual(armada_git_output(workdir, ["status"]), "")
 
         log_output = "\n".join(logs.output)
         self.assertIn("status 128", log_output)
         self.assertIn("fatal: not a git repository", log_output)
 
-    def test_pear_git_output_skips_missing_workdir_without_warning(self) -> None:
+    def test_armada_git_output_skips_missing_workdir_without_warning(self) -> None:
         with (
             tempfile.TemporaryDirectory() as parent,
             patch("zerver.lib.armada_worker.subprocess.run") as run_mock,
         ):
             missing_workdir = str(Path(parent) / "removed-topic-worktree")
-            self.assertEqual(pear_git_output(missing_workdir, ["status"]), "")
+            self.assertEqual(armada_git_output(missing_workdir, ["status"]), "")
 
         run_mock.assert_not_called()
 
-    def test_pear_git_output_skips_uninitialized_workdir_without_warning(self) -> None:
+    def test_armada_git_output_skips_uninitialized_workdir_without_warning(self) -> None:
         with (
             tempfile.TemporaryDirectory() as workdir,
             patch("zerver.lib.armada_worker.subprocess.run") as run_mock,
         ):
-            self.assertEqual(pear_git_output(workdir, ["status"]), "")
+            self.assertEqual(armada_git_output(workdir, ["status"]), "")
 
         run_mock.assert_not_called()
 
     def test_workspace_context_reports_local_topic_repo_without_external_pin(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_WORKER_WORKDIR=str(Path(temp_dir) / "base"),
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_WORKDIR=str(Path(temp_dir) / "base"),
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             # With no external repository pinned, the topic workspace is
             # provisioned from the seeded local origin on the topic branch.
-            context = ensure_pear_workspace_node(
+            context = ensure_armada_workspace_node(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
 
-            workspace_context = build_pear_workspace_context(
+            workspace_context = build_armada_workspace_context(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
 
-            self.assertEqual(workspace_context["repository"], PEAR_DEFAULT_STREAM)
+            self.assertEqual(workspace_context["repository"], ARMADA_DEFAULT_STREAM)
             self.assertEqual(workspace_context["remote_url"], "")
-            self.assertEqual(workspace_context["worktree"], PEAR_DEFAULT_TOPIC)
+            self.assertEqual(workspace_context["worktree"], ARMADA_DEFAULT_TOPIC)
             self.assertEqual(
-                workspace_context["branch"], pear_topic_branch_name(PEAR_DEFAULT_TOPIC)
+                workspace_context["branch"], armada_topic_branch_name(ARMADA_DEFAULT_TOPIC)
             )
             self.assertEqual(workspace_context["head"], "")
-            topic_payload = serialize_pear_workspace_context(
+            topic_payload = serialize_armada_workspace_context(
                 context,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
             )
             self.assertEqual(topic_payload["github_repo"], "")
-            self.assertEqual(topic_payload["repo_label"], PEAR_DEFAULT_STREAM)
-            self.assertEqual(topic_payload["worktree_label"], PEAR_DEFAULT_TOPIC)
+            self.assertEqual(topic_payload["repo_label"], ARMADA_DEFAULT_STREAM)
+            self.assertEqual(topic_payload["worktree_label"], ARMADA_DEFAULT_TOPIC)
 
         # An externally pinned repository is reported as the remote. Pin in a
         # fresh workdir scope: changing an existing channel cache's repository
@@ -2879,8 +2881,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as pin_dir,
             self.settings(
-                PEAR_WORKER_WORKDIR=str(Path(pin_dir) / "base"),
-                PEAR_TOPIC_WORKDIR_ROOT=pin_dir,
+                ARMADA_WORKER_WORKDIR=str(Path(pin_dir) / "base"),
+                ARMADA_TOPIC_WORKDIR_ROOT=pin_dir,
             ),
         ):
             (Path(pin_dir) / "external").mkdir()
@@ -2890,7 +2892,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             pinned_url = f"file://{external_origin}"
             project, _created = Repository.objects.update_or_create(
                 realm=owner.realm,
-                stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
+                stream=get_stream(ARMADA_DEFAULT_STREAM, owner.realm),
                 defaults={
                     "repository_url": pinned_url,
                     "repo_cache_path": "",
@@ -2900,10 +2902,10 @@ class PearSessionEndpointTest(ZulipTestCase):
             context.project = project
             context.save(update_fields=["project", "date_updated"])
 
-            workspace_context = build_pear_workspace_context(
+            workspace_context = build_armada_workspace_context(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
 
             self.assertEqual(workspace_context["repository"], pinned_url)
@@ -2916,23 +2918,23 @@ class PearSessionEndpointTest(ZulipTestCase):
             base_workdir = Path(temp_dir) / "base"
             topic_root = str(Path(temp_dir) / "topics")
             self.create_git_repository(base_workdir)
-            pear_file = base_workdir / "zerver/lib/armada_worker.py"
-            pear_file.parent.mkdir(parents=True)
-            pear_file.write_text("dirty pear self-dev file\n", encoding="utf-8")
+            armada_file = base_workdir / "zerver/lib/armada_worker.py"
+            armada_file.parent.mkdir(parents=True)
+            armada_file.write_text("dirty armada self-dev file\n", encoding="utf-8")
 
             with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="clean-topic",
                 )
 
             self.assertFalse((Path(context.workdir) / "zerver/lib/armada_worker.py").exists())
 
-    def test_channel_creation_can_pin_pear_repository(self) -> None:
+    def test_channel_creation_can_pin_armada_repository(self) -> None:
         owner = self.example_user("hamlet")
         self.login_user(owner)
         repository_url = "https://github.com/NVIDIA/Megatron-LM.git"
@@ -2958,15 +2960,15 @@ class PearSessionEndpointTest(ZulipTestCase):
                 check=True,
                 timeout=10,
             )
-            return "main", pear_seed_empty_bare_origin(origin, branch_name="main")
+            return "main", armada_seed_empty_bare_origin(origin, branch_name="main")
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
             patch(
-                "zerver.lib.armada_worker.pear_initialize_bare_origin",
+                "zerver.lib.armada_worker.armada_initialize_bare_origin",
                 side_effect=initialize_without_network,
             ),
         ):
@@ -2977,7 +2979,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                         [{"name": "megatron-lm", "description": "Pinned repository"}]
                     ).decode(),
                     "principals": orjson.dumps([owner.id]).decode(),
-                    "pear_repository_url": repository_url,
+                    "repository_url": repository_url,
                 },
             )
 
@@ -2998,11 +3000,11 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(project.repository_url, repository_url)
             self.assertEqual(
                 project.repo_cache_path,
-                str(pear_expected_project_cache_path(owner, stream="megatron-lm")),
+                str(armada_expected_project_cache_path(owner, stream="megatron-lm")),
             )
             self.assertNotEqual(project.repo_cache_path, context.workdir)
             self.assertTrue(Path(project.repo_cache_path).is_dir())
-            self.assertNotIn("pear_repository_error", result_dict)
+            self.assertNotIn("armada_repository_error", result_dict)
 
     def test_topic_context_inherits_channel_repository_checkout(self) -> None:
         owner = self.example_user("hamlet")
@@ -3030,24 +3032,24 @@ class PearSessionEndpointTest(ZulipTestCase):
                 check=True,
                 timeout=10,
             )
-            return "dev", pear_seed_empty_bare_origin(origin, branch_name="dev")
+            return "dev", armada_seed_empty_bare_origin(origin, branch_name="dev")
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
             patch(
-                "zerver.lib.armada_worker.pear_initialize_bare_origin",
+                "zerver.lib.armada_worker.armada_initialize_bare_origin",
                 side_effect=initialize_without_network,
             ),
         ):
-            channel_context = configure_pear_channel_repository_workspace(
+            channel_context = configure_armada_channel_repository_workspace(
                 owner,
                 stream="megatron-lm",
                 repository_url=repository_url,
             )
-            topic_context = ensure_pear_workspace_node(
+            topic_context = ensure_armada_workspace_node(
                 owner,
                 stream="megatron-lm",
                 topic="optimizer work",
@@ -3073,7 +3075,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         def record_fetch(command: Sequence[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
             if "fetch" in command:
                 fetch_timeouts.append(kwargs["timeout"])
-            return pear_run_git_checked(command, **kwargs)
+            return armada_run_git_checked(command, **kwargs)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             upstream = Path(temp_dir) / "upstream"
@@ -3082,7 +3084,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             def initialize_from_local_upstream(
                 origin: Path, *, repository_url: str, fetch_timeout_seconds: int
             ) -> tuple[str, str]:
-                base = pear_initialize_bare_origin(
+                base = armada_initialize_bare_origin(
                     origin,
                     repository_url=str(upstream),
                     fetch_timeout_seconds=fetch_timeout_seconds,
@@ -3103,14 +3105,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 return base
 
             with (
-                self.settings(PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics")),
+                self.settings(ARMADA_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics")),
                 patch(
-                    "zerver.lib.armada_worker.pear_initialize_bare_origin",
+                    "zerver.lib.armada_worker.armada_initialize_bare_origin",
                     side_effect=initialize_from_local_upstream,
                 ),
-                patch("zerver.lib.armada_worker.pear_run_git_checked", side_effect=record_fetch),
+                patch("zerver.lib.armada_worker.armada_run_git_checked", side_effect=record_fetch),
             ):
-                channel_context = configure_pear_channel_repository_workspace(
+                channel_context = configure_armada_channel_repository_workspace(
                     owner,
                     stream="megatron-lm",
                     repository_url=repository_url,
@@ -3131,8 +3133,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             self.subscribe(owner, "devel")
@@ -3145,7 +3147,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 workdir=str(parent_path),
             )
 
-            topic_context = ensure_pear_workspace_node(
+            topic_context = ensure_armada_workspace_node(
                 owner,
                 stream="devel",
                 topic="general chat",
@@ -3162,8 +3164,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_ISOLATION_BACKEND="os-user",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             workdir = Path(temp_dir) / "devel-general-chat"
@@ -3173,7 +3175,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 topic_name="general chat",
                 workdir=str(workdir),
             )
-            expected_username = pear_topic_isolation_username(
+            expected_username = armada_topic_isolation_username(
                 owner,
                 stream="devel",
                 topic="general chat",
@@ -3181,7 +3183,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             with patch("zerver.lib.armada_worker.pwd.getpwnam", side_effect=KeyError):
                 self.assertIsNone(
-                    pear_workspace_isolation_username(
+                    armada_workspace_isolation_username(
                         context,
                         stream_name="devel",
                         topic_name="general chat",
@@ -3194,7 +3196,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 return_value=SimpleNamespace(pw_name=expected_username),
             ):
                 self.assertEqual(
-                    pear_workspace_isolation_username(
+                    armada_workspace_isolation_username(
                         context,
                         stream_name="devel",
                         topic_name="general chat",
@@ -3204,17 +3206,17 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
 
     def test_topic_isolation_user_exists_rejects_missing_user(self) -> None:
-        self.assertFalse(pear_topic_isolation_user_exists("pear-user-that-should-not-exist"))
+        self.assertFalse(armada_topic_isolation_user_exists("armada-user-that-should-not-exist"))
 
     def test_topic_context_refactor_moves_full_topic_rename(self) -> None:
         owner = self.example_user("hamlet")
-        stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        stream = self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -3223,12 +3225,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(base_workdir)
 
             with self.settings(
-                PEAR_WORKER_WORKDIR=str(base_workdir),
-                PEAR_TOPIC_WORKDIR_ROOT=topic_root,
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=topic_root,
             ):
-                context = ensure_pear_workspace_node(
+                context = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="old topic",
                 )
                 old_workdir = context.workdir
@@ -3242,10 +3244,10 @@ class PearSessionEndpointTest(ZulipTestCase):
                 ).stdout.strip()
                 run = AgentRun.objects.create(
                     realm=owner.realm,
-                    bot_profile=pear_bot,
+                    bot_profile=armada_bot,
                     requesting_user=owner,
                     trigger_message_id=3001,
-                    stream_name=PEAR_DEFAULT_STREAM,
+                    stream_name=ARMADA_DEFAULT_STREAM,
                     topic_name="old topic",
                     workspace_node=context,
                     status=AgentRun.DONE,
@@ -3253,26 +3255,26 @@ class PearSessionEndpointTest(ZulipTestCase):
                 )
                 side_run = AgentRun.objects.create(
                     realm=owner.realm,
-                    bot_profile=pear_bot,
+                    bot_profile=armada_bot,
                     requesting_user=owner,
                     trigger_message_id=3002,
-                    stream_name=PEAR_DEFAULT_STREAM,
+                    stream_name=ARMADA_DEFAULT_STREAM,
                     topic_name="side topic",
                     session_kind=AgentRun.SIDE,
-                    source_stream_name=PEAR_DEFAULT_STREAM,
+                    source_stream_name=ARMADA_DEFAULT_STREAM,
                     source_topic_name="old topic",
                     status=AgentRun.DONE,
                 )
                 monitor = AgentMonitor.objects.create(
                     realm=owner.realm,
-                    bot_profile=pear_bot,
+                    bot_profile=armada_bot,
                     creator=owner,
-                    stream_name=PEAR_DEFAULT_STREAM.upper(),
+                    stream_name=ARMADA_DEFAULT_STREAM.upper(),
                     topic_name="OLD TOPIC",
                     ask="watch the moved topic",
                 )
 
-                result = maybe_refactor_pear_workspace_on_move(
+                result = maybe_refactor_armada_workspace_on_move(
                     owner,
                     old_stream=stream,
                     old_topic="old topic",
@@ -3309,49 +3311,49 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertEqual(run.topic_name, "old topic")
             self.assertEqual(run.workspace_node_id, context.id)
             self.assertEqual(side_run.source_topic_name, "old topic")
-            self.assertEqual(monitor.stream_name, PEAR_DEFAULT_STREAM.lower())
+            self.assertEqual(monitor.stream_name, ARMADA_DEFAULT_STREAM.lower())
             self.assertEqual(monitor.topic_name, "new topic")
             self.assertFalse(
                 Workspace.objects.filter(
                     realm=owner.realm,
-                    stream_name=PEAR_DEFAULT_STREAM,
+                    stream_name=ARMADA_DEFAULT_STREAM,
                     topic_name="old topic",
                 ).exists()
             )
 
     def test_topic_context_refactor_warns_for_partial_topic_move(self) -> None:
         owner = self.example_user("hamlet")
-        stream = self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        stream = self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+                ARMADA_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
             ),
         ):
-            context = ensure_pear_workspace_node(
+            context = ensure_armada_workspace_node(
                 owner,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="old topic",
             )
             old_workdir = context.workdir
             monitor = AgentMonitor.objects.create(
                 realm=owner.realm,
-                bot_profile=pear_bot,
+                bot_profile=armada_bot,
                 creator=owner,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="old topic",
                 ask="stay with the original topic",
             )
 
-            result = maybe_refactor_pear_workspace_on_move(
+            result = maybe_refactor_armada_workspace_on_move(
                 owner,
                 old_stream=stream,
                 old_topic="old topic",
@@ -3372,12 +3374,12 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_stream_context_refactor_updates_channel_rename_metadata(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         Workspace.objects.create(
             realm=owner.realm,
@@ -3393,7 +3395,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=3101,
             stream_name="old-repo",
@@ -3402,7 +3404,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         side_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=3102,
             stream_name="side",
@@ -3414,14 +3416,14 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         monitor = AgentMonitor.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             creator=owner,
             stream_name="OLD-REPO",
             topic_name="feature",
             ask="watch the renamed channel",
         )
 
-        message = maybe_refactor_pear_stream_workspaces_on_rename(
+        message = maybe_refactor_armada_stream_workspaces_on_rename(
             owner,
             old_stream_name="old-repo",
             new_stream_name="new-repo",
@@ -3456,15 +3458,15 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.create_git_repository(source)
             project = Repository.objects.create(
                 realm=owner.realm,
-                stream=get_stream(PEAR_DEFAULT_STREAM, owner.realm),
+                stream=get_stream(ARMADA_DEFAULT_STREAM, owner.realm),
                 repository_url=source.as_uri(),
             )
 
-            with self.settings(PEAR_TOPIC_WORKDIR_ROOT=temp_dir):
-                origin = ensure_pear_project_origin(owner, project)
-                workspace = ensure_pear_workspace_node(
+            with self.settings(ARMADA_TOPIC_WORKDIR_ROOT=temp_dir):
+                origin = ensure_armada_project_origin(owner, project)
+                workspace = ensure_armada_workspace_node(
                     owner,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="origin-smoke",
                 )
 
@@ -3477,27 +3479,27 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_start_allows_same_user_in_different_topics(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=901,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
         )
 
-        reason = PearDatabaseWorkerRunStore().start_blocked_reason(
-            SimpleNamespace(user_profile=pear_bot),
+        reason = ArmadaDatabaseWorkerRunStore().start_blocked_reason(
+            SimpleNamespace(user_profile=armada_bot),
             902,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-b",
             requesting_user_id=owner.id,
         )
@@ -3506,27 +3508,27 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_start_blocks_parallel_shared_run_in_same_topic(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=903,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
         )
 
-        reason = PearDatabaseWorkerRunStore().start_blocked_reason(
-            SimpleNamespace(user_profile=pear_bot),
+        reason = ArmadaDatabaseWorkerRunStore().start_blocked_reason(
+            SimpleNamespace(user_profile=armada_bot),
             904,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
             requesting_user_id=owner.id,
         )
@@ -3535,21 +3537,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_start_serializes_case_variants_of_the_same_topic(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        first_store = PearDatabaseWorkerRunStore()
-        second_store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        first_store = ArmadaDatabaseWorkerRunStore()
+        second_store = ArmadaDatabaseWorkerRunStore()
 
         with (
             self.settings(
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
             ),
             patch.object(
                 first_store,
@@ -3566,7 +3568,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 first_store.start(
                     bot_handler,
                     951,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="serialized-start",
                 )
             )
@@ -3574,7 +3576,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 second_store.start(
                     bot_handler,
                     952,
-                    stream=PEAR_DEFAULT_STREAM.upper(),
+                    stream=ARMADA_DEFAULT_STREAM.upper(),
                     topic="SERIALIZED-START",
                 )
             )
@@ -3592,21 +3594,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_start_and_claim_serialize_in_the_same_topic(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        start_store = PearDatabaseWorkerRunStore()
-        claim_store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        start_store = ArmadaDatabaseWorkerRunStore()
+        claim_store = ArmadaDatabaseWorkerRunStore()
 
         with (
             self.settings(
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
-                PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+                ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
             ),
             patch.object(
                 start_store,
@@ -3623,7 +3625,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 start_store.start(
                     bot_handler,
                     953,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="serialized-claim",
                 )
             )
@@ -3631,7 +3633,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 claim_store.claim_for_run(
                     bot_handler,
                     954,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="serialized-claim",
                 )
             )
@@ -3648,15 +3650,15 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_streamless_runs_are_rejected(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
 
         self.assertEqual(
             store.start_blocked_reason(
@@ -3674,32 +3676,32 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_claims_in_different_topics_are_independent(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
 
         with self.settings(
-            PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
-            PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
+            ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC=1,
+            ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=2,
         ):
             self.assertTrue(
-                PearDatabaseWorkerRunStore().claim_for_run(
+                ArmadaDatabaseWorkerRunStore().claim_for_run(
                     bot_handler,
                     955,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="independent-a",
                 )
             )
             self.assertTrue(
-                PearDatabaseWorkerRunStore().claim_for_run(
+                ArmadaDatabaseWorkerRunStore().claim_for_run(
                     bot_handler,
                     956,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="independent-b",
                 )
             )
@@ -3718,30 +3720,30 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_rejects_illegal_terminal_transitions(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         done_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=905,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.DONE,
         )
         cancelled_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=906,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.CANCELLED,
         )
@@ -3750,14 +3752,14 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_handler,
             done_run.trigger_message_id,
             AgentRun.RUNNING,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         store.record(
             bot_handler,
             cancelled_run.trigger_message_id,
             AgentRun.DONE,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
 
@@ -3784,34 +3786,34 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_observes_workspace_once_on_terminal_transition(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         workspace_node = Workspace.objects.create(
             realm=owner.realm,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="workspace-observer",
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=940,
             workspace_node=workspace_node,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="workspace-observer",
             status=AgentRun.QUEUED,
         )
-        store = PearDatabaseWorkerRunStore()
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
 
         with (
             patch(
-                "zerver.lib.armada_worker.refresh_pear_workspace_after_terminal_run"
+                "zerver.lib.armada_worker.refresh_armada_workspace_after_terminal_run"
             ) as refresh_workspace,
             self.captureOnCommitCallbacks(execute=True),
         ):
@@ -3819,14 +3821,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 run.trigger_message_id,
                 AgentRun.RUNNING,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
                 AgentRun.RUNNING,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             refresh_workspace.assert_not_called()
@@ -3834,14 +3836,14 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 run.trigger_message_id,
                 AgentRun.DONE,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
             store.record(
                 bot_handler,
                 run.trigger_message_id,
                 AgentRun.DONE,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="workspace-observer",
             )
 
@@ -3849,21 +3851,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_only_requeues_failed_runs_explicitly(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=907,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.FAILED,
             error="crashed",
@@ -3873,7 +3875,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_handler,
             run.trigger_message_id,
             AgentRun.QUEUED,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         run.refresh_from_db()
@@ -3892,7 +3894,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.start(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -3902,21 +3904,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_claims_queued_run_once(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=908,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.QUEUED,
         )
@@ -3925,7 +3927,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -3938,7 +3940,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -3956,20 +3958,20 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_stale_worker_attempt_rejects_every_worker_owned_store_path(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         self.assertTrue(
             store.claim_for_run(
                 bot_handler,
                 957,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-store",
             )
         )
@@ -3982,7 +3984,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             "progress": lambda: store.register_progress_message(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-store",
                 progress_message_id=4001,
             ),
@@ -3990,7 +3992,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 bot_handler,
                 run.trigger_message_id,
                 AgentRun.DONE,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-store",
                 result_message_id=4001,
             ),
@@ -4018,7 +4020,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         for operation_name, operation in operations.items():
             with (
                 self.subTest(operation=operation_name),
-                self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+                self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"),
                 transaction.atomic(),
             ):
                 operation()
@@ -4032,20 +4034,20 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_record_event_rechecks_attempt_inside_its_durable_transaction(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         self.assertTrue(
             store.claim_for_run(
                 bot_handler,
                 958,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="fenced-event",
             )
         )
@@ -4069,7 +4071,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         with (
             patch.object(store, "_record_event", side_effect=reclaim_before_durable_write),
-            self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+            self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"),
             transaction.atomic(),
         ):
             store.record_event(
@@ -4085,15 +4087,15 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_completion_rejects_terminal_run_with_the_same_attempt(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
 
         for message_id, status in (
             (1961, AgentRun.CANCELLED),
@@ -4104,7 +4106,7 @@ class PearSessionEndpointTest(ZulipTestCase):
                 store.claim_for_run(
                     bot_handler,
                     message_id,
-                    stream=PEAR_DEFAULT_STREAM,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic=topic,
                 )
             )
@@ -4115,7 +4117,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             entered_completion = False
             with (
                 self.subTest(status=status),
-                self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+                self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"),
                 transaction.atomic(),
                 store.worker_completion(bot_handler, message_id),
             ):
@@ -4124,22 +4126,22 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_claimed_cancel_check_distinguishes_cancelled_from_failed_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         cancelled_at = timezone_now()
 
         self.assertTrue(
             store.claim_for_run(
                 bot_handler,
                 1963,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="cancel-check-cancelled",
             )
         )
@@ -4154,7 +4156,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 1964,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="cancel-check-failed",
             )
         )
@@ -4163,26 +4165,26 @@ class PearSessionEndpointTest(ZulipTestCase):
             status=AgentRun.FAILED,
             cancel_requested_at=cancelled_at,
         )
-        with self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"):
+        with self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"):
             store.cancel_requested(bot_handler, 1964)
 
     def test_unclaimed_control_store_keeps_preclaim_paths_unfenced(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
         cancelled_at = timezone_now()
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=959,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="control-store",
             status=AgentRun.RUNNING,
             attempts=7,
@@ -4194,12 +4196,12 @@ class PearSessionEndpointTest(ZulipTestCase):
             summary="Continue carefully",
             payload={"instruction": "Continue carefully", "message_id": 991},
         )
-        control_store = PearDatabaseWorkerRunStore()
+        control_store = ArmadaDatabaseWorkerRunStore()
 
         control_store.register_progress_message(
             bot_handler,
             run.trigger_message_id,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="control-store",
             progress_message_id=4002,
         )
@@ -4207,7 +4209,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             bot_handler,
             run.trigger_message_id,
             AgentRun.RUNNING,
-            stream=PEAR_DEFAULT_STREAM,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="control-store",
             result_message_id=4002,
         )
@@ -4246,21 +4248,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_drops_completed_redelivery(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=909,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.DONE,
             result_message_id=400,
@@ -4270,7 +4272,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -4284,22 +4286,22 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_reclaims_stale_running_once(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         stale_time = timezone_now() - timedelta(seconds=400)
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=910,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             attempts=1,
@@ -4311,7 +4313,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -4332,7 +4334,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -4351,22 +4353,22 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_redelivery_reclaims_a_run_after_the_reaper_wins_the_race(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        store = PearDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        store = ArmadaDatabaseWorkerRunStore()
         stale_time = timezone_now() - timedelta(seconds=400)
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=911,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             attempts=1,
@@ -4374,8 +4376,8 @@ class PearSessionEndpointTest(ZulipTestCase):
             date_updated=stale_time,
         )
 
-        with patch("zerver.lib.armada_worker.settle_orphaned_pear_run_message"):
-            self.assertEqual(reap_stale_pear_worker_runs(bot_profile=pear_bot), 1)
+        with patch("zerver.lib.armada_worker.settle_orphaned_armada_run_message"):
+            self.assertEqual(reap_stale_armada_worker_runs(bot_profile=armada_bot), 1)
 
         run.refresh_from_db()
         self.assertEqual(run.status, AgentRun.FAILED)
@@ -4384,7 +4386,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
                 redelivered=True,
             )
@@ -4397,21 +4399,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_busy_reader_reaps_stale_running_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
         stale_time = timezone_now() - timedelta(seconds=400)
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=911,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             attempts=1,
@@ -4420,9 +4422,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertIsNone(
-            PearDatabaseWorkerRunStore().active_worker_run_message_id(
+            ArmadaDatabaseWorkerRunStore().active_worker_run_message_id(
                 bot_handler,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -4441,20 +4443,20 @@ class PearSessionEndpointTest(ZulipTestCase):
         self,
     ) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stale_time = timezone_now() - timedelta(seconds=61)
         active_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=913,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             attempts=1,
@@ -4463,10 +4465,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         abandoned_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=914,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-b",
             status=AgentRun.RUNNING,
             heartbeat_at=stale_time,
@@ -4474,7 +4476,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertEqual(
-            maintain_pear_worker_run_liveness(
+            maintain_armada_worker_run_liveness(
                 active_run_id=active_run.id,
                 active_run_attempt=active_run.attempts,
                 session_kinds=(AgentRun.SHARED,),
@@ -4496,20 +4498,20 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_liveness_renewal_requires_the_matching_claim_attempt(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         old_heartbeat = timezone_now() - timedelta(seconds=20)
         active_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=960,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="attempt-liveness",
             status=AgentRun.RUNNING,
             attempts=3,
@@ -4520,9 +4522,9 @@ class PearSessionEndpointTest(ZulipTestCase):
         for stale_attempt in (None, 2):
             with (
                 self.subTest(attempt=stale_attempt),
-                self.assertRaises(PearWorkerLeaseLostError),
+                self.assertRaises(ArmadaWorkerLeaseLostError),
             ):
-                maintain_pear_worker_run_liveness(
+                maintain_armada_worker_run_liveness(
                     active_run_id=active_run.id,
                     active_run_attempt=stale_attempt,
                     session_kinds=(AgentRun.SHARED,),
@@ -4532,7 +4534,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_run.heartbeat_at, old_heartbeat)
 
         self.assertEqual(
-            maintain_pear_worker_run_liveness(
+            maintain_armada_worker_run_liveness(
                 active_run_id=active_run.id,
                 active_run_attempt=3,
                 session_kinds=(AgentRun.SHARED,),
@@ -4544,19 +4546,19 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_liveness_ignores_the_exact_attempt_after_it_settles(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         settled_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=961,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="settled-liveness",
             status=AgentRun.DONE,
             attempts=4,
@@ -4564,7 +4566,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         self.assertEqual(
-            maintain_pear_worker_run_liveness(
+            maintain_armada_worker_run_liveness(
                 active_run_id=settled_run.id,
                 active_run_attempt=4,
                 session_kinds=(AgentRun.SHARED,),
@@ -4574,28 +4576,28 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_events_refresh_heartbeat_when_due(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
         old_heartbeat = timezone_now() - timedelta(seconds=20)
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=912,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             attempts=1,
             heartbeat_at=old_heartbeat,
             date_updated=old_heartbeat,
         )
-        store = PearDatabaseWorkerRunStore()
+        store = ArmadaDatabaseWorkerRunStore()
 
         store.record_event(
             bot_handler,
@@ -4621,28 +4623,28 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_run_store_refuses_paused_topic_at_start_and_claim(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
-        context = ensure_pear_workspace_node(
-            pear_bot,
-            stream=PEAR_DEFAULT_STREAM,
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        context = ensure_armada_workspace_node(
+            armada_bot,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         context.is_paused = True
         context.save(update_fields=["is_paused"])
-        store = PearDatabaseWorkerRunStore()
+        store = ArmadaDatabaseWorkerRunStore()
 
         self.assertEqual(
             store.start_blocked_reason(
                 bot_handler,
                 913,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
                 requesting_user_id=owner.id,
             ),
@@ -4650,10 +4652,10 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=913,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.QUEUED,
         )
@@ -4661,7 +4663,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             store.claim_for_run(
                 bot_handler,
                 run.trigger_message_id,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="topic-a",
             )
         )
@@ -4675,18 +4677,18 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_active_session_reflects_database_pause_flag(self) -> None:
         user = self.example_user("hamlet")
-        self.subscribe(user, PEAR_DEFAULT_STREAM)
-        context = ensure_pear_workspace_node(
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
+        context = ensure_armada_workspace_node(
             user,
-            stream=PEAR_DEFAULT_STREAM,
-            topic=PEAR_DEFAULT_TOPIC,
+            stream=ARMADA_DEFAULT_STREAM,
+            topic=ARMADA_DEFAULT_TOPIC,
         )
         context.is_paused = True
         context.save(update_fields=["is_paused"])
         self.login_user(user)
 
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
@@ -4697,25 +4699,25 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_run_controls_request_cancel_and_toggle_topic_pause(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        context = ensure_pear_workspace_node(
-            pear_bot,
-            stream=PEAR_DEFAULT_STREAM,
+        context = ensure_armada_workspace_node(
+            armada_bot,
+            stream=ARMADA_DEFAULT_STREAM,
             topic="topic-a",
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=914,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
         )
@@ -4723,10 +4725,10 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         with (
             self.captureOnCommitCallbacks(execute=True),
-            patch("zerver.views.armada.send_pear_run_event") as send_run_event,
+            patch("zerver.views.armada.send_armada_run_event") as send_run_event,
         ):
             pause_result = self.client_post(
-                f"/json/pear/runs/{run.id}/pause",
+                f"/json/armada/runs/{run.id}/pause",
                 intentionally_undocumented=True,
             )
             self.assert_json_success(pause_result)
@@ -4734,7 +4736,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertTrue(context.is_paused)
 
             resume_result = self.client_post(
-                f"/json/pear/runs/{run.id}/resume",
+                f"/json/armada/runs/{run.id}/resume",
                 intentionally_undocumented=True,
             )
             self.assert_json_success(resume_result)
@@ -4742,7 +4744,7 @@ class PearSessionEndpointTest(ZulipTestCase):
             self.assertFalse(context.is_paused)
 
             cancel_result = self.client_post(
-                f"/json/pear/runs/{run.id}/cancel",
+                f"/json/armada/runs/{run.id}/cancel",
                 intentionally_undocumented=True,
             )
             self.assert_json_success(cancel_result)
@@ -4757,20 +4759,20 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_pause_locks_workspace_before_run(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
-            "pear-lock-order",
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
+            "armada-lock-order",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=916,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-lock-order",
             status=AgentRun.RUNNING,
         )
@@ -4783,7 +4785,7 @@ class PearSessionEndpointTest(ZulipTestCase):
 
         with (
             patch(
-                "zerver.views.armada.set_pear_workspace_paused",
+                "zerver.views.armada.set_armada_workspace_paused",
                 side_effect=lambda *args, **kwargs: call_order.append("workspace"),
             ),
             patch.object(
@@ -4791,81 +4793,81 @@ class PearSessionEndpointTest(ZulipTestCase):
                 "select_for_update",
                 side_effect=select_for_update,
             ),
-            patch("zerver.views.armada.send_pear_run_event"),
+            patch("zerver.views.armada.send_armada_run_event"),
         ):
-            update_pear_run_control_event(owner, run.id, "pause", "Paused by user.")
+            update_armada_run_control_event(owner, run.id, "pause", "Paused by user.")
 
         self.assertEqual(call_order, ["workspace", "run"])
 
     def test_cancel_does_not_record_false_event_after_completion(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=915,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.DONE,
         )
         self.login_user(owner)
 
-        with patch("zerver.views.armada.send_pear_run_event") as send_run_event:
+        with patch("zerver.views.armada.send_armada_run_event") as send_run_event:
             result = self.client_post(
-                f"/json/pear/runs/{run.id}/cancel",
+                f"/json/armada/runs/{run.id}/cancel",
                 intentionally_undocumented=True,
             )
 
         response = self.assert_json_success(result)
-        self.assertEqual(response["pear_run"]["status"], AgentRun.DONE)
+        self.assertEqual(response["armada_run"]["status"], AgentRun.DONE)
         self.assertFalse(run.events.filter(event_type="cancel").exists())
         send_run_event.assert_not_called()
 
     def test_worker_event_push_and_presentation_respect_commit_order(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
-            "pear-commit-order",
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
+            "armada-commit-order",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         # Give the run a real visibility-scoped trigger message.  The push
         # helper intentionally drops events whose trigger no longer exists.
         with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
             trigger_message_id = self.send_stream_message(
                 owner,
-                PEAR_DEFAULT_STREAM,
+                ARMADA_DEFAULT_STREAM,
                 topic_name="topic-a",
                 content="@**Pear** inspect commit ordering",
             )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=trigger_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
         )
-        store = PearDatabaseWorkerRunStore()
+        store = ArmadaDatabaseWorkerRunStore()
 
         with (
             patch("zerver.actions.armada.send_event_on_commit") as send_event_on_commit,
-            patch("zerver.lib.armada_worker.maybe_enqueue_pear_run_presentation") as enqueue,
+            patch("zerver.lib.armada_worker.maybe_enqueue_armada_run_presentation") as enqueue,
             self.captureOnCommitCallbacks(execute=True) as callbacks,
         ):
             store.record_event(
-                SimpleNamespace(user_profile=pear_bot),
+                SimpleNamespace(user_profile=armada_bot),
                 run.trigger_message_id,
                 "transcript",
                 summary="Read files.",
@@ -4881,21 +4883,21 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_run_trace_is_safe_and_attention_is_bounded_to_active_runs(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
-            "pear-trace",
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
+            "armada-trace",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=919,
             result_message_id=920,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             codex_thread_id="root-thread",
@@ -5021,7 +5023,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(owner)
 
         trace_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace",
+            f"/json/armada/runs/{run.id}/trace",
             intentionally_undocumented=True,
         )
         trace_payload = self.assert_json_success(trace_result)
@@ -5038,7 +5040,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn("secret raw command output", trace_payload["rendered"])
 
         first_page_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace?limit=1",
+            f"/json/armada/runs/{run.id}/trace?limit=1",
             intentionally_undocumented=True,
         )
         first_page = self.assert_json_success(first_page_result)
@@ -5046,7 +5048,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(first_page["trace"][0]["kind"], "assistant")
         self.assertTrue(first_page["has_more"])
         second_page_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace?limit=1&before_event_id={first_page['next_before_event_id']}",
+            f"/json/armada/runs/{run.id}/trace?limit=1&before_event_id={first_page['next_before_event_id']}",
             intentionally_undocumented=True,
         )
         second_page = self.assert_json_success(second_page_result)
@@ -5054,7 +5056,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(second_page["trace"][0]["kind"], "command")
         self.assertTrue(second_page["has_more"])
         third_page_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace?limit=1&before_event_id={second_page['next_before_event_id']}",
+            f"/json/armada/runs/{run.id}/trace?limit=1&before_event_id={second_page['next_before_event_id']}",
             intentionally_undocumented=True,
         )
         third_page = self.assert_json_success(third_page_result)
@@ -5063,7 +5065,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertFalse(third_page["has_more"])
 
         child_trace_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace?thread_id=child-thread",
+            f"/json/armada/runs/{run.id}/trace?thread_id=child-thread",
             intentionally_undocumented=True,
         )
         child_trace_payload = self.assert_json_success(child_trace_result)
@@ -5084,28 +5086,28 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertNotIn("secret child runtime detail", child_trace_payload["rendered"])
 
         missing_child_result = self.client_get(
-            f"/json/pear/runs/{run.id}/trace?thread_id=unrelated-thread",
+            f"/json/armada/runs/{run.id}/trace?thread_id=unrelated-thread",
             intentionally_undocumented=True,
         )
         self.assert_json_error(missing_child_result, "Pear agent thread not found.")
 
         run_payload = self.assert_json_success(
             self.client_get(
-                f"/json/pear/runs/{run.id}",
+                f"/json/armada/runs/{run.id}",
                 intentionally_undocumented=True,
             )
-        )["pear_run"]
+        )["armada_run"]
         self.assertEqual(len(run_payload["agents"]), 1)
         self.assertEqual(run_payload["agents"][0]["thread_id"], "child-thread")
         self.assertEqual(run_payload["agents"][0]["nickname"], "Scout")
         self.assertEqual(run_payload["agents"][0]["status"], "failed")
 
         with (
-            patch("zerver.views.armada.mark_pear_run_attended") as mark_attended,
-            patch("zerver.views.armada.maybe_enqueue_pear_run_presentation") as enqueue,
+            patch("zerver.views.armada.mark_armada_run_attended") as mark_attended,
+            patch("zerver.views.armada.maybe_enqueue_armada_run_presentation") as enqueue,
         ):
             attention_result = self.client_post(
-                f"/json/pear/runs/{run.id}/attention",
+                f"/json/armada/runs/{run.id}/attention",
                 intentionally_undocumented=True,
             )
 
@@ -5116,46 +5118,46 @@ class PearSessionEndpointTest(ZulipTestCase):
         run.status = AgentRun.DONE
         run.save(update_fields=["status"])
         settled_result = self.client_post(
-            f"/json/pear/runs/{run.id}/attention",
+            f"/json/armada/runs/{run.id}/attention",
             intentionally_undocumented=True,
         )
         self.assertFalse(self.assert_json_success(settled_result)["attended"])
 
-    def test_not_for_pear_feedback_is_ambient_only_and_idempotent(self) -> None:
+    def test_not_for_agent_feedback_is_ambient_only_and_idempotent(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        pear_bot = self.create_test_bot(
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         ambient_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=915,
             result_message_id=916,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.RUNNING,
             ambient_triggered=True,
         )
         explicit_run = AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=917,
             result_message_id=918,
-            stream_name=PEAR_DEFAULT_STREAM,
+            stream_name=ARMADA_DEFAULT_STREAM,
             topic_name="topic-a",
             status=AgentRun.DONE,
         )
         self.login_user(owner)
 
         first_result = self.client_post(
-            f"/json/pear/runs/{ambient_run.id}/not-for-pear",
+            f"/json/armada/runs/{ambient_run.id}/not-for-agent",
             intentionally_undocumented=True,
         )
         first_payload = self.assert_json_success(first_result)
@@ -5176,7 +5178,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         second_result = self.client_post(
-            f"/json/pear/runs/{ambient_run.id}/not-for-pear",
+            f"/json/armada/runs/{ambient_run.id}/not-for-agent",
             intentionally_undocumented=True,
         )
         second_payload = self.assert_json_success(second_result)
@@ -5190,54 +5192,54 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
 
         explicit_result = self.client_post(
-            f"/json/pear/runs/{explicit_run.id}/not-for-pear",
+            f"/json/armada/runs/{explicit_run.id}/not-for-agent",
             intentionally_undocumented=True,
         )
         self.assert_json_error(explicit_result, "This Pear response was explicitly requested.")
 
     def test_worker_run_store_sets_topic_response_policy(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
-            store = PearDatabaseWorkerRunStore()
-            bot_handler = SimpleNamespace(user_profile=pear_bot)
+            store = ArmadaDatabaseWorkerRunStore()
+            bot_handler = SimpleNamespace(user_profile=armada_bot)
             store.set_topic_response_policy(
                 bot_handler,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
                 response_policy="ambient",
             )
             context = Workspace.objects.get(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
             )
 
         self.assertEqual(context.response_policy, "ambient")
         self.assertEqual(
             store.topic_response_policy(
                 bot_handler,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             ),
             "ambient",
         )
 
-    def test_pear_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
-        catalog = extract_pear_codex_model_catalog(
+    def test_armada_codex_model_catalog_uses_visible_priority_and_reasoning(self) -> None:
+        catalog = extract_armada_codex_model_catalog(
             {
                 "models": [
                     {
@@ -5273,59 +5275,59 @@ class PearSessionEndpointTest(ZulipTestCase):
             [{"effort": "high", "label": "High", "description": ""}],
         )
 
-    def test_post_pear_topic_context_changes_model_without_posting(self) -> None:
+    def test_post_armada_topic_context_changes_model_without_posting(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
         last_message_id_before_change = Message.objects.latest("id").id
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_MODEL="gpt-5.5",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             result = self.client_post(
-                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                f"/json{ARMADA_TOPIC_CONTEXT_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "model": "gpt-5.5-mini",
                     "reasoning_effort": "high",
                 },
                 intentionally_undocumented=True,
             )
-            model = pear_worker_model_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+            model = armada_worker_model_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
-            reasoning_effort = pear_worker_reasoning_effort_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+            reasoning_effort = armada_worker_reasoning_effort_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
-            workdir = pear_worker_workdir_for_topic(
-                pear_bot,
-                stream=PEAR_DEFAULT_STREAM,
-                topic=PEAR_DEFAULT_TOPIC,
+            workdir = armada_worker_workdir_for_topic(
+                armada_bot,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
             )
 
             result_dict = self.assert_json_success(result)
             self.assertTrue(result_dict["changed"])
-            self.assertEqual(result_dict["pear_topic_context"]["model"], "gpt-5.5-mini")
-            self.assertEqual(result_dict["pear_topic_context"]["reasoning_effort"], "high")
+            self.assertEqual(result_dict["armada_topic_context"]["model"], "gpt-5.5-mini")
+            self.assertEqual(result_dict["armada_topic_context"]["reasoning_effort"], "high")
             self.assertEqual(
-                result_dict["pear_topic_context"]["response_policy"],
+                result_dict["armada_topic_context"]["response_policy"],
                 "ambient",
             )
             self.assertEqual(model, "gpt-5.5-mini")
@@ -5336,32 +5338,32 @@ class PearSessionEndpointTest(ZulipTestCase):
         # no message may land in the topic.
         self.assertEqual(Message.objects.latest("id").id, last_message_id_before_change)
 
-    def test_post_pear_topic_context_changes_response_policy_without_model(self) -> None:
+    def test_post_armada_topic_context_changes_response_policy_without_model(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_MODEL="gpt-5.5",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             result = self.client_post(
-                f"/json{PEAR_TOPIC_CONTEXT_ENDPOINT}",
+                f"/json{ARMADA_TOPIC_CONTEXT_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "response_policy": "mentions_only",
                 },
                 intentionally_undocumented=True,
             )
             active_session_result = self.client_get(
-                f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+                f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                 },
                 intentionally_undocumented=True,
             )
@@ -5370,22 +5372,22 @@ class PearSessionEndpointTest(ZulipTestCase):
             active_session_dict = self.assert_json_success(active_session_result)
             context = Workspace.objects.get(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
-                topic_name=PEAR_DEFAULT_TOPIC,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=ARMADA_DEFAULT_TOPIC,
             )
 
         self.assertTrue(result_dict["changed"])
-        self.assertEqual(result_dict["pear_topic_context"]["response_policy"], "mentions_only")
+        self.assertEqual(result_dict["armada_topic_context"]["response_policy"], "mentions_only")
         self.assertEqual(context.response_policy, "mentions_only")
         self.assertEqual(active_session_dict["active_session"]["response_policy"], "mentions_only")
 
-    def test_get_pear_active_session_without_stream(self) -> None:
+    def test_get_armada_active_session_without_stream(self) -> None:
         self.login("hamlet")
 
         # Ask for a deliberately nonexistent channel; the default channel is
         # created in setUp, so the missing-stream state needs a named stream.
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             {"stream": "definitely-not-a-channel"},
             intentionally_undocumented=True,
         )
@@ -5402,19 +5404,19 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertFalse(active_session["worker_can_run"])
         self.assertIn("stream", active_session["worker_blocked_reason"])
 
-    def test_get_pear_active_session_from_request_message(self) -> None:
+    def test_get_armada_active_session_from_request_message(self) -> None:
         user = self.example_user("hamlet")
-        self.subscribe(user, PEAR_DEFAULT_STREAM)
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
         request_message_id = self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear please debug the flaky parser test.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
 
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
@@ -5428,37 +5430,37 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(active_session["worker_can_run"])
         self.assertIsNone(active_session["worker_blocked_reason"])
 
-    def test_get_pear_active_session_uses_ambient_run_state(self) -> None:
+    def test_get_armada_active_session_uses_ambient_run_state(self) -> None:
         user = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.addCleanup(invalidate_pear_selected_bot_cache, user.realm_id)
-        self.subscribe(user, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.addCleanup(invalidate_armada_selected_bot_cache, user.realm_id)
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         request_message_id = self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "In one sentence, explain what a hash map is.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         result_message_id = self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
             "A hash map stores key-value pairs for fast lookup.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
             realm=user.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=user,
             trigger_message_id=request_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
             codex_thread_id="thread-ambient",
             ambient_triggered=True,
@@ -5467,7 +5469,7 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.login_user(user)
 
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
@@ -5481,61 +5483,61 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_loader_uses_prior_run_as_thread_ingestion_cursor(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         first_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "agent, Choose a random 15 digit number.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=first_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
             codex_thread_id="thread-first",
         )
         self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
             "I picked a number and retained it in the Codex thread.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         berry = self.example_user("othello")
-        self.subscribe(berry, PEAR_DEFAULT_STREAM)
+        self.subscribe(berry, ARMADA_DEFAULT_STREAM)
         self.send_stream_message(
             berry,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "The number should still be in the Codex thread.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         second_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "agent, what was the number you picked?",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
-        active_session = load_pear_active_session_from_zulip(
+        active_session = load_armada_active_session_from_zulip(
             {
                 "id": second_message_id,
                 "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "display_recipient": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "content": "agent, what was the number you picked?",
             },
-            SimpleNamespace(user_profile=pear_bot),
+            SimpleNamespace(user_profile=armada_bot),
         )
 
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
@@ -5562,60 +5564,60 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_worker_loader_keeps_child_replies_out_of_parent_prompt_delta(self) -> None:
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        for user in (owner, berry, pear_bot):
-            self.subscribe(user, PEAR_DEFAULT_STREAM)
+        for user in (owner, berry, armada_bot):
+            self.subscribe(user, ARMADA_DEFAULT_STREAM)
         first_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear inspect the parser",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=first_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
             codex_thread_id="thread-first",
         )
         parent_message_id = self.send_stream_message(
             berry,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "The shared parser fixture changed.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         child_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear /btw what does that mean?",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         Message.objects.filter(id=child_message_id).update(thread_root_id=parent_message_id)
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear continue the parent task",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
-        active_session = load_pear_active_session_from_zulip(
+        active_session = load_armada_active_session_from_zulip(
             {
                 "id": trigger_message_id,
                 "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "display_recipient": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "content": "@Pear continue the parent task",
             },
-            SimpleNamespace(user_profile=pear_bot),
+            SimpleNamespace(user_profile=armada_bot),
         )
 
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
@@ -5630,81 +5632,81 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_worker_loader_uses_replied_to_message_to_select_side_parent(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         old_trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear explain the parser",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         old_result_message_id = self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
             "The parser has two phases.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=old_trigger_message_id,
             result_message_id=old_result_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             session_kind=AgentRun.SHARED,
             status=AgentRun.DONE,
             codex_thread_id="thread-old",
         )
         new_trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear inspect the renderer",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         new_result_message_id = self.send_stream_message(
-            pear_bot,
-            PEAR_DEFAULT_STREAM,
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
             "The renderer is healthy.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=new_trigger_message_id,
             result_message_id=new_result_message_id,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             session_kind=AgentRun.SHARED,
             status=AgentRun.DONE,
             codex_thread_id="thread-new",
         )
         side_trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear what do you mean by two phases?",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
-        active_session = load_pear_active_session_from_zulip(
+        active_session = load_armada_active_session_from_zulip(
             {
                 "id": side_trigger_message_id,
                 "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "display_recipient": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "content": "@Pear what do you mean by two phases?",
                 "sender_full_name": owner.full_name,
                 "thread_root_message_id": old_result_message_id,
             },
-            SimpleNamespace(user_profile=pear_bot),
+            SimpleNamespace(user_profile=armada_bot),
         )
 
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-old")
@@ -5713,30 +5715,30 @@ class PearSessionEndpointTest(ZulipTestCase):
             old_trigger_message_id,
         )
 
-    def test_pear_reference_parser_uses_canonical_zulip_link_syntax(self) -> None:
+    def test_armada_reference_parser_uses_canonical_zulip_link_syntax(self) -> None:
         self.assertEqual(
-            pear_referenced_conversations(
+            armada_referenced_conversations(
                 "Compare #**devel>parser** with #**research** and #**Devel>parser**; ignore #devel."
             ),
             [("devel", "parser"), ("research", None)],
         )
-        self.assertEqual(pear_referenced_conversations("No explicit references here."), [])
+        self.assertEqual(armada_referenced_conversations("No explicit references here."), [])
 
     def test_worker_loader_resolves_references_with_requester_permissions(self) -> None:
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        for user in (owner, berry, pear_bot):
-            self.subscribe(user, PEAR_DEFAULT_STREAM)
+        for user in (owner, berry, armada_bot):
+            self.subscribe(user, ARMADA_DEFAULT_STREAM)
         source_message_id = self.send_stream_message(
             berry,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "The parser has a bounded reference resolver.",
             topic_name="source-topic",
         )
@@ -5748,33 +5750,31 @@ class PearSessionEndpointTest(ZulipTestCase):
             "This message must remain private.",
             topic_name="hidden-topic",
         )
-        trigger_content = (
-            f"@Pear compare #**{PEAR_DEFAULT_STREAM}>source-topic** with #**sekrit>hidden-topic**."
-        )
+        trigger_content = f"@Pear compare #**{ARMADA_DEFAULT_STREAM}>source-topic** with #**sekrit>hidden-topic**."
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             trigger_content,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
 
-        active_session = load_pear_active_session_from_zulip(
+        active_session = load_armada_active_session_from_zulip(
             {
                 "id": trigger_message_id,
                 "sender_id": owner.id,
                 "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "display_recipient": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "content": trigger_content,
             },
-            SimpleNamespace(user_profile=pear_bot),
+            SimpleNamespace(user_profile=armada_bot),
         )
 
         self.assertEqual(
             active_session["referenced_threads"],
             [
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
+                    "stream": ARMADA_DEFAULT_STREAM,
                     "topic": "source-topic",
                     "accessible": True,
                     "truncated": False,
@@ -5800,26 +5800,26 @@ class PearSessionEndpointTest(ZulipTestCase):
 
     def test_reference_loader_skips_current_topic_and_caps_shared_budget(self) -> None:
         owner = self.example_user("hamlet")
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "alpha beta gamma delta",
             topic_name="source-topic",
         )
 
         with patch(
-            "zerver.lib.armada_worker.PEAR_REFERENCED_TOTAL_TOKEN_LIMIT",
+            "zerver.lib.armada_worker.ARMADA_REFERENCED_TOTAL_TOKEN_LIMIT",
             2,
         ):
-            references = load_pear_referenced_threads(
+            references = load_armada_referenced_threads(
                 owner,
                 content=(
-                    f"#**{PEAR_DEFAULT_STREAM}>{PEAR_DEFAULT_TOPIC}** "
-                    f"#**{PEAR_DEFAULT_STREAM}>source-topic**"
+                    f"#**{ARMADA_DEFAULT_STREAM}>{ARMADA_DEFAULT_TOPIC}** "
+                    f"#**{ARMADA_DEFAULT_STREAM}>source-topic**"
                 ),
-                current_stream=PEAR_DEFAULT_STREAM,
-                current_topic=PEAR_DEFAULT_TOPIC,
+                current_stream=ARMADA_DEFAULT_STREAM,
+                current_topic=ARMADA_DEFAULT_TOPIC,
             )
 
         self.assertEqual(len(references), 1)
@@ -5831,45 +5831,45 @@ class PearSessionEndpointTest(ZulipTestCase):
     def test_worker_loader_preserves_empty_topic_history(self) -> None:
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(berry, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(berry, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         self.send_stream_message(
             berry,
-            PEAR_DEFAULT_STREAM,
-            "hello pear. what is occupancy?",
+            ARMADA_DEFAULT_STREAM,
+            "hello armada. what is occupancy?",
             topic_name="",
         )
         trigger_message_id = self.send_stream_message(
             owner,
-            PEAR_DEFAULT_STREAM,
-            "pear, did you hear what berry said?",
+            ARMADA_DEFAULT_STREAM,
+            "armada, did you hear what berry said?",
             topic_name="",
         )
         self.send_stream_message(
             berry,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "this message was posted after the trigger",
             topic_name="",
         )
 
-        active_session = load_pear_active_session_from_zulip(
+        active_session = load_armada_active_session_from_zulip(
             {
                 "id": trigger_message_id,
                 "type": "stream",
-                "display_recipient": PEAR_DEFAULT_STREAM,
+                "display_recipient": ARMADA_DEFAULT_STREAM,
                 "topic": "",
-                "content": "pear, did you hear what berry said?",
+                "content": "armada, did you hear what berry said?",
                 "sender_full_name": owner.full_name,
             },
-            SimpleNamespace(user_profile=pear_bot),
+            SimpleNamespace(user_profile=armada_bot),
         )
 
         self.assertEqual(active_session["topic"], "")
@@ -5880,35 +5880,35 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(
             [message["content"] for message in active_session["recent_messages"]],
             [
-                "hello pear. what is occupancy?",
+                "hello armada. what is occupancy?",
             ],
         )
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
             self.settings(
-                PEAR_WORKER_MODEL="gpt-5.5",
-                PEAR_TOPIC_WORKDIR_ROOT=temp_dir,
+                ARMADA_WORKER_MODEL="gpt-5.5",
+                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
             ),
         ):
             self.assertEqual(
-                pear_worker_model_for_topic(
-                    pear_bot,
-                    stream=PEAR_DEFAULT_STREAM,
+                armada_worker_model_for_topic(
+                    armada_bot,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="",
                 ),
                 "gpt-5.5",
             )
             self.assertTrue(
-                pear_worker_workdir_for_topic(
-                    pear_bot,
-                    stream=PEAR_DEFAULT_STREAM,
+                armada_worker_workdir_for_topic(
+                    armada_bot,
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="",
                 ).startswith(temp_dir)
             )
             context = Workspace.objects.get(
                 realm=owner.realm,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="",
             )
             assert context.project is not None
@@ -5916,28 +5916,28 @@ class PearSessionEndpointTest(ZulipTestCase):
 
             AgentRun.objects.create(
                 realm=owner.realm,
-                bot_profile=pear_bot,
+                bot_profile=armada_bot,
                 requesting_user=owner,
                 trigger_message_id=trigger_message_id,
-                stream_name=PEAR_DEFAULT_STREAM,
+                stream_name=ARMADA_DEFAULT_STREAM,
                 topic_name="",
                 status=AgentRun.RUNNING,
             )
             self.assertEqual(
-                PearDatabaseWorkerRunStore().active_worker_run_message_id(
-                    SimpleNamespace(user_profile=pear_bot),
-                    stream=PEAR_DEFAULT_STREAM,
+                ArmadaDatabaseWorkerRunStore().active_worker_run_message_id(
+                    SimpleNamespace(user_profile=armada_bot),
+                    stream=ARMADA_DEFAULT_STREAM,
                     topic="",
                 ),
                 trigger_message_id,
             )
 
-    def test_get_pear_active_session_for_target_topic(self) -> None:
+    def test_get_armada_active_session_for_target_topic(self) -> None:
         user = self.example_user("hamlet")
         target_stream = "frontend"
         target_topic = "checkout/regression"
         self.subscribe(user, target_stream)
-        self.subscribe(user, PEAR_DEFAULT_STREAM)
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
         request_message_id = self.send_stream_message(
             user,
             target_stream,
@@ -5946,22 +5946,22 @@ class PearSessionEndpointTest(ZulipTestCase):
         )
         self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@Pear this default session should not be counted.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
 
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             {"stream": target_stream, "topic": target_topic},
             intentionally_undocumented=True,
         )
 
         result_dict = self.assert_json_success(result)
         active_session = result_dict["active_session"]
-        self.assertEqual(result_dict["pear_session"]["stream"], target_stream)
-        self.assertEqual(result_dict["pear_session"]["topic"], target_topic)
+        self.assertEqual(result_dict["armada_session"]["stream"], target_stream)
+        self.assertEqual(result_dict["armada_session"]["topic"], target_topic)
         self.assertEqual(active_session["stream"], target_stream)
         self.assertEqual(active_session["topic"], target_topic)
         self.assertEqual(active_session["state"], "requested")
@@ -5970,37 +5970,37 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_session["worker_state"], "ready")
         self.assertTrue(active_session["worker_can_run"])
 
-    def test_get_pear_active_session_from_topic_messages(self) -> None:
+    def test_get_armada_active_session_from_topic_messages(self) -> None:
         user = self.example_user("hamlet")
-        self.subscribe(user, PEAR_DEFAULT_STREAM)
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
         self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@**Pear** fix checkout latency.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "- [ ] Confirm repo, branch, and target runtime.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "Fold in the terminal status popup too.",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         latest_request_message_id = self.send_stream_message(
             user,
-            PEAR_DEFAULT_STREAM,
+            ARMADA_DEFAULT_STREAM,
             "@**Pear** Pause session:\n\nReason: waiting for CI",
-            topic_name=PEAR_DEFAULT_TOPIC,
+            topic_name=ARMADA_DEFAULT_TOPIC,
         )
         self.login_user(user)
 
         result = self.client_get(
-            f"/json{PEAR_ACTIVE_SESSION_ENDPOINT}",
+            f"/json{ARMADA_ACTIVE_SESSION_ENDPOINT}",
             intentionally_undocumented=True,
         )
 
@@ -6008,8 +6008,8 @@ class PearSessionEndpointTest(ZulipTestCase):
         active_session = result_dict["active_session"]
         self.assertEqual(active_session["state"], "requested")
         self.assertEqual(active_session["source"], "server")
-        self.assertEqual(active_session["stream"], PEAR_DEFAULT_STREAM)
-        self.assertEqual(active_session["topic"], PEAR_DEFAULT_TOPIC)
+        self.assertEqual(active_session["stream"], ARMADA_DEFAULT_STREAM)
+        self.assertEqual(active_session["topic"], ARMADA_DEFAULT_TOPIC)
         self.assertEqual(active_session["topic_message_count"], 4)
         self.assertEqual(active_session["request_count"], 2)
         self.assertEqual(active_session["latest_request_message_id"], latest_request_message_id)
@@ -6019,21 +6019,21 @@ class PearSessionEndpointTest(ZulipTestCase):
         self.assertTrue(active_session["worker_can_run"])
 
 
-class PearWorkspacePathTest(ZulipTestCase):
+class ArmadaWorkspacePathTest(ZulipTestCase):
     def test_workspace_relative_path_guard(self) -> None:
-        self.assertIsNone(pear_workspace_relative_path("/w", "../etc/passwd"))
-        self.assertIsNone(pear_workspace_relative_path("/w", "/etc/passwd"))
-        self.assertIsNone(pear_workspace_relative_path("/w", ".git/config"))
-        self.assertIsNone(pear_workspace_relative_path("/w", "a/../.."))
+        self.assertIsNone(armada_workspace_relative_path("/w", "../etc/passwd"))
+        self.assertIsNone(armada_workspace_relative_path("/w", "/etc/passwd"))
+        self.assertIsNone(armada_workspace_relative_path("/w", ".git/config"))
+        self.assertIsNone(armada_workspace_relative_path("/w", "a/../.."))
         self.assertEqual(
-            str(pear_workspace_relative_path("/w", "src/./main.py")),
+            str(armada_workspace_relative_path("/w", "src/./main.py")),
             "/w/src/main.py",
         )
 
 
-class PearImageEmbedTest(ZulipTestCase):
+class ArmadaImageEmbedTest(ZulipTestCase):
     def test_embed_workspace_images_uploads_and_appends(self) -> None:
-        from zerver.lib.armada import pear_embed_workspace_images
+        from zerver.lib.armada import armada_embed_workspace_images
 
         user = self.example_user("hamlet")
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -6042,7 +6042,7 @@ class PearImageEmbedTest(ZulipTestCase):
             png = results / "training_curve.png"
             png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
             content = "The plot is at `results/training_curve.png` in the worktree."
-            embedded = pear_embed_workspace_images(
+            embedded = armada_embed_workspace_images(
                 content,
                 workdir=temp_dir,
                 isolation_username=None,
@@ -6054,12 +6054,12 @@ class PearImageEmbedTest(ZulipTestCase):
         self.assertIn("`results/training_curve.png`", embedded)
 
     def test_embed_workspace_images_guards_paths_and_misses(self) -> None:
-        from zerver.lib.armada import pear_embed_workspace_images
+        from zerver.lib.armada import armada_embed_workspace_images
 
         user = self.example_user("hamlet")
         with tempfile.TemporaryDirectory() as temp_dir:
             content = "See `../../etc/secret.png` and `missing.png`."
-            embedded = pear_embed_workspace_images(
+            embedded = armada_embed_workspace_images(
                 content,
                 workdir=temp_dir,
                 isolation_username=None,
@@ -6068,9 +6068,9 @@ class PearImageEmbedTest(ZulipTestCase):
         self.assertEqual(embedded, content)
 
 
-class PearTaskMarkerNormalizationTest(ZulipTestCase):
-    def test_normalize_pear_task_markers(self) -> None:
-        from zerver.lib.armada import normalize_pear_task_markers
+class ArmadaTaskMarkerNormalizationTest(ZulipTestCase):
+    def test_normalize_armada_task_markers(self) -> None:
+        from zerver.lib.armada import normalize_armada_task_markers
 
         content = (
             "Checklist:\n"
@@ -6082,25 +6082,25 @@ class PearTaskMarkerNormalizationTest(ZulipTestCase):
             "```\n"
             "and inline `- [ ] code` stays.\n"
         )
-        normalized = normalize_pear_task_markers(content)
+        normalized = normalize_armada_task_markers(content)
         self.assertIn("- \u2610 keep it standalone", normalized)
         self.assertIn("- \u2611 improve the visuals", normalized)
         self.assertIn("1. \u2611 numbered done item", normalized)
         self.assertIn("- [ ] not a checklist, code", normalized)
         self.assertIn("`- [ ] code`", normalized)
         # Idempotent: a second pass changes nothing.
-        self.assertEqual(normalize_pear_task_markers(normalized), normalized)
+        self.assertEqual(normalize_armada_task_markers(normalized), normalized)
 
-    def test_normalize_pear_task_markers_leaves_plain_text(self) -> None:
-        from zerver.lib.armada import normalize_pear_task_markers
+    def test_normalize_armada_task_markers_leaves_plain_text(self) -> None:
+        from zerver.lib.armada import normalize_armada_task_markers
 
         content = "An array literal [ ] in prose stays untouched.\n"
-        self.assertEqual(normalize_pear_task_markers(content), content)
+        self.assertEqual(normalize_armada_task_markers(content), content)
 
 
-class PearMathNormalizationTest(ZulipTestCase):
-    def test_normalize_pear_math_delimiters(self) -> None:
-        from zerver.lib.armada import normalize_pear_math_delimiters
+class ArmadaMathNormalizationTest(ZulipTestCase):
+    def test_normalize_armada_math_delimiters(self) -> None:
+        from zerver.lib.armada import normalize_armada_math_delimiters
 
         content = (
             "Intro\n"
@@ -6113,22 +6113,22 @@ class PearMathNormalizationTest(ZulipTestCase):
             "```\n"
             "and `\\\\(inline code\\\\)` stays.\n"
         )
-        normalized = normalize_pear_math_delimiters(content)
+        normalized = normalize_armada_math_delimiters(content)
         # Single-line display math renders as $$...$$ so it survives
         # list nesting; only multi-line bodies become fences.
         self.assertIn("$$g_i = (u_i, v_i)$$", normalized)
-        multiline = normalize_pear_math_delimiters("\\[\nx = 1\\\\\ny = 2\n\\]")
+        multiline = normalize_armada_math_delimiters("\\[\nx = 1\\\\\ny = 2\n\\]")
         self.assertIn("```math", multiline)
         self.assertIn("$$u_i$$", normalized)
         # Fenced code and inline code spans stay untouched.
         self.assertIn('x = "\\\\[not math\\\\]"', normalized)
         self.assertIn("`\\\\(inline code\\\\)`", normalized)
         # Idempotent, and a no-op for plain content.
-        self.assertEqual(normalize_pear_math_delimiters(normalized), normalized)
-        self.assertEqual(normalize_pear_math_delimiters("plain"), "plain")
+        self.assertEqual(normalize_armada_math_delimiters(normalized), normalized)
+        self.assertEqual(normalize_armada_math_delimiters("plain"), "plain")
 
 
-class PearWorkspaceMapTest(ZulipTestCase):
+class ArmadaWorkspaceMapTest(ZulipTestCase):
     def test_workspace_topics_endpoint_lists_active_worktrees(self) -> None:
         user = self.example_user("hamlet")
         self.login_user(user)
@@ -6150,8 +6150,8 @@ class PearWorkspaceMapTest(ZulipTestCase):
             lifecycle_status=Workspace.ARCHIVED,
         )
 
-        result = self.client_get("/json/pear/workspace-topics", {"stream": stream.name})
-        payload = self.assert_json_success(result)["pear_workspace_topics"]
+        result = self.client_get("/json/armada/workspace-topics", {"stream": stream.name})
+        payload = self.assert_json_success(result)["armada_workspace_topics"]
         self.assertEqual(payload, [{"topic": "feature-a", "branch": "feature-a"}])
 
     def test_workspace_topics_requires_stream_access(self) -> None:
@@ -6161,10 +6161,10 @@ class PearWorkspaceMapTest(ZulipTestCase):
         user = self.example_user("hamlet")
         self.login_user(user)
 
-        result = self.client_get("/json/pear/workspace-topics", {"stream": "sekrit"})
+        result = self.client_get("/json/armada/workspace-topics", {"stream": "sekrit"})
         self.assert_json_error(result, "Invalid channel name 'sekrit'")
 
-    def test_register_reports_accessible_pear_project_stream_ids(self) -> None:
+    def test_register_reports_accessible_armada_project_stream_ids(self) -> None:
         user = self.example_user("hamlet")
         stream = self.subscribe(user, "workmap")
         Repository.objects.create(realm=user.realm, stream=stream)
@@ -6172,30 +6172,30 @@ class PearWorkspaceMapTest(ZulipTestCase):
         Repository.objects.create(realm=user.realm, stream=private_stream)
 
         state = fetch_initial_state_data(user, realm=user.realm)
-        self.assertIn(stream.id, state["pear_project_stream_ids"])
+        self.assertIn(stream.id, state["repository_stream_ids"])
         # Bindings on channels the user cannot see stay invisible.
-        self.assertNotIn(private_stream.id, state["pear_project_stream_ids"])
+        self.assertNotIn(private_stream.id, state["repository_stream_ids"])
 
 
-class PearMonitorTest(ZulipTestCase):
-    def create_pear_bot(self, owner: UserProfile) -> UserProfile:
+class ArmadaMonitorTest(ZulipTestCase):
+    def create_armada_bot(self, owner: UserProfile) -> UserProfile:
         return self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
 
     def create_live_monitor(
-        self, owner: UserProfile, pear_bot: UserProfile, **overrides: object
+        self, owner: UserProfile, armada_bot: UserProfile, **overrides: object
     ) -> AgentMonitor:
         fields: dict[str, object] = dict(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             creator=owner,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             title="loader",
             ask="training loader",
             status=AgentMonitor.LIVE,
@@ -6218,67 +6218,67 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_create_monitor_queues_setup_run(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        armada_bot = self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
 
         with (
             tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(PEAR_WORKER_MODEL="gpt-5.5", PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
-            patch("zerver.views.armada.PearQueueWorkerDispatcher.dispatch") as dispatch_mock,
+            self.settings(ARMADA_WORKER_MODEL="gpt-5.5", ARMADA_TOPIC_WORKDIR_ROOT=temp_dir),
+            patch("zerver.views.armada.ArmadaQueueWorkerDispatcher.dispatch") as dispatch_mock,
         ):
             result = self.client_post(
-                "/json/pear/monitors",
+                "/json/armada/monitors",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "request": "training loader",
                 },
                 intentionally_undocumented=True,
             )
             result_dict = self.assert_json_success(result)
-            monitor = AgentMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+            monitor = AgentMonitor.objects.get(id=result_dict["armada_monitor"]["id"])
             self.assertEqual(monitor.status, AgentMonitor.PROVISIONING)
             self.assertEqual(monitor.ask, "training loader")
             self.assertIsNotNone(monitor.anchor_message_id)
 
             run = AgentRun.objects.get(
-                bot_profile=pear_bot, trigger_message_id=monitor.anchor_message_id
+                bot_profile=armada_bot, trigger_message_id=monitor.anchor_message_id
             )
             self.assertEqual(run.session_kind, AgentRun.MONITOR)
             kwargs = dispatch_mock.call_args.kwargs
             self.assertEqual(kwargs["session_kind"], AgentRun.MONITOR)
             self.assertIn("training loader", kwargs["content"])
-            self.assertIn(pear_monitor_spec_relative_path(monitor.id), kwargs["content"])
+            self.assertIn(armada_monitor_spec_relative_path(monitor.id), kwargs["content"])
 
             # Setup runs are DM-anchored and never appear in the topic's
             # runs list: the wall itself is the provisioning surface.
             runs_result = self.client_get(
-                f"/json{PEAR_RUNS_ENDPOINT}",
-                {"stream": PEAR_DEFAULT_STREAM, "topic": PEAR_DEFAULT_TOPIC},
+                f"/json{ARMADA_RUNS_ENDPOINT}",
+                {"stream": ARMADA_DEFAULT_STREAM, "topic": ARMADA_DEFAULT_TOPIC},
                 intentionally_undocumented=True,
             )
             runs_dict = self.assert_json_success(runs_result)
-            self.assertNotIn(run.id, [r["id"] for r in runs_dict["pear_runs"]])
+            self.assertNotIn(run.id, [r["id"] for r in runs_dict["armada_runs"]])
 
     def test_create_monitor_enforces_topic_limit(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        armada_bot = self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
-        for index in range(PEAR_MONITOR_MAX_PER_TOPIC):
+        for index in range(ARMADA_MONITOR_MAX_PER_TOPIC):
             self.create_live_monitor(
                 owner,
-                pear_bot,
+                armada_bot,
                 title=f"m{index}",
-                topic_name=(PEAR_DEFAULT_TOPIC.upper() if index == 0 else PEAR_DEFAULT_TOPIC),
+                topic_name=(ARMADA_DEFAULT_TOPIC.upper() if index == 0 else ARMADA_DEFAULT_TOPIC),
             )
         result = self.client_post(
-            "/json/pear/monitors",
+            "/json/armada/monitors",
             {
-                "stream": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "stream": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "request": "one too many",
             },
             intentionally_undocumented=True,
@@ -6287,69 +6287,69 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_monitor_list_uses_logical_case_insensitive_topic_scope(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        armada_bot = self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         monitor = self.create_live_monitor(
             owner,
-            pear_bot,
-            topic_name=PEAR_DEFAULT_TOPIC.upper(),
+            armada_bot,
+            topic_name=ARMADA_DEFAULT_TOPIC.upper(),
         )
         self.login_user(owner)
 
         result = self.client_get(
-            "/json/pear/monitors",
-            {"stream": PEAR_DEFAULT_STREAM, "topic": PEAR_DEFAULT_TOPIC},
+            "/json/armada/monitors",
+            {"stream": ARMADA_DEFAULT_STREAM, "topic": ARMADA_DEFAULT_TOPIC},
             intentionally_undocumented=True,
         )
 
         payload = self.assert_json_success(result)
-        self.assertEqual([item["id"] for item in payload["pear_monitors"]], [monitor.id])
+        self.assertEqual([item["id"] for item in payload["armada_monitors"]], [monitor.id])
 
     def test_monitor_actions_and_delete(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        armada_bot = self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
-        monitor = self.create_live_monitor(owner, pear_bot)
+        monitor = self.create_live_monitor(owner, armada_bot)
 
         result = self.client_patch(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             {"action": "pause"},
             intentionally_undocumented=True,
         )
-        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["status"], "paused")
+        self.assertEqual(self.assert_json_success(result)["armada_monitor"]["status"], "paused")
 
         result = self.client_patch(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             {"action": "cadence", "cadence_seconds": "2"},
             intentionally_undocumented=True,
         )
         # Cadence clamps to the 5s floor.
-        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["cadence_seconds"], 5)
+        self.assertEqual(self.assert_json_success(result)["armada_monitor"]["cadence_seconds"], 5)
 
         result = self.client_patch(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             {"action": "rename", "title": "gpu loss"},
             intentionally_undocumented=True,
         )
-        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["title"], "gpu loss")
+        self.assertEqual(self.assert_json_success(result)["armada_monitor"]["title"], "gpu loss")
 
         result = self.client_patch(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             {"action": "resume"},
             intentionally_undocumented=True,
         )
-        self.assertEqual(self.assert_json_success(result)["pear_monitor"]["status"], "live")
+        self.assertEqual(self.assert_json_success(result)["armada_monitor"]["status"], "live")
 
         result = self.client_patch(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             {"action": "sabotage"},
             intentionally_undocumented=True,
         )
         self.assert_json_error(result, "Unknown monitor action.")
 
         result = self.client_delete(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             intentionally_undocumented=True,
         )
         self.assert_json_success(result)
@@ -6358,22 +6358,22 @@ class PearMonitorTest(ZulipTestCase):
     def test_monitor_list_requires_stream_access(self) -> None:
         owner = self.example_user("hamlet")
         outsider = self.example_user("cordelia")
-        pear_bot = self.create_pear_bot(owner)
-        self.make_stream("pear-private", invite_only=True)
-        self.subscribe(owner, "pear-private")
-        monitor = self.create_live_monitor(owner, pear_bot, stream_name="pear-private")
+        armada_bot = self.create_armada_bot(owner)
+        self.make_stream("armada-private", invite_only=True)
+        self.subscribe(owner, "armada-private")
+        monitor = self.create_live_monitor(owner, armada_bot, stream_name="armada-private")
         self.login_user(outsider)
         result = self.client_get(
-            "/json/pear/monitors",
-            {"stream": "pear-private", "topic": PEAR_DEFAULT_TOPIC},
+            "/json/armada/monitors",
+            {"stream": "armada-private", "topic": ARMADA_DEFAULT_TOPIC},
             intentionally_undocumented=True,
         )
-        self.assert_json_error(result, "Invalid channel name 'pear-private'")
+        self.assert_json_error(result, "Invalid channel name 'armada-private'")
         result = self.client_delete(
-            f"/json/pear/monitors/{monitor.id}",
+            f"/json/armada/monitors/{monitor.id}",
             intentionally_undocumented=True,
         )
-        self.assert_json_error(result, "Invalid channel name 'pear-private'")
+        self.assert_json_error(result, "Invalid channel name 'armada-private'")
         self.assertTrue(AgentMonitor.objects.filter(id=monitor.id).exists())
 
     def test_validate_monitor_spec(self) -> None:
@@ -6394,12 +6394,12 @@ class PearMonitorTest(ZulipTestCase):
                 "bindings": {"data.epoch": "literal:1", "data.loss": "group:loss"},
             },
         }
-        spec = pear_validate_monitor_spec(good)
+        spec = armada_validate_monitor_spec(good)
         self.assertEqual(spec["cadence_seconds"], 15)
         self.assertEqual(spec["title"], "training loader")
         self.assertEqual(len(spec["artifact_spec"]["blocks"]), 2)
 
-        explainer = pear_validate_monitor_spec(
+        explainer = armada_validate_monitor_spec(
             {
                 "title": "pipeline",
                 "artifact": {
@@ -6414,15 +6414,15 @@ class PearMonitorTest(ZulipTestCase):
         self.assertEqual(explainer["recipe"]["parse"]["mode"], "static")
         self.assertEqual(explainer["artifact_spec"]["actions"][0]["label"], "Explain")
 
-        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Invalid artifact"):
+            armada_validate_monitor_spec(
                 {
                     **good,
                     "artifact": {"version": 1, "blocks": [{"type": "hologram"}]},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Invalid artifact"):
+            armada_validate_monitor_spec(
                 {
                     **good,
                     "artifact": {
@@ -6431,8 +6431,8 @@ class PearMonitorTest(ZulipTestCase):
                     },
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Bad binding source"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Bad binding source"):
+            armada_validate_monitor_spec(
                 {
                     **good,
                     "recipe": {
@@ -6441,21 +6441,21 @@ class PearMonitorTest(ZulipTestCase):
                     },
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid regex"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Invalid regex"):
+            armada_validate_monitor_spec(
                 {
                     **good,
                     "recipe": {**good["recipe"], "parse": {"mode": "regex", "pattern": "("}},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Invalid artifact"):
+            armada_validate_monitor_spec(
                 {
                     "artifact": {"version": 1, "blocks": [{"type": "svg", "markup": "x"}]},
                 }
             )
-        with self.assertRaisesRegex(PearMonitorSpecError, "Invalid artifact"):
-            pear_validate_monitor_spec(
+        with self.assertRaisesRegex(ArmadaMonitorSpecError, "Invalid artifact"):
+            armada_validate_monitor_spec(
                 {
                     "artifact": {
                         "version": 1,
@@ -6470,7 +6470,7 @@ class PearMonitorTest(ZulipTestCase):
             "parse": {"mode": "regex", "pattern": r"loss=(?P<loss>[\d.]+) step=(?P<step>\d+)"},
             "bindings": {"data.loss": "group:loss", "data.step": "group:step"},
         }
-        bound = pear_monitor_bind_data(regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n")
+        bound = armada_monitor_bind_data(regex_recipe, "loss=0.91 step=10\nloss=0.42 step=57\n")
         # The LAST match wins: monitors track the newest line.
         self.assertEqual(bound["loss"], 0.42)
         self.assertEqual(bound["step"], 57)
@@ -6482,7 +6482,7 @@ class PearMonitorTest(ZulipTestCase):
                 "data.provider": "literal:lambda",
             },
         }
-        bound = pear_monitor_bind_data(json_recipe, '{"credits": {"remaining": 41.5}}')
+        bound = armada_monitor_bind_data(json_recipe, '{"credits": {"remaining": 41.5}}')
         self.assertEqual(bound["remaining"], 41.5)
         self.assertEqual(bound["provider"], "lambda")
 
@@ -6490,26 +6490,26 @@ class PearMonitorTest(ZulipTestCase):
             "parse": {"mode": "text"},
             "bindings": {"data.lines": "lines:2", "data.raw": "text"},
         }
-        bound = pear_monitor_bind_data(text_recipe, "one\ntwo\nthree")
+        bound = armada_monitor_bind_data(text_recipe, "one\ntwo\nthree")
         self.assertEqual(bound["lines"], ["two", "three"])
         self.assertEqual(bound["raw"], "one\ntwo\nthree")
 
     def test_monitor_tick_success_and_failure(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
-        monitor = self.create_live_monitor(owner, pear_bot)
-        process_isolation = PearProcessIsolation(
-            username="pear-test",
-            home="/tmp/pear-test",  # noqa: S108
-            codex_home="/tmp/pear-test/.codex",  # noqa: S108
+        armada_bot = self.create_armada_bot(owner)
+        monitor = self.create_live_monitor(owner, armada_bot)
+        process_isolation = ArmadaProcessIsolation(
+            username="armada-test",
+            home="/tmp/armada-test",  # noqa: S108
+            codex_home="/tmp/armada-test/.codex",  # noqa: S108
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch(
-                "zerver.lib.armada_monitor.pear_monitor_run_recipe_command",
+                "zerver.lib.armada_monitor.armada_monitor_run_recipe_command",
                 return_value="value=0.5",
             ):
-                pear_monitor_apply_tick(
+                armada_monitor_apply_tick(
                     monitor,
                     workdir=temp_dir,
                     process_isolation=process_isolation,
@@ -6527,11 +6527,11 @@ class PearMonitorTest(ZulipTestCase):
             }
             monitor.save(update_fields=["recipe"])
             with patch(
-                "zerver.lib.armada_monitor.pear_monitor_run_recipe_command",
+                "zerver.lib.armada_monitor.armada_monitor_run_recipe_command",
                 side_effect=OSError("recipe exited 1: failed"),
             ):
-                for _ in range(PEAR_MONITOR_FAILURE_LIMIT):
-                    pear_monitor_apply_tick(
+                for _ in range(ARMADA_MONITOR_FAILURE_LIMIT):
+                    armada_monitor_apply_tick(
                         monitor,
                         workdir=temp_dir,
                         process_isolation=process_isolation,
@@ -6544,34 +6544,36 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_executable_monitor_recipe_requires_process_isolation(self) -> None:
         with self.assertRaisesRegex(OSError, "require the topic's isolated OS user"):
-            pear_monitor_run_recipe_command(
+            armada_monitor_run_recipe_command(
                 "echo 1",
                 workdir="/tmp",  # noqa: S108
                 process_isolation=None,
             )
-        isolation = PearProcessIsolation(
-            username="pear-test",
-            home="/home/pear-test",
-            codex_home="/home/pear-test/.codex",
+        isolation = ArmadaProcessIsolation(
+            username="armada-test",
+            home="/home/armada-test",
+            codex_home="/home/armada-test/.codex",
         )
         with patch("zerver.lib.armada_monitor.subprocess.run") as run:
             run.return_value = SimpleNamespace(returncode=0, stdout="1\n", stderr="")
             self.assertEqual(
-                pear_monitor_run_recipe_command(
+                armada_monitor_run_recipe_command(
                     "echo 1",
                     workdir="/tmp/topic",  # noqa: S108
                     process_isolation=isolation,
                 ),
                 "1\n",
             )
-        self.assertEqual(run.call_args.args[0][:6], ["sudo", "-n", "-H", "-u", "pear-test", "env"])
+        self.assertEqual(
+            run.call_args.args[0][:6], ["sudo", "-n", "-H", "-u", "armada-test", "env"]
+        )
 
     def test_apply_monitor_setup_result(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(owner)
+        armada_bot = self.create_armada_bot(owner)
         monitor = self.create_live_monitor(
             owner,
-            pear_bot,
+            armada_bot,
             status=AgentMonitor.PROVISIONING,
             anchor_message_id=987654,
             recipe={},
@@ -6594,11 +6596,11 @@ class PearMonitorTest(ZulipTestCase):
             },
         }
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / pear_monitor_spec_relative_path(monitor.id)
+            spec_path = Path(temp_dir) / armada_monitor_spec_relative_path(monitor.id)
             spec_path.parent.mkdir(parents=True)
             spec_path.write_text(orjson.dumps(spec).decode())
-            pear_apply_monitor_setup_result(
-                pear_bot, 987654, workdir=temp_dir, isolation_username=None
+            armada_apply_monitor_setup_result(
+                armada_bot, 987654, workdir=temp_dir, isolation_username=None
             )
             monitor.refresh_from_db()
             self.assertEqual(monitor.status, AgentMonitor.LIVE)
@@ -6611,8 +6613,8 @@ class PearMonitorTest(ZulipTestCase):
         monitor.status = AgentMonitor.PROVISIONING
         monitor.save(update_fields=["status"])
         with tempfile.TemporaryDirectory() as temp_dir:
-            pear_apply_monitor_setup_result(
-                pear_bot, 987654, workdir=temp_dir, isolation_username=None
+            armada_apply_monitor_setup_result(
+                armada_bot, 987654, workdir=temp_dir, isolation_username=None
             )
         monitor.refresh_from_db()
         self.assertEqual(monitor.status, AgentMonitor.ERROR)
@@ -6620,19 +6622,19 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_monitor_dispatch_routes_to_monitor_queue(self) -> None:
         owner = self.example_user("hamlet")
-        self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
         with (
             tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(PEAR_WORKER_MODEL="gpt-5.5", PEAR_TOPIC_WORKDIR_ROOT=temp_dir),
+            self.settings(ARMADA_WORKER_MODEL="gpt-5.5", ARMADA_TOPIC_WORKDIR_ROOT=temp_dir),
             patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish_mock,
         ):
             result = self.client_post(
-                "/json/pear/monitors",
+                "/json/armada/monitors",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "request": "training loader",
                 },
                 intentionally_undocumented=True,
@@ -6641,13 +6643,13 @@ class PearMonitorTest(ZulipTestCase):
             queue_name, event = publish_mock.call_args.args
             # Monitor turns ride their own consumer so a provisioning
             # wall block never queues ahead of a chat run.
-            self.assertEqual(queue_name, "pear_monitor_worker")
+            self.assertEqual(queue_name, "armada_monitor_worker")
             self.assertEqual(event["session_kind"], AgentRun.MONITOR)
 
     def test_spec_direct_monitor_creation_pins_without_agent_run(self) -> None:
         owner = self.example_user("hamlet")
-        self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
         spec = {
             "title": "gpu credits",
@@ -6662,19 +6664,19 @@ class PearMonitorTest(ZulipTestCase):
         }
         runs_before = AgentRun.objects.count()
         messages_before = Message.objects.count()
-        with patch("zerver.views.armada.PearQueueWorkerDispatcher.dispatch") as dispatch_mock:
+        with patch("zerver.views.armada.ArmadaQueueWorkerDispatcher.dispatch") as dispatch_mock:
             result = self.client_post(
-                "/json/pear/monitors",
+                "/json/armada/monitors",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "request": "pinned from chat",
                     "spec": orjson.dumps(spec).decode(),
                 },
                 intentionally_undocumented=True,
             )
         result_dict = self.assert_json_success(result)
-        monitor = AgentMonitor.objects.get(id=result_dict["pear_monitor"]["id"])
+        monitor = AgentMonitor.objects.get(id=result_dict["armada_monitor"]["id"])
         # Pinning is instant: live monitor, no setup run, no DM anchor.
         self.assertEqual(monitor.status, AgentMonitor.LIVE)
         self.assertEqual(monitor.title, "gpu credits")
@@ -6686,8 +6688,8 @@ class PearMonitorTest(ZulipTestCase):
 
     def test_spec_direct_monitor_creation_rejects_bad_specs(self) -> None:
         owner = self.example_user("hamlet")
-        self.create_pear_bot(owner)
-        self.subscribe(owner, PEAR_DEFAULT_STREAM)
+        self.create_armada_bot(owner)
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
         self.login_user(owner)
         bad_spec = {
             "title": "nope",
@@ -6695,10 +6697,10 @@ class PearMonitorTest(ZulipTestCase):
             "recipe": {"command": "", "parse": {"mode": "static"}, "bindings": {}},
         }
         result = self.client_post(
-            "/json/pear/monitors",
+            "/json/armada/monitors",
             {
-                "stream": PEAR_DEFAULT_STREAM,
-                "topic": PEAR_DEFAULT_TOPIC,
+                "stream": ARMADA_DEFAULT_STREAM,
+                "topic": ARMADA_DEFAULT_TOPIC,
                 "request": "pinned from chat",
                 "spec": orjson.dumps(bad_spec).decode(),
             },
@@ -6708,32 +6710,32 @@ class PearMonitorTest(ZulipTestCase):
         self.assertFalse(AgentMonitor.objects.exists())
 
 
-class PearTrustedUsersTest(ZulipTestCase):
-    """With PEAR_WORKER_TRUSTED_USERS_ONLY (the production template's
-    default), only administrators and PEAR_WORKER_TRUSTED_USER_IDS may
+class ArmadaTrustedUsersTest(ZulipTestCase):
+    """With ARMADA_WORKER_TRUSTED_USERS_ONLY (the production template's
+    default), only administrators and ARMADA_WORKER_TRUSTED_USER_IDS may
     drive the agent or give a channel a repository URL."""
 
-    def create_pear_bot(self, owner: UserProfile) -> UserProfile:
+    def create_armada_bot(self, owner: UserProfile) -> UserProfile:
         return self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
 
     def test_run_start_requires_trusted_user(self) -> None:
         hamlet = self.example_user("hamlet")
         iago = self.example_user("iago")
-        pear_bot = self.create_pear_bot(hamlet)
-        store = PearDatabaseWorkerRunStore()
-        bot_handler = SimpleNamespace(user_profile=pear_bot)
+        armada_bot = self.create_armada_bot(hamlet)
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
 
         def start_reason(user: UserProfile) -> str | None:
             return store.start_blocked_reason(
                 bot_handler,
                 950,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="trusted-users",
                 requesting_user_id=user.id,
             )
@@ -6742,41 +6744,41 @@ class PearTrustedUsersTest(ZulipTestCase):
             return store.side_start_blocked_reason(
                 bot_handler,
                 951,
-                stream=PEAR_DEFAULT_STREAM,
+                stream=ARMADA_DEFAULT_STREAM,
                 topic="trusted-users",
                 requesting_user_id=user.id,
             )
 
         refused = "This user is not allowed to start Pear worker runs."
         self.assertIsNone(start_reason(hamlet))
-        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+        with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
             self.assertEqual(start_reason(hamlet), refused)
             self.assertEqual(side_start_reason(hamlet), refused)
             self.assertIsNone(start_reason(iago))
         with self.settings(
-            PEAR_WORKER_TRUSTED_USERS_ONLY=True, PEAR_WORKER_TRUSTED_USER_IDS=[hamlet.id]
+            ARMADA_WORKER_TRUSTED_USERS_ONLY=True, ARMADA_WORKER_TRUSTED_USER_IDS=[hamlet.id]
         ):
             self.assertIsNone(start_reason(hamlet))
-        with self.settings(PEAR_WORKER_TRUSTED_USER_IDS=[iago.id]):
+        with self.settings(ARMADA_WORKER_TRUSTED_USER_IDS=[iago.id]):
             self.assertEqual(start_reason(hamlet), refused)
 
     def test_steering_requires_trusted_user(self) -> None:
         hamlet = self.example_user("hamlet")
         iago = self.example_user("iago")
-        pear_bot = self.create_pear_bot(hamlet)
-        loaded_session = build_pear_active_session_summary_from_messages(
-            pear_session=get_pear_session_payload(),
+        armada_bot = self.create_armada_bot(hamlet)
+        loaded_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
             source="server",
             stream_exists=True,
             messages=[
                 (10, "@Pear fix the checkout test", False),
-                (11, PEAR_WORKING_MESSAGE, True),
+                (11, ARMADA_WORKING_MESSAGE, True),
             ],
         )
         sent_replies: list[str] = []
         steering_events: list[str] = []
 
-        class FakeRunStore(PearDatabaseWorkerRunStore):
+        class FakeRunStore(ArmadaDatabaseWorkerRunStore):
             @override
             def active_worker_run_message_id(
                 self,
@@ -6805,23 +6807,23 @@ class PearTrustedUsersTest(ZulipTestCase):
                 pass
 
         class FakeBotHandler:
-            user_profile = pear_bot
+            user_profile = armada_bot
 
             def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
                 sent_replies.append(response)
                 return {"id": 400 + len(sent_replies)}
 
         def steer_as(sender_id: int | None) -> None:
-            PearEmbeddedBotHandler(
+            ArmadaEmbeddedBotHandler(
                 active_session_loader=lambda message, bot_handler: loaded_session,
                 worker_run_store=FakeRunStore(),
-                worker_dispatcher=PearQueueWorkerDispatcher(),
+                worker_dispatcher=ArmadaQueueWorkerDispatcher(),
             ).handle_message(
                 {
                     "id": 206,
                     "type": "stream",
-                    "display_recipient": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "display_recipient": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "sender_id": sender_id,
                     "content": "@Pear make it the 30th",
                 },
@@ -6829,7 +6831,7 @@ class PearTrustedUsersTest(ZulipTestCase):
             )
 
         refused = "This user is not allowed to steer Pear worker runs."
-        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+        with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
             steer_as(hamlet.id)
             steer_as(None)
             steer_as(self.mit_user("starnine").id)
@@ -6848,49 +6850,49 @@ class PearTrustedUsersTest(ZulipTestCase):
     def test_repository_url_requires_trusted_user(self) -> None:
         hamlet = self.example_user("hamlet")
         self.login_user(hamlet)
-        with self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True):
+        with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
             result = self.client_post(
                 "/json/users/me/subscriptions",
                 {
                     "subscriptions": orjson.dumps([{"name": "untrusted-repository"}]).decode(),
-                    "pear_repository_url": "https://github.com/pallets/click.git",
+                    "repository_url": "https://github.com/pallets/click.git",
                 },
             )
         self.assert_json_error(result, "You are not allowed to give a channel a Git repository.")
 
     def test_monitor_setup_run_requires_trusted_user(self) -> None:
         hamlet = self.example_user("hamlet")
-        pear_bot = self.create_pear_bot(hamlet)
-        self.subscribe(hamlet, PEAR_DEFAULT_STREAM)
-        self.subscribe(pear_bot, PEAR_DEFAULT_STREAM)
+        armada_bot = self.create_armada_bot(hamlet)
+        self.subscribe(hamlet, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
         self.login_user(hamlet)
         monitor = AgentMonitor.objects.create(
             realm=hamlet.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             creator=hamlet,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             title="loader",
             ask="training loader",
             status=AgentMonitor.ERROR,
         )
 
         with (
-            self.settings(PEAR_WORKER_TRUSTED_USERS_ONLY=True),
-            patch("zerver.views.armada.PearQueueWorkerDispatcher.dispatch") as dispatch_mock,
+            self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True),
+            patch("zerver.views.armada.ArmadaQueueWorkerDispatcher.dispatch") as dispatch_mock,
         ):
             result = self.client_post(
-                "/json/pear/monitors",
+                "/json/armada/monitors",
                 {
-                    "stream": PEAR_DEFAULT_STREAM,
-                    "topic": PEAR_DEFAULT_TOPIC,
+                    "stream": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
                     "request": "training loader",
                 },
                 intentionally_undocumented=True,
             )
             self.assert_json_error(result, "You are not allowed to start agent runs.")
             result = self.client_patch(
-                f"/json/pear/monitors/{monitor.id}",
+                f"/json/armada/monitors/{monitor.id}",
                 {"action": "rebuild"},
                 intentionally_undocumented=True,
             )

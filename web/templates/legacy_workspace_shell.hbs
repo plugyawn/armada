@@ -1,38 +1,38 @@
 <section
-  class="pear-workspace-shell"
+  class="legacy-workspace-shell"
   aria-label="{{t 'Workspace' }}"
   data-room="files"
   data-readme-state="unknown"
   >
-    <header class="pear-workspace-shell__header">
+    <header class="legacy-workspace-shell__header">
         <button
           type="button"
           data-action="toggle-explorer"
-          class="pear-workspace-shell__explorer-toggle pear-workspace-icon-button"
-          aria-controls="pear-workspace-explorer"
+          class="legacy-workspace-shell__explorer-toggle legacy-workspace-icon-button"
+          aria-controls="legacy-workspace-explorer"
           aria-expanded="false"
           aria-label="{{t 'Toggle file explorer' }}"
           >
             <i class="zulip-icon zulip-icon-panel-left" aria-hidden="true"></i>
-            <span class="pear-workspace-shell__button-label">Files</span>
+            <span class="legacy-workspace-shell__button-label">Files</span>
         </button>
-        <div class="pear-workspace-shell__identity">
+        <div class="legacy-workspace-shell__identity">
             <strong data-role="workspace-title">Files</strong>
             <span data-role="workspace-meta"></span>
         </div>
         <button
           type="button"
           data-action="refresh"
-          class="pear-workspace-icon-button"
+          class="legacy-workspace-icon-button"
           aria-label="{{t 'Refresh workspace' }}"
           >
             <i class="zulip-icon zulip-icon-refresh-cw" aria-hidden="true"></i>
         </button>
     </header>
-    <div class="pear-workspace-shell__body">
+    <div class="legacy-workspace-shell__body">
         <aside
-          id="pear-workspace-explorer"
-          class="pear-workspace-shell__explorer"
+          id="legacy-workspace-explorer"
+          class="legacy-workspace-shell__explorer"
           aria-label="{{t 'Workspace explorer' }}"
           >
             <form data-role="search-form" role="search">
@@ -52,7 +52,7 @@
               >
             </div>
             <div
-              class="pear-workspace-shell__tree"
+              class="legacy-workspace-shell__tree"
               data-role="tree"
               role="tree"
               aria-label="{{t 'Workspace files' }}"
@@ -60,7 +60,7 @@
             </div>
         </aside>
         <div
-          class="pear-workspace-shell__splitter"
+          class="legacy-workspace-shell__splitter"
           data-role="explorer-splitter"
           role="separator"
           aria-label="{{t 'Resize file explorer' }}"
@@ -71,19 +71,19 @@
           >
         </div>
         <main
-          id="pear-workspace-document-panel"
-          class="pear-workspace-shell__document"
+          id="legacy-workspace-document-panel"
+          class="legacy-workspace-shell__document"
           aria-label="{{t 'Workspace document' }}"
           role="tabpanel"
           tabindex="-1"
           >
             <div data-role="tabs" role="tablist" aria-label="{{t 'Open files' }}"></div>
-            <header class="pear-workspace-shell__document-header">
+            <header class="legacy-workspace-shell__document-header">
                 <nav data-role="breadcrumb" aria-label="{{t 'File path' }}"></nav>
-                <div class="pear-workspace-shell__document-actions">
+                <div class="legacy-workspace-shell__document-actions">
                     <span
-                      id="pear-workspace-mode-feedback"
-                      class="pear-workspace-shell__mode-feedback"
+                      id="legacy-workspace-mode-feedback"
+                      class="legacy-workspace-shell__mode-feedback"
                       data-role="mode-feedback"
                       role="status"
                       aria-live="polite"
@@ -91,7 +91,7 @@
                       hidden
                       >
                     </span>
-                    <div class="pear-workspace-file-menu-wrap">
+                    <div class="legacy-workspace-file-menu-wrap">
                         <button
                           type="button"
                           data-role="file-menu-button"
@@ -100,7 +100,7 @@
                           >File<i class="zulip-icon zulip-icon-chevron-down" aria-hidden="true"></i></button>
                         <div
                           data-role="file-menu"
-                          class="pear-workspace-file-menu"
+                          class="legacy-workspace-file-menu"
                           role="menu"
                           aria-label="{{t 'File actions' }}"
                           hidden
@@ -148,9 +148,9 @@
                               >History</button>
                         </div>
                     </div>
-                    <button type="button" data-action="ask-pear" hidden>Ask Pear</button>
+                    <button type="button" data-action="ask-armada" hidden>Ask Pear</button>
                     <div
-                      class="pear-workspace-segmented"
+                      class="legacy-workspace-segmented"
                       role="group"
                       aria-label="{{t 'Document view' }}"
                       >
@@ -163,24 +163,24 @@
                         <button
                           type="button"
                           data-action="mode-rich"
-                          aria-describedby="pear-workspace-mode-feedback"
+                          aria-describedby="legacy-workspace-mode-feedback"
                           >Rich</button>
                         <button
                           type="button"
                           data-action="mode-source"
-                          aria-describedby="pear-workspace-mode-feedback"
+                          aria-describedby="legacy-workspace-mode-feedback"
                           >Source</button>
                     </div>
                     <a
                       data-role="raw-link"
-                      class="pear-workspace-icon-button"
+                      class="legacy-workspace-icon-button"
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="{{t 'Open raw file' }}"
                       ><i class="zulip-icon zulip-icon-external-link" aria-hidden="true"></i></a>
                     <a
                       data-role="download-link"
-                      class="pear-workspace-icon-button"
+                      class="legacy-workspace-icon-button"
                       aria-label="{{t 'Download file' }}"
                       ><i class="zulip-icon zulip-icon-download" aria-hidden="true"></i></a>
                 </div>
@@ -201,40 +201,40 @@
                   >Overwrite</button>
             </div>
             <div
-              class="pear-workspace-readme-empty"
+              class="legacy-workspace-readme-empty"
               data-role="readme-empty"
               hidden
               >
                 <span
-                  class="pear-workspace-readme-empty__glyph"
+                  class="legacy-workspace-readme-empty__glyph"
                   aria-hidden="true"
                   >README</span>
                 <strong>No README yet</strong>
                 <span>Create the durable context layer for this topic.</span>
                 <button type="button" data-action="create-readme">Create README</button>
             </div>
-            <div class="pear-workspace-shell__surface">
+            <div class="legacy-workspace-shell__surface">
                 <div
                   data-role="editor"
-                  class="pear-workspace-shell__editor"
+                  class="legacy-workspace-shell__editor"
                   >
                 </div>
                 <article
                   data-role="preview"
-                  class="pear-workspace-shell__preview"
+                  class="legacy-workspace-shell__preview"
                   aria-label="{{t 'Rendered Markdown' }}"
                   hidden
                   >
                 </article>
                 <div
                   data-role="nontext"
-                  class="pear-workspace-shell__nontext"
+                  class="legacy-workspace-shell__nontext"
                   hidden
                   >
                 </div>
             </div>
             <footer
-              class="pear-workspace-shell__status"
+              class="legacy-workspace-shell__status"
               role="status"
               aria-live="polite"
               aria-atomic="true"

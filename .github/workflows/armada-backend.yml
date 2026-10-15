@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  pear-backend:
+  armada-backend:
     name: Pear backend tests
     runs-on: ubuntu-latest
     container: zulip/ci:noble
@@ -26,8 +26,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
-          key: pear-uv-noble-${{ hashFiles('uv.lock') }}
-          restore-keys: pear-uv-noble-
+          key: armada-uv-noble-${{ hashFiles('uv.lock') }}
+          restore-keys: armada-uv-noble-
 
       - name: Install backend dependencies
         run: ./tools/ci/setup-backend --skip-dev-db-build

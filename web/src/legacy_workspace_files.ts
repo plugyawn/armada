@@ -1,51 +1,51 @@
 import type {
-    PearWorkspaceApiError,
-    PearWorkspaceDescriptor,
-    PearWorkspaceEntry,
-    PearWorkspaceHistoryResponse,
-    PearWorkspaceMutation,
+    ArmadaWorkspaceApiError,
+    ArmadaWorkspaceDescriptor,
+    ArmadaWorkspaceEntry,
+    ArmadaWorkspaceHistoryResponse,
+    ArmadaWorkspaceMutation,
 } from "./legacy_workspace_api.ts";
-import * as pear_workspace_api from "./legacy_workspace_api.ts";
+import * as legacy_workspace_api from "./legacy_workspace_api.ts";
 
-export type PearWorkspaceReadmeState = "absent" | "present" | "unknown";
+export type ArmadaWorkspaceReadmeState = "absent" | "present" | "unknown";
 
-export type PearWorkspaceFilesContext = {
-    descriptor: PearWorkspaceDescriptor | undefined;
-    activeEntry: PearWorkspaceEntry | undefined;
-    selectedEntry: PearWorkspaceEntry | undefined;
-    readmeState: PearWorkspaceReadmeState;
+export type ArmadaWorkspaceFilesContext = {
+    descriptor: ArmadaWorkspaceDescriptor | undefined;
+    activeEntry: ArmadaWorkspaceEntry | undefined;
+    selectedEntry: ArmadaWorkspaceEntry | undefined;
+    readmeState: ArmadaWorkspaceReadmeState;
     authorityStale: boolean;
 };
 
-export type PearWorkspaceFileMutationEvent = {
-    mutation: PearWorkspaceMutation;
+export type ArmadaWorkspaceFileMutationEvent = {
+    mutation: ArmadaWorkspaceMutation;
     operation: "create" | "delete" | "rename";
     sourcePath: string | undefined;
     destinationPath: string | undefined;
     kind: "directory" | "file";
 };
 
-export type PearWorkspaceFilesDependencies = {
-    createEntry: typeof pear_workspace_api.create_pear_workspace_entry;
-    renameEntry: typeof pear_workspace_api.rename_pear_workspace_entry;
-    deleteEntry: typeof pear_workspace_api.delete_pear_workspace_entry;
-    getHistory: typeof pear_workspace_api.get_pear_workspace_history;
+export type ArmadaWorkspaceFilesDependencies = {
+    createEntry: typeof legacy_workspace_api.create_armada_workspace_entry;
+    renameEntry: typeof legacy_workspace_api.rename_armada_workspace_entry;
+    deleteEntry: typeof legacy_workspace_api.delete_armada_workspace_entry;
+    getHistory: typeof legacy_workspace_api.get_armada_workspace_history;
     copyText: (text: string) => Promise<void>;
 };
 
-export type PearWorkspaceFilesOptions = {
+export type ArmadaWorkspaceFilesOptions = {
     menuButton: HTMLButtonElement;
     menu: HTMLElement;
     dialogLayer: HTMLElement;
     announce: (message: string) => void;
-    onMutation: (event: PearWorkspaceFileMutationEvent) => void;
+    onMutation: (event: ArmadaWorkspaceFileMutationEvent) => void;
     onStaleAuthority: () => void;
-    onReveal: (entry: PearWorkspaceEntry) => void;
-    dependencies?: Partial<PearWorkspaceFilesDependencies>;
+    onReveal: (entry: ArmadaWorkspaceEntry) => void;
+    dependencies?: Partial<ArmadaWorkspaceFilesDependencies>;
 };
 
-export type PearWorkspaceFilesController = {
-    updateContext: (context: PearWorkspaceFilesContext) => void;
+export type ArmadaWorkspaceFilesController = {
+    updateContext: (context: ArmadaWorkspaceFilesContext) => void;
     createReadme: () => void;
     getDebugState: () => {
         menuOpen: boolean;
@@ -77,7 +77,7 @@ type DialogState = {
 type MutationRequest = {
     operation: "create" | "delete" | "rename";
     kind: "directory" | "file";
-    sourceEntry: PearWorkspaceEntry | undefined;
+    sourceEntry: ArmadaWorkspaceEntry | undefined;
     destinationPath: string | undefined;
 };
 
@@ -97,11 +97,11 @@ function parse_file_action(value: string | undefined): FileAction | undefined {
     }
 }
 
-const default_dependencies: PearWorkspaceFilesDependencies = {
-    createEntry: pear_workspace_api.create_pear_workspace_entry,
-    renameEntry: pear_workspace_api.rename_pear_workspace_entry,
-    deleteEntry: pear_workspace_api.delete_pear_workspace_entry,
-    getHistory: pear_workspace_api.get_pear_workspace_history,
+const default_dependencies: ArmadaWorkspaceFilesDependencies = {
+    createEntry: legacy_workspace_api.create_armada_workspace_entry,
+    renameEntry: legacy_workspace_api.rename_armada_workspace_entry,
+    deleteEntry: legacy_workspace_api.delete_armada_workspace_entry,
+    getHistory: legacy_workspace_api.get_armada_workspace_history,
     async copyText(text): Promise<void> {
         if (globalThis.navigator.clipboard === undefined) {
             throw new Error("Clipboard access is unavailable.");
@@ -110,11 +110,11 @@ const default_dependencies: PearWorkspaceFilesDependencies = {
     },
 };
 
-function api_error_message(error: PearWorkspaceApiError): string {
+function api_error_message(error: ArmadaWorkspaceApiError): string {
     return error.kind === "server" ? error.error.msg : error.message;
 }
 
-function is_stale_error(error: PearWorkspaceApiError): boolean {
+function is_stale_error(error: ArmadaWorkspaceApiError): boolean {
     return (
         error.kind === "server" &&
         ["stale_entry", "stale_workspace"].includes(error.error.error_code)
@@ -135,7 +135,7 @@ function parent_path(path: string): string {
     return path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
 }
 
-function context_identity(context: PearWorkspaceFilesContext): string {
+function context_identity(context: ArmadaWorkspaceFilesContext): string {
     return JSON.stringify([
         context.descriptor?.uuid,
         context.descriptor?.workspace_revision,
@@ -149,7 +149,7 @@ function context_identity(context: PearWorkspaceFilesContext): string {
 }
 
 function mutation_is_valid(
-    mutation: PearWorkspaceMutation,
+    mutation: ArmadaWorkspaceMutation,
     workspace_id: string,
     workspace_revision: number,
     request: MutationRequest,
@@ -204,11 +204,11 @@ function visible_enabled_items(menu: HTMLElement): HTMLButtonElement[] {
     );
 }
 
-export function create_pear_workspace_files(
-    options: PearWorkspaceFilesOptions,
-): PearWorkspaceFilesController {
+export function create_armada_workspace_files(
+    options: ArmadaWorkspaceFilesOptions,
+): ArmadaWorkspaceFilesController {
     const dependencies = {...default_dependencies, ...options.dependencies};
-    const guard = pear_workspace_api.create_pear_workspace_request_guard();
+    const guard = legacy_workspace_api.create_armada_workspace_request_guard();
     const menu_items = new Map<FileAction, HTMLButtonElement>();
     for (const item of options.menu.querySelectorAll<HTMLButtonElement>("[data-file-action]")) {
         const action = parse_file_action(item.dataset["fileAction"]);
@@ -216,7 +216,7 @@ export function create_pear_workspace_files(
             menu_items.set(action, item);
         }
     }
-    let context: PearWorkspaceFilesContext = {
+    let context: ArmadaWorkspaceFilesContext = {
         descriptor: undefined,
         activeEntry: undefined,
         selectedEntry: undefined,
@@ -230,11 +230,11 @@ export function create_pear_workspace_files(
     let dialog_serial = 0;
     let mutation_busy = false;
     let awaiting_revision: number | undefined;
-    let history_target: PearWorkspaceEntry | undefined;
-    let history_commits: PearWorkspaceHistoryResponse["pear_workspace_history"]["commits"] = [];
+    let history_target: ArmadaWorkspaceEntry | undefined;
+    let history_commits: ArmadaWorkspaceHistoryResponse["armada_workspace_history"]["commits"] = [];
     let history_cursor: string | null = null;
 
-    const mutation_target = (): PearWorkspaceEntry | undefined =>
+    const mutation_target = (): ArmadaWorkspaceEntry | undefined =>
         context.selectedEntry ?? context.activeEntry;
 
     const set_dialog_error = (message: string): void => {
@@ -299,12 +299,12 @@ export function create_pear_workspace_files(
         }
         dialog_serial += 1;
         const overlay = document.createElement("div");
-        overlay.className = "pear-workspace-file-dialog-overlay";
+        overlay.className = "legacy-workspace-file-dialog-overlay";
         const panel = document.createElement("section");
-        panel.className = "pear-workspace-file-dialog";
+        panel.className = "legacy-workspace-file-dialog";
         panel.setAttribute("role", "dialog");
         panel.setAttribute("aria-modal", "true");
-        const title_id = `pear-workspace-file-dialog-${dialog_serial}`;
+        const title_id = `legacy-workspace-file-dialog-${dialog_serial}`;
         panel.setAttribute("aria-labelledby", title_id);
         const header = document.createElement("header");
         const heading = document.createElement("h2");
@@ -317,9 +317,9 @@ export function create_pear_workspace_files(
         close_button.textContent = "Close";
         header.append(heading, close_button);
         const body = document.createElement("div");
-        body.className = "pear-workspace-file-dialog__body";
+        body.className = "legacy-workspace-file-dialog__body";
         const error = document.createElement("p");
-        error.className = "pear-workspace-file-dialog__error";
+        error.className = "legacy-workspace-file-dialog__error";
         error.setAttribute("role", "alert");
         error.hidden = true;
         const footer = document.createElement("footer");
@@ -391,7 +391,7 @@ export function create_pear_workspace_files(
         }
     };
 
-    const finish_mutation_error = (error: PearWorkspaceApiError): void => {
+    const finish_mutation_error = (error: ArmadaWorkspaceApiError): void => {
         set_mutation_busy(false);
         if (is_stale_error(error)) {
             close_dialog(false);
@@ -409,7 +409,7 @@ export function create_pear_workspace_files(
         invoke: (
             workspace_id: string,
             workspace_revision: number,
-            callbacks: pear_workspace_api.PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+            callbacks: legacy_workspace_api.ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceMutation>,
         ) => {abort: () => unknown} | undefined,
     ): void => {
         const descriptor = context.descriptor;
@@ -618,7 +618,7 @@ export function create_pear_workspace_files(
         warning.textContent = `Delete ${target.path}?`;
         form.append(warning);
         const recursive_label = document.createElement("label");
-        recursive_label.className = "pear-workspace-file-dialog__check";
+        recursive_label.className = "legacy-workspace-file-dialog__check";
         const recursive = document.createElement("input");
         recursive.type = "checkbox";
         recursive.name = "recursive";
@@ -626,7 +626,7 @@ export function create_pear_workspace_files(
         recursive_label.hidden = target.kind !== "directory";
         form.append(recursive_label);
         const irreversible_label = document.createElement("label");
-        irreversible_label.className = "pear-workspace-file-dialog__check";
+        irreversible_label.className = "legacy-workspace-file-dialog__check";
         const irreversible = document.createElement("input");
         irreversible.type = "checkbox";
         irreversible.name = "irreversible";

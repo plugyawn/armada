@@ -20,16 +20,16 @@ import * as condense from "./condense.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
 import * as internal_url from "./internal_url.ts";
-import {unmount_pear_artifact} from "./legacy_artifact_lifecycle.ts";
+import {unmount_armada_artifact} from "./legacy_artifact_lifecycle.ts";
 import {
-    pear_live_overview_key,
-    pear_live_progress_matches,
-    pear_live_progress_signature,
-    preserve_unchanged_pear_overview,
+    armada_live_overview_key,
+    armada_live_progress_matches,
+    armada_live_progress_signature,
+    preserve_unchanged_armada_overview,
 } from "./legacy_live_dom.ts";
-import * as pear_panel from "./legacy_panel.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
-import * as pear_run_trace from "./legacy_run_trace.ts";
+import * as legacy_panel from "./legacy_panel.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
+import * as legacy_run_trace from "./legacy_run_trace.ts";
 import {active_plan_presentation} from "./legacy_runtime_shared.ts";
 import * as message_edit from "./message_edit.ts";
 import type {MessageList} from "./message_list.ts";
@@ -52,7 +52,7 @@ import * as rendered_markdown from "./rendered_markdown.ts";
 import * as resolved_topic from "./resolved_topic.ts";
 import * as rows from "./rows.ts";
 import * as sidebar_ui from "./sidebar_ui.ts";
-import {is_pear_bot_user_id} from "./state_data.ts";
+import {is_armada_bot_user_id} from "./state_data.ts";
 import * as stream_color from "./stream_color.ts";
 import * as stream_data from "./stream_data.ts";
 import * as sub_store from "./sub_store.ts";
@@ -72,8 +72,8 @@ export type MessageContainer = {
     year_changed: boolean;
     include_recipient: boolean;
     include_sender: boolean;
-    is_pear_active_message: boolean;
-    is_pear_message: boolean;
+    is_armada_active_message: boolean;
+    is_agent_message: boolean;
     is_hidden: boolean;
     last_edit_timestamp: number | undefined;
     last_moved_timestamp: number | undefined;
@@ -163,13 +163,13 @@ type RenderingPlan = {
     append_messages: MessageContainer[];
 };
 
-function unmount_pear_artifacts_in(root: JQuery | HTMLElement): void {
+function unmount_armada_artifacts_in(root: JQuery | HTMLElement): void {
     const element = root instanceof HTMLElement ? root : root[0];
     if (element === undefined) {
         return;
     }
-    for (const host of element.querySelectorAll<HTMLElement>("[data-pear-artifact-host]")) {
-        unmount_pear_artifact(host);
+    for (const host of element.querySelectorAll<HTMLElement>("[data-legacy-artifact-host]")) {
+        unmount_armada_artifact(host);
     }
 }
 
@@ -188,7 +188,7 @@ function destroy_message_threads_in(root: JQuery | HTMLElement): void {
     }
 }
 
-const pear_thinking_glyphs = [
+const armada_thinking_glyphs = [
     "·",
     "∙",
     "⋅",
@@ -211,64 +211,64 @@ const pear_thinking_glyphs = [
     "∙",
 ] as const;
 
-export function pear_thinking_glyph_frames_for_testing(): readonly string[] {
-    return pear_thinking_glyphs;
+export function armada_thinking_glyph_frames_for_testing(): readonly string[] {
+    return armada_thinking_glyphs;
 }
-const PEAR_ACTIVE_VISIBLE_GLYPH = pear_thinking_glyphs[0];
-type PearToolRowMarker = {
+const ARMADA_ACTIVE_VISIBLE_GLYPH = armada_thinking_glyphs[0];
+type ArmadaToolRowMarker = {
     regex: RegExp;
     glyph: string;
     class_name: string;
     is_active?: boolean;
 };
 
-const pear_tool_row_markers: PearToolRowMarker[] = [
-    {regex: /^\s*·✓\s*/, glyph: "·", class_name: "pear-tool-row-done"},
-    {regex: /^\s*·!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
-    {regex: /^\s*✓\s*/, glyph: "·", class_name: "pear-tool-row-done"},
-    {regex: /^\s*!\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
+const armada_tool_row_markers: ArmadaToolRowMarker[] = [
+    {regex: /^\s*·✓\s*/, glyph: "·", class_name: "legacy-tool-row-done"},
+    {regex: /^\s*·!\s*/, glyph: "✷", class_name: "legacy-tool-row-blocked"},
+    {regex: /^\s*✓\s*/, glyph: "·", class_name: "legacy-tool-row-done"},
+    {regex: /^\s*!\s*/, glyph: "✷", class_name: "legacy-tool-row-blocked"},
     {
         regex: /^\s*✦\s*/,
-        glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
-        class_name: "pear-tool-row-active",
+        glyph: ARMADA_ACTIVE_VISIBLE_GLYPH,
+        class_name: "legacy-tool-row-active",
         is_active: true,
     },
-    {regex: /^\s*✷\s*/, glyph: "✷", class_name: "pear-tool-row-blocked"},
-    {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
-    {regex: /^\s*·\s*/, glyph: "·", class_name: "pear-tool-row-done"},
-    {regex: /^\s*\[x\]\s*/i, glyph: "·", class_name: "pear-tool-row-done"},
-    {regex: /^\s*\[\s\]\s*/, glyph: "⋅", class_name: "pear-tool-row-pending"},
+    {regex: /^\s*✷\s*/, glyph: "✷", class_name: "legacy-tool-row-blocked"},
+    {regex: /^\s*⋅\s*/, glyph: "⋅", class_name: "legacy-tool-row-pending"},
+    {regex: /^\s*·\s*/, glyph: "·", class_name: "legacy-tool-row-done"},
+    {regex: /^\s*\[x\]\s*/i, glyph: "·", class_name: "legacy-tool-row-done"},
+    {regex: /^\s*\[\s\]\s*/, glyph: "⋅", class_name: "legacy-tool-row-pending"},
     {
         regex: /^\s*\[~\]\s*/i,
-        glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
-        class_name: "pear-tool-row-active",
+        glyph: ARMADA_ACTIVE_VISIBLE_GLYPH,
+        class_name: "legacy-tool-row-active",
         is_active: true,
     },
 ];
 
-function extract_pear_tool_row_marker_from_text(text: string): {
-    marker: PearToolRowMarker;
+function extract_armada_tool_row_marker_from_text(text: string): {
+    marker: ArmadaToolRowMarker;
     remaining_text: string;
 } {
-    for (const marker of pear_tool_row_markers) {
+    for (const marker of armada_tool_row_markers) {
         const match = marker.regex.exec(text);
         if (match !== null) {
             return {marker, remaining_text: text.slice(match[0].length)};
         }
     }
     return {
-        marker: {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"},
+        marker: {regex: /^/, glyph: "·", class_name: "legacy-tool-row-done"},
         remaining_text: text,
     };
 }
 
-export function extract_pear_tool_row_marker_for_testing(text: string): {
+export function extract_armada_tool_row_marker_for_testing(text: string): {
     glyph: string;
     class_name: string;
     is_active: boolean;
     remaining_text: string;
 } {
-    const {marker, remaining_text} = extract_pear_tool_row_marker_from_text(text);
+    const {marker, remaining_text} = extract_armada_tool_row_marker_from_text(text);
     return {
         glyph: marker.glyph,
         class_name: marker.class_name,
@@ -277,42 +277,42 @@ export function extract_pear_tool_row_marker_for_testing(text: string): {
     };
 }
 
-function is_active_pear_message(message: Message, is_pear_message: boolean): boolean {
-    return is_pear_message && pear_run_state.is_active_run_result_message(message.id);
+function is_active_armada_message(message: Message, is_agent_message: boolean): boolean {
+    return is_agent_message && legacy_run_state.is_active_run_result_message(message.id);
 }
 
-function message_is_pear_message(message: Message, is_hidden: boolean): boolean {
+function message_is_armada_message(message: Message, is_hidden: boolean): boolean {
     if (is_hidden) {
         return false;
     }
-    // Pear identity is structured: the server stamps is_pear_message on
+    // Pear identity is structured: the server stamps is_agent_message on
     // every serialized message and the client tracks the Pear bot ids.
     // Content sniffing for the \u2726 glyph is deliberately NOT a fallback
     // here — any third-party bot posting the glyph would have its sender
     // chrome suppressed and Pear styling applied.
-    return message.is_pear_message || is_pear_bot_user_id(message.sender_id);
+    return message.is_agent_message || is_armada_bot_user_id(message.sender_id);
 }
 
-function pear_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
+function armada_thinking_markers($scope: JQuery<HTMLElement | Document> = $(document)): JQuery {
     const selectors = [
-        ".pear-liveness-active .pear-thinking-glyph",
-        ".pear-rail-plan-active .pear-thinking-glyph",
-        ".message_row.pear-active-message .pear-live-plan-current .pear-thinking-glyph",
-        ".message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
+        ".legacy-liveness-active .legacy-thinking-glyph",
+        ".legacy-rail-plan-active .legacy-thinking-glyph",
+        ".message_row.legacy-active-message .legacy-live-plan-current .legacy-thinking-glyph",
+        ".message_row.legacy-active-message .legacy-tool-row-active.legacy-thinking-glyph",
     ];
-    if ($scope.hasClass("pear-active-message")) {
+    if ($scope.hasClass("legacy-active-message")) {
         selectors.push(
-            ".pear-live-plan-current .pear-thinking-glyph",
-            ".pear-tool-row-active.pear-thinking-glyph",
+            ".legacy-live-plan-current .legacy-thinking-glyph",
+            ".legacy-tool-row-active.legacy-thinking-glyph",
         );
     }
-    if ($scope.hasClass("pear-liveness-active")) {
-        selectors.push(".pear-thinking-glyph");
+    if ($scope.hasClass("legacy-liveness-active")) {
+        selectors.push(".legacy-thinking-glyph");
     }
     return $scope.find(selectors.join(", "));
 }
 
-function is_pear_tool_spoiler_title(title: string): boolean {
+function is_armada_tool_spoiler_title(title: string): boolean {
     return (
         /^(?:Ran|Running)\s+\d+(?:\/\d+)?\s+tools?(?:\s+✦)?(?:\s+·\s+\d+\s+retr(?:y|ies))?$/.test(
             title,
@@ -320,18 +320,18 @@ function is_pear_tool_spoiler_title(title: string): boolean {
     );
 }
 
-export function is_pear_tool_spoiler_title_for_testing(title: string): boolean {
-    return is_pear_tool_spoiler_title(title);
+export function is_armada_tool_spoiler_title_for_testing(title: string): boolean {
+    return is_armada_tool_spoiler_title(title);
 }
 
-function pear_tool_spoiler_blocks($row: JQuery): JQuery {
+function armada_tool_spoiler_blocks($row: JQuery): JQuery {
     return $row.find(".spoiler-block").filter((_index, block) => {
         const title = $(block).find(".spoiler-header-text").first().text().trim();
-        return is_pear_tool_spoiler_title(title);
+        return is_armada_tool_spoiler_title(title);
     });
 }
 
-function extract_pear_tool_row_marker(row: HTMLElement): PearToolRowMarker {
+function extract_armada_tool_row_marker(row: HTMLElement): ArmadaToolRowMarker {
     for (const node of row.childNodes) {
         if (node.nodeType !== Node.TEXT_NODE) {
             continue;
@@ -340,46 +340,50 @@ function extract_pear_tool_row_marker(row: HTMLElement): PearToolRowMarker {
         if (text === null || text.trim() === "") {
             continue;
         }
-        const {marker, remaining_text} = extract_pear_tool_row_marker_from_text(text);
+        const {marker, remaining_text} = extract_armada_tool_row_marker_from_text(text);
         node.textContent = remaining_text;
         return marker;
     }
-    return {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
+    return {regex: /^/, glyph: "·", class_name: "legacy-tool-row-done"};
 }
 
-function pear_tool_block_marker_from_state(options: {
+function armada_tool_block_marker_from_state(options: {
     title: string;
     row_texts: string[];
     has_active_row: boolean;
     has_blocked_row: boolean;
     has_pending_row: boolean;
-}): PearToolRowMarker {
+}): ArmadaToolRowMarker {
     if (options.has_active_row || options.title.endsWith("✦")) {
         return {
             regex: /^/,
-            glyph: PEAR_ACTIVE_VISIBLE_GLYPH,
-            class_name: "pear-tool-row-active",
+            glyph: ARMADA_ACTIVE_VISIBLE_GLYPH,
+            class_name: "legacy-tool-row-active",
             is_active: true,
         };
     }
     if (options.has_blocked_row || /^\d+\s+failed\s+tools?$/.test(options.title)) {
-        return {regex: /^/, glyph: "✷", class_name: "pear-tool-row-blocked"};
+        return {regex: /^/, glyph: "✷", class_name: "legacy-tool-row-blocked"};
     }
     if (options.has_pending_row) {
-        return {regex: /^/, glyph: "⋅", class_name: "pear-tool-row-pending"};
+        return {regex: /^/, glyph: "⋅", class_name: "legacy-tool-row-pending"};
     }
 
-    let fallback: PearToolRowMarker = {regex: /^/, glyph: "·", class_name: "pear-tool-row-done"};
+    let fallback: ArmadaToolRowMarker = {
+        regex: /^/,
+        glyph: "·",
+        class_name: "legacy-tool-row-done",
+    };
     for (const row_text of options.row_texts) {
-        const marker = extract_pear_tool_row_marker_from_text(row_text).marker;
+        const marker = extract_armada_tool_row_marker_from_text(row_text).marker;
         if (marker.is_active === true) {
             return marker;
         }
-        if (marker.class_name === "pear-tool-row-blocked") {
+        if (marker.class_name === "legacy-tool-row-blocked") {
             fallback = marker;
         } else if (
-            marker.class_name === "pear-tool-row-pending" &&
-            fallback.class_name !== "pear-tool-row-blocked"
+            marker.class_name === "legacy-tool-row-pending" &&
+            fallback.class_name !== "legacy-tool-row-blocked"
         ) {
             fallback = marker;
         }
@@ -387,12 +391,15 @@ function pear_tool_block_marker_from_state(options: {
     return fallback;
 }
 
-export function pear_tool_block_marker_for_testing(options: {title: string; row_texts: string[]}): {
+export function armada_tool_block_marker_for_testing(options: {
+    title: string;
+    row_texts: string[];
+}): {
     glyph: string;
     class_name: string;
     is_active: boolean;
 } {
-    const marker = pear_tool_block_marker_from_state({
+    const marker = armada_tool_block_marker_from_state({
         ...options,
         has_active_row: false,
         has_blocked_row: false,
@@ -405,28 +412,28 @@ export function pear_tool_block_marker_for_testing(options: {title: string; row_
     };
 }
 
-function pear_tool_block_marker(block: HTMLElement): PearToolRowMarker {
-    return pear_tool_block_marker_from_state({
+function armada_tool_block_marker(block: HTMLElement): ArmadaToolRowMarker {
+    return armada_tool_block_marker_from_state({
         title: $(block).find(".spoiler-header-text").first().text().trim(),
         row_texts: [...block.querySelectorAll(".spoiler-content li")].map(
             (row) => row.textContent ?? "",
         ),
-        has_active_row: block.querySelector(".pear-tool-row-active") !== null,
-        has_blocked_row: block.querySelector(".pear-tool-row-blocked") !== null,
-        has_pending_row: block.querySelector(".pear-tool-row-pending") !== null,
+        has_active_row: block.querySelector(".legacy-tool-row-active") !== null,
+        has_blocked_row: block.querySelector(".legacy-tool-row-blocked") !== null,
+        has_pending_row: block.querySelector(".legacy-tool-row-pending") !== null,
     });
 }
 
-function render_pear_tool_block_header(block: HTMLElement): void {
+function render_armada_tool_block_header(block: HTMLElement): void {
     const header = block.querySelector(".spoiler-header");
     if (!(header instanceof HTMLElement)) {
         return;
     }
-    const marker = pear_tool_block_marker(block);
-    let glyph = header.querySelector(".pear-tool-header-glyph");
+    const marker = armada_tool_block_marker(block);
+    let glyph = header.querySelector(".legacy-tool-header-glyph");
     if (!(glyph instanceof HTMLElement)) {
         glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        glyph.classList.add("pear-tool-header-glyph");
+        glyph.classList.add("legacy-tool-header-glyph");
         glyph.setAttribute("aria-hidden", "true");
         const title = header.querySelector(".spoiler-header-text");
         if (title === null) {
@@ -436,47 +443,47 @@ function render_pear_tool_block_header(block: HTMLElement): void {
         }
     }
     glyph.classList.remove(
-        "pear-tool-row-active",
-        "pear-tool-row-blocked",
-        "pear-tool-row-done",
-        "pear-tool-row-pending",
-        "pear-thinking-glyph",
+        "legacy-tool-row-active",
+        "legacy-tool-row-blocked",
+        "legacy-tool-row-done",
+        "legacy-tool-row-pending",
+        "legacy-thinking-glyph",
     );
     glyph.classList.add(marker.class_name);
     if (marker.is_active === true) {
-        glyph.classList.add("pear-thinking-glyph");
+        glyph.classList.add("legacy-thinking-glyph");
     }
     glyph.textContent = marker.glyph;
 }
 
-function enhance_pear_tool_rows($row: JQuery): void {
-    if (!$row.hasClass("pear-message")) {
+function enhance_armada_tool_rows($row: JQuery): void {
+    if (!$row.hasClass("legacy-message")) {
         return;
     }
-    const $tool_blocks = pear_tool_spoiler_blocks($row);
-    $tool_blocks.addClass("pear-tool-spoiler-block");
+    const $tool_blocks = armada_tool_spoiler_blocks($row);
+    $tool_blocks.addClass("legacy-tool-spoiler-block");
     $tool_blocks.find(".spoiler-content li").each((_index, row) => {
         if (!(row instanceof HTMLElement)) {
             return;
         }
-        if (row.firstElementChild?.classList.contains("pear-tool-row-glyph") === true) {
+        if (row.firstElementChild?.classList.contains("legacy-tool-row-glyph") === true) {
             return;
         }
-        const marker = extract_pear_tool_row_marker(row);
+        const marker = extract_armada_tool_row_marker(row);
         const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        glyph.classList.add("pear-tool-row-glyph", marker.class_name);
+        glyph.classList.add("legacy-tool-row-glyph", marker.class_name);
         if (marker.is_active === true) {
-            glyph.classList.add("pear-thinking-glyph");
+            glyph.classList.add("legacy-thinking-glyph");
         }
         glyph.textContent = marker.glyph;
         const content = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        content.classList.add("pear-tool-row-content");
+        content.classList.add("legacy-tool-row-content");
         content.append(...row.childNodes);
         row.replaceChildren(glyph, content);
     });
     $tool_blocks.each((_index, block) => {
         if (block instanceof HTMLElement) {
-            render_pear_tool_block_header(block);
+            render_armada_tool_block_header(block);
         }
     });
 }
@@ -499,24 +506,24 @@ function render_message_threads(view: MessageListView | undefined, $row: JQuery)
         return;
     }
     message_thread_hooks.render_for_message_row(row, rows.id($row), (trace_root) => {
-        enhance_pear_tool_rows($(trace_root));
+        enhance_armada_tool_rows($(trace_root));
     });
 }
 
-let pear_thinking_marker_observer: IntersectionObserver | undefined;
-let active_pear_thinking_markers = new Set<Element>();
-const observed_pear_thinking_markers = new Set<Element>();
+let armada_thinking_marker_observer: IntersectionObserver | undefined;
+let active_armada_thinking_markers = new Set<Element>();
+const observed_armada_thinking_markers = new Set<Element>();
 
-function set_pear_thinking_marker_animated(marker: Element, animated: boolean): void {
-    marker.classList.toggle("pear-thinking-glyph-animated", animated);
+function set_armada_thinking_marker_animated(marker: Element, animated: boolean): void {
+    marker.classList.toggle("legacy-thinking-glyph-animated", animated);
     if (animated) {
         marker.textContent = "";
     } else {
-        marker.textContent = PEAR_ACTIVE_VISIBLE_GLYPH;
+        marker.textContent = ARMADA_ACTIVE_VISIBLE_GLYPH;
     }
 }
 
-export function pear_thinking_glyph_should_animate_for_testing(options: {
+export function armada_thinking_glyph_should_animate_for_testing(options: {
     active: boolean;
     intersecting: boolean;
     observer_supported: boolean;
@@ -524,83 +531,83 @@ export function pear_thinking_glyph_should_animate_for_testing(options: {
     return options.active && (!options.observer_supported || options.intersecting);
 }
 
-function ensure_pear_thinking_marker_observer(): IntersectionObserver | undefined {
-    if (pear_thinking_marker_observer !== undefined) {
-        return pear_thinking_marker_observer;
+function ensure_armada_thinking_marker_observer(): IntersectionObserver | undefined {
+    if (armada_thinking_marker_observer !== undefined) {
+        return armada_thinking_marker_observer;
     }
     if (typeof IntersectionObserver === "undefined") {
         return undefined;
     }
-    pear_thinking_marker_observer = new IntersectionObserver((entries) => {
+    armada_thinking_marker_observer = new IntersectionObserver((entries) => {
         for (const entry of entries) {
-            set_pear_thinking_marker_animated(
+            set_armada_thinking_marker_animated(
                 entry.target,
-                pear_thinking_glyph_should_animate_for_testing({
-                    active: active_pear_thinking_markers.has(entry.target),
+                armada_thinking_glyph_should_animate_for_testing({
+                    active: active_armada_thinking_markers.has(entry.target),
                     intersecting: entry.isIntersecting,
                     observer_supported: true,
                 }),
             );
         }
     });
-    return pear_thinking_marker_observer;
+    return armada_thinking_marker_observer;
 }
 
-function mark_pear_thinking_markers(
+function mark_armada_thinking_markers(
     $scope: JQuery<HTMLElement | Document>,
     options: {observe_visibility?: boolean} = {},
 ): Set<Element> {
     const active_markers = new Set<Element>();
     const observer =
-        options.observe_visibility === false ? undefined : ensure_pear_thinking_marker_observer();
-    pear_thinking_markers($scope).each((_index, marker) => {
+        options.observe_visibility === false ? undefined : ensure_armada_thinking_marker_observer();
+    armada_thinking_markers($scope).each((_index, marker) => {
         active_markers.add(marker);
         if (observer === undefined) {
-            set_pear_thinking_marker_animated(marker, true);
+            set_armada_thinking_marker_animated(marker, true);
         } else {
             observer.observe(marker);
-            observed_pear_thinking_markers.add(marker);
+            observed_armada_thinking_markers.add(marker);
         }
     });
     return active_markers;
 }
 
-function update_pear_thinking_glyphs(): void {
-    // The frame cycle itself runs in CSS (pear-thinking-frames in
-    // legacy.css, mirroring pear_thinking_glyphs): JS marks each active
+function update_armada_thinking_glyphs(): void {
+    // The frame cycle itself runs in CSS (legacy-thinking-frames in
+    // legacy.css, mirroring armada_thinking_glyphs): JS marks each active
     // marker once, clearing its text so the animated ::before frames are
     // not doubled next to a static glyph. Typed terminal events own
     // deactivation; there is no client-side liveness timeout.
-    const active_markers = mark_pear_thinking_markers($(document));
-    active_pear_thinking_markers = active_markers;
+    const active_markers = mark_armada_thinking_markers($(document));
+    active_armada_thinking_markers = active_markers;
     // Markers that stopped matching (including inactive markers which were
     // offscreen and therefore never received the animated class) return to
     // the resting glyph and leave the observer entirely.
-    for (const marker of observed_pear_thinking_markers) {
+    for (const marker of observed_armada_thinking_markers) {
         if (active_markers.has(marker)) {
             continue;
         }
-        pear_thinking_marker_observer?.unobserve(marker);
-        observed_pear_thinking_markers.delete(marker);
-        set_pear_thinking_marker_animated(marker, false);
+        armada_thinking_marker_observer?.unobserve(marker);
+        observed_armada_thinking_markers.delete(marker);
+        set_armada_thinking_marker_animated(marker, false);
     }
-    if (observed_pear_thinking_markers.size === 0) {
-        pear_thinking_marker_observer?.disconnect();
-        pear_thinking_marker_observer = undefined;
+    if (observed_armada_thinking_markers.size === 0) {
+        armada_thinking_marker_observer?.disconnect();
+        armada_thinking_marker_observer = undefined;
     }
 }
 
-function maybe_render_pear_thinking_glyph($row: JQuery): void {
-    if (!$row.hasClass("pear-active-message")) {
+function maybe_render_armada_thinking_glyph($row: JQuery): void {
+    if (!$row.hasClass("legacy-active-message")) {
         return;
     }
     // _rerender_message post-processes the freshly built row while it is
     // still detached from the document. Mark its tool glyphs locally; the
     // document-wide sweep still owns deactivation.
-    mark_pear_thinking_markers($row, {observe_visibility: false});
+    mark_armada_thinking_markers($row, {observe_visibility: false});
 }
 
-function pear_run_footer_duration_label(duration_seconds: number): string {
+function armada_run_footer_duration_label(duration_seconds: number): string {
     const total_seconds = Math.round(duration_seconds);
     if (total_seconds < 60) {
         return `${total_seconds}s`;
@@ -610,23 +617,23 @@ function pear_run_footer_duration_label(duration_seconds: number): string {
     return `${minutes}m ${seconds}s`;
 }
 
-function pear_run_footer_tokens_label(total_tokens: number): string {
+function armada_run_footer_tokens_label(total_tokens: number): string {
     if (total_tokens >= 1000) {
         return `${(total_tokens / 1000).toFixed(1)}k`;
     }
     return `${total_tokens}`;
 }
 
-export function pear_run_footer_line_for_testing(footer: {
+export function armada_run_footer_line_for_testing(footer: {
     status: string;
     duration_seconds: number | null;
     total_tokens: number | null;
     tool_count: number;
 }): {text: string; glyph: string; failed: boolean} {
-    return pear_run_footer_line(footer);
+    return armada_run_footer_line(footer);
 }
 
-function pear_run_footer_line(footer: {
+function armada_run_footer_line(footer: {
     status: string;
     duration_seconds: number | null;
     total_tokens: number | null;
@@ -637,7 +644,7 @@ function pear_run_footer_line(footer: {
         parts.push(
             $t(
                 {defaultMessage: "run {duration}"},
-                {duration: pear_run_footer_duration_label(footer.duration_seconds)},
+                {duration: armada_run_footer_duration_label(footer.duration_seconds)},
             ),
         );
     }
@@ -653,7 +660,7 @@ function pear_run_footer_line(footer: {
         parts.push(
             $t(
                 {defaultMessage: "{tokens} tokens"},
-                {tokens: pear_run_footer_tokens_label(footer.total_tokens)},
+                {tokens: armada_run_footer_tokens_label(footer.total_tokens)},
             ),
         );
     }
@@ -667,7 +674,7 @@ function pear_run_footer_line(footer: {
     return {text: parts.join(" · "), glyph, failed};
 }
 
-function pear_source_fingerprint(html: string): string {
+function armada_source_fingerprint(html: string): string {
     // djb2 over the pristine template HTML; the length suffix guards the
     // rare collision. Stored on each adopted node so later ticks can
     // recognize unchanged content without keeping the full string.
@@ -678,11 +685,14 @@ function pear_source_fingerprint(html: string): string {
     return `${hash}:${html.length}`;
 }
 
-function extend_pear_streamed_text(current: HTMLElement, incoming: HTMLElement): boolean {
-    if (current.tagName !== incoming.tagName || current.closest(".pear-active-message") === null) {
+function extend_armada_streamed_text(current: HTMLElement, incoming: HTMLElement): boolean {
+    if (
+        current.tagName !== incoming.tagName ||
+        current.closest(".legacy-active-message") === null
+    ) {
         return false;
     }
-    for (const chunk of current.querySelectorAll(":scope > .pear-stream-chunk")) {
+    for (const chunk of current.querySelectorAll(":scope > .legacy-stream-chunk")) {
         chunk.replaceWith(document.createTextNode(chunk.textContent ?? ""));
     }
     current.normalize();
@@ -696,7 +706,7 @@ function extend_pear_streamed_text(current: HTMLElement, incoming: HTMLElement):
     }
     const suffix = incoming_text.slice(current_text.length);
     const chunk = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-    chunk.setAttribute("class", "pear-stream-chunk");
+    chunk.setAttribute("class", "legacy-stream-chunk");
     chunk.textContent = suffix;
     current.append(chunk);
     window.setTimeout(() => {
@@ -708,10 +718,10 @@ function extend_pear_streamed_text(current: HTMLElement, incoming: HTMLElement):
     return true;
 }
 
-function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement): HTMLElement[] {
-    const footer = old_content.querySelector(":scope > .pear-run-footer");
-    const progress = old_content.querySelector(":scope > .pear-live-progress");
-    const trace_reveal = old_content.querySelector(":scope > .pear-run-trace-reveal");
+function armada_morph_content(old_content: HTMLElement, new_content: HTMLElement): HTMLElement[] {
+    const footer = old_content.querySelector(":scope > .legacy-run-footer");
+    const progress = old_content.querySelector(":scope > .legacy-live-progress");
+    const trace_reveal = old_content.querySelector(":scope > .legacy-run-trace-reveal");
     const old_children = [...old_content.children].filter(
         (child) => child !== footer && child !== progress && child !== trace_reveal,
     );
@@ -719,9 +729,12 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
     const adopted: HTMLElement[] = [];
     let old_index = 0;
     for (const incoming of new_children) {
-        const source = pear_source_fingerprint(incoming.outerHTML);
+        const source = armada_source_fingerprint(incoming.outerHTML);
         const current = old_children[old_index];
-        if (current instanceof HTMLElement && current.getAttribute("data-pear-source") === source) {
+        if (
+            current instanceof HTMLElement &&
+            current.getAttribute("data-legacy-source") === source
+        ) {
             // Unchanged: the enhanced, possibly animated node stays.
             old_index += 1;
             continue;
@@ -729,13 +742,13 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
         if (
             current instanceof HTMLElement &&
             incoming instanceof HTMLElement &&
-            extend_pear_streamed_text(current, incoming)
+            extend_armada_streamed_text(current, incoming)
         ) {
-            current.setAttribute("data-pear-source", source);
+            current.setAttribute("data-legacy-source", source);
             old_index += 1;
             continue;
         }
-        incoming.setAttribute("data-pear-source", source);
+        incoming.setAttribute("data-legacy-source", source);
         if (current !== undefined) {
             current.replaceWith(incoming);
             old_index += 1;
@@ -754,73 +767,73 @@ function pear_morph_content(old_content: HTMLElement, new_content: HTMLElement):
     return adopted;
 }
 
-export function pear_live_is_placeholder_for_testing(
+export function armada_live_is_placeholder_for_testing(
     has_visible_assistant_text: boolean | undefined,
     has_server_placeholder = false,
 ): boolean {
     return has_server_placeholder || has_visible_assistant_text !== true;
 }
 
-export function pear_live_should_show_progress_for_testing(
+export function armada_live_should_show_progress_for_testing(
     plan_length: number,
     has_visible_assistant_text: boolean | undefined,
     has_server_placeholder = false,
 ): boolean {
     return (
         plan_length > 0 ||
-        pear_live_is_placeholder_for_testing(has_visible_assistant_text, has_server_placeholder)
+        armada_live_is_placeholder_for_testing(has_visible_assistant_text, has_server_placeholder)
     );
 }
 
-const PEAR_WORKING_PLACEHOLDER = "· Working";
+const ARMADA_WORKING_PLACEHOLDER = "· Working";
 
-export function pear_live_is_server_placeholder_for_testing(source_text: string): boolean {
-    return source_text.trim() === PEAR_WORKING_PLACEHOLDER;
+export function armada_live_is_server_placeholder_for_testing(source_text: string): boolean {
+    return source_text.trim() === ARMADA_WORKING_PLACEHOLDER;
 }
 
-const pear_live_announcement_signatures = new Map<number, string>();
+const armada_live_announcement_signatures = new Map<number, string>();
 
-export function pear_live_announcement_changed_for_testing(
+export function armada_live_announcement_changed_for_testing(
     previous_signature: string | undefined,
     next_signature: string,
 ): boolean {
     return previous_signature !== next_signature;
 }
 
-function mark_pear_live_step_for_announcement(
+function mark_armada_live_step_for_announcement(
     progress: HTMLElement,
     message_id: number,
     signature: string,
     label: string,
 ): void {
-    const previous_signature = pear_live_announcement_signatures.get(message_id);
-    if (!pear_live_announcement_changed_for_testing(previous_signature, signature)) {
+    const previous_signature = armada_live_announcement_signatures.get(message_id);
+    if (!armada_live_announcement_changed_for_testing(previous_signature, signature)) {
         return;
     }
-    pear_live_announcement_signatures.set(message_id, signature);
+    armada_live_announcement_signatures.set(message_id, signature);
     progress.setAttribute("role", "status");
     progress.setAttribute("aria-live", "polite");
     progress.setAttribute("aria-atomic", "true");
     progress.setAttribute("aria-label", label);
 }
 
-function pear_live_source_is_server_placeholder(content: HTMLElement): boolean {
+function armada_live_source_is_server_placeholder(content: HTMLElement): boolean {
     let source_text = "";
     for (const child of content.childNodes) {
         if (
             child instanceof HTMLElement &&
-            (child.classList.contains("pear-live-progress") ||
-                child.classList.contains("pear-run-footer") ||
-                child.classList.contains("pear-run-trace-reveal"))
+            (child.classList.contains("legacy-live-progress") ||
+                child.classList.contains("legacy-run-footer") ||
+                child.classList.contains("legacy-run-trace-reveal"))
         ) {
             continue;
         }
         source_text += child.textContent ?? "";
     }
-    return pear_live_is_server_placeholder_for_testing(source_text);
+    return armada_live_is_server_placeholder_for_testing(source_text);
 }
 
-function append_pear_live_overview(
+function append_armada_live_overview(
     progress: HTMLElement,
     overview: string | null | undefined,
     overview_key: string,
@@ -829,10 +842,10 @@ function append_pear_live_overview(
         return;
     }
     const element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-    element.setAttribute("class", "pear-live-overview");
+    element.setAttribute("class", "legacy-live-overview");
     element.setAttribute("title", overview);
-    element.setAttribute("data-pear-generated", "true");
-    element.setAttribute("data-pear-overview-key", overview_key);
+    element.setAttribute("data-legacy-generated", "true");
+    element.setAttribute("data-legacy-overview-key", overview_key);
     element.setAttribute(
         "aria-label",
         $t({defaultMessage: "Activity summary: {overview}"}, {overview}),
@@ -841,7 +854,7 @@ function append_pear_live_overview(
     progress.append(element);
 }
 
-function render_pear_live_progress($row: JQuery): void {
+function render_armada_live_progress($row: JQuery): void {
     const row = $row[0];
     if (!(row instanceof HTMLElement)) {
         return;
@@ -851,39 +864,39 @@ function render_pear_live_progress($row: JQuery): void {
         return;
     }
     const message_id = rows.id($row);
-    const run = pear_run_state.get_run_view(message_id);
-    const existing = content.querySelector(":scope > .pear-live-progress");
+    const run = legacy_run_state.get_run_view(message_id);
+    const existing = content.querySelector(":scope > .legacy-live-progress");
     const run_is_active = run?.status === "queued" || run?.status === "running";
     // Message edits and typed run events travel independently. Honor the
     // server's exact protocol sentinel at every transition so it can never
     // paint as a second prose row, even when a newer typed event already has
     // a plan or reports visible assistant text. This is an equality check on
     // the dedicated placeholder, not an inference from arbitrary prose.
-    const has_server_placeholder = pear_live_source_is_server_placeholder(content);
-    const had_server_placeholder_marker = row.dataset["pearWorkingPlaceholder"] === "true";
+    const has_server_placeholder = armada_live_source_is_server_placeholder(content);
+    const had_server_placeholder_marker = row.dataset["legacyWorkingPlaceholder"] === "true";
     if (has_server_placeholder) {
-        row.dataset["pearWorkingPlaceholder"] = "true";
+        row.dataset["legacyWorkingPlaceholder"] = "true";
     } else {
-        delete row.dataset["pearWorkingPlaceholder"];
+        delete row.dataset["legacyWorkingPlaceholder"];
     }
     if (had_server_placeholder_marker !== has_server_placeholder) {
         // The panel owns the one-shot reconciliation budget. Notify it only
         // when an exact protocol sentinel appears or disappears; animation
         // frames and arbitrary prose never reset the watchdog.
-        pear_run_state.notify_liveness_markers_changed();
+        legacy_run_state.notify_liveness_markers_changed();
     }
     if (!run_is_active && !has_server_placeholder) {
-        pear_live_announcement_signatures.delete(message_id);
+        armada_live_announcement_signatures.delete(message_id);
         existing?.remove();
-        place_existing_pear_run_trace(content);
-        content.classList.remove("pear-live-placeholder");
-        for (const child of content.querySelectorAll(":scope > .pear-live-thought")) {
-            child.classList.remove("pear-live-thought");
+        place_existing_armada_run_trace(content);
+        content.classList.remove("legacy-live-placeholder");
+        for (const child of content.querySelectorAll(":scope > .legacy-live-thought")) {
+            child.classList.remove("legacy-live-thought");
         }
         return;
     }
     if (has_server_placeholder) {
-        row.classList.add("pear-active-message");
+        row.classList.add("legacy-active-message");
     }
 
     // This flag comes from the worker's typed live state.  An absent value is
@@ -892,60 +905,60 @@ function render_pear_live_progress($row: JQuery): void {
     // emitted user-visible text.
     const is_placeholder =
         run === undefined ||
-        pear_live_is_placeholder_for_testing(
+        armada_live_is_placeholder_for_testing(
             run.has_visible_assistant_text,
             has_server_placeholder,
         );
-    content.classList.toggle("pear-live-placeholder", is_placeholder);
+    content.classList.toggle("legacy-live-placeholder", is_placeholder);
 
     const progress = document.createElementNS("http://www.w3.org/1999/xhtml", "section");
-    progress.setAttribute("class", "pear-live-progress");
+    progress.setAttribute("class", "legacy-live-progress");
     const plan = run?.plan ?? [];
     const presentation = active_plan_presentation(plan);
-    const progress_signature = pear_live_progress_signature(plan, run?.overview);
-    progress.setAttribute("data-pear-progress-signature", progress_signature);
+    const progress_signature = armada_live_progress_signature(plan, run?.overview);
+    progress.setAttribute("data-legacy-progress-signature", progress_signature);
     if (
-        !pear_live_should_show_progress_for_testing(
+        !armada_live_should_show_progress_for_testing(
             plan.length,
             run?.has_visible_assistant_text,
             has_server_placeholder,
         )
     ) {
         existing?.remove();
-        place_existing_pear_run_trace(content);
+        place_existing_armada_run_trace(content);
         for (const child of content.children) {
-            if (!child.classList.contains("pear-run-footer")) {
-                child.classList.add("pear-live-thought");
+            if (!child.classList.contains("legacy-run-footer")) {
+                child.classList.add("legacy-live-thought");
             }
         }
         return;
     }
     if (presentation.kind === "working") {
-        mark_pear_live_step_for_announcement(
+        mark_armada_live_step_for_announcement(
             progress,
             message_id,
             "working",
             $t({defaultMessage: "Pear is working"}),
         );
-        progress.classList.add("pear-live-progress-planless");
+        progress.classList.add("legacy-live-progress-planless");
         const working = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        working.setAttribute("class", "pear-live-plan-step pear-live-plan-current");
+        working.setAttribute("class", "legacy-live-plan-step legacy-live-plan-current");
         const glyph = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        glyph.setAttribute("class", "pear-live-plan-glyph pear-thinking-glyph");
+        glyph.setAttribute("class", "legacy-live-plan-glyph legacy-thinking-glyph");
         glyph.setAttribute("aria-hidden", "true");
         glyph.textContent = "·";
         const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        label.setAttribute("class", "pear-live-plan-label");
+        label.setAttribute("class", "legacy-live-plan-label");
         label.textContent = $t({defaultMessage: "Working"});
         working.append(glyph, label);
         progress.append(working);
-        append_pear_live_overview(
+        append_armada_live_overview(
             progress,
             run?.overview,
-            pear_live_overview_key(message_id, "working", run?.overview ?? ""),
+            armada_live_overview_key(message_id, "working", run?.overview ?? ""),
         );
     } else {
-        mark_pear_live_step_for_announcement(
+        mark_armada_live_step_for_announcement(
             progress,
             message_id,
             presentation.current_key,
@@ -959,7 +972,7 @@ function render_pear_live_progress($row: JQuery): void {
                 const ellipsis = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
                 ellipsis.setAttribute(
                     "class",
-                    "pear-live-plan-step pear-live-plan-context pear-live-plan-ellipsis",
+                    "legacy-live-plan-step legacy-live-plan-context legacy-live-plan-ellipsis",
                 );
                 ellipsis.setAttribute("aria-hidden", "true");
                 ellipsis.textContent = "…";
@@ -970,83 +983,83 @@ function render_pear_live_progress($row: JQuery): void {
             step_element.setAttribute(
                 "class",
                 row.is_current
-                    ? "pear-live-plan-step pear-live-plan-current"
-                    : "pear-live-plan-step pear-live-plan-context",
+                    ? "legacy-live-plan-step legacy-live-plan-current"
+                    : "legacy-live-plan-step legacy-live-plan-context",
             );
             if (row.status === "completed") {
-                step_element.classList.add("pear-live-plan-completed");
+                step_element.classList.add("legacy-live-plan-completed");
             }
             if (row.is_current) {
                 step_element.setAttribute("aria-current", "step");
             }
             const glyph = row.status === "completed" ? "✓" : row.is_current ? "·" : "○";
             const glyph_element = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-            glyph_element.setAttribute("class", "pear-live-plan-glyph");
+            glyph_element.setAttribute("class", "legacy-live-plan-glyph");
             if (row.is_current && row.status !== "completed") {
-                glyph_element.classList.add("pear-thinking-glyph");
+                glyph_element.classList.add("legacy-thinking-glyph");
             }
             glyph_element.setAttribute("aria-hidden", "true");
             glyph_element.textContent = glyph;
             const label = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-            label.setAttribute("class", "pear-live-plan-label");
+            label.setAttribute("class", "legacy-live-plan-label");
             label.textContent = row.step;
             step_element.append(glyph_element, label);
             progress.append(step_element);
             if (row.is_current) {
-                append_pear_live_overview(
+                append_armada_live_overview(
                     progress,
                     run?.overview,
-                    pear_live_overview_key(message_id, row.step, run?.overview ?? ""),
+                    armada_live_overview_key(message_id, row.step, run?.overview ?? ""),
                 );
             }
         }
     }
-    if (pear_live_progress_matches(existing, progress_signature)) {
+    if (armada_live_progress_matches(existing, progress_signature)) {
         if (run?.trace_available === true && existing instanceof HTMLElement) {
-            const trace_state = ensure_pear_run_trace(content, run.id);
-            ensure_pear_live_trace_disclosure(existing, trace_state);
+            const trace_state = ensure_armada_run_trace(content, run.id);
+            ensure_armada_live_trace_disclosure(existing, trace_state);
             existing.after(trace_state.reveal);
         }
         return;
     }
     if (existing !== null) {
-        preserve_unchanged_pear_overview(existing, progress);
+        preserve_unchanged_armada_overview(existing, progress);
     }
     existing?.replaceWith(progress);
     if (existing === null) {
         content.prepend(progress);
     }
     if (run?.trace_available === true) {
-        const trace_state = ensure_pear_run_trace(content, run.id);
-        ensure_pear_live_trace_disclosure(progress, trace_state);
+        const trace_state = ensure_armada_run_trace(content, run.id);
+        ensure_armada_live_trace_disclosure(progress, trace_state);
         progress.after(trace_state.reveal);
     }
     for (const child of content.children) {
         if (
             child !== progress &&
-            !child.classList.contains("pear-live-progress") &&
-            !child.classList.contains("pear-run-footer") &&
-            !child.classList.contains("pear-run-trace-reveal")
+            !child.classList.contains("legacy-live-progress") &&
+            !child.classList.contains("legacy-run-footer") &&
+            !child.classList.contains("legacy-run-trace-reveal")
         ) {
-            child.classList.toggle("pear-live-thought", !is_placeholder);
+            child.classList.toggle("legacy-live-thought", !is_placeholder);
         }
     }
 }
 
-type PearTraceRequestState = {
+type ArmadaTraceRequestState = {
     run_id: number;
     reveal: HTMLElement;
     host: HTMLElement;
     status: HTMLElement;
-    controller: pear_run_trace.PearRunTraceController;
+    controller: legacy_run_trace.ArmadaRunTraceController;
     expanded: boolean;
 };
 
-function pear_trace_block_signature(element: Element): string {
+function armada_trace_block_signature(element: Element): string {
     return `${element.tagName}:${(element.textContent ?? "").replaceAll(/\s+/g, " ").trim()}`;
 }
 
-function remove_pear_run_trace_duplicate_tail(state: PearTraceRequestState): void {
+function remove_armada_run_trace_duplicate_tail(state: ArmadaTraceRequestState): void {
     const content = state.reveal.parentElement;
     if (content === null) {
         return;
@@ -1055,24 +1068,24 @@ function remove_pear_run_trace_duplicate_tail(state: PearTraceRequestState): voi
     const message_blocks = [...content.children].filter(
         (child) =>
             child !== state.reveal &&
-            !child.classList.contains("pear-live-progress") &&
-            !child.classList.contains("pear-run-footer"),
+            !child.classList.contains("legacy-live-progress") &&
+            !child.classList.contains("legacy-run-footer"),
     );
-    const duplicate_count = pear_run_trace.duplicate_tail_count_for_testing(
-        trace_blocks.map((element) => pear_trace_block_signature(element)),
-        message_blocks.map((element) => pear_trace_block_signature(element)),
+    const duplicate_count = legacy_run_trace.duplicate_tail_count_for_testing(
+        trace_blocks.map((element) => armada_trace_block_signature(element)),
+        message_blocks.map((element) => armada_trace_block_signature(element)),
     );
     for (let index = 0; index < duplicate_count; index += 1) {
         trace_blocks[trace_blocks.length - 1 - index]!.remove();
     }
 }
 
-const pear_trace_request_states = new WeakMap<HTMLElement, PearTraceRequestState>();
-const pear_trace_trigger_controllers = new WeakMap<HTMLElement, AbortController>();
-const pear_trace_surface_controllers = new WeakMap<HTMLElement, AbortController>();
-let next_pear_trace_host_id = 0;
+const armada_trace_request_states = new WeakMap<HTMLElement, ArmadaTraceRequestState>();
+const armada_trace_trigger_controllers = new WeakMap<HTMLElement, AbortController>();
+const armada_trace_surface_controllers = new WeakMap<HTMLElement, AbortController>();
+let next_armada_trace_host_id = 0;
 
-export function pear_trace_trigger_label_for_testing(
+export function armada_trace_trigger_label_for_testing(
     expanded: boolean,
     loaded: boolean,
     request_state: string | undefined,
@@ -1092,7 +1105,7 @@ export function pear_trace_trigger_label_for_testing(
     return loaded ? $t({defaultMessage: "Show work"}) : $t({defaultMessage: "Load work"});
 }
 
-export function pear_trace_toggle_action_for_testing(
+export function armada_trace_toggle_action_for_testing(
     expanded: boolean,
     request_failed: boolean,
 ): "expand" | "collapse" | "retry" {
@@ -1102,7 +1115,7 @@ export function pear_trace_toggle_action_for_testing(
     return request_failed ? "retry" : "collapse";
 }
 
-export function pear_trace_trigger_is_current_for_testing(
+export function armada_trace_trigger_is_current_for_testing(
     trigger_run_id: string | undefined,
     controls: string | null,
     run_id: number,
@@ -1111,19 +1124,19 @@ export function pear_trace_trigger_is_current_for_testing(
     return trigger_run_id === `${run_id}` && controls === host_id;
 }
 
-export function pear_trace_surface_click_should_toggle_for_testing(
+export function armada_trace_surface_click_should_toggle_for_testing(
     clicked_disclosure: boolean,
     selection_is_collapsed: boolean,
 ): boolean {
     return !clicked_disclosure && selection_is_collapsed;
 }
 
-function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
+function update_armada_run_trace_triggers(state: ArmadaTraceRequestState): void {
     const content = state.reveal.parentElement;
     if (content === null) {
         return;
     }
-    const label = pear_trace_trigger_label_for_testing(
+    const label = armada_trace_trigger_label_for_testing(
         state.expanded,
         state.controller.loaded,
         state.controller.request_state,
@@ -1137,95 +1150,95 @@ function update_pear_run_trace_triggers(state: PearTraceRequestState): void {
     }
 }
 
-function load_pear_run_trace(state: PearTraceRequestState): void {
+function load_armada_run_trace(state: ArmadaTraceRequestState): void {
     state.controller.load();
 }
 
-function set_pear_run_trace_expanded(state: PearTraceRequestState, expanded: boolean): void {
+function set_armada_run_trace_expanded(state: ArmadaTraceRequestState, expanded: boolean): void {
     state.expanded = expanded;
     state.reveal.dataset["expanded"] = String(expanded);
     state.reveal.setAttribute("aria-hidden", String(!expanded));
     state.reveal.toggleAttribute("inert", !expanded);
-    update_pear_run_trace_triggers(state);
+    update_armada_run_trace_triggers(state);
 }
 
-function toggle_pear_run_trace(state: PearTraceRequestState): void {
-    const action = pear_trace_toggle_action_for_testing(state.expanded, state.controller.failed);
+function toggle_armada_run_trace(state: ArmadaTraceRequestState): void {
+    const action = armada_trace_toggle_action_for_testing(state.expanded, state.controller.failed);
     if (action === "retry") {
-        load_pear_run_trace(state);
+        load_armada_run_trace(state);
         return;
     }
     if (action === "collapse") {
-        set_pear_run_trace_expanded(state, false);
+        set_armada_run_trace_expanded(state, false);
         return;
     }
-    set_pear_run_trace_expanded(state, true);
+    set_armada_run_trace_expanded(state, true);
     if (
-        pear_run_trace.should_load_on_open_for_testing(
+        legacy_run_trace.should_load_on_open_for_testing(
             state.controller.loaded,
             state.controller.dirty,
             state.controller.failed,
         )
     ) {
-        load_pear_run_trace(state);
+        load_armada_run_trace(state);
     }
 }
 
-function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceRequestState {
+function ensure_armada_run_trace(content: HTMLElement, run_id: number): ArmadaTraceRequestState {
     const existing = content.querySelector<HTMLElement>(
-        `:scope > .pear-run-trace-reveal[data-pear-run-id="${run_id}"]`,
+        `:scope > .legacy-run-trace-reveal[data-legacy-run-id="${run_id}"]`,
     );
     if (existing !== null) {
-        const host = existing.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        const host = existing.querySelector<HTMLElement>(":scope > .legacy-run-trace");
         if (host !== null) {
-            const state = pear_trace_request_states.get(host);
+            const state = armada_trace_request_states.get(host);
             if (state !== undefined) {
                 return state;
             }
         }
     }
-    for (const stale of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
-        const stale_host = stale.querySelector<HTMLElement>(":scope > .pear-run-trace");
+    for (const stale of content.querySelectorAll(":scope > .legacy-run-trace-reveal")) {
+        const stale_host = stale.querySelector<HTMLElement>(":scope > .legacy-run-trace");
         if (stale_host !== null) {
-            pear_trace_request_states.get(stale_host)?.controller.destroy();
+            armada_trace_request_states.get(stale_host)?.controller.destroy();
         }
         stale.remove();
     }
     const reveal = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-    reveal.setAttribute("class", "pear-run-trace-reveal");
-    reveal.setAttribute("data-pear-run-id", `${run_id}`);
+    reveal.setAttribute("class", "legacy-run-trace-reveal");
+    reveal.setAttribute("data-legacy-run-id", `${run_id}`);
     reveal.setAttribute("data-expanded", "false");
     reveal.setAttribute("aria-hidden", "true");
     reveal.setAttribute("aria-label", $t({defaultMessage: "Pear work trace"}));
     reveal.setAttribute("role", "region");
     reveal.setAttribute("inert", "");
     const trace_status = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-    trace_status.setAttribute("class", "pear-run-trace-status");
+    trace_status.setAttribute("class", "legacy-run-trace-status");
     trace_status.setAttribute("aria-live", "polite");
     trace_status.setAttribute("role", "status");
     const trace = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-    trace.setAttribute("class", "pear-run-trace");
-    trace.setAttribute("data-pear-run-id", `${run_id}`);
-    next_pear_trace_host_id += 1;
-    trace.id = `pear-run-trace-${run_id}-${next_pear_trace_host_id}`;
+    trace.setAttribute("class", "legacy-run-trace");
+    trace.setAttribute("data-legacy-run-id", `${run_id}`);
+    next_armada_trace_host_id += 1;
+    trace.id = `legacy-run-trace-${run_id}-${next_armada_trace_host_id}`;
     reveal.append(trace_status, trace);
-    let state: PearTraceRequestState;
-    const controller = pear_run_trace.create_controller({
+    let state: ArmadaTraceRequestState;
+    const controller = legacy_run_trace.create_controller({
         run_id,
         host: trace,
         status: trace_status,
         after_render() {
-            remove_pear_run_trace_duplicate_tail(state);
+            remove_armada_run_trace_duplicate_tail(state);
             const row = trace.closest(".message_row");
             if (row instanceof HTMLElement) {
-                enhance_pear_tool_rows($(row));
+                enhance_armada_tool_rows($(row));
             }
         },
         on_state_change(next_controller) {
             reveal.dataset["state"] = next_controller.request_state;
             reveal.toggleAttribute("aria-busy", next_controller.in_flight);
             if (state !== undefined) {
-                update_pear_run_trace_triggers(state);
+                update_armada_run_trace_triggers(state);
             }
         },
     });
@@ -1237,14 +1250,14 @@ function ensure_pear_run_trace(content: HTMLElement, run_id: number): PearTraceR
         controller,
         expanded: false,
     };
-    pear_trace_request_states.set(trace, state);
+    armada_trace_request_states.set(trace, state);
     return state;
 }
 
-function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceRequestState): void {
+function wire_armada_run_trace_trigger(trigger: HTMLElement, state: ArmadaTraceRequestState): void {
     if (
-        pear_trace_trigger_is_current_for_testing(
-            trigger.dataset["pearTraceRunId"],
+        armada_trace_trigger_is_current_for_testing(
+            trigger.dataset["legacyTraceRunId"],
             trigger.getAttribute("aria-controls"),
             state.run_id,
             state.host.id,
@@ -1253,14 +1266,14 @@ function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceReque
         trigger.setAttribute("aria-expanded", String(state.expanded));
         return;
     }
-    pear_trace_trigger_controllers.get(trigger)?.abort();
+    armada_trace_trigger_controllers.get(trigger)?.abort();
     const controller = new AbortController();
-    pear_trace_trigger_controllers.set(trigger, controller);
-    trigger.dataset["pearTraceRunId"] = `${state.run_id}`;
-    trigger.classList.add("pear-run-trace-trigger");
+    armada_trace_trigger_controllers.set(trigger, controller);
+    trigger.dataset["legacyTraceRunId"] = `${state.run_id}`;
+    trigger.classList.add("legacy-run-trace-trigger");
     trigger.setAttribute("aria-controls", state.host.id);
     trigger.setAttribute("aria-expanded", String(state.expanded));
-    const label = pear_trace_trigger_label_for_testing(
+    const label = armada_trace_trigger_label_for_testing(
         state.expanded,
         state.controller.loaded,
         state.controller.request_state,
@@ -1272,7 +1285,7 @@ function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceReque
         (event) => {
             event.preventDefault();
             event.stopPropagation();
-            toggle_pear_run_trace(state);
+            toggle_armada_run_trace(state);
         },
         {
             signal: controller.signal,
@@ -1280,44 +1293,46 @@ function wire_pear_run_trace_trigger(trigger: HTMLElement, state: PearTraceReque
     );
 }
 
-function append_pear_run_trace_toggle(footer: HTMLElement, state: PearTraceRequestState): void {
+function append_armada_run_trace_toggle(footer: HTMLElement, state: ArmadaTraceRequestState): void {
     const disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
-    disclosure.setAttribute("class", "pear-run-trace-toggle");
+    disclosure.setAttribute("class", "legacy-run-trace-toggle");
     disclosure.setAttribute("type", "button");
     disclosure.setAttribute("title", $t({defaultMessage: "Show work"}));
-    wire_pear_run_trace_trigger(disclosure, state);
+    wire_armada_run_trace_trigger(disclosure, state);
     footer.append(disclosure);
 }
 
-function ensure_pear_live_trace_disclosure(
+function ensure_armada_live_trace_disclosure(
     progress: HTMLElement,
-    state: PearTraceRequestState,
+    state: ArmadaTraceRequestState,
 ): void {
-    let disclosure = progress.querySelector<HTMLElement>(":scope > .pear-live-progress-disclosure");
+    let disclosure = progress.querySelector<HTMLElement>(
+        ":scope > .legacy-live-progress-disclosure",
+    );
     if (disclosure === null) {
         disclosure = document.createElementNS("http://www.w3.org/1999/xhtml", "button");
-        disclosure.setAttribute("class", "pear-live-progress-disclosure");
+        disclosure.setAttribute("class", "legacy-live-progress-disclosure");
         disclosure.setAttribute("type", "button");
         progress.append(disclosure);
     }
-    wire_pear_run_trace_trigger(disclosure, state);
+    wire_armada_run_trace_trigger(disclosure, state);
     if (
-        progress.dataset["pearTraceSurfaceRunId"] === `${state.run_id}` &&
-        progress.dataset["pearTraceSurfaceHostId"] === state.host.id
+        progress.dataset["legacyTraceSurfaceRunId"] === `${state.run_id}` &&
+        progress.dataset["legacyTraceSurfaceHostId"] === state.host.id
     ) {
         return;
     }
-    pear_trace_surface_controllers.get(progress)?.abort();
+    armada_trace_surface_controllers.get(progress)?.abort();
     const controller = new AbortController();
-    pear_trace_surface_controllers.set(progress, controller);
-    progress.dataset["pearTraceSurfaceRunId"] = `${state.run_id}`;
-    progress.dataset["pearTraceSurfaceHostId"] = state.host.id;
+    armada_trace_surface_controllers.set(progress, controller);
+    progress.dataset["legacyTraceSurfaceRunId"] = `${state.run_id}`;
+    progress.dataset["legacyTraceSurfaceHostId"] = state.host.id;
     progress.addEventListener(
         "click",
         (event) => {
             const selection = window.getSelection();
             if (
-                !pear_trace_surface_click_should_toggle_for_testing(
+                !armada_trace_surface_click_should_toggle_for_testing(
                     event.target === disclosure,
                     selection?.isCollapsed ?? true,
                 )
@@ -1326,29 +1341,29 @@ function ensure_pear_live_trace_disclosure(
             }
             event.preventDefault();
             event.stopPropagation();
-            toggle_pear_run_trace(state);
+            toggle_armada_run_trace(state);
         },
         {signal: controller.signal},
     );
 }
 
-function remove_pear_run_trace(content: HTMLElement): void {
-    for (const reveal of content.querySelectorAll(":scope > .pear-run-trace-reveal")) {
-        const trace = reveal.querySelector<HTMLElement>(":scope > .pear-run-trace");
+function remove_armada_run_trace(content: HTMLElement): void {
+    for (const reveal of content.querySelectorAll(":scope > .legacy-run-trace-reveal")) {
+        const trace = reveal.querySelector<HTMLElement>(":scope > .legacy-run-trace");
         if (trace !== null) {
-            pear_trace_request_states.get(trace)?.controller.destroy();
+            armada_trace_request_states.get(trace)?.controller.destroy();
         }
         reveal.remove();
     }
 }
 
-function place_pear_run_trace(content: HTMLElement, state: PearTraceRequestState): void {
-    const progress = content.querySelector<HTMLElement>(":scope > .pear-live-progress");
+function place_armada_run_trace(content: HTMLElement, state: ArmadaTraceRequestState): void {
+    const progress = content.querySelector<HTMLElement>(":scope > .legacy-live-progress");
     if (progress !== null) {
         progress.after(state.reveal);
         return;
     }
-    const footer = content.querySelector<HTMLElement>(":scope > .pear-run-footer");
+    const footer = content.querySelector<HTMLElement>(":scope > .legacy-run-footer");
     if (footer !== null) {
         footer.before(state.reveal);
         return;
@@ -1356,75 +1371,75 @@ function place_pear_run_trace(content: HTMLElement, state: PearTraceRequestState
     content.append(state.reveal);
 }
 
-function place_existing_pear_run_trace(content: HTMLElement): void {
+function place_existing_armada_run_trace(content: HTMLElement): void {
     const trace = content.querySelector<HTMLElement>(
-        ":scope > .pear-run-trace-reveal > .pear-run-trace",
+        ":scope > .legacy-run-trace-reveal > .legacy-run-trace",
     );
     if (trace === null) {
         return;
     }
-    const state = pear_trace_request_states.get(trace);
+    const state = armada_trace_request_states.get(trace);
     if (state !== undefined) {
-        place_pear_run_trace(content, state);
+        place_armada_run_trace(content, state);
     }
 }
 
-function refresh_open_pear_run_traces(run_id: number): void {
+function refresh_open_armada_run_traces(run_id: number): void {
     const reveals = document.querySelectorAll<HTMLElement>(
-        `.pear-run-trace-reveal[data-pear-run-id="${run_id}"]`,
+        `.legacy-run-trace-reveal[data-legacy-run-id="${run_id}"]`,
     );
     for (const reveal of reveals) {
-        const trace = reveal.querySelector<HTMLElement>(":scope > .pear-run-trace");
+        const trace = reveal.querySelector<HTMLElement>(":scope > .legacy-run-trace");
         if (trace === null) {
             continue;
         }
-        const state = pear_trace_request_states.get(trace);
+        const state = armada_trace_request_states.get(trace);
         if (state !== undefined) {
             state.controller.mark_dirty(
-                pear_run_trace.event_should_load_for_testing(state.expanded),
+                legacy_run_trace.event_should_load_for_testing(state.expanded),
             );
         }
     }
 }
 
-let pear_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
+let armada_run_elapsed_timer: ReturnType<typeof setInterval> | undefined;
 
-function update_pear_run_elapsed_labels(): void {
+function update_armada_run_elapsed_labels(): void {
     if (typeof document === "undefined") {
         return;
     }
-    const labels = document.querySelectorAll<HTMLElement>(".pear-run-elapsed");
-    if (labels.length === 0 && pear_run_elapsed_timer !== undefined) {
-        clearInterval(pear_run_elapsed_timer);
-        pear_run_elapsed_timer = undefined;
+    const labels = document.querySelectorAll<HTMLElement>(".legacy-run-elapsed");
+    if (labels.length === 0 && armada_run_elapsed_timer !== undefined) {
+        clearInterval(armada_run_elapsed_timer);
+        armada_run_elapsed_timer = undefined;
         return;
     }
     const now_seconds = Date.now() / 1000;
     for (const label of labels) {
-        const started_attr = label.getAttribute("data-pear-run-started");
+        const started_attr = label.getAttribute("data-legacy-run-started");
         if (started_attr === null) {
             continue;
         }
         const elapsed_seconds = Math.max(0, now_seconds - Number.parseFloat(started_attr));
         label.textContent = $t(
             {defaultMessage: "run {duration}"},
-            {duration: pear_run_footer_duration_label(elapsed_seconds)},
+            {duration: armada_run_footer_duration_label(elapsed_seconds)},
         );
     }
 }
 
-function ensure_pear_run_elapsed_timer(): void {
-    if (pear_run_elapsed_timer !== undefined || typeof setInterval !== "function") {
+function ensure_armada_run_elapsed_timer(): void {
+    if (armada_run_elapsed_timer !== undefined || typeof setInterval !== "function") {
         return;
     }
-    pear_run_elapsed_timer = setInterval(update_pear_run_elapsed_labels, 1000);
+    armada_run_elapsed_timer = setInterval(update_armada_run_elapsed_labels, 1000);
 }
 
-function maybe_render_pear_run_footer(view: MessageListView | undefined, $row: JQuery): void {
+function maybe_render_armada_run_footer(view: MessageListView | undefined, $row: JQuery): void {
     // A completed run closes its result message with one quiet meta
     // line (design §8.3): `run 33s · 3 tools · 13.5k tokens · ✓`.
     // While the run is still live the slot holds the settling ticker.
-    if (!$row.hasClass("pear-message") || typeof document.createElementNS !== "function") {
+    if (!$row.hasClass("legacy-message") || typeof document.createElementNS !== "function") {
         return;
     }
     // `view` comes from the rendering MessageListView (authoritative even
@@ -1443,147 +1458,150 @@ function maybe_render_pear_run_footer(view: MessageListView | undefined, $row: J
         return;
     }
     const message_id = rows.id($row);
-    const existing = content.querySelector(":scope > .pear-run-footer");
+    const existing = content.querySelector(":scope > .legacy-run-footer");
     // The active predicate is the row's typed run-state class. The template
     // sets it at render and the event-driven sweep maintains it afterwards.
-    if ($row.hasClass("pear-active-message")) {
-        const operation = pear_run_state.get_active_run_operation(message_id);
-        const run = pear_run_state.get_run_view(message_id);
+    if ($row.hasClass("legacy-active-message")) {
+        const operation = legacy_run_state.get_active_run_operation(message_id);
+        const run = legacy_run_state.get_run_view(message_id);
         const operation_signature =
             operation === undefined ? "" : `${operation.kind}|${operation.label}`;
         const trace_available = run?.trace_available === true;
         if (
             existing instanceof HTMLElement &&
-            existing.classList.contains("pear-run-footer-ticker") &&
-            (existing.getAttribute("data-pear-op") ?? "") === operation_signature &&
-            (existing.querySelector(":scope > .pear-run-trace-toggle") !== null) === trace_available
+            existing.classList.contains("legacy-run-footer-ticker") &&
+            (existing.getAttribute("data-legacy-op") ?? "") === operation_signature &&
+            (existing.querySelector(":scope > .legacy-run-trace-toggle") !== null) ===
+                trace_available
         ) {
             // Hydration can add the run start time after the first push event;
             // backfill the timestamp when it arrives.
-            const label = existing.querySelector(".pear-run-elapsed");
-            const started_at = pear_run_state.get_active_run_started_at(message_id);
+            const label = existing.querySelector(".legacy-run-elapsed");
+            const started_at = legacy_run_state.get_active_run_started_at(message_id);
             if (
                 label instanceof HTMLElement &&
-                !label.hasAttribute("data-pear-run-started") &&
+                !label.hasAttribute("data-legacy-run-started") &&
                 started_at !== undefined
             ) {
-                label.setAttribute("data-pear-run-started", `${started_at}`);
-                update_pear_run_elapsed_labels();
-                ensure_pear_run_elapsed_timer();
+                label.setAttribute("data-legacy-run-started", `${started_at}`);
+                update_armada_run_elapsed_labels();
+                ensure_armada_run_elapsed_timer();
             }
             if (trace_available && run !== undefined) {
-                const trace_state = ensure_pear_run_trace(content, run.id);
+                const trace_state = ensure_armada_run_trace(content, run.id);
                 const toggle = existing.querySelector<HTMLElement>(
-                    ":scope > .pear-run-trace-toggle",
+                    ":scope > .legacy-run-trace-toggle",
                 );
                 if (toggle !== null) {
-                    wire_pear_run_trace_trigger(toggle, trace_state);
+                    wire_armada_run_trace_trigger(toggle, trace_state);
                 }
-                place_pear_run_trace(content, trace_state);
+                place_armada_run_trace(content, trace_state);
             }
             return;
         }
         if (!trace_available) {
-            remove_pear_run_trace(content);
+            remove_armada_run_trace(content);
         }
         existing?.remove();
         const ticker = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-        ticker.setAttribute("class", "pear-run-footer pear-run-footer-ticker");
-        ticker.setAttribute("data-pear-op", operation_signature);
+        ticker.setAttribute("class", "legacy-run-footer legacy-run-footer-ticker");
+        ticker.setAttribute("data-legacy-op", operation_signature);
         if (operation === undefined) {
             const spinner = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
             // The frames live in a CSS content animation on ::after.
-            spinner.setAttribute("class", "pear-braille-spinner");
+            spinner.setAttribute("class", "legacy-braille-spinner");
             ticker.append(spinner);
         } else {
             // A long engine operation owns the slot: ASCII frames on
             // ::after plus its label, e.g. `▓▓▓▓░░░░ compacting context`.
             const frames = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-            frames.setAttribute("class", `pear-op-frames pear-op-${operation.kind}`);
+            frames.setAttribute("class", `legacy-op-frames legacy-op-${operation.kind}`);
             const operation_label = document.createElementNS(
                 "http://www.w3.org/1999/xhtml",
                 "span",
             );
-            operation_label.setAttribute("class", "pear-op-label");
+            operation_label.setAttribute("class", "legacy-op-label");
             operation_label.textContent = operation.label;
             ticker.append(frames, operation_label);
         }
         const elapsed = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        elapsed.setAttribute("class", "pear-run-elapsed");
-        const started_at = pear_run_state.get_active_run_started_at(message_id);
+        elapsed.setAttribute("class", "legacy-run-elapsed");
+        const started_at = legacy_run_state.get_active_run_started_at(message_id);
         if (started_at !== undefined) {
-            elapsed.setAttribute("data-pear-run-started", `${started_at}`);
+            elapsed.setAttribute("data-legacy-run-started", `${started_at}`);
         }
         ticker.append(elapsed);
         const trace_state =
             trace_available && run !== undefined
-                ? ensure_pear_run_trace(content, run.id)
+                ? ensure_armada_run_trace(content, run.id)
                 : undefined;
         if (trace_state !== undefined) {
-            append_pear_run_trace_toggle(ticker, trace_state);
+            append_armada_run_trace_toggle(ticker, trace_state);
         }
         content.append(ticker);
         if (trace_state !== undefined) {
-            place_pear_run_trace(content, trace_state);
+            place_armada_run_trace(content, trace_state);
         }
-        update_pear_run_elapsed_labels();
-        ensure_pear_run_elapsed_timer();
+        update_armada_run_elapsed_labels();
+        ensure_armada_run_elapsed_timer();
         return;
     }
-    const footer = pear_run_state.get_run_footer(message_id);
+    const footer = legacy_run_state.get_run_footer(message_id);
     if (footer === undefined) {
         existing?.remove();
-        remove_pear_run_trace(content);
+        remove_armada_run_trace(content);
         return;
     }
-    const line = pear_run_footer_line(footer);
-    const run = pear_run_state.get_run_view(message_id);
+    const line = armada_run_footer_line(footer);
+    const run = legacy_run_state.get_run_view(message_id);
     const signature = `${line.text}|${line.glyph}|${footer.overview ?? ""}|${run?.trace_available === true ? run.id : ""}`;
     if (
         existing instanceof HTMLElement &&
-        !existing.classList.contains("pear-run-footer-ticker") &&
-        existing.getAttribute("data-pear-footer-signature") === signature
+        !existing.classList.contains("legacy-run-footer-ticker") &&
+        existing.getAttribute("data-legacy-footer-signature") === signature
     ) {
         if (run?.trace_available === true) {
-            const trace_state = ensure_pear_run_trace(content, run.id);
-            const toggle = existing.querySelector<HTMLElement>(":scope > .pear-run-trace-toggle");
+            const trace_state = ensure_armada_run_trace(content, run.id);
+            const toggle = existing.querySelector<HTMLElement>(":scope > .legacy-run-trace-toggle");
             if (toggle !== null) {
-                wire_pear_run_trace_trigger(toggle, trace_state);
+                wire_armada_run_trace_trigger(toggle, trace_state);
             }
-            place_pear_run_trace(content, trace_state);
+            place_armada_run_trace(content, trace_state);
         }
         return;
     }
     existing?.remove();
     const footer_element = document.createElementNS("http://www.w3.org/1999/xhtml", "div");
-    footer_element.setAttribute("class", "pear-run-footer");
+    footer_element.setAttribute("class", "legacy-run-footer");
     footer_element.setAttribute("role", "status");
     footer_element.setAttribute("aria-live", "polite");
-    footer_element.setAttribute("data-pear-footer-signature", signature);
+    footer_element.setAttribute("data-legacy-footer-signature", signature);
     if (line.text !== "") {
         const meta = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        meta.setAttribute("class", "pear-run-footer-meta");
+        meta.setAttribute("class", "legacy-run-footer-meta");
         meta.textContent = line.text;
         footer_element.append(meta);
     }
     const status = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
     status.setAttribute(
         "class",
-        line.failed ? "pear-run-footer-status pear-run-footer-failed" : "pear-run-footer-status",
+        line.failed
+            ? "legacy-run-footer-status legacy-run-footer-failed"
+            : "legacy-run-footer-status",
     );
     status.textContent = line.glyph;
     footer_element.append(status);
     const trace_state =
-        run?.trace_available === true ? ensure_pear_run_trace(content, run.id) : undefined;
+        run?.trace_available === true ? ensure_armada_run_trace(content, run.id) : undefined;
     if (trace_state !== undefined) {
-        append_pear_run_trace_toggle(footer_element, trace_state);
+        append_armada_run_trace_toggle(footer_element, trace_state);
     } else {
-        remove_pear_run_trace(content);
+        remove_armada_run_trace(content);
     }
     if (footer.overview !== null) {
         const overview = document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-        overview.setAttribute("class", "pear-run-settled-overview pear-live-overview");
-        overview.setAttribute("data-pear-generated", "true");
+        overview.setAttribute("class", "legacy-run-settled-overview legacy-live-overview");
+        overview.setAttribute("data-legacy-generated", "true");
         overview.setAttribute(
             "aria-label",
             $t({defaultMessage: "Last activity summary: {overview}"}, {overview: footer.overview}),
@@ -1593,32 +1611,32 @@ function maybe_render_pear_run_footer(view: MessageListView | undefined, $row: J
     }
     content.append(footer_element);
     if (trace_state !== undefined) {
-        place_pear_run_trace(content, trace_state);
+        place_armada_run_trace(content, trace_state);
     }
 }
 
 if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener(
-        pear_run_state.PEAR_LIVENESS_MARKERS_CHANGED_EVENT,
-        schedule_pear_presence_render,
+        legacy_run_state.ARMADA_LIVENESS_MARKERS_CHANGED_EVENT,
+        schedule_armada_presence_render,
     );
 }
 
-function update_rendered_pear_active_messages(): void {
-    const $pear_messages = $(".message_row.pear-message");
-    if ($pear_messages.length === 0) {
-        update_pear_thinking_glyphs();
+function update_rendered_armada_active_messages(): void {
+    const $armada_messages = $(".message_row.legacy-message");
+    if ($armada_messages.length === 0) {
+        update_armada_thinking_glyphs();
         return;
     }
-    $pear_messages.each((_index, row) => {
+    $armada_messages.each((_index, row) => {
         const $row = $(row);
         const message_id_attr = $row.attr("data-message-id");
         const message_id =
             message_id_attr === undefined ? undefined : Number.parseFloat(message_id_attr);
         const message = message_id === undefined ? undefined : message_store.get(message_id);
         $row.toggleClass(
-            "pear-active-message",
-            message !== undefined && is_active_pear_message(message, true),
+            "legacy-active-message",
+            message !== undefined && is_active_armada_message(message, true),
         );
         // The footer slot follows the run state: a run's start reaches
         // rendered rows through this sweep (not through a row rebuild),
@@ -1627,8 +1645,8 @@ function update_rendered_pear_active_messages(): void {
         // view renders the full chrome.
         const in_pane = row instanceof HTMLElement && row.closest("#message-thread-pane") !== null;
         const row_view = in_pane ? message_lists.get_message_list_for_row($row)?.view : undefined;
-        maybe_render_pear_run_footer(row_view, $row);
-        render_pear_live_progress($row);
+        maybe_render_armada_run_footer(row_view, $row);
+        render_armada_live_progress($row);
         render_message_threads(row_view, $row);
         // Artifact submessages can arrive immediately before the final
         // streaming edit.  Keep the independently mounted artifact host
@@ -1638,36 +1656,36 @@ function update_rendered_pear_active_messages(): void {
             submessage.render_submessage({message_id: message.id, $row});
         }
     });
-    update_pear_thinking_glyphs();
+    update_armada_thinking_glyphs();
 }
 
-let pear_presence_render_frame: number | undefined;
-const pending_pear_footer_message_ids = new Set<number>();
+let armada_presence_render_frame: number | undefined;
+const pending_armada_footer_message_ids = new Set<number>();
 
-function flush_pear_presence_render(): void {
-    const footer_message_ids = [...pending_pear_footer_message_ids];
-    pending_pear_footer_message_ids.clear();
+function flush_armada_presence_render(): void {
+    const footer_message_ids = [...pending_armada_footer_message_ids];
+    pending_armada_footer_message_ids.clear();
     if (footer_message_ids.length > 0) {
-        rerender_pear_result_messages(footer_message_ids);
+        rerender_armada_result_messages(footer_message_ids);
     }
-    update_rendered_pear_active_messages();
+    update_rendered_armada_active_messages();
 }
 
-function schedule_pear_presence_render(): void {
-    if (pear_presence_render_frame !== undefined) {
+function schedule_armada_presence_render(): void {
+    if (armada_presence_render_frame !== undefined) {
         return;
     }
     if (typeof requestAnimationFrame !== "function") {
-        flush_pear_presence_render();
+        flush_armada_presence_render();
         return;
     }
-    pear_presence_render_frame = requestAnimationFrame(() => {
-        pear_presence_render_frame = undefined;
-        flush_pear_presence_render();
+    armada_presence_render_frame = requestAnimationFrame(() => {
+        armada_presence_render_frame = undefined;
+        flush_armada_presence_render();
     });
 }
 
-function rerender_pear_result_messages(message_ids: number[]): void {
+function rerender_armada_result_messages(message_ids: number[]): void {
     const messages_to_render = [];
     for (const id of message_ids) {
         const message = message_store.get(id);
@@ -1680,7 +1698,7 @@ function rerender_pear_result_messages(message_ids: number[]): void {
     }
 }
 
-pear_run_state.on_active_run_result_messages_changed((change) => {
+legacy_run_state.on_active_run_result_messages_changed((change) => {
     // Footer stats can arrive (or grow) after the settle rerender; a
     // rerender re-runs the row post-processing that draws them.
     const footer_changed_message_ids = (change.footer_changed_message_ids ?? []).filter(
@@ -1688,35 +1706,35 @@ pear_run_state.on_active_run_result_messages_changed((change) => {
     );
     if (footer_changed_message_ids.length > 0) {
         for (const message_id of footer_changed_message_ids) {
-            pending_pear_footer_message_ids.add(message_id);
+            pending_armada_footer_message_ids.add(message_id);
         }
     }
-    schedule_pear_presence_render();
+    schedule_armada_presence_render();
 });
 
-pear_run_state.on_run_state_changed((run, event) => {
+legacy_run_state.on_run_state_changed((run, event) => {
     if (typeof run.result_message_id !== "number") {
         return;
     }
     if (run.status !== "running" && run.status !== "queued") {
-        pear_live_announcement_signatures.delete(run.result_message_id);
+        armada_live_announcement_signatures.delete(run.result_message_id);
     }
-    schedule_pear_presence_render();
+    schedule_armada_presence_render();
     if (event?.event_type !== "agent") {
-        refresh_open_pear_run_traces(run.id);
+        refresh_open_armada_run_traces(run.id);
     }
-    remember_pear_attention_candidate(run);
+    remember_armada_attention_candidate(run);
 });
 
-let pear_attention_run: pear_run_state.PearRunLiveView | undefined;
-let pear_attention_last_posted_at = 0;
-let pear_attention_backoff_until = 0;
-let pear_attention_backoff_ms = 0;
-let pear_attention_request_in_flight = false;
-const PEAR_ATTENTION_HEARTBEAT_MS = 5000;
-const PEAR_ATTENTION_MAX_BACKOFF_MS = 60000;
+let armada_attention_run: legacy_run_state.ArmadaRunLiveView | undefined;
+let armada_attention_last_posted_at = 0;
+let armada_attention_backoff_until = 0;
+let armada_attention_backoff_ms = 0;
+let armada_attention_request_in_flight = false;
+const ARMADA_ATTENTION_HEARTBEAT_MS = 5000;
+const ARMADA_ATTENTION_MAX_BACKOFF_MS = 60000;
 
-function pear_run_is_currently_visible(run: pear_run_state.PearRunLiveView): boolean {
+function armada_run_is_currently_visible(run: legacy_run_state.ArmadaRunLiveView): boolean {
     return (
         !document.hidden &&
         (run.status === "queued" || run.status === "running") &&
@@ -1724,62 +1742,62 @@ function pear_run_is_currently_visible(run: pear_run_state.PearRunLiveView): boo
         run.topic?.toLowerCase() === narrow_state.topic()?.toLowerCase() &&
         typeof run.result_message_id === "number" &&
         document.querySelector(
-            `.message_row[data-message-id="${run.result_message_id}"] .pear-live-progress`,
+            `.message_row[data-message-id="${run.result_message_id}"] .legacy-live-progress`,
         ) !== null
     );
 }
 
-function post_pear_attention_if_visible(): void {
-    const run = pear_attention_run;
-    if (run === undefined || !pear_run_is_currently_visible(run)) {
+function post_armada_attention_if_visible(): void {
+    const run = armada_attention_run;
+    if (run === undefined || !armada_run_is_currently_visible(run)) {
         return;
     }
     const now = Date.now();
     if (
-        pear_attention_request_in_flight ||
-        now < pear_attention_backoff_until ||
-        now - pear_attention_last_posted_at < PEAR_ATTENTION_HEARTBEAT_MS
+        armada_attention_request_in_flight ||
+        now < armada_attention_backoff_until ||
+        now - armada_attention_last_posted_at < ARMADA_ATTENTION_HEARTBEAT_MS
     ) {
         return;
     }
-    pear_attention_last_posted_at = now;
-    pear_attention_request_in_flight = true;
+    armada_attention_last_posted_at = now;
+    armada_attention_request_in_flight = true;
     void channel.post({
-        url: `/json/pear/runs/${run.id}/attention`,
+        url: `/json/armada/runs/${run.id}/attention`,
         data: {},
         success() {
-            pear_attention_backoff_ms = 0;
-            pear_attention_backoff_until = 0;
+            armada_attention_backoff_ms = 0;
+            armada_attention_backoff_until = 0;
         },
         error(xhr) {
             if (xhr.status === 429) {
-                pear_attention_backoff_ms = Math.min(
-                    Math.max(pear_attention_backoff_ms * 2, PEAR_ATTENTION_HEARTBEAT_MS),
-                    PEAR_ATTENTION_MAX_BACKOFF_MS,
+                armada_attention_backoff_ms = Math.min(
+                    Math.max(armada_attention_backoff_ms * 2, ARMADA_ATTENTION_HEARTBEAT_MS),
+                    ARMADA_ATTENTION_MAX_BACKOFF_MS,
                 );
-                pear_attention_backoff_until = Date.now() + pear_attention_backoff_ms;
+                armada_attention_backoff_until = Date.now() + armada_attention_backoff_ms;
             }
             if (xhr.readyState !== 0) {
                 blueslip.warn("Could not update Pear viewer attention.");
             }
         },
         complete() {
-            pear_attention_request_in_flight = false;
+            armada_attention_request_in_flight = false;
         },
     });
 }
 
-function remember_pear_attention_candidate(run: pear_run_state.PearRunLiveView): void {
+function remember_armada_attention_candidate(run: legacy_run_state.ArmadaRunLiveView): void {
     if (run.status === "queued" || run.status === "running") {
-        pear_attention_run = run;
-        post_pear_attention_if_visible();
-    } else if (pear_attention_run?.id === run.id) {
-        pear_attention_run = undefined;
+        armada_attention_run = run;
+        post_armada_attention_if_visible();
+    } else if (armada_attention_run?.id === run.id) {
+        armada_attention_run = undefined;
     }
 }
 
 if (typeof window !== "undefined") {
-    window.setInterval(post_pear_attention_if_visible, PEAR_ATTENTION_HEARTBEAT_MS);
+    window.setInterval(post_armada_attention_if_visible, ARMADA_ATTENTION_HEARTBEAT_MS);
 }
 
 type BoundaryMessageContainerInfo = {
@@ -2139,7 +2157,7 @@ export class MessageListView {
     show_thread_previews: boolean;
     // Secondary lists (e.g. the thread pane) can strip per-row chrome that
     // would duplicate the chrome of the container they are mounted in:
-    // the message-thread strip and the pear run footer.
+    // the message-thread strip and the armada run footer.
     suppress_row_chrome: boolean;
     // TODO: Access this via .list.data.
     collapse_messages: boolean;
@@ -2262,7 +2280,7 @@ export class MessageListView {
 
     _get_visible_message_edited_and_moved_vars(
         message: Message,
-        is_pear_message: boolean,
+        is_agent_message: boolean,
     ): {
         last_edit_timestamp: number | undefined;
         last_moved_timestamp: number | undefined;
@@ -2272,7 +2290,7 @@ export class MessageListView {
         widget_edited: boolean;
     } {
         const edited_and_moved_vars = this._get_message_edited_and_moved_vars(message);
-        if (!is_pear_message) {
+        if (!is_agent_message) {
             return edited_and_moved_vars;
         }
         return {
@@ -2305,8 +2323,8 @@ export class MessageListView {
         is_hidden: boolean;
         mention_classname: string | undefined;
         include_sender: boolean;
-        is_pear_active_message: boolean;
-        is_pear_message: boolean;
+        is_armada_active_message: boolean;
+        is_agent_message: boolean;
         status_message: string | false;
         last_edit_timestamp: number | undefined;
         last_moved_timestamp: number | undefined;
@@ -2374,17 +2392,17 @@ export class MessageListView {
         }
 
         const sender_is_bot = people.sender_is_bot(message);
-        const is_pear_message = message_is_pear_message(message, is_hidden);
+        const is_agent_message = message_is_armada_message(message, is_hidden);
         // The agent is ambient: its rows carry no sender chrome at all —
         // the tinted block and the pixel voice are the identity — so
         // every Pear row renders as a continuation row, prose starting
         // beside the timestamp instead of under an empty sender band.
-        if (is_pear_message) {
+        if (is_agent_message) {
             include_sender = false;
         }
-        const is_pear_active_message = is_active_pear_message(message, is_pear_message);
+        const is_armada_active_message = is_active_armada_message(message, is_agent_message);
         const is_typing = typing_data.is_message_editing(message.id);
-        if (is_typing && !is_pear_message) {
+        if (is_typing && !is_agent_message) {
             // Ensure the typing animation is rendered when a user switches
             // to a view where someone is editing a message.
             setTimeout(() => {
@@ -2417,10 +2435,10 @@ export class MessageListView {
             is_hidden,
             mention_classname,
             include_sender,
-            is_pear_active_message,
-            is_pear_message,
+            is_armada_active_message,
+            is_agent_message,
             ...this._maybe_get_me_message(is_hidden, message),
-            ...this._get_visible_message_edited_and_moved_vars(message, is_pear_message),
+            ...this._get_visible_message_edited_and_moved_vars(message, is_agent_message),
         };
     }
 
@@ -2979,15 +2997,15 @@ export class MessageListView {
         const $content = $row.find(".message_content");
 
         rendered_markdown.update_elements($content);
-        enhance_pear_tool_rows($row);
-        maybe_render_pear_run_footer(this, $row);
-        render_pear_live_progress($row);
+        enhance_armada_tool_rows($row);
+        maybe_render_armada_run_footer(this, $row);
+        render_armada_live_progress($row);
         render_message_threads(this, $row);
         // Live progress owns the current-step glyph, so it must exist before
         // the animation decorator scans the row. Streaming edits take this
         // path repeatedly; reversing these calls leaves the freshly replaced
         // glyph frozen until some unrelated liveness event arrives.
-        maybe_render_pear_thinking_glyph($row);
+        maybe_render_armada_thinking_glyph($row);
 
         const id = rows.id($row);
         message_edit.maybe_show_edit($row, id);
@@ -3171,7 +3189,7 @@ export class MessageListView {
                 // Not adding to new_dom_elements it is only used for autoscroll
 
                 this._post_process($dom_messages);
-                unmount_pear_artifacts_in($old_message_group);
+                unmount_armada_artifacts_in($old_message_group);
                 destroy_message_threads_in($old_message_group);
                 $old_message_group.replaceWith($rendered_groups);
                 condense.condense_and_collapse($dom_messages);
@@ -3244,7 +3262,7 @@ export class MessageListView {
             list.update_trailing_bookend();
         }
         if (list === message_lists.current) {
-            pear_panel.refresh_topic_header_controls();
+            legacy_panel.refresh_topic_header_controls();
         }
 
         if (list === message_lists.current) {
@@ -3619,10 +3637,10 @@ export class MessageListView {
         this.set_edited_notice_locations(message_container);
 
         const $rendered_msg = $(this._get_message_template(message_container));
-        if (message_content_edited && !message_container.is_pear_message) {
+        if (message_content_edited && !message_container.is_agent_message) {
             $rendered_msg.addClass("fade-in-message");
         }
-        if (message_container.is_pear_message && $row.length === 1) {
+        if (message_container.is_agent_message && $row.length === 1) {
             // Streaming ticks arrive every second or two; replacing the
             // whole row each time restarts every CSS animation in it
             // (the ✦ cycle, the settling spinner) and reads as flicker.
@@ -3643,7 +3661,7 @@ export class MessageListView {
                 old_row instanceof HTMLElement &&
                 new_row instanceof HTMLElement
             ) {
-                const adopted = pear_morph_content(old_content, new_content);
+                const adopted = armada_morph_content(old_content, new_content);
                 // The fresh template only knows template-driven classes;
                 // carry over the ones Zulip applies to live rows after
                 // render, or selection and condensation would strobe on
@@ -3658,16 +3676,16 @@ export class MessageListView {
                 // The markdown decoration pass is not idempotent
                 // (spoiler buttons and code copy buttons append per
                 // call), so it runs only on the freshly adopted nodes;
-                // the pear decorations below are idempotent by design
+                // the armada decorations below are idempotent by design
                 // and run row-wide.
                 for (const node of adopted) {
                     rendered_markdown.update_elements($(node));
                 }
-                enhance_pear_tool_rows($row);
-                maybe_render_pear_run_footer(this, $row);
-                render_pear_live_progress($row);
+                enhance_armada_tool_rows($row);
+                maybe_render_armada_run_footer(this, $row);
+                render_armada_live_progress($row);
                 render_message_threads(this, $row);
-                maybe_render_pear_thinking_glyph($row);
+                maybe_render_armada_thinking_glyph($row);
                 submessage.render_submessage({
                     $row,
                     message_id: rows.id($row),
@@ -3679,7 +3697,7 @@ export class MessageListView {
             }
         }
         this._post_process($rendered_msg);
-        unmount_pear_artifacts_in($row);
+        unmount_armada_artifacts_in($row);
         destroy_message_threads_in($row);
         $row.replaceWith($rendered_msg);
 
@@ -3806,7 +3824,7 @@ export class MessageListView {
             // Rebuilding a recipient bar discards the injected Pear status
             // cluster; re-inject it in the same pass so the header does
             // not flicker for every streaming transcript edit.
-            pear_panel.refresh_topic_header_controls();
+            legacy_panel.refresh_topic_header_controls();
         }
 
         if (message_lists.current === this.list && narrow_state.is_message_feed_visible()) {

@@ -6,7 +6,7 @@ from typing import Any, TypedDict
 
 import orjson
 
-from zerver.lib.armada_identity import pear_bot_user_ids_from_user_ids
+from zerver.lib.armada_identity import armada_bot_user_ids_from_user_ids
 from zerver.lib.avatar import get_avatar_field, get_avatar_for_inaccessible_user
 from zerver.lib.cache import cache_set_many, cache_with_key, to_dict_cache_key, to_dict_cache_key_id
 from zerver.lib.display_recipient import bulk_fetch_display_recipients
@@ -158,7 +158,7 @@ class MessageDict:
         processor.
         """
         MessageDict.bulk_hydrate_sender_info([obj])
-        MessageDict.bulk_hydrate_pear_message_flags([obj])
+        MessageDict.bulk_hydrate_armada_message_flags([obj])
         MessageDict.bulk_hydrate_recipient_info([obj])
 
         return obj
@@ -181,7 +181,7 @@ class MessageDict:
               often fetching hundreds of messages.
         """
         MessageDict.bulk_hydrate_sender_info(objs)
-        MessageDict.bulk_hydrate_pear_message_flags(objs)
+        MessageDict.bulk_hydrate_armada_message_flags(objs)
         MessageDict.bulk_hydrate_recipient_info(objs)
 
         for obj in objs:
@@ -336,7 +336,7 @@ class MessageDict:
 
         MessageDict.sew_submessages_and_reactions_to_msgs(message_rows)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in message_rows]
-        MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
+        MessageDict.bulk_hydrate_armada_message_flags(message_dicts)
         return message_dicts
 
     @staticmethod
@@ -364,7 +364,7 @@ class MessageDict:
         messages = Message.objects.filter(id__in=needed_ids).values(*fields)
         MessageDict.sew_submessages_and_reactions_to_msgs(messages)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
-        MessageDict.bulk_hydrate_pear_message_flags(message_dicts)
+        MessageDict.bulk_hydrate_armada_message_flags(message_dicts)
         return message_dicts
 
     @staticmethod
@@ -522,14 +522,14 @@ class MessageDict:
             obj["sender_email_address_visibility"] = user_row["email_address_visibility"]
 
     @staticmethod
-    def bulk_hydrate_pear_message_flags(objs: list[dict[str, Any]]) -> None:
-        objs_to_hydrate = [obj for obj in objs if "is_pear_message" not in obj]
-        pear_bot_user_ids = pear_bot_user_ids_from_user_ids(
+    def bulk_hydrate_armada_message_flags(objs: list[dict[str, Any]]) -> None:
+        objs_to_hydrate = [obj for obj in objs if "is_agent_message" not in obj]
+        agent_user_ids = armada_bot_user_ids_from_user_ids(
             obj["sender_id"] for obj in objs_to_hydrate
         )
 
         for obj in objs_to_hydrate:
-            obj["is_pear_message"] = obj["sender_id"] in pear_bot_user_ids
+            obj["is_agent_message"] = obj["sender_id"] in agent_user_ids
 
     @staticmethod
     def bulk_hydrate_message_thread_summaries(

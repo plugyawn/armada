@@ -13,7 +13,7 @@ const settings_data = mock_esm("../src/settings_data");
 
 const message_lists = zrequire("message_lists");
 const people = zrequire("people");
-const {set_current_user, set_pear_bot_user_ids, set_realm} = zrequire("state_data");
+const {set_current_user, set_armada_bot_user_ids, set_realm} = zrequire("state_data");
 const typing_data = zrequire("typing_data");
 const typing_events = zrequire("typing_events");
 
@@ -51,7 +51,7 @@ people.add_active_user(levin);
 people.add_active_user(kitty);
 
 run_test("render_notifications_for_narrow", ({override, mock_template}) => {
-    set_pear_bot_user_ids([]);
+    set_armada_bot_user_ids([]);
     override(current_user, "user_id", anna.user_id);
     override(settings_data, "user_can_access_all_other_users", () => true);
     const group = [anna.user_id, vronsky.user_id, levin.user_id, kitty.user_id];
@@ -115,7 +115,7 @@ run_test("display_notification tracks Pear typists without a working line", ({ov
 
     const $typing_notifications = $("#typing_notifications");
 
-    set_pear_bot_user_ids([vronsky.user_id]);
+    set_armada_bot_user_ids([vronsky.user_id]);
     typing_events.display_notification({
         id: 1,
         type: "typing",
@@ -135,7 +135,7 @@ run_test("display_notification tracks Pear typists without a working line", ({ov
     // deliberately renders nothing: the streaming transcript's animated
     // "Thinking ✦" line and the topic header already show the live state.
     assert.ok(!$typing_notifications.visible());
-    set_pear_bot_user_ids([]);
+    set_armada_bot_user_ids([]);
     typing_data.clear_for_testing();
 });
 
@@ -155,7 +155,7 @@ run_test(
             return "<ul>typing</ul>";
         });
 
-        set_pear_bot_user_ids([vronsky.user_id]);
+        set_armada_bot_user_ids([vronsky.user_id]);
         typing_data.add_typist(conversation_key, vronsky.user_id);
         typing_data.add_typist(conversation_key, anna.user_id);
         typing_events.render_notifications_for_narrow();
@@ -164,7 +164,7 @@ run_test(
         assert.ok($typing_notifications.visible());
         assert.equal(rendered_context.users.length, 1);
         assert.equal(rendered_context.users[0].user_id, anna.user_id);
-        set_pear_bot_user_ids([]);
+        set_armada_bot_user_ids([]);
         typing_data.clear_for_testing();
     },
 );

@@ -40,8 +40,8 @@ from zerver.lib.armada_workspace_io import (
     validate_workspace_relative_path,
 )
 from zerver.lib.armada_workspace_resources import (
-    PEAR_WORKSPACE_RAW_MAX_BYTES,
-    PEAR_WORKSPACE_TEXT_MAX_BYTES,
+    ARMADA_WORKSPACE_RAW_MAX_BYTES,
+    ARMADA_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceDestinationPolicyError,
     WorkspaceHistoryCursorError,
     WorkspaceMutationReadOnlyError,
@@ -96,8 +96,8 @@ from zerver.models.users import UserProfile
 
 logger = logging.getLogger(__name__)
 
-PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS = 30
-PEAR_WORKSPACE_RECOVERY_BATCH_SIZE = 8
+ARMADA_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS = 30
+ARMADA_WORKSPACE_RECOVERY_BATCH_SIZE = 8
 _P = ParamSpec("_P")
 _ResponseT = TypeVar("_ResponseT", bound=HttpResponseBase)
 
@@ -117,13 +117,13 @@ def workspace_server_timing(
                 raise
             duration_ms = (time.perf_counter() - started) * 1000
             cache_status = consume_workspace_cache_status()
-            timings = [f'pear_workspace;dur={duration_ms:.2f};desc="{operation}"']
+            timings = [f'armada_workspace;dur={duration_ms:.2f};desc="{operation}"']
             if cache_status is not None:
-                timings.append(f'pear_workspace_cache;desc="{cache_status}"')
+                timings.append(f'armada_workspace_cache;desc="{cache_status}"')
             response["Server-Timing"] = ", ".join(timings)
             response_metric = f"response_{operation}_{response.status_code // 100}xx"
             record_workspace_metric(response_metric)
-            response["X-Pear-Workspace-Operation-Count"] = str(
+            response["X-Armada-Workspace-Operation-Count"] = str(
                 workspace_metrics_snapshot()[response_metric]
             )
             return response
@@ -215,8 +215,8 @@ def _workspace_descriptor_payload(
             **mutation_capabilities,
         },
         "limits": {
-            "text_file_max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES,
-            "raw_file_max_bytes": PEAR_WORKSPACE_RAW_MAX_BYTES,
+            "text_file_max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES,
+            "raw_file_max_bytes": ARMADA_WORKSPACE_RAW_MAX_BYTES,
         },
     }
 
@@ -428,7 +428,7 @@ def _terminal_entry_mutation_response(
         )
     return json_success(
         request,
-        data={"pear_workspace_mutation": receipt.result_payload},
+        data={"armada_workspace_mutation": receipt.result_payload},
     )
 
 
@@ -588,7 +588,7 @@ def _inspect_created_path(
             file = read_workspace_node_file(
                 node,
                 path,
-                max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+                max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
                 expected_identity=expected_identity,
             )
             if hashlib.sha256(file.data).hexdigest() != content_sha256:
@@ -918,10 +918,10 @@ def _reconcile_interrupted_entry_mutations(
     node: Workspace,
 ) -> WorkspaceSnapshot | None:
     prepared_before = timezone_now() - timedelta(
-        seconds=PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS
+        seconds=ARMADA_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS
     )
     latest_snapshot: WorkspaceSnapshot | None = None
-    for _attempt in range(PEAR_WORKSPACE_RECOVERY_BATCH_SIZE):
+    for _attempt in range(ARMADA_WORKSPACE_RECOVERY_BATCH_SIZE):
         with lock_next_recoverable_workspace_entry_mutation(
             node,
             prepared_before=prepared_before,
@@ -1002,7 +1002,7 @@ def _text_file_payload(
         "language": workspace_language(entry.path),
         "editable": False,
         "rich_mode_eligible": workspace_rich_mode_eligible(entry.path),
-        "max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES,
+        "max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES,
     }
     if edit_revision is not None:
         payload["edit_revision"] = edit_revision
@@ -1033,7 +1033,7 @@ def _unsupported_file_response(
         "language": workspace_language(entry.path),
         "editable": False,
         "rich_mode_eligible": False,
-        "max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES,
+        "max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES,
     }
     if file is not None:
         metadata.update({"version": file.version, "size": file.size})
@@ -1055,7 +1055,7 @@ def _read_text_file(
         file = read_workspace_node_file(
             node,
             entry.path,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_identity=entry.identity,
         )
     except WorkspaceFileTooLargeError:
@@ -1064,7 +1064,7 @@ def _read_text_file(
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=snapshot.revision,
-            data={"entry": _entry_payload(entry), "max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"entry": _entry_payload(entry), "max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
         return _workspace_error(
@@ -1129,7 +1129,7 @@ def _check_and_record_file_observation(
 
 @workspace_server_timing("descriptor")
 @typed_endpoint
-def get_pear_workspace_descriptor_backend(
+def get_armada_workspace_descriptor_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1141,13 +1141,13 @@ def get_pear_workspace_descriptor_backend(
         return snapshot
     return json_success(
         request,
-        data={"pear_workspace": _workspace_descriptor_payload(node, snapshot)},
+        data={"armada_workspace": _workspace_descriptor_payload(node, snapshot)},
     )
 
 
 @workspace_server_timing("tree")
 @typed_endpoint
-def get_pear_workspace_tree_backend(
+def get_armada_workspace_tree_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1199,7 +1199,7 @@ def get_pear_workspace_tree_backend(
     return json_success(
         request,
         data={
-            "pear_workspace_tree": {
+            "armada_workspace_tree": {
                 "workspace_uuid": snapshot.workspace_uuid,
                 "workspace_revision": snapshot.revision,
                 "directory": _entry_payload(directory),
@@ -1225,7 +1225,7 @@ def _ancestor_payloads(
 
 @workspace_server_timing("search")
 @typed_endpoint
-def get_pear_workspace_search_backend(
+def get_armada_workspace_search_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1255,7 +1255,7 @@ def get_pear_workspace_search_backend(
     return json_success(
         request,
         data={
-            "pear_workspace_search": {
+            "armada_workspace_search": {
                 "workspace_uuid": snapshot.workspace_uuid,
                 "workspace_revision": snapshot.revision,
                 "query": query,
@@ -1267,7 +1267,7 @@ def get_pear_workspace_search_backend(
 
 @workspace_server_timing("file_read")
 @typed_endpoint
-def get_pear_workspace_resource_file_backend(
+def get_armada_workspace_resource_file_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1291,7 +1291,7 @@ def get_pear_workspace_resource_file_backend(
     observation_error = _check_and_record_file_observation(node, snapshot, entry, file)
     if observation_error is not None:
         return observation_error
-    return json_success(request, data={"pear_workspace_file": payload})
+    return json_success(request, data={"armada_workspace_file": payload})
 
 
 def _stale_workspace_response(snapshot: WorkspaceSnapshot) -> HttpResponse:
@@ -1326,7 +1326,7 @@ def _workspace_version_conflict_response(
         remote_file = read_workspace_node_file(
             node,
             conflict_entry.path,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_identity=conflict_entry.identity,
         )
     except (WorkspaceEntryIdError, WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
@@ -1342,7 +1342,7 @@ def _workspace_version_conflict_response(
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=int(node.content_revision),
-            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     except (WorkspaceSnapshotError, WorkspaceIOError):
         return _workspace_error(
@@ -1372,7 +1372,7 @@ def _workspace_version_conflict_response(
 
 @workspace_server_timing("file_write")
 @typed_endpoint
-def put_pear_workspace_resource_file_backend(
+def put_armada_workspace_resource_file_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1425,13 +1425,13 @@ def put_pear_workspace_resource_file_backend(
             status=409,
             revision=snapshot.revision,
         )
-    if len(content_bytes) > PEAR_WORKSPACE_TEXT_MAX_BYTES:
+    if len(content_bytes) > ARMADA_WORKSPACE_TEXT_MAX_BYTES:
         return _workspace_error(
             code="file_too_large",
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=snapshot.revision,
-            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     if re.fullmatch(r"[0-9a-f]{64}", base_version) is None:
         raise JsonableError(_("Invalid base version."))
@@ -1467,7 +1467,7 @@ def put_pear_workspace_resource_file_backend(
             current_file = read_workspace_node_file(
                 node,
                 current_entry.path,
-                max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+                max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
                 expected_identity=receipt.result_identity,
             )
         except (
@@ -1509,7 +1509,7 @@ def put_pear_workspace_resource_file_backend(
                 result_revision=snapshot.revision,
                 result_entry_id=current_entry.entry_id,
             )
-        return json_success(request, data={"pear_workspace_file": payload})
+        return json_success(request, data={"armada_workspace_file": payload})
 
     entry = _resolve_file_entry(snapshot, entry_id)
     if isinstance(entry, HttpResponse):
@@ -1607,7 +1607,7 @@ def put_pear_workspace_resource_file_backend(
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=snapshot.revision,
-            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     except WorkspaceEntryNotFoundError:
         return _workspace_error(
@@ -1660,12 +1660,12 @@ def put_pear_workspace_resource_file_backend(
         user_profile.id,
         result.changed,
     )
-    return json_success(request, data={"pear_workspace_file": payload})
+    return json_success(request, data={"armada_workspace_file": payload})
 
 
 @workspace_server_timing("entry_create")
 @typed_endpoint
-def post_pear_workspace_entry_backend(
+def post_armada_workspace_entry_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1734,13 +1734,13 @@ def post_pear_workspace_entry_backend(
         if receipt is None:
             return destination
         destination = normalized_destination
-    if len(content_bytes) > PEAR_WORKSPACE_TEXT_MAX_BYTES:
+    if len(content_bytes) > ARMADA_WORKSPACE_TEXT_MAX_BYTES:
         return _workspace_error(
             code="file_too_large",
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=snapshot.revision,
-            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     if receipt is None:
         receipt, _created = prepare_workspace_entry_mutation_receipt(
@@ -1829,7 +1829,7 @@ def post_pear_workspace_entry_backend(
             message="Workspace file exceeds the editable size limit.",
             status=413,
             revision=int(node.content_revision),
-            data={"max_bytes": PEAR_WORKSPACE_TEXT_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_TEXT_MAX_BYTES},
         )
     except (WorkspaceEntryNotFoundError, WorkspaceEntryChangedError):
         return _workspace_error(
@@ -1860,13 +1860,13 @@ def post_pear_workspace_entry_backend(
     )
     return json_success(
         request,
-        data={"pear_workspace_mutation": mutation_payload},
+        data={"armada_workspace_mutation": mutation_payload},
     )
 
 
 @workspace_server_timing("entry_rename")
 @typed_endpoint
-def patch_pear_workspace_entry_backend(
+def patch_armada_workspace_entry_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2126,13 +2126,13 @@ def patch_pear_workspace_entry_backend(
     )
     return json_success(
         request,
-        data={"pear_workspace_mutation": mutation_payload},
+        data={"armada_workspace_mutation": mutation_payload},
     )
 
 
 @workspace_server_timing("entry_delete")
 @typed_endpoint
-def delete_pear_workspace_entry_backend(
+def delete_armada_workspace_entry_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2390,13 +2390,13 @@ def delete_pear_workspace_entry_backend(
     )
     return json_success(
         request,
-        data={"pear_workspace_mutation": mutation_payload},
+        data={"armada_workspace_mutation": mutation_payload},
     )
 
 
 @workspace_server_timing("history")
 @typed_endpoint
-def get_pear_workspace_history_backend(
+def get_armada_workspace_history_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2449,7 +2449,7 @@ def get_pear_workspace_history_backend(
     return json_success(
         request,
         data={
-            "pear_workspace_history": {
+            "armada_workspace_history": {
                 "workspace_uuid": snapshot.workspace_uuid,
                 "workspace_revision": snapshot.revision,
                 "entry": _entry_payload(entry),
@@ -2470,7 +2470,7 @@ def get_pear_workspace_history_backend(
 
 @workspace_server_timing("raw")
 @typed_endpoint
-def get_pear_workspace_raw_backend(
+def get_armada_workspace_raw_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2512,7 +2512,7 @@ def get_pear_workspace_raw_backend(
             message="Workspace file exceeds the raw download size limit.",
             status=413,
             revision=snapshot.revision,
-            data={"max_bytes": PEAR_WORKSPACE_RAW_MAX_BYTES},
+            data={"max_bytes": ARMADA_WORKSPACE_RAW_MAX_BYTES},
         )
     except WorkspaceIOError:
         return _workspace_error(
@@ -2533,13 +2533,13 @@ def get_pear_workspace_raw_backend(
     response["Cache-Control"] = "private, max-age=0, must-revalidate"
     response["Content-Security-Policy"] = "default-src 'none'; sandbox"
     response["X-Content-Type-Options"] = "nosniff"
-    response["X-Pear-Workspace-Revision"] = str(snapshot.revision)
+    response["X-Armada-Workspace-Revision"] = str(snapshot.revision)
     return response
 
 
 @workspace_server_timing("refresh")
 @typed_endpoint
-def post_pear_workspace_refresh_backend(
+def post_armada_workspace_refresh_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2567,7 +2567,7 @@ def post_pear_workspace_refresh_backend(
     return json_success(
         request,
         data={
-            "pear_workspace_refresh": {
+            "armada_workspace_refresh": {
                 "changed": changed,
                 "workspace": _workspace_descriptor_payload(node, snapshot),
             }

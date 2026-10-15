@@ -2,25 +2,25 @@
 // model options, topic keys, and Codex plan projection here so chat, the rail,
 // and the runtime menu do not grow parallel interpretations of the same state.
 
-export type PearReasoningEffortOption = {
+export type ArmadaReasoningEffortOption = {
     effort: string;
     label: string;
 };
 
-type PearRuntimeEffortSource =
+type ArmadaRuntimeEffortSource =
     | {
           model_catalog?:
               | {
                     slug: string;
-                    supported_reasoning_levels?: PearReasoningEffortOption[] | undefined;
+                    supported_reasoning_levels?: ArmadaReasoningEffortOption[] | undefined;
                 }[]
               | undefined;
-          reasoning_efforts?: PearReasoningEffortOption[] | undefined;
+          reasoning_efforts?: ArmadaReasoningEffortOption[] | undefined;
       }
     | undefined
     | null;
 
-export const fallback_reasoning_efforts: PearReasoningEffortOption[] = [
+export const fallback_reasoning_efforts: ArmadaReasoningEffortOption[] = [
     {effort: "low", label: "Low"},
     {effort: "medium", label: "Medium"},
     {effort: "high", label: "High"},
@@ -28,9 +28,9 @@ export const fallback_reasoning_efforts: PearReasoningEffortOption[] = [
 ];
 
 export function model_reasoning_efforts(
-    context: PearRuntimeEffortSource,
+    context: ArmadaRuntimeEffortSource,
     model: string | undefined,
-): PearReasoningEffortOption[] {
+): ArmadaReasoningEffortOption[] {
     const catalog_entry = context?.model_catalog?.find((entry) => entry.slug === model);
     const model_efforts = catalog_entry?.supported_reasoning_levels;
     if (model_efforts !== undefined && model_efforts.length > 0) {
@@ -59,15 +59,18 @@ export function compact_reasoning_effort(effort: string | undefined): string {
     return effort.at(0)?.toLowerCase() ?? "";
 }
 
-export type PearWindowedIndex = number | "ellipsis";
+export type ArmadaWindowedIndex = number | "ellipsis";
 
-export function windowed_plan_indices(length: number, current_index: number): PearWindowedIndex[] {
+export function windowed_plan_indices(
+    length: number,
+    current_index: number,
+): ArmadaWindowedIndex[] {
     if (length <= 0 || current_index < 0 || current_index >= length) {
         return [];
     }
     const first = Math.max(0, current_index - 1);
     const last = Math.min(length - 1, current_index + 1);
-    const result: PearWindowedIndex[] = [];
+    const result: ArmadaWindowedIndex[] = [];
     if (first > 0) {
         result.push("ellipsis");
     }
@@ -80,12 +83,12 @@ export function windowed_plan_indices(length: number, current_index: number): Pe
     return result;
 }
 
-export type PearPlanSourceStep = {
+export type ArmadaPlanSourceStep = {
     step: string;
     status: string;
 };
 
-export type PearActivePlanRow =
+export type ArmadaActivePlanRow =
     | {
           kind: "ellipsis";
       }
@@ -97,7 +100,7 @@ export type PearActivePlanRow =
           is_current: boolean;
       };
 
-export type PearActivePlanPresentation =
+export type ArmadaActivePlanPresentation =
     | {
           kind: "working";
           current_key: "working";
@@ -107,15 +110,15 @@ export type PearActivePlanPresentation =
           kind: "plan";
           current_key: string;
           current_index: number;
-          rows: PearActivePlanRow[];
+          rows: ArmadaActivePlanRow[];
       };
 
 // Codex owns the plan and its statuses. This helper only projects a bounded,
 // deterministic window for the two places that display that plan; it never
 // generates, renames, or summarizes a step.
 export function active_plan_presentation(
-    plan: readonly PearPlanSourceStep[],
-): PearActivePlanPresentation {
+    plan: readonly ArmadaPlanSourceStep[],
+): ArmadaActivePlanPresentation {
     if (plan.length === 0) {
         return {kind: "working", current_key: "working", rows: []};
     }
@@ -126,7 +129,7 @@ export function active_plan_presentation(
     if (current_index === -1) {
         current_index = plan.length - 1;
     }
-    const rows: PearActivePlanRow[] = windowed_plan_indices(plan.length, current_index).map(
+    const rows: ArmadaActivePlanRow[] = windowed_plan_indices(plan.length, current_index).map(
         (index) => {
             if (index === "ellipsis") {
                 return {kind: "ellipsis"};

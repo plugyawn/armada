@@ -835,9 +835,9 @@ def add_subscriptions_backend(
     is_default_stream: Json[bool] = False,
     is_web_public: Json[bool] = False,
     message_retention_days: Json[str] | Json[int] = RETENTION_DEFAULT,
-    pear_repository_url: Annotated[
+    repository_url: Annotated[
         str | None,
-        ApiParamConfig("pear_repository_url", documentation_status=INTENTIONALLY_UNDOCUMENTED),
+        ApiParamConfig("repository_url", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
     principals: Json[list[str] | list[int]] | None = None,
     send_new_subscription_messages: Json[bool] = True,
@@ -852,18 +852,18 @@ def add_subscriptions_backend(
         principals = []
 
     request_settings_dict = locals()
-    clean_pear_repository_url = ""
-    if pear_repository_url is not None and pear_repository_url.strip():
+    clean_armada_repository_url = ""
+    if repository_url is not None and repository_url.strip():
         if len(streams_raw) != 1:
             raise JsonableError(
                 _("Repository URLs can only be set when creating a single new channel.")
             )
-        from zerver.lib.armada_worker import clean_pear_repository_url as clean_pear_repo_url
-        from zerver.lib.armada_worker import pear_user_is_trusted
+        from zerver.lib.armada_worker import armada_user_is_trusted
+        from zerver.lib.armada_worker import clean_armada_repository_url as clean_armada_repo_url
 
-        if not pear_user_is_trusted(user_profile):
+        if not armada_user_is_trusted(user_profile):
             raise JsonableError(_("You are not allowed to give a channel a Git repository."))
-        clean_pear_repository_url = clean_pear_repo_url(pear_repository_url)
+        clean_armada_repository_url = clean_armada_repo_url(repository_url)
 
     folder: ChannelFolder | None = None
     if folder_id is not None:
@@ -929,7 +929,7 @@ def add_subscriptions_backend(
 
     # Newly created streams are also authorized for the creator
     streams = authorized_streams + created_streams
-    if clean_pear_repository_url and len(created_streams) != 1:
+    if clean_armada_repository_url and len(created_streams) != 1:
         raise JsonableError(_("Repository URLs can only be set when creating a new channel."))
 
     if is_subscribing_other_users:
@@ -965,17 +965,17 @@ def add_subscriptions_backend(
     result["subscribed"] = dict(result["subscribed"])
     result["already_subscribed"] = dict(result["already_subscribed"])
 
-    if clean_pear_repository_url:
-        from zerver.lib.armada_worker import configure_pear_channel_repository_workspace
+    if clean_armada_repository_url:
+        from zerver.lib.armada_worker import configure_armada_channel_repository_workspace
 
         try:
-            configure_pear_channel_repository_workspace(
+            configure_armada_channel_repository_workspace(
                 user_profile,
                 stream=created_streams[0].name,
-                repository_url=clean_pear_repository_url,
+                repository_url=clean_armada_repository_url,
             )
         except JsonableError as error:
-            result["pear_repository_error"] = error.msg
+            result["armada_repository_error"] = error.msg
 
     if send_new_subscription_messages:
         send_user_subscribed_direct_messages = (

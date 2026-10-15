@@ -119,14 +119,14 @@ run_test(
             ".message_edit_notice",
             ".edit-notifications",
             ".spoiler-header",
-            ".pear-artifact-pin, .pear-artifact-action",
+            ".legacy-artifact-pin, .legacy-artifact-action",
             ".copy_codeblock",
             ".todo-widget label.checkbox",
         ]) {
             $target.set_matches(selector, false);
         }
         $target.set_parents_result(".spoiler-header", []);
-        $target.set_parents_result(".pear-artifact-pin, .pear-artifact-action", []);
+        $target.set_parents_result(".legacy-artifact-pin, .legacy-artifact-action", []);
         $target.set_parents_result(".copy_codeblock", []);
         $target.set_parents_result(".message_controls", []);
         $target.set_parents_result(".todo-widget label.checkbox", []);
@@ -155,13 +155,13 @@ run_test(
             ".message_edit_notice",
             ".edit-notifications",
             ".spoiler-header",
-            ".pear-artifact-pin, .pear-artifact-action",
+            ".legacy-artifact-pin, .legacy-artifact-action",
             ".copy_codeblock",
         ]) {
             $preview_target.set_matches(selector, false);
         }
         $preview_target.set_parents_result(".spoiler-header", []);
-        $preview_target.set_parents_result(".pear-artifact-pin, .pear-artifact-action", []);
+        $preview_target.set_parents_result(".legacy-artifact-pin, .legacy-artifact-action", []);
         $preview_target.set_parents_result(".copy_codeblock", []);
         $preview_target.set_parents_result(".message_controls", []);
         $preview_target.set_closest_results(thread_previews, [$.create("thread-preview")]);

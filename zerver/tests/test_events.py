@@ -164,7 +164,7 @@ from zerver.actions.users import (
     do_update_outgoing_webhook_service,
 )
 from zerver.actions.video_calls import do_set_video_call_provider_token
-from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
 from zerver.lib.drafts import DraftData, do_create_drafts, do_delete_draft, do_edit_draft
 from zerver.lib.event_schema import (
     check_alert_words,
@@ -737,26 +737,26 @@ class NormalActionsTest(BaseAction):
             )
         self.assertEqual(events[0]["message"][TOPIC_NAME], "")
 
-    def test_pear_send_message_event_is_flagged(self) -> None:
-        pear_bot = self.create_test_bot(
+    def test_armada_send_message_event_is_flagged(self) -> None:
+        armada_bot = self.create_test_bot(
             "pear",
             self.user_profile,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             config_data=orjson.dumps({}).decode(),
         )
 
         with self.verify_action(event_types=["message"]) as events:
             self.send_stream_message(
-                pear_bot,
+                armada_bot,
                 "Denmark",
-                content="pear status",
+                content="armada status",
                 skip_capture_on_commit_callbacks=True,
             )
 
         check_message("events[0]", events[0])
-        self.assertTrue(events[0]["message"]["is_pear_message"])
+        self.assertTrue(events[0]["message"]["is_agent_message"])
 
     def test_user_creation_events_on_sending_messages(self) -> None:
         self.set_up_db_for_testing_user_access()
@@ -3550,26 +3550,26 @@ class NormalActionsTest(BaseAction):
         check_realm_bot_add("events[3]", events[3], UserProfile.EMBEDDED_BOT)
 
         with self.verify_action(num_events=4) as events:
-            pear_bot = self.create_bot(
+            armada_bot = self.create_bot(
                 "pear",
                 full_name="Pear",
-                service_name=PEAR_EMBEDDED_BOT_SERVICE,
+                service_name=ARMADA_EMBEDDED_BOT_SERVICE,
                 config_data=orjson.dumps({}).decode(),
                 bot_type=UserProfile.EMBEDDED_BOT,
             )
         self.assertEqual(events[3]["type"], "realm_bot")
         self.assertEqual(events[3]["op"], "add")
-        self.assertEqual(events[3]["bot"]["user_id"], pear_bot.id)
+        self.assertEqual(events[3]["bot"]["user_id"], armada_bot.id)
 
-    def test_apply_pear_bot_user_id_realm_bot_events(self) -> None:
-        state: dict[str, Any] = {"realm_bots": [], "pear_bot_user_ids": []}
+    def test_apply_armada_bot_user_id_realm_bot_events(self) -> None:
+        state: dict[str, Any] = {"realm_bots": [], "agent_user_ids": []}
         events = [
             {
                 "type": "realm_bot",
                 "op": "add",
                 "bot": {
                     "user_id": 10,
-                    "services": [{"service_name": PEAR_EMBEDDED_BOT_SERVICE}],
+                    "services": [{"service_name": ARMADA_EMBEDDED_BOT_SERVICE}],
                 },
                 "id": 0,
             },
@@ -3584,7 +3584,7 @@ class NormalActionsTest(BaseAction):
                 "op": "add",
                 "bot": {
                     "user_id": 11,
-                    "services": [{"service_name": PEAR_EMBEDDED_BOT_SERVICE}],
+                    "services": [{"service_name": ARMADA_EMBEDDED_BOT_SERVICE}],
                 },
                 "id": 2,
             },
@@ -3604,7 +3604,7 @@ class NormalActionsTest(BaseAction):
             include_deactivated_groups=False,
         )
 
-        self.assertEqual(state["pear_bot_user_ids"], [])
+        self.assertEqual(state["agent_user_ids"], [])
 
     def test_change_bot_full_name(self) -> None:
         bot = self.create_bot("test")

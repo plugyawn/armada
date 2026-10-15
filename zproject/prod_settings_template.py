@@ -844,7 +844,7 @@ SOCIAL_AUTH_SAML_SUPPORT_CONTACT = {
 ## docs/armada/deploy.md for the whole setup: the Codex login, the
 ## worker queues, the worktree directory and git access.
 ##
-## Every PEAR_* setting below can also be set by an environment
+## Every ARMADA_* setting below can also be set by an environment
 ## variable of the same name, which wins over this file. Production
 ## Zulip runs under supervisor with no such environment, so set them
 ## here.
@@ -855,30 +855,30 @@ EMBEDDED_BOTS_ENABLED = True
 ## "codex-app-server" turns the agent on. Leave it "disabled" until the
 ## Codex CLI is installed and logged in as the zulip user
 ## (docs/armada/deploy.md).
-# PEAR_WORKER_AGENT_RUNTIME = "disabled"
+# ARMADA_WORKER_AGENT_RUNTIME = "disabled"
 
 ## The Codex executable. An absolute path, since supervisor's PATH may
 ## not include where it was installed. Unset, "codex" on the PATH.
-# PEAR_WORKER_CODEX_BIN = "/opt/codex/bin/codex"
+# ARMADA_WORKER_CODEX_BIN = "/opt/codex/bin/codex"
 
 ## Where channel repositories (bare clones, under projects/) and topic
 ## worktrees live. Owned by the zulip user, mode 0750, on a disk with
 ## room for every repository once plus one checkout per active topic.
-## Unset, it is a "pear-workspaces" directory next to the deployment.
-# PEAR_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
+## Unset, it is an "armada-workspaces" directory next to the deployment.
+# ARMADA_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
 
-## An empty directory owned by zulip, inside PEAR_TOPIC_WORKDIR_ROOT.
+## An empty directory owned by zulip, inside ARMADA_TOPIC_WORKDIR_ROOT.
 ## Unset, the server's own working directory stands in for it (only to
-## place the default PEAR_TOPIC_WORKDIR_ROOT), and a turn that has no
+## place the default ARMADA_TOPIC_WORKDIR_ROOT), and a turn that has no
 ## topic worktree is refused.
-# PEAR_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
+# ARMADA_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
 
 ## The model a run uses unless the person picks another in the model
-## picker, and the models the picker offers (PEAR_WORKER_MODEL is always
+## picker, and the models the picker offers (ARMADA_WORKER_MODEL is always
 ## among them). Model ids are Codex's (`codex debug models`, run as the
 ## zulip user, prints the catalog).
-# PEAR_WORKER_MODEL = "gpt-6-astra"
-# PEAR_WORKER_MODEL_CHOICES = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
+# ARMADA_WORKER_MODEL = "gpt-6-astra"
+# ARMADA_WORKER_MODEL_CHOICES = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
 
 ## The speed tier: "ultrafast" (offered only by the models whose catalog
 ## entry lists it) or "fast" (which Codex sends as the catalog's
@@ -886,12 +886,12 @@ EMBEDDED_BOTS_ENABLED = True
 ## with every turn, whichever model the topic uses; Codex drops a tier
 ## the model does not list and runs that model at standard speed.
 ## FAST_MODE turns on Codex's fast-mode feature for the app-server.
-# PEAR_WORKER_SERVICE_TIER = "ultrafast"
-# PEAR_WORKER_FAST_MODE = True
+# ARMADA_WORKER_SERVICE_TIER = "ultrafast"
+# ARMADA_WORKER_FAST_MODE = True
 
 ## Default reasoning effort: "low", "medium", "high", "xhigh", "max"
 ## or "ultra" (the models accept a subset; see the catalog).
-# PEAR_WORKER_REASONING_EFFORT = "medium"
+# ARMADA_WORKER_REASONING_EFFORT = "medium"
 
 ## Codex's sandbox for agent commands: "read-only", "workspace-write"
 ## (writes only inside the topic worktree, no network; the useful
@@ -900,18 +900,18 @@ EMBEDDED_BOTS_ENABLED = True
 ## the default isolation backend every agent runs as the zulip user and
 ## can read whatever that user can read, /etc/zulip/zulip-secrets.conf
 ## included; see "Security" in docs/armada/deploy.md.
-# PEAR_WORKER_SANDBOX = "read-only"
+# ARMADA_WORKER_SANDBOX = "read-only"
 ## When Codex asks before running a command: "untrusted",
 ## "on-request" or "never".
-# PEAR_WORKER_APPROVAL_POLICY = "on-request"
+# ARMADA_WORKER_APPROVAL_POLICY = "on-request"
 
 ## How agents are kept apart: "codex-sandbox" (Codex's own sandbox, as
 ## the zulip user) or "os-user" (one Unix user per topic, created by a
 ## root helper through sudo; it runs agents without Codex's sandbox,
 ## so with network access, and is not packaged for a production
 ## install: see docs/armada/deploy.md before choosing it).
-# PEAR_TOPIC_ISOLATION_BACKEND = "codex-sandbox"
-# PEAR_TOPIC_ISOLATION_HELPER = "/usr/local/sbin/pear-topic-isolate"
+# ARMADA_TOPIC_ISOLATION_BACKEND = "codex-sandbox"
+# ARMADA_TOPIC_ISOLATION_HELPER = "/usr/local/sbin/armada-topic-isolate"
 
 ## Who may drive the agent (start a run, steer it, answer its
 ## questions, set up a monitor) and give a new channel a repository URL
@@ -919,39 +919,39 @@ EMBEDDED_BOTS_ENABLED = True
 ## organization administrators, plus the user ids listed below. Every
 ## agent can read the server's secrets (see above), so this is on for a
 ## new server. False with an empty list lets every member do all of it.
-PEAR_WORKER_TRUSTED_USERS_ONLY = True
+ARMADA_WORKER_TRUSTED_USERS_ONLY = True
 ## The user ids, once the accounts exist (docs/armada/deploy.md, step 5).
-# PEAR_WORKER_TRUSTED_USER_IDS = []
+# ARMADA_WORKER_TRUSTED_USER_IDS = []
 ## Concurrent runs: per topic, and per organization (each running
 ## topic keeps its own Codex app-server process).
-# PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
-# PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
+# ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
+# ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
 
 ## A turn that produces nothing for this long is abandoned. This is an
 ## idle timeout, not a cap on a run's length; RabbitMQ's consumer
-## timeout for the pear_worker queues caps that (docs/armada/deploy.md).
-# PEAR_WORKER_TIMEOUT_SECONDS = 19800
+## timeout for the armada_worker queues caps that (docs/armada/deploy.md).
+# ARMADA_WORKER_TIMEOUT_SECONDS = 19800
 ## The longest reply or error text, in characters, the agent posts
 ## before cutting it with "[truncated]".
-# PEAR_WORKER_OUTPUT_LIMIT = 50000
+# ARMADA_WORKER_OUTPUT_LIMIT = 50000
 ## True keeps Codex threads in memory only; a restart then loses a
 ## topic's conversation with the agent.
-# PEAR_WORKER_CODEX_EPHEMERAL = False
+# ARMADA_WORKER_CODEX_EPHEMERAL = False
 ## Codex's memories feature. Every topic's agent shares one CODEX_HOME,
 ## and Codex injects the memory summary it consolidates from past
 ## sessions into every new session, so what an agent read in one
 ## channel, a private one included, can reach a run in another. Off
 ## for a new server; turn it on only if every channel's content may be
 ## seen by everyone who can address the agent.
-PEAR_WORKER_CODEX_MEMORIES = False
+ARMADA_WORKER_CODEX_MEMORIES = False
 ## Codex skills copied into the agent's CODEX_HOME before each run.
-## Unset, deployments/../pear/skills is used if it exists.
-# PEAR_CODEX_SKILLS_DIR = "/srv/armada/skills"
+## Unset, deployments/../armada/skills is used if it exists.
+# ARMADA_CODEX_SKILLS_DIR = "/srv/armada/skills"
 
 ## Each web process keeps recent Files-tab indexes in memory, bounded
 ## by entries and by total paths.
-# PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
-# PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
+# ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
+# ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
 
 ## Optional: let a Gemini model decide whether a message without an
 ## @-mention is addressed to the agent, and write live run summaries.
@@ -959,13 +959,13 @@ PEAR_WORKER_CODEX_MEMORIES = False
 ## setting or the GEMINI_API_KEY environment variable; this file is
 ## readable by every local user (mode 644), so prefer leaving the
 ## router off.
-# PEAR_ADDRESSING_ROUTER_RUNTIME = "disabled"
-# PEAR_GEMINI_INTERACTIONS_API_KEY = ""
-# PEAR_GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
-# PEAR_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
-# PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL = "minimal"
-# PEAR_PRESENTATION_GEMINI_MODEL = "gemini-3.1-flash-lite"
-# PEAR_PRESENTATION_GEMINI_THINKING_LEVEL = "minimal"
+# ARMADA_ADDRESSING_ROUTER_RUNTIME = "disabled"
+# ARMADA_GEMINI_INTERACTIONS_API_KEY = ""
+# ARMADA_GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
+# ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
+# ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL = "minimal"
+# ARMADA_PRESENTATION_GEMINI_MODEL = "gemini-3.1-flash-lite"
+# ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL = "minimal"
 
 ## The palette the interface is drawn in: "lapis", "tide", "citrine"
 ## or "onyx".

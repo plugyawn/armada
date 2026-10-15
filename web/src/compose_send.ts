@@ -35,7 +35,7 @@ type SendMessageBase = {
     to: string;
     content: string;
     draft_id?: string | undefined;
-    pear_followup?: string;
+    agent_followup?: string;
     thread_root_message_id?: number | undefined;
 };
 
@@ -79,13 +79,13 @@ function build_message_data_impl({
     recipient,
     content,
     draft_id,
-    pear_followup,
+    agent_followup,
     thread_root_message_id,
 }: {
     recipient: ResolvedComposeRecipient;
     content: string;
     draft_id?: string;
-    pear_followup?: boolean;
+    agent_followup?: boolean;
     thread_root_message_id?: number;
 }): ComposeSendMessageData {
     const common = {
@@ -93,7 +93,7 @@ function build_message_data_impl({
         queue_id: server_events_state.queue_id,
         content,
         ...(draft_id === undefined ? {} : {draft_id}),
-        ...(pear_followup ? {pear_followup: JSON.stringify(true)} : {}),
+        ...(agent_followup ? {agent_followup: JSON.stringify(true)} : {}),
         ...(thread_root_message_id === undefined ? {} : {thread_root_message_id}),
     };
     if (recipient.type === "stream") {

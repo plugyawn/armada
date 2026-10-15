@@ -17,7 +17,7 @@ import * as compose_ui from "./compose_ui.ts";
 import * as compose_validate from "./compose_validate.ts";
 import * as drafts from "./drafts.ts";
 import type {PostMessageAPIData} from "./echo.ts";
-import * as compose_pear from "./legacy_agent_toggle.ts";
+import * as legacy_agent_toggle from "./legacy_agent_toggle.ts";
 import type {LocalMessage} from "./message_helper.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import * as scheduled_messages from "./scheduled_messages.ts";
@@ -86,7 +86,7 @@ export function clear_compose_box(): void {
     compose_ui.hide_compose_spinner();
     scheduled_messages.reset_selected_schedule_timestamp();
     $(".needs-empty-compose").removeClass("disabled-on-hover");
-    compose_pear.clear();
+    legacy_agent_toggle.clear();
 }
 
 export type SentMessageData = compose_send.SentComposeMessageData<SendMessageData>;
@@ -153,7 +153,7 @@ function main_destination(): compose_controller.ComposeDestination {
     }
     return {
         recipient,
-        pear_followup: recipient.type === "stream" && compose_pear.is_followup_enabled(),
+        agent_followup: recipient.type === "stream" && legacy_agent_toggle.is_followup_enabled(),
     };
 }
 

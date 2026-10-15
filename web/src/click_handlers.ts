@@ -157,8 +157,8 @@ export function initialize(): void {
         // feature of stopPropagation once clicked.
         // See https://github.com/zenorocha/clipboard.js/pull/475
         if (
-            $target.is(".pear-artifact-pin, .pear-artifact-action") ||
-            $target.parents(".pear-artifact-pin, .pear-artifact-action").length > 0
+            $target.is(".legacy-artifact-pin, .legacy-artifact-action") ||
+            $target.parents(".legacy-artifact-pin, .legacy-artifact-action").length > 0
         ) {
             return true;
         }

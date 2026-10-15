@@ -1,7 +1,7 @@
 // The Pear console signature — flavor register item, printed once at
-// boot (pear/PEAR_DESIGN_LANGUAGE.md §11). Decoration only; must never
+// boot (armada/ARMADA_DESIGN_LANGUAGE.md §11). Decoration only; must never
 // throw or block.
-export function print_pear_signature(): void {
+export function print_armada_signature(): void {
     try {
         // eslint-disable-next-line no-console -- the signature is console output by design
         console.log(
@@ -16,7 +16,7 @@ export function print_pear_signature(): void {
                 "\n" +
                 String.raw` (      )` +
                 "\n" +
-                String.raw`  '-..-'   pear — the machine speaks in pixels`,
+                String.raw`  '-..-'   armada — the machine speaks in pixels`,
             "color: #3aa469; font-family: ui-monospace, monospace;",
         );
     } catch {

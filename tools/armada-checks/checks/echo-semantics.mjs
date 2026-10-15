@@ -291,15 +291,15 @@ async function steering(ctx) {
         await ctx.sleep(300);
         const steer = await send(`ac-steer-${stamp}`);
         const addressed =
-            steer?.get("pear_followup") === "true" && steer?.get("topic") === "demo-live-run";
-        const plain_addressed = plain?.get("pear_followup") === "true";
+            steer?.get("agent_followup") === "true" && steer?.get("topic") === "demo-live-run";
+        const plain_addressed = plain?.get("agent_followup") === "true";
         ctx.assert(
             "steer.request-addresses-live-run",
             live && plain !== null && steer !== null ? addressed && !plain_addressed : null,
             "==",
             1,
             {
-                note: `two requests in the topic of a live run (${live ? "its message is on screen" : "no live run on screen"}), both held and then failed, nothing posted and no run started; agent control on: pear_followup=${steer?.get("pear_followup")}, topic=${steer?.get("topic")}; off: pear_followup=${plain?.get("pear_followup")}`,
+                note: `two requests in the topic of a live run (${live ? "its message is on screen" : "no live run on screen"}), both held and then failed, nothing posted and no run started; agent control on: agent_followup=${steer?.get("agent_followup")}, topic=${steer?.get("topic")}; off: agent_followup=${plain?.get("agent_followup")}`,
             },
         );
     } finally {

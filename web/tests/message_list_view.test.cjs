@@ -41,7 +41,7 @@ const {MessageListData} = zrequire("message_list_data");
 const message_lists = zrequire("message_lists");
 const message_store = zrequire("message_store");
 const muted_users = zrequire("muted_users");
-const pear_run_state = zrequire("../src/legacy_run_state");
+const legacy_run_state = zrequire("../src/legacy_run_state");
 const state_data = zrequire("state_data");
 
 let next_timestamp = 1500000000;
@@ -50,11 +50,11 @@ function test(label, f) {
     run_test(label, ({override, mock_template}) => {
         sender_is_bot = () => false;
         $("document-stub").set_find_results(
-            ".pear-liveness-active .pear-thinking-glyph, .pear-rail-plan-active .pear-thinking-glyph, .message_row.pear-active-message .pear-live-plan-current .pear-thinking-glyph, .message_row.pear-active-message .pear-tool-row-active.pear-thinking-glyph",
+            ".legacy-liveness-active .legacy-thinking-glyph, .legacy-rail-plan-active .legacy-thinking-glyph, .message_row.legacy-active-message .legacy-live-plan-current .legacy-thinking-glyph, .message_row.legacy-active-message .legacy-tool-row-active.legacy-thinking-glyph",
             [],
         );
-        pear_run_state.clear_for_testing();
-        state_data.set_pear_bot_user_ids([]);
+        legacy_run_state.clear_for_testing();
+        state_data.set_armada_bot_user_ids([]);
         message_store.clear_for_testing();
         muted_users.set_muted_users([]);
         mock_template("message_list.hbs", false, () => "<message-list-stub>");
@@ -62,8 +62,8 @@ function test(label, f) {
     });
 }
 
-run_test("pear_run_footer_line", () => {
-    const line = message_list_view.pear_run_footer_line_for_testing({
+run_test("armada_run_footer_line", () => {
+    const line = message_list_view.armada_run_footer_line_for_testing({
         status: "done",
         duration_seconds: 33.4,
         total_tokens: 13541,
@@ -73,7 +73,7 @@ run_test("pear_run_footer_line", () => {
     assert.equal(line.glyph, "✓");
     assert.equal(line.failed, false);
 
-    const failed = message_list_view.pear_run_footer_line_for_testing({
+    const failed = message_list_view.armada_run_footer_line_for_testing({
         status: "failed",
         duration_seconds: 95,
         total_tokens: 412,
@@ -86,7 +86,7 @@ run_test("pear_run_footer_line", () => {
     assert.equal(failed.glyph, "translated: ✗ failed");
     assert.equal(failed.failed, true);
 
-    const bare = message_list_view.pear_run_footer_line_for_testing({
+    const bare = message_list_view.armada_run_footer_line_for_testing({
         status: "cancelled",
         duration_seconds: null,
         total_tokens: null,
@@ -97,24 +97,24 @@ run_test("pear_run_footer_line", () => {
     assert.equal(bare.failed, true);
 });
 
-run_test("pear live placeholder waits for typed assistant text", () => {
-    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(undefined), true);
-    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(false), true);
-    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true), false);
-    assert.equal(message_list_view.pear_live_is_placeholder_for_testing(true, true), true);
+run_test("armada live placeholder waits for typed assistant text", () => {
+    assert.equal(message_list_view.armada_live_is_placeholder_for_testing(undefined), true);
+    assert.equal(message_list_view.armada_live_is_placeholder_for_testing(false), true);
+    assert.equal(message_list_view.armada_live_is_placeholder_for_testing(true), false);
+    assert.equal(message_list_view.armada_live_is_placeholder_for_testing(true, true), true);
 });
 
-run_test("pear live announcements change only with the Codex plan step", () => {
+run_test("armada live announcements change only with the Codex plan step", () => {
     assert.equal(
-        message_list_view.pear_live_announcement_changed_for_testing(undefined, "working"),
+        message_list_view.armada_live_announcement_changed_for_testing(undefined, "working"),
         true,
     );
     assert.equal(
-        message_list_view.pear_live_announcement_changed_for_testing("working", "working"),
+        message_list_view.armada_live_announcement_changed_for_testing("working", "working"),
         false,
     );
     assert.equal(
-        message_list_view.pear_live_announcement_changed_for_testing(
+        message_list_view.armada_live_announcement_changed_for_testing(
             "1:Inspect files",
             "2:Run tests",
         ),
@@ -181,86 +181,95 @@ run_test("message rows resolve to their registered owning list", () => {
 });
 
 run_test(
-    "pear trace disclosure labels loading and failure separately from live plan status",
+    "armada trace disclosure labels loading and failure separately from live plan status",
     () => {
         assert.equal(
-            message_list_view.pear_trace_trigger_label_for_testing(true, false, "loading"),
+            message_list_view.armada_trace_trigger_label_for_testing(true, false, "loading"),
             "translated: Hide work while loading",
         );
         assert.equal(
-            message_list_view.pear_trace_trigger_label_for_testing(true, false, "failed"),
+            message_list_view.armada_trace_trigger_label_for_testing(true, false, "failed"),
             "translated: Retry loading work",
         );
         assert.equal(
-            message_list_view.pear_trace_trigger_label_for_testing(false, false, "failed"),
+            message_list_view.armada_trace_trigger_label_for_testing(false, false, "failed"),
             "translated: Retry loading work",
         );
     },
 );
 
-run_test("pear trace retries failed open requests without a collapse round trip", () => {
-    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(false, false), "expand");
-    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(true, false), "collapse");
-    assert.equal(message_list_view.pear_trace_toggle_action_for_testing(true, true), "retry");
+run_test("armada trace retries failed open requests without a collapse round trip", () => {
+    assert.equal(message_list_view.armada_trace_toggle_action_for_testing(false, false), "expand");
+    assert.equal(message_list_view.armada_trace_toggle_action_for_testing(true, false), "collapse");
+    assert.equal(message_list_view.armada_trace_toggle_action_for_testing(true, true), "retry");
 });
 
-run_test("pear trace rewires stale controls and keeps row clicks intentional", () => {
+run_test("armada trace rewires stale controls and keeps row clicks intentional", () => {
     assert.equal(
-        message_list_view.pear_trace_trigger_is_current_for_testing(
+        message_list_view.armada_trace_trigger_is_current_for_testing(
             "156",
-            "pear-run-trace-156-1",
+            "legacy-run-trace-156-1",
             156,
-            "pear-run-trace-156-2",
+            "legacy-run-trace-156-2",
         ),
         false,
     );
     assert.equal(
-        message_list_view.pear_trace_trigger_is_current_for_testing(
+        message_list_view.armada_trace_trigger_is_current_for_testing(
             "156",
-            "pear-run-trace-156-2",
+            "legacy-run-trace-156-2",
             156,
-            "pear-run-trace-156-2",
+            "legacy-run-trace-156-2",
         ),
         true,
     );
     assert.equal(
-        message_list_view.pear_trace_surface_click_should_toggle_for_testing(false, true),
+        message_list_view.armada_trace_surface_click_should_toggle_for_testing(false, true),
         true,
     );
     assert.equal(
-        message_list_view.pear_trace_surface_click_should_toggle_for_testing(true, true),
+        message_list_view.armada_trace_surface_click_should_toggle_for_testing(true, true),
         false,
     );
     assert.equal(
-        message_list_view.pear_trace_surface_click_should_toggle_for_testing(false, false),
+        message_list_view.armada_trace_surface_click_should_toggle_for_testing(false, false),
         false,
     );
 });
 
 run_test("planless progress gives way to typed assistant text", () => {
-    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, undefined), true);
-    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, false), true);
-    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, true), false);
-    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(0, true, true), true);
-    assert.equal(message_list_view.pear_live_should_show_progress_for_testing(1, true), true);
+    assert.equal(
+        message_list_view.armada_live_should_show_progress_for_testing(0, undefined),
+        true,
+    );
+    assert.equal(message_list_view.armada_live_should_show_progress_for_testing(0, false), true);
+    assert.equal(message_list_view.armada_live_should_show_progress_for_testing(0, true), false);
+    assert.equal(
+        message_list_view.armada_live_should_show_progress_for_testing(0, true, true),
+        true,
+    );
+    assert.equal(message_list_view.armada_live_should_show_progress_for_testing(1, true), true);
 });
 
 run_test("server Working sentinel hydrates without semantic text matching", () => {
-    assert.equal(message_list_view.pear_live_is_server_placeholder_for_testing("· Working"), true);
     assert.equal(
-        message_list_view.pear_live_is_server_placeholder_for_testing("  · Working\n"),
+        message_list_view.armada_live_is_server_placeholder_for_testing("· Working"),
         true,
     );
-    assert.equal(message_list_view.pear_live_is_server_placeholder_for_testing("Working"), false);
     assert.equal(
-        message_list_view.pear_live_is_server_placeholder_for_testing("· Working now"),
+        message_list_view.armada_live_is_server_placeholder_for_testing("  · Working\n"),
+        true,
+    );
+    assert.equal(message_list_view.armada_live_is_server_placeholder_for_testing("Working"), false);
+    assert.equal(
+        message_list_view.armada_live_is_server_placeholder_for_testing("· Working now"),
         false,
     );
 });
 
 run_test("thinking glyph animation is gated by visibility when supported", () => {
     assert.equal(
-        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+        message_list_view.armada_thinking_glyph_should_animate_for_testing({
             active: true,
             intersecting: false,
             observer_supported: true,
@@ -268,7 +277,7 @@ run_test("thinking glyph animation is gated by visibility when supported", () =>
         false,
     );
     assert.equal(
-        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+        message_list_view.armada_thinking_glyph_should_animate_for_testing({
             active: true,
             intersecting: true,
             observer_supported: true,
@@ -276,7 +285,7 @@ run_test("thinking glyph animation is gated by visibility when supported", () =>
         true,
     );
     assert.equal(
-        message_list_view.pear_thinking_glyph_should_animate_for_testing({
+        message_list_view.armada_thinking_glyph_should_animate_for_testing({
             active: true,
             intersecting: false,
             observer_supported: false,
@@ -442,7 +451,7 @@ test("msg_edited_and_moved_vars", () => {
         assert.equal(result[3].modified, false);
     })();
 
-    (function test_pear_message_hides_edit_notice_vars() {
+    (function test_armada_message_hides_edit_notice_vars() {
         const message = {
             last_edit_timestamp: (next_timestamp += 1),
             last_moved_timestamp: (next_timestamp += 1),
@@ -456,12 +465,12 @@ test("msg_edited_and_moved_vars", () => {
         assert.equal(normal_result.last_edit_timestamp, message.last_edit_timestamp);
         assert.equal(normal_result.last_moved_timestamp, message.last_moved_timestamp);
 
-        const pear_result = list._get_visible_message_edited_and_moved_vars(message, true);
-        assert.equal(pear_result.edited, false);
-        assert.equal(pear_result.moved, false);
-        assert.equal(pear_result.modified, false);
-        assert.equal(pear_result.last_edit_timestamp, undefined);
-        assert.equal(pear_result.last_moved_timestamp, undefined);
+        const armada_result = list._get_visible_message_edited_and_moved_vars(message, true);
+        assert.equal(armada_result.edited, false);
+        assert.equal(armada_result.moved, false);
+        assert.equal(armada_result.modified, false);
+        assert.equal(armada_result.last_edit_timestamp, undefined);
+        assert.equal(armada_result.last_moved_timestamp, undefined);
     })();
 });
 
@@ -760,7 +769,7 @@ test("muted_message_vars", () => {
     })();
 });
 
-test("pear_message_vars", () => {
+test("armada_message_vars", () => {
     function build_message_context(message = {}, message_context = {}) {
         return {
             include_sender: true,
@@ -770,7 +779,7 @@ test("pear_message_vars", () => {
                 sender_full_name: "Regular User",
                 sender_id: 10,
                 content: "<message-stub>",
-                is_pear_message: false,
+                is_agent_message: false,
                 ...message,
             },
         };
@@ -804,16 +813,16 @@ test("pear_message_vars", () => {
 
     sender_is_bot = (message) => message.sender_id === 25 || message.sender_id === 26;
 
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1001}]);
+    legacy_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1001}]);
     let result = calculate_variables(
         build_message_context({
             id: 1001,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, true);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
@@ -821,11 +830,11 @@ test("pear_message_vars", () => {
         build_message_context({
             id: 1002,
             content: "<p><em>Thinking</em> ✦</p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
@@ -833,76 +842,76 @@ test("pear_message_vars", () => {
         build_message_context({
             id: 1003,
             content: "<p>I’ll check the current workspace. ✦</p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
+    legacy_run_state.set_active_run_result_messages([{status: "running", result_message_id: 1005}]);
     result = calculate_variables(
         build_message_context({
             id: 1005,
             content: "<p><em>Thinking</em></p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, true);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, true);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
-    pear_run_state.set_active_run_result_messages([]);
+    legacy_run_state.set_active_run_result_messages([]);
     result = calculate_variables(
         build_message_context({
             id: 1006,
             content: "<p><em>Thinking</em></p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
             content: "<p>Done.</p>",
-            is_pear_message: true,
+            is_agent_message: true,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
 
     result = calculate_variables(
         build_message_context({
-            sender_email: "pear@zulip.com",
+            sender_email: "armada@zulip.com",
             sender_full_name: "Pear",
             sender_id: 25,
         }),
     );
-    assert.equal(result.is_pear_message, false);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, false);
+    assert.equal(result.is_armada_active_message, false);
     assert.equal(result.include_sender, true);
 
-    state_data.set_pear_bot_user_ids([25]);
+    state_data.set_armada_bot_user_ids([25]);
     result = calculate_real_variables(
         build_message_context({
             id: 1001,
-            sender_email: "pear@zulip.com",
+            sender_email: "armada@zulip.com",
             sender_full_name: "Pear",
             sender_id: 25,
             content: "<p><em>Thinking</em> <em>✦</em></p>",
-            is_pear_message: undefined,
+            is_agent_message: undefined,
             last_edit_timestamp: 123,
         }),
     );
-    assert.equal(result.is_pear_message, true);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, true);
+    assert.equal(result.is_armada_active_message, false);
     // Ambient voice: Pear rows never include sender chrome.
     assert.equal(result.include_sender, false);
     assert.equal(result.edited, false);
@@ -918,122 +927,128 @@ test("pear_message_vars", () => {
             sender_full_name: "CI Bot",
             sender_id: 26,
             content: "<p><em>Thinking</em> ✦</p>",
-            is_pear_message: undefined,
+            is_agent_message: undefined,
             last_edit_timestamp: 456,
         }),
     );
-    assert.equal(result.is_pear_message, false);
-    assert.equal(result.is_pear_active_message, false);
+    assert.equal(result.is_agent_message, false);
+    assert.equal(result.is_armada_active_message, false);
     assert.equal(result.include_sender, true);
 });
 
-run_test("pear_tool_spoiler_title_detection", () => {
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 1 tool"), true);
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 7 tools"), true);
+run_test("armada_tool_spoiler_title_detection", () => {
+    assert.equal(message_list_view.is_armada_tool_spoiler_title_for_testing("Ran 1 tool"), true);
+    assert.equal(message_list_view.is_armada_tool_spoiler_title_for_testing("Ran 7 tools"), true);
     assert.equal(
-        message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 11 tools · 1 retry"),
+        message_list_view.is_armada_tool_spoiler_title_for_testing("Ran 11 tools · 1 retry"),
         true,
     );
     assert.equal(
-        message_list_view.is_pear_tool_spoiler_title_for_testing("Ran 12 tools · 2 retries"),
+        message_list_view.is_armada_tool_spoiler_title_for_testing("Ran 12 tools · 2 retries"),
         true,
     );
     assert.equal(
-        message_list_view.is_pear_tool_spoiler_title_for_testing("Running 2/4 tools ✦"),
+        message_list_view.is_armada_tool_spoiler_title_for_testing("Running 2/4 tools ✦"),
         true,
     );
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("3 failed tools"), true);
     assert.equal(
-        message_list_view.is_pear_tool_spoiler_title_for_testing("Implementation details"),
+        message_list_view.is_armada_tool_spoiler_title_for_testing("3 failed tools"),
+        true,
+    );
+    assert.equal(
+        message_list_view.is_armada_tool_spoiler_title_for_testing("Implementation details"),
         false,
     );
-    assert.equal(message_list_view.is_pear_tool_spoiler_title_for_testing("Ran tests"), false);
+    assert.equal(message_list_view.is_armada_tool_spoiler_title_for_testing("Ran tests"), false);
 });
 
-run_test("pear_tool_row_marker_detection", () => {
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·✓ Ran: pwd"), {
+run_test("armada_tool_row_marker_detection", () => {
+    assert.deepEqual(message_list_view.extract_armada_tool_row_marker_for_testing("·✓ Ran: pwd"), {
         glyph: "·",
-        class_name: "pear-tool-row-done",
-        is_active: false,
-        remaining_text: "Ran: pwd",
-    });
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("·! Failed: pwd"), {
-        glyph: "✷",
-        class_name: "pear-tool-row-blocked",
-        is_active: false,
-        remaining_text: "Failed: pwd",
-    });
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[x] Ran: pwd"), {
-        glyph: "·",
-        class_name: "pear-tool-row-done",
+        class_name: "legacy-tool-row-done",
         is_active: false,
         remaining_text: "Ran: pwd",
     });
     assert.deepEqual(
-        message_list_view.extract_pear_tool_row_marker_for_testing("[ ] Queued: tests"),
+        message_list_view.extract_armada_tool_row_marker_for_testing("·! Failed: pwd"),
+        {
+            glyph: "✷",
+            class_name: "legacy-tool-row-blocked",
+            is_active: false,
+            remaining_text: "Failed: pwd",
+        },
+    );
+    assert.deepEqual(message_list_view.extract_armada_tool_row_marker_for_testing("[x] Ran: pwd"), {
+        glyph: "·",
+        class_name: "legacy-tool-row-done",
+        is_active: false,
+        remaining_text: "Ran: pwd",
+    });
+    assert.deepEqual(
+        message_list_view.extract_armada_tool_row_marker_for_testing("[ ] Queued: tests"),
         {
             glyph: "⋅",
-            class_name: "pear-tool-row-pending",
+            class_name: "legacy-tool-row-pending",
             is_active: false,
             remaining_text: "Queued: tests",
         },
     );
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("[~] running"), {
+    assert.deepEqual(message_list_view.extract_armada_tool_row_marker_for_testing("[~] running"), {
         glyph: "·",
-        class_name: "pear-tool-row-active",
+        class_name: "legacy-tool-row-active",
         is_active: true,
         remaining_text: "running",
     });
-    assert.deepEqual(message_list_view.extract_pear_tool_row_marker_for_testing("✦ running"), {
+    assert.deepEqual(message_list_view.extract_armada_tool_row_marker_for_testing("✦ running"), {
         glyph: "·",
-        class_name: "pear-tool-row-active",
+        class_name: "legacy-tool-row-active",
         is_active: true,
         remaining_text: "running",
     });
 });
 
-run_test("pear_tool_block_marker_detection", () => {
+run_test("armada_tool_block_marker_detection", () => {
     assert.deepEqual(
-        message_list_view.pear_tool_block_marker_for_testing({
+        message_list_view.armada_tool_block_marker_for_testing({
             title: "Ran 3 tools",
             row_texts: ["·✓ Ran: pwd", "·✓ Ran: git status"],
         }),
         {
             glyph: "·",
-            class_name: "pear-tool-row-done",
+            class_name: "legacy-tool-row-done",
             is_active: false,
         },
     );
     assert.deepEqual(
-        message_list_view.pear_tool_block_marker_for_testing({
+        message_list_view.armada_tool_block_marker_for_testing({
             title: "Running 2/4 tools ✦",
             row_texts: ["[x] Ran: pwd", "[~] Running: tests"],
         }),
         {
             glyph: "·",
-            class_name: "pear-tool-row-active",
+            class_name: "legacy-tool-row-active",
             is_active: true,
         },
     );
     assert.deepEqual(
-        message_list_view.pear_tool_block_marker_for_testing({
+        message_list_view.armada_tool_block_marker_for_testing({
             title: "3 failed tools",
             row_texts: ["·! Failed: test"],
         }),
         {
             glyph: "✷",
-            class_name: "pear-tool-row-blocked",
+            class_name: "legacy-tool-row-blocked",
             is_active: false,
         },
     );
     assert.deepEqual(
-        message_list_view.pear_tool_block_marker_for_testing({
+        message_list_view.armada_tool_block_marker_for_testing({
             title: "Ran 2 tools",
             row_texts: ["[ ] Queued: tests", "Ran: git status"],
         }),
         {
             glyph: "⋅",
-            class_name: "pear-tool-row-pending",
+            class_name: "legacy-tool-row-pending",
             is_active: false,
         },
     );

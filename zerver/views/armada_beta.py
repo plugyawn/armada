@@ -19,7 +19,7 @@ from zerver.decorator import (
     zulip_login_required,
     zulip_otp_required_if_logged_in,
 )
-from zerver.lib.armada import PEAR_QUESTION_TIMEOUT_SECONDS
+from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
@@ -37,7 +37,7 @@ from zerver.lib.typed_endpoint import (
 )
 from zerver.models import AgentRun, Stream, UserProfile
 
-# The live runs the page is told about. pear/runs takes 20 ids a
+# The live runs the page is told about. armada/runs takes 20 ids a
 # request, so this is a handful of requests at most; a realm with more
 # live runs than this has Home show the newest.
 ARMADA_BETA_LIVE_RUN_LIMIT = 100
@@ -56,10 +56,10 @@ ARMADA_BETA_SPRITE_CACHE = "private, max-age=31536000, immutable"
 def live_run_ids_for_user(user_profile: UserProfile) -> list[int]:
     """The shared runs that are queued or running in the channels this
     person is subscribed to, newest first. Home reads these (through
-    pear/runs?run_ids=...) instead of asking every worktree for its
+    armada/runs?run_ids=...) instead of asking every worktree for its
     runs. A run is placed in a channel the way
-    check_can_access_pear_worker_run places it, so every id here is one
-    pear/runs will let this person read."""
+    check_can_access_armada_worker_run places it, so every id here is one
+    armada/runs will let this person read."""
     subscribed = {
         name.lower()
         for name in Stream.objects.filter(
@@ -106,7 +106,7 @@ def armada_beta(request: HttpRequest) -> HttpResponse:
         "zerver/armada_beta.html",
         context={
             "doc_root_title": "Armada beta",
-            "question_timeout_seconds": PEAR_QUESTION_TIMEOUT_SECONDS,
+            "question_timeout_seconds": ARMADA_QUESTION_TIMEOUT_SECONDS,
             "live_run_ids": orjson.dumps(live_run_ids_for_user(user_profile)).decode(),
             "read_receipts": user_profile.realm.enable_read_receipts,
             "sprite_version": pack.version if pack is not None else "",

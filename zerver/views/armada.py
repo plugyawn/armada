@@ -15,78 +15,78 @@ from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 from pydantic import Json
 
-from zerver.actions.armada import send_pear_run_event
+from zerver.actions.armada import send_armada_run_event
 from zerver.actions.message_send import internal_send_private_message, internal_send_stream_message
 from zerver.actions.streams import bulk_add_subscriptions
 from zerver.decorator import require_realm_admin
 from zerver.lib.armada import (
-    PEAR_AGENT_NAME,
-    PEAR_BOT_SHORT_NAME,
-    PEAR_EMBEDDED_BOT_SERVICE,
-    PEAR_FIRST_RUN_STARTER_MESSAGE,
-    PEAR_FIRST_RUN_STREAM,
-    PEAR_FIRST_RUN_TOPIC,
-    PEAR_REASONING_EFFORTS,
-    PEAR_SELECTED_BOT_CONFIG_KEY,
-    PEAR_SELECTED_BOT_CONFIG_VALUE,
-    PearConfigPayload,
-    PearEmbeddedBotHandler,
-    PearTokenUsage,
-    build_pear_active_session_summary,
-    build_pear_active_session_summary_from_messages,
-    build_pear_config_payload,
-    get_pear_live_run_state,
-    get_pear_session_payload,
-    is_pear_task_request_message,
-    normalize_pear_response_policy,
-    normalize_pear_visible_markdown,
-    pear_normalize_token_usage,
-    pear_token_usage_summary,
-    pear_topic_scope,
-    trim_pear_text,
+    ARMADA_AGENT_NAME,
+    ARMADA_BOT_SHORT_NAME,
+    ARMADA_EMBEDDED_BOT_SERVICE,
+    ARMADA_FIRST_RUN_STARTER_MESSAGE,
+    ARMADA_FIRST_RUN_STREAM,
+    ARMADA_FIRST_RUN_TOPIC,
+    ARMADA_REASONING_EFFORTS,
+    ARMADA_SELECTED_BOT_CONFIG_KEY,
+    ARMADA_SELECTED_BOT_CONFIG_VALUE,
+    ArmadaConfigPayload,
+    ArmadaEmbeddedBotHandler,
+    ArmadaTokenUsage,
+    armada_normalize_token_usage,
+    armada_token_usage_summary,
+    armada_topic_scope,
+    build_armada_active_session_summary,
+    build_armada_active_session_summary_from_messages,
+    build_armada_config_payload,
+    get_armada_live_run_state,
+    get_armada_session_payload,
+    is_armada_task_request_message,
+    normalize_armada_response_policy,
+    normalize_armada_visible_markdown,
+    trim_armada_text,
 )
 from zerver.lib.armada_agent_threads import (
-    load_pear_agent_thread_events,
-    serialize_pear_agent_threads,
+    load_armada_agent_thread_events,
+    serialize_armada_agent_threads,
 )
-from zerver.lib.armada_gate import invalidate_pear_selected_bot_cache
+from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.armada_monitor import (
-    PEAR_MONITOR_MAX_CADENCE_SECONDS,
-    PEAR_MONITOR_MAX_PER_REALM,
-    PEAR_MONITOR_MAX_PER_TOPIC,
-    PEAR_MONITOR_MIN_CADENCE_SECONDS,
-    PearMonitorSpecError,
-    build_pear_monitor_contract,
-    pear_create_monitor_from_spec,
-    serialize_pear_monitor,
+    ARMADA_MONITOR_MAX_CADENCE_SECONDS,
+    ARMADA_MONITOR_MAX_PER_REALM,
+    ARMADA_MONITOR_MAX_PER_TOPIC,
+    ARMADA_MONITOR_MIN_CADENCE_SECONDS,
+    ArmadaMonitorSpecError,
+    armada_create_monitor_from_spec,
+    build_armada_monitor_contract,
+    serialize_armada_monitor,
 )
-from zerver.lib.armada_presentation import pear_presentation_current_step
+from zerver.lib.armada_presentation import armada_presentation_current_step
 from zerver.lib.armada_worker import (
-    PearDatabaseWorkerRunStore,
-    PearQueueWorkerDispatcher,
-    ensure_pear_workspace_node,
-    mark_pear_run_attended,
-    maybe_enqueue_pear_run_presentation,
-    pear_default_worker_reasoning_effort,
-    pear_git_status_delta,
-    pear_logical_repository_label,
-    pear_logical_worktree_label,
-    pear_pinned_repository_value,
-    pear_repo_artifact_value_is_durable,
-    pear_topic_isolation_user_exists,
-    pear_topic_isolation_username_for_realm,
-    pear_topic_os_user_isolation_enabled,
-    pear_user_is_trusted,
-    pear_worker_model_for_topic,
-    pear_worker_reasoning_effort_for_topic,
-    pear_worker_sandbox_for_topic,
-    pear_worker_workdir_for_topic,
-    pear_workspace_is_paused,
-    pear_workspace_node_default_branch,
-    pear_workspace_response_policy,
-    set_pear_workspace_paused,
+    ArmadaDatabaseWorkerRunStore,
+    ArmadaQueueWorkerDispatcher,
+    armada_default_worker_reasoning_effort,
+    armada_git_status_delta,
+    armada_logical_repository_label,
+    armada_logical_worktree_label,
+    armada_pinned_repository_value,
+    armada_repo_artifact_value_is_durable,
+    armada_topic_isolation_user_exists,
+    armada_topic_isolation_username_for_realm,
+    armada_topic_os_user_isolation_enabled,
+    armada_user_is_trusted,
+    armada_worker_model_for_topic,
+    armada_worker_reasoning_effort_for_topic,
+    armada_worker_sandbox_for_topic,
+    armada_worker_workdir_for_topic,
+    armada_workspace_is_paused,
+    armada_workspace_node_default_branch,
+    armada_workspace_response_policy,
+    ensure_armada_workspace_node,
+    mark_armada_run_attended,
+    maybe_enqueue_armada_run_presentation,
+    set_armada_workspace_paused,
 )
-from zerver.lib.armada_workspace_map import pear_workspace_topics_for_stream
+from zerver.lib.armada_workspace_map import armada_workspace_topics_for_stream
 from zerver.lib.bot_config import get_bot_configs, set_bot_config
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.markdown import render_message_markdown
@@ -106,20 +106,20 @@ from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Service, W
 from zerver.models.users import UserProfile
 from zerver.views.users import add_bot_backend
 
-PEAR_ACTIVE_SESSION_MESSAGE_LIMIT = 50
-PEAR_RUN_LIST_LIMIT = 20
-PEAR_RUN_IDS_FILTER_LIMIT = 20
-PEAR_RUN_EVENT_LIMIT = 40
-PEAR_RUN_TRACE_LIMIT = 50
-PEAR_RUN_TRACE_MAX_LIMIT = 100
-PEAR_MODEL_SLUG_LIMIT = 100
-PEAR_MODEL_CATALOG_CACHE_SECONDS = 300
+ARMADA_ACTIVE_SESSION_MESSAGE_LIMIT = 50
+ARMADA_RUN_LIST_LIMIT = 20
+ARMADA_RUN_IDS_FILTER_LIMIT = 20
+ARMADA_RUN_EVENT_LIMIT = 40
+ARMADA_RUN_TRACE_LIMIT = 50
+ARMADA_RUN_TRACE_MAX_LIMIT = 100
+ARMADA_MODEL_SLUG_LIMIT = 100
+ARMADA_MODEL_CATALOG_CACHE_SECONDS = 300
 
-pear_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
+armada_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
 
 
-def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
-    codex_bin = settings.PEAR_WORKER_CODEX_BIN
+def armada_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
+    codex_bin = settings.ARMADA_WORKER_CODEX_BIN
     codex_path = which(codex_bin)
     if worker_agent_runtime == "codex-app-server":
         if codex_path is None:
@@ -127,15 +127,15 @@ def pear_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bo
         return True, f"codex app-server via {codex_path}."
     return (
         False,
-        "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server.",
+        "Set ARMADA_WORKER_AGENT_RUNTIME to codex-app-server.",
     )
 
 
-def pear_codex_login_command() -> str:
-    return f"{settings.PEAR_WORKER_CODEX_BIN} login"
+def armada_codex_login_command() -> str:
+    return f"{settings.ARMADA_WORKER_CODEX_BIN} login"
 
 
-def pear_codex_login_available(codex_bin: str) -> bool:
+def armada_codex_login_available(codex_bin: str) -> bool:
     try:
         completed = subprocess.run(
             [codex_bin, "login", "status"],
@@ -150,12 +150,12 @@ def pear_codex_login_available(codex_bin: str) -> bool:
     return completed.returncode == 0 and "Logged in" in output
 
 
-def pear_worker_runtime_auth_status(
+def armada_worker_runtime_auth_status(
     worker_agent_runtime: str,
 ) -> tuple[bool, str, str | None, str | None, str | None, str | None]:
-    codex_bin = settings.PEAR_WORKER_CODEX_BIN
-    login_command = pear_codex_login_command()
-    codex_logged_in = pear_codex_login_available(codex_bin)
+    codex_bin = settings.ARMADA_WORKER_CODEX_BIN
+    login_command = armada_codex_login_command()
+    codex_logged_in = armada_codex_login_available(codex_bin)
     codex_login_instructions = "Run Codex CLI login inside the worker environment used by Pear."
 
     if worker_agent_runtime == "codex-app-server":
@@ -187,11 +187,11 @@ def pear_worker_runtime_auth_status(
     )
 
 
-def get_pear_bot_query(user_profile: UserProfile) -> Any:
+def get_armada_bot_query(user_profile: UserProfile) -> Any:
     return (
         Service.objects.select_related("user_profile")
         .filter(
-            name=PEAR_EMBEDDED_BOT_SERVICE,
+            name=ARMADA_EMBEDDED_BOT_SERVICE,
             user_profile__realm=user_profile.realm,
             user_profile__is_active=True,
             user_profile__is_bot=True,
@@ -201,39 +201,39 @@ def get_pear_bot_query(user_profile: UserProfile) -> Any:
     )
 
 
-def get_selected_pear_bot(user_profile: UserProfile) -> Service | None:
-    pear_bots = list(get_pear_bot_query(user_profile))
-    if not pear_bots:
+def get_selected_armada_bot(user_profile: UserProfile) -> Service | None:
+    armada_bots = list(get_armada_bot_query(user_profile))
+    if not armada_bots:
         return None
-    bot_configs = get_bot_configs([bot.user_profile_id for bot in pear_bots])
+    bot_configs = get_bot_configs([bot.user_profile_id for bot in armada_bots])
     return next(
         (
             bot
-            for bot in pear_bots
-            if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
-            == PEAR_SELECTED_BOT_CONFIG_VALUE
+            for bot in armada_bots
+            if bot_configs.get(bot.user_profile_id, {}).get(ARMADA_SELECTED_BOT_CONFIG_KEY)
+            == ARMADA_SELECTED_BOT_CONFIG_VALUE
         ),
-        pear_bots[0],
+        armada_bots[0],
     )
 
 
-def clean_pear_model_slug(model: str) -> str:
+def clean_armada_model_slug(model: str) -> str:
     model = model.strip()
     if not model:
         raise JsonableError(_("Pear model cannot be empty."))
-    if len(model) > PEAR_MODEL_SLUG_LIMIT or any(character.isspace() for character in model):
+    if len(model) > ARMADA_MODEL_SLUG_LIMIT or any(character.isspace() for character in model):
         raise JsonableError(_("Pear model must be a short model slug without whitespace."))
     return model
 
 
-def clean_pear_reasoning_effort(reasoning_effort: str) -> str:
+def clean_armada_reasoning_effort(reasoning_effort: str) -> str:
     reasoning_effort = reasoning_effort.strip()
-    if reasoning_effort not in PEAR_REASONING_EFFORTS:
+    if reasoning_effort not in ARMADA_REASONING_EFFORTS:
         raise JsonableError(_("Pear reasoning effort must be low, medium, high, or xhigh."))
     return reasoning_effort
 
 
-def pear_reasoning_effort_label(reasoning_effort: str) -> str:
+def armada_reasoning_effort_label(reasoning_effort: str) -> str:
     labels = {
         "low": "Low",
         "medium": "Medium",
@@ -245,7 +245,7 @@ def pear_reasoning_effort_label(reasoning_effort: str) -> str:
     return labels.get(reasoning_effort, reasoning_effort)
 
 
-def build_pear_reasoning_effort_payload(
+def build_armada_reasoning_effort_payload(
     levels: object | None = None,
 ) -> list[dict[str, str]]:
     payload: list[dict[str, str]] = []
@@ -259,12 +259,12 @@ def build_pear_reasoning_effort_payload(
                 description = ""
             else:
                 continue
-            if effort not in PEAR_REASONING_EFFORTS:
+            if effort not in ARMADA_REASONING_EFFORTS:
                 continue
             payload.append(
                 {
                     "effort": effort,
-                    "label": pear_reasoning_effort_label(effort),
+                    "label": armada_reasoning_effort_label(effort),
                     "description": description,
                 }
             )
@@ -273,27 +273,27 @@ def build_pear_reasoning_effort_payload(
     return [
         {
             "effort": effort,
-            "label": pear_reasoning_effort_label(effort),
+            "label": armada_reasoning_effort_label(effort),
             "description": "",
         }
-        for effort in PEAR_REASONING_EFFORTS
+        for effort in ARMADA_REASONING_EFFORTS
     ]
 
 
-def configured_pear_model_choices() -> list[str]:
+def configured_armada_model_choices() -> list[str]:
     return list(
         dict.fromkeys(
             model.strip()
             for model in [
-                settings.PEAR_WORKER_MODEL,
-                *settings.PEAR_WORKER_MODEL_CHOICES,
+                settings.ARMADA_WORKER_MODEL,
+                *settings.ARMADA_WORKER_MODEL_CHOICES,
             ]
             if isinstance(model, str) and model.strip()
         )
     )
 
 
-def pear_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | None:
+def armada_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | None:
     if model.get("visibility") != "list":
         return None
     slug = str(model.get("slug") or "").strip()
@@ -306,9 +306,9 @@ def pear_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | No
         "description": str(model.get("description") or "").strip(),
         "priority": model.get("priority") if isinstance(model.get("priority"), int) else 1000,
         "default_reasoning_level": str(
-            model.get("default_reasoning_level") or pear_default_worker_reasoning_effort()
+            model.get("default_reasoning_level") or armada_default_worker_reasoning_effort()
         ).strip(),
-        "supported_reasoning_levels": build_pear_reasoning_effort_payload(
+        "supported_reasoning_levels": build_armada_reasoning_effort_payload(
             model.get("supported_reasoning_levels")
         ),
         "supported_in_api": bool(model.get("supported_in_api", False)),
@@ -321,14 +321,14 @@ def pear_model_catalog_entry(model: dict[str, object]) -> dict[str, object] | No
     }
 
 
-def extract_pear_codex_model_catalog(data: object) -> list[dict[str, object]]:
+def extract_armada_codex_model_catalog(data: object) -> list[dict[str, object]]:
     if not isinstance(data, dict) or not isinstance(data.get("models"), list):
         return []
     entries = [
         entry
         for model in data["models"]
         if isinstance(model, dict)
-        for entry in [pear_model_catalog_entry(model)]
+        for entry in [armada_model_catalog_entry(model)]
         if entry is not None
     ]
 
@@ -339,15 +339,15 @@ def extract_pear_codex_model_catalog(data: object) -> list[dict[str, object]]:
     return sorted(entries, key=priority_key)
 
 
-def fallback_pear_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
+def fallback_armada_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
     return [
         {
             "slug": model,
             "display_name": model,
             "description": "",
             "priority": index,
-            "default_reasoning_level": pear_default_worker_reasoning_effort(),
-            "supported_reasoning_levels": build_pear_reasoning_effort_payload(),
+            "default_reasoning_level": armada_default_worker_reasoning_effort(),
+            "supported_reasoning_levels": build_armada_reasoning_effort_payload(),
             "supported_in_api": False,
             "service_tiers": [],
             "additional_speed_tiers": [],
@@ -356,18 +356,18 @@ def fallback_pear_model_catalog(model_choices: list[str]) -> list[dict[str, obje
     ]
 
 
-def build_pear_codex_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
-    global pear_model_catalog_cache
+def build_armada_codex_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
+    global armada_model_catalog_cache
     now = time.monotonic()
     if (
-        pear_model_catalog_cache is not None
-        and now - pear_model_catalog_cache[0] < PEAR_MODEL_CATALOG_CACHE_SECONDS
+        armada_model_catalog_cache is not None
+        and now - armada_model_catalog_cache[0] < ARMADA_MODEL_CATALOG_CACHE_SECONDS
     ):
-        catalog = [dict(entry) for entry in pear_model_catalog_cache[1]]
+        catalog = [dict(entry) for entry in armada_model_catalog_cache[1]]
     else:
         try:
             completed = subprocess.run(
-                [settings.PEAR_WORKER_CODEX_BIN, "debug", "models"],
+                [settings.ARMADA_WORKER_CODEX_BIN, "debug", "models"],
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -380,34 +380,34 @@ def build_pear_codex_model_catalog(model_choices: list[str]) -> list[dict[str, o
             catalog = []
             if completed.returncode == 0:
                 try:
-                    catalog = extract_pear_codex_model_catalog(json.loads(completed.stdout))
+                    catalog = extract_armada_codex_model_catalog(json.loads(completed.stdout))
                 except json.JSONDecodeError:
                     catalog = []
         if not catalog:
-            catalog = fallback_pear_model_catalog([])
-        pear_model_catalog_cache = (now, [dict(entry) for entry in catalog])
+            catalog = fallback_armada_model_catalog([])
+        armada_model_catalog_cache = (now, [dict(entry) for entry in catalog])
 
     slugs = {str(entry["slug"]) for entry in catalog}
-    for entry in fallback_pear_model_catalog(model_choices):
+    for entry in fallback_armada_model_catalog(model_choices):
         if str(entry["slug"]) not in slugs:
             catalog.append(entry)
     return catalog
 
 
-def build_pear_git_context(
+def build_armada_git_context(
     workdir: str,
     *,
     topic: str = "",
     isolation_username: str | None = None,
 ) -> dict[str, object]:
-    return pear_git_status_delta(
+    return armada_git_status_delta(
         workdir,
         topic=topic,
         isolation_username=isolation_username,
     )
 
 
-def pear_workspace_isolation_username(
+def armada_workspace_isolation_username(
     workspace_node: Workspace | None,
     *,
     stream_name: str,
@@ -416,27 +416,27 @@ def pear_workspace_isolation_username(
 ) -> str | None:
     if (
         workspace_node is not None
-        and pear_topic_os_user_isolation_enabled()
-        and pear_repo_artifact_value_is_durable(workdir)
+        and armada_topic_os_user_isolation_enabled()
+        and armada_repo_artifact_value_is_durable(workdir)
     ):
-        username = pear_topic_isolation_username_for_realm(
+        username = armada_topic_isolation_username_for_realm(
             workspace_node.realm_id,
             stream=stream_name,
             topic=topic_name,
         )
-        if not pear_topic_isolation_user_exists(username):
+        if not armada_topic_isolation_user_exists(username):
             return None
         return username
     return None
 
 
-def pear_workspace_for_request(
+def armada_workspace_for_request(
     user_profile: UserProfile,
     *,
     stream_name: str,
     topic_name: str,
 ) -> Workspace | None:
-    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
+    stream_name, topic_name = armada_topic_scope(stream_name, topic_name)
     return (
         Workspace.objects.select_related("project")
         .filter(
@@ -448,14 +448,14 @@ def pear_workspace_for_request(
     )
 
 
-def serialize_pear_workspace_context(
+def serialize_armada_workspace_context(
     workspace_node: Workspace | None,
     *,
     stream_name: str,
     topic_name: str,
     include_git: bool = True,
 ) -> dict[str, object]:
-    runtime_config = build_pear_runtime_config_payload()
+    runtime_config = build_armada_runtime_config_payload()
     default_model = str(runtime_config.get("model") or "")
     default_reasoning_effort = str(runtime_config.get("reasoning_effort") or "medium")
     selected_model = (
@@ -468,7 +468,7 @@ def serialize_pear_workspace_context(
         if workspace_node is not None and workspace_node.reasoning_effort.strip()
         else default_reasoning_effort
     )
-    selected_response_policy = normalize_pear_response_policy(
+    selected_response_policy = normalize_armada_response_policy(
         workspace_node.response_policy if workspace_node is not None else None
     )
     workdir = (
@@ -485,7 +485,7 @@ def serialize_pear_workspace_context(
         (
             repo_value
             for repo_value in (workspace_repo,)
-            if pear_repo_artifact_value_is_durable(repo_value)
+            if armada_repo_artifact_value_is_durable(repo_value)
         ),
         "",
     )
@@ -493,18 +493,18 @@ def serialize_pear_workspace_context(
         (
             repo_value
             for repo_value in (
-                pear_pinned_repository_value(workspace_repo),
+                armada_pinned_repository_value(workspace_repo),
             )
             if repo_value
         ),
         "",
     )
-    repo_label = pear_logical_repository_label(
+    repo_label = armada_logical_repository_label(
         stream=stream_name,
         context_repo=workspace_repo,
         parent_repo="",
     )
-    worktree_label = pear_logical_worktree_label(
+    worktree_label = armada_logical_worktree_label(
         stream=stream_name,
         topic=topic_name,
         fallback=Path(workdir).name,
@@ -517,9 +517,9 @@ def serialize_pear_workspace_context(
     expected_branch = (
         workspace_node.branch_name.strip()
         if workspace_node is not None and workspace_node.branch_name.strip()
-        else pear_workspace_node_default_branch()
+        else armada_workspace_node_default_branch()
     )
-    isolation_username = pear_workspace_isolation_username(
+    isolation_username = armada_workspace_isolation_username(
         workspace_node,
         stream_name=stream_name,
         topic_name=topic_name,
@@ -551,7 +551,7 @@ def serialize_pear_workspace_context(
         # ("general chat"), whose default is the trunk branch, is also
         # recognized as default.
         "branch_is_topic_default": expected_branch
-        == pear_workspace_node_default_branch(
+        == armada_workspace_node_default_branch(
             project=project,
             topic=topic_name,
         ),
@@ -569,7 +569,7 @@ def serialize_pear_workspace_context(
         "parent_workspace_id": None,
     }
     if include_git:
-        payload["git"] = build_pear_git_context(
+        payload["git"] = build_armada_git_context(
             workdir,
             topic=expected_branch,
             isolation_username=isolation_username,
@@ -577,31 +577,31 @@ def serialize_pear_workspace_context(
     return payload
 
 
-def build_pear_runtime_config_payload() -> dict[str, object]:
-    configured_model_choices = configured_pear_model_choices()
-    model_catalog = build_pear_codex_model_catalog(configured_model_choices)
+def build_armada_runtime_config_payload() -> dict[str, object]:
+    configured_model_choices = configured_armada_model_choices()
+    model_catalog = build_armada_codex_model_catalog(configured_model_choices)
     model_choices = [str(entry["slug"]) for entry in model_catalog]
     return {
-        "agent_runtime": settings.PEAR_WORKER_AGENT_RUNTIME,
-        "model": settings.PEAR_WORKER_MODEL,
+        "agent_runtime": settings.ARMADA_WORKER_AGENT_RUNTIME,
+        "model": settings.ARMADA_WORKER_MODEL,
         "model_choices": model_choices,
         "model_catalog": model_catalog,
-        "reasoning_effort": pear_default_worker_reasoning_effort(),
-        "reasoning_efforts": build_pear_reasoning_effort_payload(),
-        "service_tier": settings.PEAR_WORKER_SERVICE_TIER,
-        "fast_mode": settings.PEAR_WORKER_FAST_MODE,
-        "sandbox": settings.PEAR_WORKER_SANDBOX,
-        "approval_policy": settings.PEAR_WORKER_APPROVAL_POLICY,
-        "workdir": settings.PEAR_WORKER_WORKDIR,
-        "trusted_user_ids_configured": bool(settings.PEAR_WORKER_TRUSTED_USER_IDS),
-        "max_active_runs_per_topic": settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC,
-        "max_active_runs_per_realm": settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM,
+        "reasoning_effort": armada_default_worker_reasoning_effort(),
+        "reasoning_efforts": build_armada_reasoning_effort_payload(),
+        "service_tier": settings.ARMADA_WORKER_SERVICE_TIER,
+        "fast_mode": settings.ARMADA_WORKER_FAST_MODE,
+        "sandbox": settings.ARMADA_WORKER_SANDBOX,
+        "approval_policy": settings.ARMADA_WORKER_APPROVAL_POLICY,
+        "workdir": settings.ARMADA_WORKER_WORKDIR,
+        "trusted_user_ids_configured": bool(settings.ARMADA_WORKER_TRUSTED_USER_IDS),
+        "max_active_runs_per_topic": settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC,
+        "max_active_runs_per_realm": settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM,
     }
 
 
-def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
-    worker_agent_runtime = settings.PEAR_WORKER_AGENT_RUNTIME
-    worker_runtime_available, worker_runtime_detail = pear_worker_runtime_dependency_status(
+def build_armada_config_for_user(user_profile: UserProfile) -> ArmadaConfigPayload:
+    worker_agent_runtime = settings.ARMADA_WORKER_AGENT_RUNTIME
+    worker_runtime_available, worker_runtime_detail = armada_worker_runtime_dependency_status(
         worker_agent_runtime
     )
     (
@@ -611,47 +611,51 @@ def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
         worker_runtime_login_command,
         worker_runtime_login_target,
         worker_runtime_login_instructions,
-    ) = pear_worker_runtime_auth_status(worker_agent_runtime)
-    pear_bot_query = get_pear_bot_query(user_profile)
-    pear_bots = list(pear_bot_query)
-    bot_count = len(pear_bots)
-    bot_profile_ids = [bot.user_profile_id for bot in pear_bots]
+    ) = armada_worker_runtime_auth_status(worker_agent_runtime)
+    armada_bot_query = get_armada_bot_query(user_profile)
+    armada_bots = list(armada_bot_query)
+    bot_count = len(armada_bots)
+    bot_profile_ids = [bot.user_profile_id for bot in armada_bots]
     bot_configs = get_bot_configs(bot_profile_ids)
-    selected_pear_bot = next(
+    selected_armada_bot = next(
         (
             bot
-            for bot in pear_bots
-            if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
-            == PEAR_SELECTED_BOT_CONFIG_VALUE
+            for bot in armada_bots
+            if bot_configs.get(bot.user_profile_id, {}).get(ARMADA_SELECTED_BOT_CONFIG_KEY)
+            == ARMADA_SELECTED_BOT_CONFIG_VALUE
         ),
-        pear_bots[0] if pear_bots else None,
+        armada_bots[0] if armada_bots else None,
     )
-    return build_pear_config_payload(
+    return build_armada_config_payload(
         embedded_bots_enabled=settings.EMBEDDED_BOTS_ENABLED,
         bot_count=bot_count,
-        bot_user_id=selected_pear_bot.user_profile_id if selected_pear_bot is not None else None,
-        bot_full_name=selected_pear_bot.user_profile.full_name
-        if selected_pear_bot is not None
+        bot_user_id=selected_armada_bot.user_profile_id
+        if selected_armada_bot is not None
         else None,
-        bot_email=selected_pear_bot.user_profile.email if selected_pear_bot is not None else None,
-        selected_bot_user_id=selected_pear_bot.user_profile_id
-        if selected_pear_bot is not None
+        bot_full_name=selected_armada_bot.user_profile.full_name
+        if selected_armada_bot is not None
         else None,
-        selected_bot_full_name=selected_pear_bot.user_profile.full_name
-        if selected_pear_bot is not None
+        bot_email=selected_armada_bot.user_profile.email
+        if selected_armada_bot is not None
         else None,
-        selected_bot_email=selected_pear_bot.user_profile.email
-        if selected_pear_bot is not None
+        selected_bot_user_id=selected_armada_bot.user_profile_id
+        if selected_armada_bot is not None
+        else None,
+        selected_bot_full_name=selected_armada_bot.user_profile.full_name
+        if selected_armada_bot is not None
+        else None,
+        selected_bot_email=selected_armada_bot.user_profile.email
+        if selected_armada_bot is not None
         else None,
         bot_identities=[
             {
                 "bot_user_id": bot.user_profile_id,
                 "bot_full_name": bot.user_profile.full_name,
                 "bot_email": bot.user_profile.email,
-                "selected": selected_pear_bot is not None
-                and bot.user_profile_id == selected_pear_bot.user_profile_id,
+                "selected": selected_armada_bot is not None
+                and bot.user_profile_id == selected_armada_bot.user_profile_id,
             }
-            for bot in pear_bots
+            for bot in armada_bots
         ],
         worker_agent_runtime=worker_agent_runtime,
         worker_runtime_available=worker_runtime_available,
@@ -662,12 +666,12 @@ def build_pear_config_for_user(user_profile: UserProfile) -> PearConfigPayload:
         worker_runtime_login_command=worker_runtime_login_command,
         worker_runtime_login_target=worker_runtime_login_target,
         worker_runtime_login_instructions=worker_runtime_login_instructions,
-        worker_service_tier=settings.PEAR_WORKER_SERVICE_TIER,
-        worker_fast_mode=settings.PEAR_WORKER_FAST_MODE,
+        worker_service_tier=settings.ARMADA_WORKER_SERVICE_TIER,
+        worker_fast_mode=settings.ARMADA_WORKER_FAST_MODE,
     )
 
 
-def serialize_pear_worker_run_event(event: AgentRunEvent) -> dict[str, object]:
+def serialize_armada_worker_run_event(event: AgentRunEvent) -> dict[str, object]:
     return {
         "id": event.id,
         "event_type": event.event_type,
@@ -677,21 +681,21 @@ def serialize_pear_worker_run_event(event: AgentRunEvent) -> dict[str, object]:
     }
 
 
-def pear_usage_from_event_payload(payload: object) -> PearTokenUsage | None:
+def armada_usage_from_event_payload(payload: object) -> ArmadaTokenUsage | None:
     if not isinstance(payload, dict):
         return None
-    usage = pear_normalize_token_usage(payload.get("usage"))
+    usage = armada_normalize_token_usage(payload.get("usage"))
     if usage is not None:
         return usage
     metadata = payload.get("metadata")
     if isinstance(metadata, dict):
-        usage = pear_normalize_token_usage(metadata.get("usage"))
+        usage = armada_normalize_token_usage(metadata.get("usage"))
         if usage is not None:
             return usage
-    return pear_normalize_token_usage(payload)
+    return armada_normalize_token_usage(payload)
 
 
-def pear_worker_run_summary_events(
+def armada_worker_run_summary_events(
     runs: list[AgentRun],
 ) -> dict[int, list[AgentRunEvent]]:
     """Load bounded run-card state without issuing per-run queries.
@@ -730,7 +734,7 @@ def pear_worker_run_summary_events(
         .filter(summary_rank=1)
         .only("id", "run_id", "event_type", "payload", "date_created")
     )
-    agent_candidates = load_pear_agent_thread_events(events_by_run_id)
+    agent_candidates = load_armada_agent_thread_events(events_by_run_id)
     unique_events: dict[int, AgentRunEvent] = {}
     for event in [
         *newest_usage_candidates,
@@ -747,7 +751,7 @@ def pear_worker_run_summary_events(
     return events_by_run_id
 
 
-def serialize_pear_worker_run_usage(
+def serialize_armada_worker_run_usage(
     run: AgentRun,
     summary_events: list[AgentRunEvent] | None = None,
 ) -> dict[str, object] | None:
@@ -755,7 +759,7 @@ def serialize_pear_worker_run_usage(
     # are usually usage-less transcript markers ("Codex turn
     # completed."), so scan back a bounded window instead of trusting
     # the single latest event.
-    usage: PearTokenUsage | None = None
+    usage: ArmadaTokenUsage | None = None
     event = None
     candidates = (
         [event for event in summary_events if event.event_type in {"usage", "transcript"}][:20]
@@ -765,7 +769,7 @@ def serialize_pear_worker_run_usage(
         )[:20]
     )
     for candidate in candidates:
-        usage = pear_usage_from_event_payload(candidate.payload)
+        usage = armada_usage_from_event_payload(candidate.payload)
         if usage is not None:
             event = candidate
             break
@@ -778,13 +782,13 @@ def serialize_pear_worker_run_usage(
         duration_seconds = round((timezone_now() - run.date_created).total_seconds(), 1)
     return {
         **usage,
-        "summary": pear_token_usage_summary(usage),
+        "summary": armada_token_usage_summary(usage),
         "duration_seconds": duration_seconds,
         "event_id": event.id if event is not None else None,
     }
 
 
-def serialize_pear_worker_run_plan(
+def serialize_armada_worker_run_plan(
     run: AgentRun,
     summary_events: list[AgentRunEvent] | None = None,
 ) -> list[dict[str, str]] | None:
@@ -819,7 +823,7 @@ def serialize_pear_worker_run_plan(
     return None
 
 
-def serialize_pear_worker_run_tool_count(
+def serialize_armada_worker_run_tool_count(
     run: AgentRun,
     summary_events: list[AgentRunEvent] | None = None,
 ) -> int:
@@ -834,17 +838,17 @@ def serialize_pear_worker_run_tool_count(
     return tool_count
 
 
-def serialize_pear_worker_run_overview(
+def serialize_armada_worker_run_overview(
     run: AgentRun,
     summary_events: list[AgentRunEvent] | None = None,
     *,
     plan: list[dict[str, str]] | None = None,
 ) -> str | None:
     if plan is None:
-        plan = serialize_pear_worker_run_plan(run, summary_events)
+        plan = serialize_armada_worker_run_plan(run, summary_events)
     if plan is None:
         return None
-    current_step = pear_presentation_current_step(plan)
+    current_step = armada_presentation_current_step(plan)
     events = (
         [event for event in summary_events if event.event_type == "presentation"]
         if summary_events is not None
@@ -855,18 +859,18 @@ def serialize_pear_worker_run_overview(
         overview = payload.get("overview") if isinstance(payload, dict) else None
         overview_step = payload.get("current_step") if isinstance(payload, dict) else None
         if isinstance(overview, str) and overview.strip() and overview_step == current_step:
-            return trim_pear_text(" ".join(overview.split()), limit=72)
+            return trim_armada_text(" ".join(overview.split()), limit=72)
     return None
 
 
-def serialize_pear_worker_run(
+def serialize_armada_worker_run(
     run: AgentRun,
     *,
     include_events: bool = False,
     summary_events: list[AgentRunEvent] | None = None,
 ) -> dict[str, object]:
-    plan = serialize_pear_worker_run_plan(run, summary_events)
-    live_state = get_pear_live_run_state(run.trigger_message_id)
+    plan = serialize_armada_worker_run_plan(run, summary_events)
+    live_state = get_armada_live_run_state(run.trigger_message_id)
     if (
         run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}
         and live_state is not None
@@ -905,25 +909,25 @@ def serialize_pear_worker_run(
         "requesting_user_full_name": run.requesting_user.full_name
         if run.requesting_user is not None
         else None,
-        "usage": serialize_pear_worker_run_usage(run, summary_events),
-        "tool_count": serialize_pear_worker_run_tool_count(run, summary_events),
+        "usage": serialize_armada_worker_run_usage(run, summary_events),
+        "tool_count": serialize_armada_worker_run_tool_count(run, summary_events),
         "plan": plan,
-        "overview": serialize_pear_worker_run_overview(run, summary_events, plan=plan),
+        "overview": serialize_armada_worker_run_overview(run, summary_events, plan=plan),
         "live": live_state,
-        "agents": serialize_pear_agent_threads(run, summary_events),
+        "agents": serialize_armada_agent_threads(run, summary_events),
     }
     snapshot_sequence = getattr(run, "snapshot_sequence", None)
     if isinstance(snapshot_sequence, int):
         payload["snapshot_sequence"] = snapshot_sequence
     if include_events:
         payload["events"] = [
-            serialize_pear_worker_run_event(event)
-            for event in run.events.order_by("-date_created", "-id")[:PEAR_RUN_EVENT_LIMIT]
+            serialize_armada_worker_run_event(event)
+            for event in run.events.order_by("-date_created", "-id")[:ARMADA_RUN_EVENT_LIMIT]
         ]
     return payload
 
 
-def check_can_access_pear_worker_run(
+def check_can_access_armada_worker_run(
     user_profile: UserProfile,
     run: AgentRun,
 ) -> None:
@@ -941,7 +945,7 @@ def check_can_access_pear_worker_run(
     access_stream_by_name(user_profile, stream_name)
 
 
-def get_visible_pear_worker_run(
+def get_visible_armada_worker_run(
     user_profile: UserProfile,
     run_id: int,
 ) -> AgentRun:
@@ -953,16 +957,16 @@ def get_visible_pear_worker_run(
         ).get(id=run_id, realm=user_profile.realm)
     except AgentRun.DoesNotExist as error:
         raise JsonableError(_("Pear run not found.")) from error
-    check_can_access_pear_worker_run(user_profile, run)
+    check_can_access_armada_worker_run(user_profile, run)
     return run
 
 
-def get_visible_pear_worker_runs_by_id(
+def get_visible_armada_worker_runs_by_id(
     user_profile: UserProfile,
     run_ids: list[int],
 ) -> list[AgentRun]:
     normalized_run_ids = list(dict.fromkeys(run_ids))
-    if len(normalized_run_ids) > PEAR_RUN_IDS_FILTER_LIMIT:
+    if len(normalized_run_ids) > ARMADA_RUN_IDS_FILTER_LIMIT:
         raise JsonableError(_("Too many Pear runs requested."))
     if any(run_id <= 0 for run_id in normalized_run_ids):
         raise JsonableError(_("Pear run not found."))
@@ -978,109 +982,111 @@ def get_visible_pear_worker_runs_by_id(
     if len(runs_by_id) != len(normalized_run_ids):
         raise JsonableError(_("Pear run not found."))
     for run in runs_by_id.values():
-        check_can_access_pear_worker_run(user_profile, run)
+        check_can_access_armada_worker_run(user_profile, run)
     return list(runs_by_id.values())
 
 
-def set_selected_pear_bot(user_profile: UserProfile, selected_bot_user_id: int | None) -> bool:
-    pear_bots = list(get_pear_bot_query(user_profile))
-    if not pear_bots:
+def set_selected_armada_bot(user_profile: UserProfile, selected_bot_user_id: int | None) -> bool:
+    armada_bots = list(get_armada_bot_query(user_profile))
+    if not armada_bots:
         return False
 
-    pear_bot_by_user_id = {bot.user_profile_id: bot for bot in pear_bots}
+    armada_bot_by_user_id = {bot.user_profile_id: bot for bot in armada_bots}
     if selected_bot_user_id is None:
-        bot_configs = get_bot_configs(list(pear_bot_by_user_id))
+        bot_configs = get_bot_configs(list(armada_bot_by_user_id))
         selected_bot = next(
             (
                 bot
-                for bot in pear_bots
-                if bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
-                == PEAR_SELECTED_BOT_CONFIG_VALUE
+                for bot in armada_bots
+                if bot_configs.get(bot.user_profile_id, {}).get(ARMADA_SELECTED_BOT_CONFIG_KEY)
+                == ARMADA_SELECTED_BOT_CONFIG_VALUE
             ),
-            pear_bots[0],
+            armada_bots[0],
         )
         selected_bot_user_id = selected_bot.user_profile_id
-    elif selected_bot_user_id not in pear_bot_by_user_id:
+    elif selected_bot_user_id not in armada_bot_by_user_id:
         raise JsonableError(_("Invalid Pear bot selection."))
 
     changed = False
-    bot_configs = get_bot_configs(list(pear_bot_by_user_id))
-    for bot in pear_bots:
+    bot_configs = get_bot_configs(list(armada_bot_by_user_id))
+    for bot in armada_bots:
         selected_value = (
-            PEAR_SELECTED_BOT_CONFIG_VALUE
+            ARMADA_SELECTED_BOT_CONFIG_VALUE
             if bot.user_profile_id == selected_bot_user_id
             else "false"
         )
-        previous_value = bot_configs.get(bot.user_profile_id, {}).get(PEAR_SELECTED_BOT_CONFIG_KEY)
+        previous_value = bot_configs.get(bot.user_profile_id, {}).get(
+            ARMADA_SELECTED_BOT_CONFIG_KEY
+        )
         if previous_value != selected_value:
             changed = True
-        set_bot_config(bot.user_profile, PEAR_SELECTED_BOT_CONFIG_KEY, selected_value)
+        set_bot_config(bot.user_profile, ARMADA_SELECTED_BOT_CONFIG_KEY, selected_value)
     if changed:
-        invalidate_pear_selected_bot_cache(user_profile.realm_id)
+        invalidate_armada_selected_bot_cache(user_profile.realm_id)
     return changed
 
 
-def ensure_pear_configured_bot(
+def ensure_armada_configured_bot(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
     selected_bot_user_id: int | None = None,
-) -> tuple[Service, PearConfigPayload, bool, bool]:
-    pear_config = build_pear_config_for_user(user_profile)
+) -> tuple[Service, ArmadaConfigPayload, bool, bool]:
+    armada_config = build_armada_config_for_user(user_profile)
     created = False
-    if not pear_config["configured"] and selected_bot_user_id is not None:
+    if not armada_config["configured"] and selected_bot_user_id is not None:
         raise JsonableError(_("Invalid Pear bot selection."))
-    if not pear_config["configured"]:
+    if not armada_config["configured"]:
         add_bot_backend(
             request,
             user_profile,
             bot_type=UserProfile.EMBEDDED_BOT,
-            config_data={PEAR_SELECTED_BOT_CONFIG_KEY: PEAR_SELECTED_BOT_CONFIG_VALUE},
-            full_name_raw=PEAR_AGENT_NAME,
+            config_data={ARMADA_SELECTED_BOT_CONFIG_KEY: ARMADA_SELECTED_BOT_CONFIG_VALUE},
+            full_name_raw=ARMADA_AGENT_NAME,
             interface_type=Service.GENERIC,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
-            short_name_raw=PEAR_BOT_SHORT_NAME,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+            short_name_raw=ARMADA_BOT_SHORT_NAME,
         )
         created = True
-        invalidate_pear_selected_bot_cache(user_profile.realm_id)
+        invalidate_armada_selected_bot_cache(user_profile.realm_id)
 
-    selection_changed = set_selected_pear_bot(user_profile, selected_bot_user_id)
-    pear_config = build_pear_config_for_user(user_profile)
-    pear_bot = get_selected_pear_bot(user_profile)
-    if pear_bot is None:
+    selection_changed = set_selected_armada_bot(user_profile, selected_bot_user_id)
+    armada_config = build_armada_config_for_user(user_profile)
+    armada_bot = get_selected_armada_bot(user_profile)
+    if armada_bot is None:
         raise JsonableError(_("Pear bot is not configured."))
-    return pear_bot, pear_config, created, selection_changed
+    return armada_bot, armada_config, created, selection_changed
 
 
 @typed_endpoint_without_parameters
-def get_pear_session_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+def get_armada_session_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     return json_success(
         request,
         data={
-            "pear_session": get_pear_session_payload(),
+            "armada_session": get_armada_session_payload(),
         },
     )
 
 
 @typed_endpoint_without_parameters
-def get_pear_config_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
+def get_armada_config_backend(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     return json_success(
         request,
         data={
-            "pear_config": build_pear_config_for_user(user_profile),
+            "armada_config": build_armada_config_for_user(user_profile),
         },
     )
 
 
 @require_realm_admin
 @typed_endpoint
-def post_pear_config_backend(
+def post_armada_config_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
     selected_bot_user_id: Json[int] | None = None,
 ) -> HttpResponse:
-    _pear_bot, pear_config, created, selection_changed = ensure_pear_configured_bot(
+    _armada_bot, armada_config, created, selection_changed = ensure_armada_configured_bot(
         request,
         user_profile,
         selected_bot_user_id=selected_bot_user_id,
@@ -1091,31 +1097,31 @@ def post_pear_config_backend(
         data={
             "created": created,
             "selection_changed": selection_changed,
-            "pear_config": pear_config,
+            "armada_config": armada_config,
         },
     )
 
 
 @require_realm_admin
 @typed_endpoint_without_parameters
-def post_pear_first_run_backend(
+def post_armada_first_run_backend(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
-    pear_bot, pear_config, bot_created, selection_changed = ensure_pear_configured_bot(
+    armada_bot, armada_config, bot_created, selection_changed = ensure_armada_configured_bot(
         request,
         user_profile,
     )
     stream, stream_created = create_stream_if_needed(
         user_profile.realm,
-        PEAR_FIRST_RUN_STREAM,
+        ARMADA_FIRST_RUN_STREAM,
         stream_description="Pear sandbox for first-run Codex sessions.",
         acting_user=user_profile,
     )
     bulk_add_subscriptions(
         user_profile.realm,
         [stream],
-        [user_profile, pear_bot.user_profile],
+        [user_profile, armada_bot.user_profile],
         acting_user=user_profile,
     )
 
@@ -1124,9 +1130,9 @@ def post_pear_first_run_backend(
         messages_for_topic(
             user_profile.realm_id,
             stream.recipient_id,
-            PEAR_FIRST_RUN_TOPIC,
+            ARMADA_FIRST_RUN_TOPIC,
         )
-        .filter(content=PEAR_FIRST_RUN_STARTER_MESSAGE)
+        .filter(content=ARMADA_FIRST_RUN_STARTER_MESSAGE)
         .order_by("id")
         .first()
     )
@@ -1134,8 +1140,8 @@ def post_pear_first_run_backend(
         starter_message_id = internal_send_stream_message(
             user_profile,
             stream,
-            PEAR_FIRST_RUN_TOPIC,
-            PEAR_FIRST_RUN_STARTER_MESSAGE,
+            ARMADA_FIRST_RUN_TOPIC,
+            ARMADA_FIRST_RUN_STARTER_MESSAGE,
             mark_as_read_for_acting_user=True,
             acting_user=user_profile,
         )
@@ -1149,30 +1155,30 @@ def post_pear_first_run_backend(
     narrow_url = topic_narrow_url(
         realm=user_profile.realm,
         stream=stream,
-        topic_name=PEAR_FIRST_RUN_TOPIC,
+        topic_name=ARMADA_FIRST_RUN_TOPIC,
     )
     return json_success(
         request,
         data={
             "narrow_url": narrow_url,
-            "pear_first_run": {
+            "armada_first_run": {
                 "stream": stream.name,
                 "stream_id": stream.id,
-                "topic": PEAR_FIRST_RUN_TOPIC,
+                "topic": ARMADA_FIRST_RUN_TOPIC,
                 "message_id": starter_message_id,
                 "narrow_url": narrow_url,
                 "bot_created": bot_created,
                 "stream_created": stream_created,
                 "message_created": message_created,
                 "selection_changed": selection_changed,
-                "pear_config": pear_config,
+                "armada_config": armada_config,
             },
         },
     )
 
 
 @typed_endpoint
-def get_pear_workspace_topics_backend(
+def get_armada_workspace_topics_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1185,7 +1191,7 @@ def get_pear_workspace_topics_backend(
     return json_success(
         request,
         data={
-            "pear_workspace_topics": pear_workspace_topics_for_stream(
+            "armada_workspace_topics": armada_workspace_topics_for_stream(
                 user_profile.realm, stream_name
             ),
         },
@@ -1193,7 +1199,7 @@ def get_pear_workspace_topics_backend(
 
 
 @typed_endpoint
-def get_pear_topic_context_backend(
+def get_armada_topic_context_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1211,7 +1217,7 @@ def get_pear_topic_context_backend(
     ] = True,
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    workspace_node = pear_workspace_for_request(
+    workspace_node = armada_workspace_for_request(
         user_profile,
         stream_name=stream_name,
         topic_name=topic_name,
@@ -1219,7 +1225,7 @@ def get_pear_topic_context_backend(
     return json_success(
         request,
         data={
-            "pear_topic_context": serialize_pear_workspace_context(
+            "armada_topic_context": serialize_armada_workspace_context(
                 workspace_node,
                 stream_name=stream_name,
                 topic_name=topic_name,
@@ -1230,7 +1236,7 @@ def get_pear_topic_context_backend(
 
 
 @typed_endpoint
-def post_pear_topic_context_backend(
+def post_armada_topic_context_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1260,25 +1266,27 @@ def post_pear_topic_context_backend(
     ] = True,
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    clean_model = clean_pear_model_slug(model) if model is not None else None
+    clean_model = clean_armada_model_slug(model) if model is not None else None
     clean_reasoning_effort = (
-        clean_pear_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
+        clean_armada_reasoning_effort(reasoning_effort) if reasoning_effort is not None else None
     )
     if response_policy is not None and response_policy not in {"ambient", "mentions_only"}:
         raise JsonableError(_("Invalid Pear response policy."))
     clean_response_policy = response_policy
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream_name, topic=topic_name)
-    previous_model = pear_worker_model_for_topic(
+    workspace_node = ensure_armada_workspace_node(
+        user_profile, stream=stream_name, topic=topic_name
+    )
+    previous_model = armada_worker_model_for_topic(
         user_profile,
         stream=stream_name,
         topic=topic_name,
     )
-    previous_reasoning_effort = pear_worker_reasoning_effort_for_topic(
+    previous_reasoning_effort = armada_worker_reasoning_effort_for_topic(
         user_profile,
         stream=stream_name,
         topic=topic_name,
     )
-    previous_response_policy = pear_workspace_response_policy(
+    previous_response_policy = armada_workspace_response_policy(
         user_profile,
         stream=stream_name,
         topic=topic_name,
@@ -1320,7 +1328,7 @@ def post_pear_topic_context_backend(
         request,
         data={
             "changed": changed,
-            "pear_topic_context": serialize_pear_workspace_context(
+            "armada_topic_context": serialize_armada_workspace_context(
                 workspace_node,
                 stream_name=stream_name,
                 topic_name=topic_name,
@@ -1331,7 +1339,7 @@ def post_pear_topic_context_backend(
 
 
 @typed_endpoint
-def get_pear_active_session_backend(
+def get_armada_active_session_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1344,12 +1352,12 @@ def get_pear_active_session_backend(
         ApiParamConfig("topic", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
 ) -> HttpResponse:
-    pear_session = get_pear_session_payload(stream=stream_name, topic=topic_name)
+    armada_session = get_armada_session_payload(stream=stream_name, topic=topic_name)
     try:
-        stream, _sub = access_stream_by_name(user_profile, pear_session["stream"])
+        stream, _sub = access_stream_by_name(user_profile, armada_session["stream"])
     except JsonableError:
-        active_session = build_pear_active_session_summary(
-            pear_session=pear_session,
+        active_session = build_armada_active_session_summary(
+            armada_session=armada_session,
             source="server",
             stream_exists=False,
             topic_message_count=0,
@@ -1360,7 +1368,7 @@ def get_pear_active_session_backend(
         message_query = messages_for_topic(
             user_profile.realm_id,
             stream.recipient_id,
-            pear_session["topic"],
+            armada_session["topic"],
         )
         message_count = message_query.count()
         message_rows = list(
@@ -1369,26 +1377,28 @@ def get_pear_active_session_backend(
                 "content",
                 "sender__is_bot",
                 "sender__full_name",
-            )[:PEAR_ACTIVE_SESSION_MESSAGE_LIMIT]
+            )[:ARMADA_ACTIVE_SESSION_MESSAGE_LIMIT]
         )
-        message_summary = build_pear_active_session_summary_from_messages(
-            pear_session=pear_session,
+        message_summary = build_armada_active_session_summary_from_messages(
+            armada_session=armada_session,
             source="server",
             stream_exists=True,
             messages=message_rows,
             topic_message_count=message_count,
-            is_paused=pear_workspace_is_paused(
+            is_paused=armada_workspace_is_paused(
                 user_profile,
-                stream=pear_session["stream"],
-                topic=pear_session["topic"],
+                stream=armada_session["stream"],
+                topic=armada_session["topic"],
             ),
-            response_policy=pear_workspace_response_policy(
+            response_policy=armada_workspace_response_policy(
                 user_profile,
-                stream=pear_session["stream"],
-                topic=pear_session["topic"],
+                stream=armada_session["stream"],
+                topic=armada_session["topic"],
             ),
         )
-        scope_stream, scope_topic = pear_topic_scope(pear_session["stream"], pear_session["topic"])
+        scope_stream, scope_topic = armada_topic_scope(
+            armada_session["stream"], armada_session["topic"]
+        )
         topic_runs = AgentRun.objects.filter(
             realm=user_profile.realm,
             session_kind=AgentRun.SHARED,
@@ -1407,7 +1417,7 @@ def get_pear_active_session_backend(
         pending_explicit_request_ids = [
             message_id
             for message_id, content, _sender_is_bot, _sender_name in message_rows
-            if message_id > latest_persisted_trigger_id and is_pear_task_request_message(content)
+            if message_id > latest_persisted_trigger_id and is_armada_task_request_message(content)
         ]
         latest_request_message_id = max(
             [
@@ -1424,8 +1434,8 @@ def get_pear_active_session_backend(
         ):
             latest_result_message_id = None
 
-        active_session = build_pear_active_session_summary(
-            pear_session=pear_session,
+        active_session = build_armada_active_session_summary(
+            armada_session=armada_session,
             source="server",
             stream_exists=True,
             topic_message_count=message_count,
@@ -1445,14 +1455,14 @@ def get_pear_active_session_backend(
     return json_success(
         request,
         data={
-            "pear_session": pear_session,
+            "armada_session": armada_session,
             "active_session": active_session,
         },
     )
 
 
 @typed_endpoint
-def get_pear_runs_backend(
+def get_armada_runs_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1486,7 +1496,7 @@ def get_pear_runs_backend(
     ] = None,
 ) -> HttpResponse:
     requested_runs = (
-        get_visible_pear_worker_runs_by_id(user_profile, run_ids) if run_ids is not None else []
+        get_visible_armada_worker_runs_by_id(user_profile, run_ids) if run_ids is not None else []
     )
     topic_runs: list[AgentRun]
     workspace_node: Workspace | None = None
@@ -1503,12 +1513,12 @@ def get_pear_runs_backend(
         topic_runs = list(
             AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
             .filter(realm=user_profile.realm, workspace_node=workspace_node)
-            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
+            .order_by("-date_created", "-id")[:ARMADA_RUN_LIST_LIMIT]
         )
     elif stream_name is not None and topic_name is not None:
         access_stream_by_name(user_profile, stream_name)
-        scope_stream, scope_topic = pear_topic_scope(stream_name, topic_name)
-        topic_workspace = pear_workspace_for_request(
+        scope_stream, scope_topic = armada_topic_scope(stream_name, topic_name)
+        topic_workspace = armada_workspace_for_request(
             user_profile,
             stream_name=stream_name,
             topic_name=topic_name,
@@ -1536,7 +1546,7 @@ def get_pear_runs_backend(
                     source_topic_name__iexact=scope_topic,
                 )
             )
-            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
+            .order_by("-date_created", "-id")[:ARMADA_RUN_LIST_LIMIT]
         )
     elif requested_runs:
         topic_runs = []
@@ -1548,7 +1558,7 @@ def get_pear_runs_backend(
                 session_kind=AgentRun.SIDE,
                 requesting_user=user_profile,
             )
-            .order_by("-date_created", "-id")[:PEAR_RUN_LIST_LIMIT]
+            .order_by("-date_created", "-id")[:ARMADA_RUN_LIST_LIMIT]
         )
 
     runs_by_id = {run.id: run for run in [*topic_runs, *requested_runs]}
@@ -1568,13 +1578,13 @@ def get_pear_runs_backend(
         key=lambda run: (run.date_created, run.id),
         reverse=True,
     )
-    summary_events_by_run_id = pear_worker_run_summary_events(runs)
+    summary_events_by_run_id = armada_worker_run_summary_events(runs)
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
-        topic_context = serialize_pear_workspace_context(
+        topic_context = serialize_armada_workspace_context(
             topic_workspace
             if topic_workspace is not None
-            else pear_workspace_for_request(
+            else armada_workspace_for_request(
                 user_profile,
                 stream_name=stream_name,
                 topic_name=topic_name,
@@ -1586,37 +1596,37 @@ def get_pear_runs_backend(
     return json_success(
         request,
         data={
-            "pear_runs": [
-                serialize_pear_worker_run(
+            "armada_runs": [
+                serialize_armada_worker_run(
                     run,
                     include_events=bool(include_events),
                     summary_events=summary_events_by_run_id[run.id],
                 )
                 for run in runs
             ],
-            "runtime_config": build_pear_runtime_config_payload(),
-            "pear_topic_context": topic_context,
+            "runtime_config": build_armada_runtime_config_payload(),
+            "armada_topic_context": topic_context,
         },
     )
 
 
 @typed_endpoint_without_parameters
-def get_pear_run_backend(
+def get_armada_run_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    run = get_visible_pear_worker_run(user_profile, run_id)
+    run = get_visible_armada_worker_run(user_profile, run_id)
     return json_success(
         request,
         data={
-            "pear_run": serialize_pear_worker_run(run, include_events=True),
-            "runtime_config": build_pear_runtime_config_payload(),
+            "armada_run": serialize_armada_worker_run(run, include_events=True),
+            "runtime_config": build_armada_runtime_config_payload(),
         },
     )
 
 
-def serialize_pear_run_trace_event(event: AgentRunEvent) -> dict[str, object] | None:
+def serialize_armada_run_trace_event(event: AgentRunEvent) -> dict[str, object] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type in {"transcript", "agent"}:
         kind = payload.get("kind")
@@ -1633,7 +1643,7 @@ def serialize_pear_run_trace_event(event: AgentRunEvent) -> dict[str, object] | 
                 "date_created": datetime_to_timestamp(event.date_created),
             }
         if kind == "plan":
-            plan = _pear_trace_plan(payload)
+            plan = _armada_trace_plan(payload)
             if plan is None:
                 return None
             return {
@@ -1648,7 +1658,7 @@ def serialize_pear_run_trace_event(event: AgentRunEvent) -> dict[str, object] | 
             serialized: dict[str, object] = {
                 "id": event.id,
                 "kind": str(kind),
-                "title": trim_pear_text(str(title or event.summary), limit=500),
+                "title": trim_armada_text(str(title or event.summary), limit=500),
                 "status": "failed" if kind == "error" else str(payload.get("status") or "done"),
                 "date_created": datetime_to_timestamp(event.date_created),
             }
@@ -1669,13 +1679,13 @@ def serialize_pear_run_trace_event(event: AgentRunEvent) -> dict[str, object] | 
     return {
         "id": event.id,
         "kind": event.event_type,
-        "title": trim_pear_text(title, limit=500),
+        "title": trim_armada_text(title, limit=500),
         "status": "failed" if event.event_type == "failed" else "done",
         "date_created": datetime_to_timestamp(event.date_created),
     }
 
 
-def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
+def armada_run_trace_markdown(trace: list[dict[str, object]]) -> str:
     """Rebuild the former visible work log without exposing hidden reasoning or raw output."""
     blocks: list[str] = []
     tool_events: list[dict[str, object]] = []
@@ -1707,7 +1717,7 @@ def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
             status = str(event.get("status") or "done")
             glyph = "✷" if status in {"failed", "error"} else "·"
             event_title = " ".join(str(event.get("title") or "tool").split())
-            event_title = trim_pear_text(event_title.replace("`", "'"), limit=220)
+            event_title = trim_armada_text(event_title.replace("`", "'"), limit=220)
             rows.append(f"- {glyph} `{event_title}`")
         tool_body = "\n".join(rows)
         blocks.append(f"```spoiler {title}\n{tool_body}\n```")
@@ -1720,19 +1730,19 @@ def pear_run_trace_markdown(trace: list[dict[str, object]]) -> str:
             continue
         if kind == "error":
             flush_tools()
-            error_title = trim_pear_text(str(event.get("title") or "Agent failed."), limit=500)
+            error_title = trim_armada_text(str(event.get("title") or "Agent failed."), limit=500)
             blocks.append(f"**Agent error:** `{error_title.replace('`', "'")}`")
             continue
         if kind == "assistant":
             flush_tools()
             body = event.get("body")
             if isinstance(body, str) and body.strip():
-                blocks.append(normalize_pear_visible_markdown(body.strip()))
+                blocks.append(normalize_armada_visible_markdown(body.strip()))
     flush_tools()
     return "\n\n".join(blocks)
 
 
-def _pear_trace_plan(payload: dict[str, object]) -> list[dict[str, str]] | None:
+def _armada_trace_plan(payload: dict[str, object]) -> list[dict[str, str]] | None:
     metadata = payload.get("metadata")
     steps = metadata.get("steps") if isinstance(metadata, dict) else None
     if not isinstance(steps, list):
@@ -1746,7 +1756,7 @@ def _pear_trace_plan(payload: dict[str, object]) -> list[dict[str, str]] | None:
 
 
 @typed_endpoint
-def get_pear_run_trace_backend(
+def get_armada_run_trace_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
@@ -1758,17 +1768,17 @@ def get_pear_run_trace_backend(
     limit: Annotated[
         Json[int],
         ApiParamConfig("limit", documentation_status=INTENTIONALLY_UNDOCUMENTED),
-    ] = PEAR_RUN_TRACE_LIMIT,
+    ] = ARMADA_RUN_TRACE_LIMIT,
     thread_id: Annotated[
         str | None,
         ApiParamConfig("thread_id", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
 ) -> HttpResponse:
-    run = get_visible_pear_worker_run(user_profile, run_id)
-    requested_limit = max(1, min(limit, PEAR_RUN_TRACE_MAX_LIMIT))
+    run = get_visible_armada_worker_run(user_profile, run_id)
+    requested_limit = max(1, min(limit, ARMADA_RUN_TRACE_MAX_LIMIT))
     if thread_id is not None:
         visible_thread_ids = {
-            str(agent["thread_id"]) for agent in serialize_pear_agent_threads(run)
+            str(agent["thread_id"]) for agent in serialize_armada_agent_threads(run)
         }
         if thread_id not in visible_thread_ids:
             raise JsonableError(_("Pear agent thread not found."))
@@ -1816,9 +1826,9 @@ def get_pear_run_trace_backend(
     trace = [
         serialized
         for event in reversed(candidates[:requested_limit])
-        if (serialized := serialize_pear_run_trace_event(event)) is not None
+        if (serialized := serialize_armada_run_trace_event(event)) is not None
     ]
-    trace_markdown = pear_run_trace_markdown(trace)
+    trace_markdown = armada_run_trace_markdown(trace)
     trace_message = Message()
     trace_message.sender = run.bot_profile
     trace_message.realm = user_profile.realm
@@ -1846,28 +1856,28 @@ def get_pear_run_trace_backend(
 
 
 @typed_endpoint_without_parameters
-def post_pear_run_attention_backend(
+def post_armada_run_attention_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    run = get_visible_pear_worker_run(user_profile, run_id)
+    run = get_visible_armada_worker_run(user_profile, run_id)
     if run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}:
         return json_success(request, data={"attended": False})
-    mark_pear_run_attended(run.id)
+    mark_armada_run_attended(run.id)
     latest_event_id = run.events.order_by("-id").values_list("id", flat=True).first()
     if latest_event_id is not None:
-        maybe_enqueue_pear_run_presentation(run.id, latest_event_id)
+        maybe_enqueue_armada_run_presentation(run.id, latest_event_id)
     return json_success(request, data={"attended": True})
 
 
-def update_pear_run_control_event(
+def update_armada_run_control_event(
     user_profile: UserProfile,
     run_id: int,
     event_type: str,
     summary: str,
 ) -> AgentRun:
-    visible_run = get_visible_pear_worker_run(user_profile, run_id)
+    visible_run = get_visible_armada_worker_run(user_profile, run_id)
     with transaction.atomic(savepoint=False):
         if event_type in {"pause", "resume"}:
             # Worker claims take locks in realm -> workspace -> run order.  Keep
@@ -1880,7 +1890,7 @@ def update_pear_run_control_event(
             control_topic = (
                 visible_run.source_topic_name if visible_run.session_kind == AgentRun.SIDE else ""
             )
-            set_pear_workspace_paused(
+            set_armada_workspace_paused(
                 visible_run.bot_profile,
                 stream=control_stream or visible_run.stream_name,
                 topic=control_topic or visible_run.topic_name,
@@ -1892,7 +1902,7 @@ def update_pear_run_control_event(
             AgentRun.QUEUED,
             AgentRun.RUNNING,
         }:
-            record_control_event = PearDatabaseWorkerRunStore().cancel_locked_run(
+            record_control_event = ArmadaDatabaseWorkerRunStore().cancel_locked_run(
                 run, summary="Cancelled."
             )
         elif event_type == "cancel":
@@ -1910,35 +1920,35 @@ def update_pear_run_control_event(
             )
             # Capture this exact transition's payload now; the action helper
             # defers delivery with send_event_on_commit.
-            send_pear_run_event(run, run_event)
+            send_armada_run_event(run, run_event)
     return run
 
 
 @typed_endpoint_without_parameters
-def post_pear_run_cancel_backend(
+def post_armada_run_cancel_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    run = update_pear_run_control_event(user_profile, run_id, "cancel", "Cancelled by user.")
+    run = update_armada_run_control_event(user_profile, run_id, "cancel", "Cancelled by user.")
     return json_success(
         request,
-        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+        data={"armada_run": serialize_armada_worker_run(run, include_events=True)},
     )
 
 
 @typed_endpoint_without_parameters
-def post_pear_run_not_for_pear_backend(
+def post_armada_run_not_for_agent_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    visible_run = get_visible_pear_worker_run(user_profile, run_id)
+    visible_run = get_visible_armada_worker_run(user_profile, run_id)
     if not visible_run.ambient_triggered:
         raise JsonableError(_("This Pear response was explicitly requested."))
 
     if visible_run.status in {AgentRun.QUEUED, AgentRun.RUNNING}:
-        visible_run = update_pear_run_control_event(
+        visible_run = update_armada_run_control_event(
             user_profile,
             run_id,
             "cancel",
@@ -1965,45 +1975,45 @@ def post_pear_run_not_for_pear_backend(
         request,
         data={
             "changed": not feedback_exists,
-            "pear_run": serialize_pear_worker_run(run, include_events=True),
+            "armada_run": serialize_armada_worker_run(run, include_events=True),
         },
     )
 
 
 @typed_endpoint_without_parameters
-def post_pear_run_pause_backend(
+def post_armada_run_pause_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    run = update_pear_run_control_event(user_profile, run_id, "pause", "Paused by user.")
+    run = update_armada_run_control_event(user_profile, run_id, "pause", "Paused by user.")
     return json_success(
         request,
-        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+        data={"armada_run": serialize_armada_worker_run(run, include_events=True)},
     )
 
 
 @typed_endpoint_without_parameters
-def post_pear_run_resume_backend(
+def post_armada_run_resume_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     run_id: int,
 ) -> HttpResponse:
-    run = update_pear_run_control_event(user_profile, run_id, "resume", "Resumed by user.")
+    run = update_armada_run_control_event(user_profile, run_id, "resume", "Resumed by user.")
     return json_success(
         request,
-        data={"pear_run": serialize_pear_worker_run(run, include_events=True)},
+        data={"armada_run": serialize_armada_worker_run(run, include_events=True)},
     )
 
 
-def check_pear_user_may_start_runs(user_profile: UserProfile) -> None:
-    if not pear_user_is_trusted(user_profile):
+def check_armada_user_may_start_runs(user_profile: UserProfile) -> None:
+    if not armada_user_is_trusted(user_profile):
         raise JsonableError(_("You are not allowed to start agent runs."))
 
 
-def _dispatch_pear_monitor_run(
+def _dispatch_armada_monitor_run(
     user_profile: UserProfile,
-    pear_bot: Service,
+    armada_bot: Service,
     monitor: AgentMonitor,
     *,
     repair_error: str = "",
@@ -2012,7 +2022,7 @@ def _dispatch_pear_monitor_run(
     The run is a normal MONITOR-kind AgentRun; ticks never are."""
     stream_name = monitor.stream_name
     topic_name = monitor.topic_name
-    task = build_pear_monitor_contract(
+    task = build_armada_monitor_contract(
         monitor_id=monitor.id,
         ask=monitor.ask,
         stream=stream_name,
@@ -2028,7 +2038,7 @@ def _dispatch_pear_monitor_run(
         ]
     )
     dm_message_id = internal_send_private_message(
-        pear_bot.user_profile,
+        armada_bot.user_profile,
         user_profile,
         dm_intro,
         disable_external_notifications=True,
@@ -2042,7 +2052,7 @@ def _dispatch_pear_monitor_run(
 
     run = AgentRun.objects.create(
         realm=user_profile.realm,
-        bot_profile=pear_bot.user_profile,
+        bot_profile=armada_bot.user_profile,
         requesting_user=user_profile,
         trigger_message_id=dm_message_id,
         stream_name=stream_name,
@@ -2052,24 +2062,24 @@ def _dispatch_pear_monitor_run(
         source_topic_name=topic_name,
         status=AgentRun.QUEUED,
         summary="Queued monitor setup.",
-        current_activity=trim_pear_text(monitor.ask, limit=200),
-        runtime_label=str(settings.PEAR_WORKER_AGENT_RUNTIME or ""),
-        model=pear_worker_model_for_topic(
-            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        current_activity=trim_armada_text(monitor.ask, limit=200),
+        runtime_label=str(settings.ARMADA_WORKER_AGENT_RUNTIME or ""),
+        model=armada_worker_model_for_topic(
+            armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
-        sandbox=pear_worker_sandbox_for_topic(
-            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        sandbox=armada_worker_sandbox_for_topic(
+            armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
-        approval_policy=str(settings.PEAR_WORKER_APPROVAL_POLICY or ""),
-        workdir=pear_worker_workdir_for_topic(
-            pear_bot.user_profile, stream=stream_name, topic=topic_name
+        approval_policy=str(settings.ARMADA_WORKER_APPROVAL_POLICY or ""),
+        workdir=armada_worker_workdir_for_topic(
+            armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
     )
     AgentRunEvent.objects.create(
         run=run,
         event_type="queued",
         summary="Queued monitor setup.",
-        payload={"monitor_id": monitor.id, "ask": trim_pear_text(monitor.ask, limit=500)},
+        payload={"monitor_id": monitor.id, "ask": trim_armada_text(monitor.ask, limit=500)},
     )
     worker_message = {
         "id": dm_message_id,
@@ -2085,9 +2095,9 @@ def _dispatch_pear_monitor_run(
         "sender_email": user_profile.email,
         "content": task,
     }
-    PearQueueWorkerDispatcher().dispatch(
-        PearEmbeddedBotHandler(worker_run_store=PearDatabaseWorkerRunStore()),
-        SimpleNamespace(user_profile=pear_bot.user_profile),
+    ArmadaQueueWorkerDispatcher().dispatch(
+        ArmadaEmbeddedBotHandler(worker_run_store=ArmadaDatabaseWorkerRunStore()),
+        SimpleNamespace(user_profile=armada_bot.user_profile),
         worker_message,
         content=task,
         active_session=None,
@@ -2103,7 +2113,7 @@ def _dispatch_pear_monitor_run(
 
 
 @typed_endpoint
-def get_pear_monitors_backend(
+def get_armada_monitors_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2117,7 +2127,7 @@ def get_pear_monitors_backend(
     ],
 ) -> HttpResponse:
     access_stream_by_name(user_profile, stream_name)
-    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
+    stream_name, topic_name = armada_topic_scope(stream_name, topic_name)
     monitors = AgentMonitor.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream_name,
@@ -2125,12 +2135,12 @@ def get_pear_monitors_backend(
     ).order_by("position", "id")
     return json_success(
         request,
-        data={"pear_monitors": [serialize_pear_monitor(monitor) for monitor in monitors]},
+        data={"armada_monitors": [serialize_armada_monitor(monitor) for monitor in monitors]},
     )
 
 
 @typed_endpoint
-def post_pear_monitors_backend(
+def post_armada_monitors_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -2155,28 +2165,28 @@ def post_pear_monitors_backend(
     if not ask_request:
         raise JsonableError(_("Pear monitor request cannot be empty."))
     access_stream_by_name(user_profile, stream_name)
-    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
-    pear_bot = get_selected_pear_bot(user_profile)
-    if pear_bot is None:
+    stream_name, topic_name = armada_topic_scope(stream_name, topic_name)
+    armada_bot = get_selected_armada_bot(user_profile)
+    if armada_bot is None:
         raise JsonableError(_("Pear bot is not configured."))
     topic_count = AgentMonitor.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream_name,
         topic_name__iexact=topic_name,
     ).count()
-    if topic_count >= PEAR_MONITOR_MAX_PER_TOPIC:
+    if topic_count >= ARMADA_MONITOR_MAX_PER_TOPIC:
         raise JsonableError(_("This topic already has the maximum number of monitors."))
     realm_count = AgentMonitor.objects.filter(realm=user_profile.realm).count()
-    if realm_count >= PEAR_MONITOR_MAX_PER_REALM:
+    if realm_count >= ARMADA_MONITOR_MAX_PER_REALM:
         raise JsonableError(_("This organization already has the maximum number of monitors."))
 
     if spec is not None:
         # Pin-to-wall: the artifact spec is already composed; the monitor
         # goes live immediately with no agent run.
         try:
-            monitor = pear_create_monitor_from_spec(
+            monitor = armada_create_monitor_from_spec(
                 realm=user_profile.realm,
-                bot_profile=pear_bot.user_profile,
+                bot_profile=armada_bot.user_profile,
                 creator=user_profile,
                 stream_name=stream_name,
                 topic_name=topic_name,
@@ -2184,26 +2194,26 @@ def post_pear_monitors_backend(
                 raw_spec=spec,
                 position=topic_count,
             )
-        except PearMonitorSpecError as error:
+        except ArmadaMonitorSpecError as error:
             raise JsonableError(_("Invalid artifact spec: {error}").format(error=error))
-        return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+        return json_success(request, data={"armada_monitor": serialize_armada_monitor(monitor)})
 
-    check_pear_user_may_start_runs(user_profile)
+    check_armada_user_may_start_runs(user_profile)
     monitor = AgentMonitor.objects.create(
         realm=user_profile.realm,
-        bot_profile=pear_bot.user_profile,
+        bot_profile=armada_bot.user_profile,
         creator=user_profile,
         stream_name=stream_name,
         topic_name=topic_name,
-        title=trim_pear_text(ask_request, limit=24),
-        ask=trim_pear_text(ask_request, limit=500),
+        title=trim_armada_text(ask_request, limit=24),
+        ask=trim_armada_text(ask_request, limit=500),
         position=topic_count,
     )
-    _dispatch_pear_monitor_run(user_profile, pear_bot, monitor)
-    return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+    _dispatch_armada_monitor_run(user_profile, armada_bot, monitor)
+    return json_success(request, data={"armada_monitor": serialize_armada_monitor(monitor)})
 
 
-def _get_accessible_pear_monitor(user_profile: UserProfile, monitor_id: int) -> AgentMonitor:
+def _get_accessible_armada_monitor(user_profile: UserProfile, monitor_id: int) -> AgentMonitor:
     try:
         monitor = AgentMonitor.objects.get(id=monitor_id, realm=user_profile.realm)
     except AgentMonitor.DoesNotExist as error:
@@ -2213,7 +2223,7 @@ def _get_accessible_pear_monitor(user_profile: UserProfile, monitor_id: int) -> 
 
 
 @typed_endpoint
-def update_pear_monitor_backend(
+def update_armada_monitor_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     monitor_id: int,
@@ -2231,7 +2241,7 @@ def update_pear_monitor_backend(
         ApiParamConfig("title", documentation_status=INTENTIONALLY_UNDOCUMENTED),
     ] = None,
 ) -> HttpResponse:
-    monitor = _get_accessible_pear_monitor(user_profile, monitor_id)
+    monitor = _get_accessible_armada_monitor(user_profile, monitor_id)
     now = timezone_now()
     if action == "pause":
         monitor.status = AgentMonitor.PAUSED
@@ -2250,8 +2260,8 @@ def update_pear_monitor_backend(
         if cadence_seconds is None:
             raise JsonableError(_("cadence_seconds is required."))
         monitor.cadence_seconds = min(
-            max(cadence_seconds, PEAR_MONITOR_MIN_CADENCE_SECONDS),
-            PEAR_MONITOR_MAX_CADENCE_SECONDS,
+            max(cadence_seconds, ARMADA_MONITOR_MIN_CADENCE_SECONDS),
+            ARMADA_MONITOR_MAX_CADENCE_SECONDS,
         )
         if monitor.status == AgentMonitor.LIVE:
             monitor.next_due_at = now
@@ -2260,28 +2270,30 @@ def update_pear_monitor_backend(
             raise JsonableError(_("title is required."))
         monitor.title = title.strip()[:24]
     elif action == "rebuild":
-        check_pear_user_may_start_runs(user_profile)
-        pear_bot = get_selected_pear_bot(user_profile)
-        if pear_bot is None:
+        check_armada_user_may_start_runs(user_profile)
+        armada_bot = get_selected_armada_bot(user_profile)
+        if armada_bot is None:
             raise JsonableError(_("Pear bot is not configured."))
         monitor.date_updated = now
         monitor.save(update_fields=["date_updated"])
-        _dispatch_pear_monitor_run(user_profile, pear_bot, monitor, repair_error=monitor.last_error)
+        _dispatch_armada_monitor_run(
+            user_profile, armada_bot, monitor, repair_error=monitor.last_error
+        )
         monitor.refresh_from_db()
-        return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+        return json_success(request, data={"armada_monitor": serialize_armada_monitor(monitor)})
     else:
         raise JsonableError(_("Unknown monitor action."))
     monitor.date_updated = now
     monitor.save()
-    return json_success(request, data={"pear_monitor": serialize_pear_monitor(monitor)})
+    return json_success(request, data={"armada_monitor": serialize_armada_monitor(monitor)})
 
 
 @typed_endpoint_without_parameters
-def delete_pear_monitor_backend(
+def delete_armada_monitor_backend(
     request: HttpRequest,
     user_profile: UserProfile,
     monitor_id: int,
 ) -> HttpResponse:
-    monitor = _get_accessible_pear_monitor(user_profile, monitor_id)
+    monitor = _get_accessible_armada_monitor(user_profile, monitor_id)
     monitor.delete()
     return json_success(request)

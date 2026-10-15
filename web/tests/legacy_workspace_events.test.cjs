@@ -9,14 +9,14 @@ const workspace_events = zrequire("legacy_workspace_events");
 
 run_test("Workspace revision listeners receive events until they unsubscribe", () => {
     const seen = [];
-    const unsubscribe = workspace_events.on_pear_workspace_changed((event) => seen.push(event));
+    const unsubscribe = workspace_events.on_armada_workspace_changed((event) => seen.push(event));
     const event = {
-        type: "pear_workspace_changed",
+        type: "workspace_changed",
         workspace_id: "workspace-a",
         revision: 2,
     };
-    workspace_events.apply_pear_workspace_changed_event(event);
+    workspace_events.apply_armada_workspace_changed_event(event);
     unsubscribe();
-    workspace_events.apply_pear_workspace_changed_event({...event, revision: 3});
+    workspace_events.apply_armada_workspace_changed_event({...event, revision: 3});
     assert.deepEqual(seen, [event]);
 });

@@ -233,13 +233,13 @@ export function initialize({
                 popover_menus.hide_current_popover_if_visible(instance);
             });
 
-            $popper.one("click", ".not_for_pear", (e) => {
+            $popper.one("click", ".not_for_agent", (e) => {
                 const message_id = Number($(e.currentTarget).attr("data-message-id"));
                 const run_id = Number($(e.currentTarget).attr("data-run-id"));
                 const message = message_list.get(message_id);
                 assert(message !== undefined);
                 void channel.post({
-                    url: `/json/pear/runs/${run_id}/not-for-pear`,
+                    url: `/json/armada/runs/${run_id}/not-for-agent`,
                     success() {
                         condense.collapse(message);
                     },

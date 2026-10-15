@@ -23,13 +23,13 @@ const workspace_compose = zrequire("legacy_workspace_compose");
 run_test("file context is formatted without sending a message", () => {
     starts.length = 0;
     insertions.length = 0;
-    const text = workspace_compose.format_pear_workspace_compose_context({
+    const text = workspace_compose.format_armada_workspace_compose_context({
         path: "docs/README.md",
         selectedText: "",
     });
     assert.equal(text, "Ask Pear about this workspace file.\n\nPath: `docs/README.md`");
 
-    workspace_compose.fill_pear_compose_with_workspace_context({
+    workspace_compose.fill_armada_compose_with_workspace_context({
         path: "docs/README.md",
         selectedText: "",
     });
@@ -42,7 +42,7 @@ run_test("file context is formatted without sending a message", () => {
 
 run_test("selection context includes lines and uses a collision-safe fence", () => {
     assert.equal(
-        workspace_compose.format_pear_workspace_compose_context({
+        workspace_compose.format_armada_workspace_compose_context({
             path: "src/`parser`.ts",
             selectedText: "const fence = ```;",
             startLine: 7,

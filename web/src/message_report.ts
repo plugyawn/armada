@@ -69,8 +69,8 @@ function get_message_group_for_message_preview(message: Message): MessageGroup {
 function get_message_container_for_preview(message: Message): MessageContainer {
     const computed_variables = {
         include_sender: true,
-        is_pear_message: false,
-        is_pear_active_message: false,
+        is_agent_message: false,
+        is_armada_active_message: false,
         // Message report preview will be automatically collapsed
         is_hidden: false,
         msg: message,

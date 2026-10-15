@@ -11,27 +11,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 BASE_DIR = Path(__file__).resolve().parents[1]
-PearTokenUsage = dict[str, int | float]
+ArmadaTokenUsage = dict[str, int | float]
 
 
 @dataclass(frozen=True)
 class RunUsage:
     run: Any
     events: list[Any]
-    usages: list[PearTokenUsage]
+    usages: list[ArmadaTokenUsage]
 
     @property
-    def first_usage(self) -> PearTokenUsage:
+    def first_usage(self) -> ArmadaTokenUsage:
         return self.usages[0]
 
     @property
-    def last_usage(self) -> PearTokenUsage:
+    def last_usage(self) -> ArmadaTokenUsage:
         return self.usages[-1]
 
 
-def pear_token_usage_int(value: object) -> int | None:
+def armada_token_usage_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, int | float):
@@ -39,7 +38,7 @@ def pear_token_usage_int(value: object) -> int | None:
     return None
 
 
-def normalize_token_usage(value: object) -> PearTokenUsage | None:
+def normalize_token_usage(value: object) -> ArmadaTokenUsage | None:
     raw_usage = value
     if isinstance(raw_usage, dict):
         token_usage = raw_usage.get("tokenUsage")
@@ -59,10 +58,10 @@ def normalize_token_usage(value: object) -> PearTokenUsage | None:
         "reasoning_output_tokens": ("reasoning_output_tokens", "reasoningOutputTokens"),
         "total_tokens": ("total_tokens", "totalTokens"),
     }
-    usage: PearTokenUsage = {}
+    usage: ArmadaTokenUsage = {}
     for normalized_key, source_keys in sources.items():
         for source_key in source_keys:
-            token_value = pear_token_usage_int(raw_usage.get(source_key))
+            token_value = armada_token_usage_int(raw_usage.get(source_key))
             if token_value is not None:
                 usage[normalized_key] = token_value
                 break
@@ -76,7 +75,7 @@ def normalize_token_usage(value: object) -> PearTokenUsage | None:
     return usage
 
 
-def usage_from_event_payload(payload: object) -> PearTokenUsage | None:
+def usage_from_event_payload(payload: object) -> ArmadaTokenUsage | None:
     if isinstance(payload, dict):
         usage = normalize_token_usage(payload.get("usage"))
         if usage is not None:
@@ -89,7 +88,7 @@ def usage_from_event_payload(payload: object) -> PearTokenUsage | None:
     return normalize_token_usage(payload)
 
 
-def cache_percent(usage: PearTokenUsage) -> float | None:
+def cache_percent(usage: ArmadaTokenUsage) -> float | None:
     value = usage.get("cache_percent")
     if isinstance(value, int | float):
         return float(value)
@@ -221,7 +220,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Report cached-input token rates for recent Pear worker runs. "
-            "Run this inside the Zulip checkout, usually with pear.env loaded on the box."
+            "Run this inside the Zulip checkout, usually with armada.env loaded on the box."
         )
     )
     parser.add_argument("--stream", help="Only include runs from this stream.")

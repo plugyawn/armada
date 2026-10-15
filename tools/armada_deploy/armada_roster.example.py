@@ -1,6 +1,6 @@
 # Demo-user roster for reset_remote_dev_data.sh.
 #
-# Copy this file to pear_roster.local.py (gitignored) and fill in the real
+# Copy this file to armada_roster.local.py (gitignored) and fill in the real
 # account names and emails for your deployment. The roster is deployment
 # data, not source: keeping it untracked keeps personal identities out of
 # the repository.

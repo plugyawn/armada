@@ -3,13 +3,13 @@
      * which have different font-family, we force font-family
      * for tooltips here.
      */
-    font-family: var(--pear-font-ui) !important;
+    font-family: var(--legacy-font-ui) !important;
     overflow-wrap: anywhere;
 
     /* Affects all tippy tooltips not using any theme. */
     .tippy-box:not([data-theme]) {
         background: var(--color-background-tippy-box);
-        border-radius: var(--pear-radius-chip);
+        border-radius: var(--legacy-radius-chip);
         /* 14px at 14px/1em */
         font-size: var(--base-font-size-px);
         /* 25px at 14px/1em */
@@ -86,7 +86,7 @@
 
     & span.tooltip-hotkey-hint {
         border: 1px solid hsl(225deg 100% 84%);
-        border-radius: var(--pear-radius-px);
+        border-radius: var(--legacy-radius-px);
         color: hsl(225deg 100% 84%);
         padding: 0 5px;
         text-align: center;

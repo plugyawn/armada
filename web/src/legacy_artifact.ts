@@ -1,9 +1,9 @@
 import katex from "katex";
 
-import {PEAR_ARTIFACT_SCHEMA} from "./armada_artifact_contract_generated.ts";
-import {replace_pear_artifact_host} from "./legacy_artifact_lifecycle.ts";
+import {ARMADA_ARTIFACT_SCHEMA} from "./armada_artifact_contract_generated.ts";
+import {replace_armada_artifact_host} from "./legacy_artifact_lifecycle.ts";
 
-export const PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact";
+export const ARMADA_ARTIFACT_SUBMESSAGE_TYPE = "artifact";
 
 type JsonSchema = Record<string, unknown>;
 type JsonObject = Record<string, unknown>;
@@ -12,19 +12,19 @@ function is_json_object(value: unknown): value is JsonObject {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export type PearArtifactAction = {label: string; prompt: string};
-export type PearArtifactBlock = JsonObject & {type: string};
-export type PearArtifactDocument = {
+export type ArmadaArtifactAction = {label: string; prompt: string};
+export type ArmadaArtifactBlock = JsonObject & {type: string};
+export type ArmadaArtifactDocument = {
     version: 1;
     title?: string;
     data?: JsonObject;
-    blocks: PearArtifactBlock[];
-    actions?: PearArtifactAction[];
+    blocks: ArmadaArtifactBlock[];
+    actions?: ArmadaArtifactAction[];
 };
 
-export type PearArtifactRenderOptions = {
+export type ArmadaArtifactRenderOptions = {
     density: "chat" | "wall";
-    onAction?: (action: PearArtifactAction, button: HTMLButtonElement) => void;
+    onAction?: (action: ArmadaArtifactAction, button: HTMLButtonElement) => void;
     onGeometryChange?: (
         artifact: HTMLElement,
         previous_height: number,
@@ -33,9 +33,9 @@ export type PearArtifactRenderOptions = {
     onPin?: (button: HTMLButtonElement) => void;
 };
 
-export type PearArtifactModule = {
-    parse_pear_artifact: typeof parse_pear_artifact;
-    mount_pear_artifact: typeof mount_pear_artifact;
+export type ArmadaArtifactModule = {
+    parse_armada_artifact: typeof parse_armada_artifact;
+    mount_armada_artifact: typeof mount_armada_artifact;
 };
 
 function schema_reference(root: JsonSchema, reference: string): JsonSchema | undefined {
@@ -222,7 +222,7 @@ function semantic_scene_is_valid(root: JsonObject): boolean {
     const connectors: [string, string][] = [];
     let count = 0;
     let text_length = 0;
-    const definitions = PEAR_ARTIFACT_SCHEMA["$defs"];
+    const definitions = ARMADA_ARTIFACT_SCHEMA["$defs"];
     if (!is_json_object(definitions)) {
         return false;
     }
@@ -230,7 +230,7 @@ function semantic_scene_is_valid(root: JsonObject): boolean {
     if (!is_json_object(node_definition)) {
         return false;
     }
-    const allowed_properties_by_type = node_definition["x-pear-type-properties"];
+    const allowed_properties_by_type = node_definition["x-armada-type-properties"];
     if (!is_json_object(allowed_properties_by_type)) {
         return false;
     }
@@ -468,7 +468,7 @@ function semantic_media_is_valid(block: JsonObject): boolean {
     });
 }
 
-export function parse_pear_artifact(raw: string): PearArtifactDocument | undefined {
+export function parse_armada_artifact(raw: string): ArmadaArtifactDocument | undefined {
     if (new TextEncoder().encode(raw).length > 64000) {
         return undefined;
     }
@@ -478,20 +478,20 @@ export function parse_pear_artifact(raw: string): PearArtifactDocument | undefin
     } catch {
         return undefined;
     }
-    if (!validates(PEAR_ARTIFACT_SCHEMA, value, PEAR_ARTIFACT_SCHEMA)) {
+    if (!validates(ARMADA_ARTIFACT_SCHEMA, value, ARMADA_ARTIFACT_SCHEMA)) {
         return undefined;
     }
     if (!is_json_object(value) || value["version"] !== 1 || !Array.isArray(value["blocks"])) {
         return undefined;
     }
-    const blocks: PearArtifactBlock[] = [];
+    const blocks: ArmadaArtifactBlock[] = [];
     for (const block of value["blocks"]) {
         if (!is_json_object(block) || typeof block["type"] !== "string") {
             return undefined;
         }
         blocks.push({...block, type: block["type"]});
     }
-    const document: PearArtifactDocument = {version: 1, blocks};
+    const document: ArmadaArtifactDocument = {version: 1, blocks};
     if (typeof value["title"] === "string") {
         document.title = value["title"];
     }
@@ -500,7 +500,7 @@ export function parse_pear_artifact(raw: string): PearArtifactDocument | undefin
     }
     if (Array.isArray(value["actions"])) {
         document.actions = value["actions"].filter(
-            (action): action is PearArtifactAction =>
+            (action): action is ArmadaArtifactAction =>
                 is_json_object(action) &&
                 typeof action["label"] === "string" &&
                 typeof action["prompt"] === "string",
@@ -547,7 +547,7 @@ const artifact_math_pattern = /```math[\t ]*\n([\s\S]*?)```|\$\$([\s\S]*?)\$\$/g
 
 function set_artifact_text(host: HTMLElement, source: string): void {
     host.replaceChildren();
-    host.dataset["pearArtifactSource"] = source;
+    host.dataset["legacyArtifactSource"] = source;
     let offset = 0;
     for (const match of source.matchAll(artifact_math_pattern)) {
         const index = match.index;
@@ -558,7 +558,9 @@ function set_artifact_text(host: HTMLElement, source: string): void {
         const tex = (match[1] ?? match[2] ?? "").trim();
         const math = element(
             "span",
-            display_mode ? "pear-artifact-math pear-artifact-math-display" : "pear-artifact-math",
+            display_mode
+                ? "legacy-artifact-math legacy-artifact-math-display"
+                : "legacy-artifact-math",
         );
         try {
             katex.render(tex, math, {
@@ -615,7 +617,7 @@ function watch_theme(controller: AbortController, callback: () => void): void {
     );
 }
 
-function themed_media_value(block: PearArtifactBlock, field: string): string {
+function themed_media_value(block: ArmadaArtifactBlock, field: string): string {
     const dark_value = block[`${field}Dark`];
     if (dark_theme_is_active() && typeof dark_value === "string") {
         return dark_value;
@@ -782,10 +784,10 @@ function graph_distance_ranks(
 }
 
 function layout_graph_group(host: HTMLElement, connectors: Connector[]): void {
-    const nodes = [...host.querySelectorAll<HTMLElement>(":scope > [data-pear-artifact-node]")];
+    const nodes = [...host.querySelectorAll<HTMLElement>(":scope > [data-legacy-artifact-node]")];
     const node_by_id = new Map(
         nodes.flatMap((node) => {
-            const id = node.dataset["pearArtifactNode"];
+            const id = node.dataset["legacyArtifactNode"];
             return id === undefined ? [] : [[id, node] as const];
         }),
     );
@@ -877,8 +879,9 @@ function graph_should_stack_dense_chain(
     }
     let source_length = 0;
     for (const node of node_by_id.values()) {
-        const label = node.querySelector<HTMLElement>(".pear-artifact-shape-label");
-        source_length += (label?.dataset["pearArtifactSource"] ?? label?.textContent ?? "").length;
+        const label = node.querySelector<HTMLElement>(".legacy-artifact-shape-label");
+        source_length += (label?.dataset["legacyArtifactSource"] ?? label?.textContent ?? "")
+            .length;
     }
     return source_length > Math.max(72, node_by_id.size * 16);
 }
@@ -922,30 +925,30 @@ function position_graph_nodes(
         });
     }
     if (stack_dense_chain) {
-        host.style.setProperty("--pear-artifact-graph-columns", "1");
-        host.style.setProperty("--pear-artifact-graph-rows", String(columns));
+        host.style.setProperty("--legacy-artifact-graph-columns", "1");
+        host.style.setProperty("--legacy-artifact-graph-rows", String(columns));
         for (const [row, rank_nodes] of nodes_by_rank.entries()) {
             for (const {node} of rank_nodes) {
-                node.style.setProperty("--pear-artifact-grid-column", "1");
-                node.style.setProperty("--pear-artifact-grid-row", String(row + 1));
-                node.style.setProperty("--pear-artifact-order", String(row));
+                node.style.setProperty("--legacy-artifact-grid-column", "1");
+                node.style.setProperty("--legacy-artifact-grid-row", String(row + 1));
+                node.style.setProperty("--legacy-artifact-order", String(row));
             }
         }
         return;
     }
     const rows = Math.max(1, ...nodes_by_rank.map((rank_nodes) => rank_nodes.length));
-    host.style.setProperty("--pear-artifact-graph-columns", String(columns));
-    host.style.setProperty("--pear-artifact-graph-rows", String(rows));
+    host.style.setProperty("--legacy-artifact-graph-columns", String(columns));
+    host.style.setProperty("--legacy-artifact-graph-rows", String(rows));
     for (const [column, rank_nodes] of nodes_by_rank.entries()) {
         for (const [index, {node}] of rank_nodes.entries()) {
-            node.style.setProperty("--pear-artifact-grid-column", String(column + 1));
+            node.style.setProperty("--legacy-artifact-grid-column", String(column + 1));
             node.style.setProperty(
-                "--pear-artifact-grid-row",
+                "--legacy-artifact-grid-row",
                 rank_nodes.length === 1
                     ? `1 / span ${rows}`
                     : String(Math.round((index * (rows - 1)) / (rank_nodes.length - 1)) + 1),
             );
-            node.style.setProperty("--pear-artifact-order", String(column * rows + index));
+            node.style.setProperty("--legacy-artifact-order", String(column * rows + index));
         }
     }
 }
@@ -958,7 +961,7 @@ const artifact_lifecycles = new WeakMap<HTMLElement, AbortController>();
 function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
     const host = element(
         "div",
-        `pear-artifact-mark pear-artifact-mark-${scalar_text(node["mark"])}`,
+        `legacy-artifact-mark legacy-artifact-mark-${scalar_text(node["mark"])}`,
     );
     const bound = data_value(data, node["bind"]);
     const values = Array.isArray(bound)
@@ -975,9 +978,9 @@ function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
     const range = Math.max(high - low, Number.EPSILON);
     if (node["mark"] === "bar") {
         for (const value of numbers) {
-            const bar = element("span", "pear-artifact-bar");
+            const bar = element("span", "legacy-artifact-bar");
             bar.style.setProperty(
-                "--pear-artifact-value",
+                "--legacy-artifact-value",
                 String(Math.max(0, (value - low) / range)),
             );
             host.append(bar);
@@ -997,7 +1000,7 @@ function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
             circle.setAttribute("cx", String(point.x));
             circle.setAttribute("cy", String(point.y));
             circle.setAttribute("r", "2.5");
-            circle.setAttribute("class", "pear-artifact-series-point");
+            circle.setAttribute("class", "legacy-artifact-series-point");
             svg.append(circle);
         }
     } else if (node["mark"] === "arc") {
@@ -1016,7 +1019,7 @@ function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
                 circle.setAttribute("stroke-dashoffset", String(-offset));
                 circle.setAttribute(
                     "class",
-                    `pear-artifact-series-arc pear-artifact-cat-${(index % 6) + 1}`,
+                    `legacy-artifact-series-arc legacy-artifact-cat-${(index % 6) + 1}`,
                 );
                 svg.append(circle);
                 offset += fraction;
@@ -1034,7 +1037,7 @@ function render_mark(node: JsonObject, data: JsonObject): HTMLElement {
         );
         polyline.setAttribute(
             "class",
-            node["mark"] === "area" ? "pear-artifact-series-area" : "pear-artifact-series-line",
+            node["mark"] === "area" ? "legacy-artifact-series-area" : "legacy-artifact-series-line",
         );
         svg.append(polyline);
     }
@@ -1052,7 +1055,7 @@ function render_scene_node(
     if (is_json_object(repeat)) {
         const items = data_value(data, repeat["source"]);
         const limit = typeof repeat["limit"] === "number" ? repeat["limit"] : 16;
-        const repeated = element("div", "pear-artifact-repeat");
+        const repeated = element("div", "legacy-artifact-repeat");
         if (!Array.isArray(items)) {
             return repeated;
         }
@@ -1091,10 +1094,10 @@ function render_scene_node(
         connectors.push(connector);
         return undefined;
     }
-    const host = element("div", `pear-artifact-node pear-artifact-${String(type)}`);
+    const host = element("div", `legacy-artifact-node legacy-artifact-${String(type)}`);
     if (typeof node["id"] === "string") {
-        host.dataset["pearArtifactNode"] = node["id"];
-        host.dataset["pearArtifactTarget"] = node["id"];
+        host.dataset["legacyArtifactNode"] = node["id"];
+        host.dataset["legacyArtifactTarget"] = node["id"];
     }
     if (typeof node["state"] === "string") {
         host.dataset["state"] = node["state"];
@@ -1129,7 +1132,7 @@ function render_scene_node(
         case "group": {
             host.dataset["layout"] = String(node["layout"]);
             if (typeof node["columns"] === "number") {
-                host.style.setProperty("--pear-artifact-columns", String(node["columns"]));
+                host.style.setProperty("--legacy-artifact-columns", String(node["columns"]));
             }
             if (typeof node["align"] === "string") {
                 host.dataset["align"] = node["align"];
@@ -1160,7 +1163,7 @@ function render_scene_node(
         case "shape": {
             host.dataset["shape"] = scalar_text(node["shape"]);
             if (typeof node["label"] === "string") {
-                const label = element("span", "pear-artifact-shape-label");
+                const label = element("span", "legacy-artifact-shape-label");
                 set_artifact_text(label, node["label"]);
                 if (node["shape"] === "circle" && node["label"].includes("\n")) {
                     host.dataset["labelDensity"] = "long";
@@ -1206,7 +1209,7 @@ function render_scene_node(
                 }
             }
             path.setAttribute("points", points.join(" "));
-            path.setAttribute("class", "pear-artifact-path-line");
+            path.setAttribute("class", "legacy-artifact-path-line");
             svg.append(path);
             host.append(svg);
 
@@ -1217,7 +1220,7 @@ function render_scene_node(
             const label = scalar_text(node["label"]);
             const action = scalar_text(node["action"]);
             if (control === "toggle") {
-                const button = element("button", "pear-artifact-control-button", label);
+                const button = element("button", "legacy-artifact-control-button", label);
                 button.type = "button";
                 if (action !== "") {
                     button.dataset["action"] = action;
@@ -1235,7 +1238,7 @@ function render_scene_node(
                 );
                 host.append(button);
             } else if (control === "range") {
-                const label_node = element("label", "pear-artifact-control-label", label);
+                const label_node = element("label", "legacy-artifact-control-label", label);
                 const input = document.createElement("input");
                 input.type = "range";
                 input.min = scalar_text(node["min"] ?? 0);
@@ -1251,7 +1254,7 @@ function render_scene_node(
                 let value = Number(node["value"] ?? node["min"] ?? 0);
                 const render_label = (): string =>
                     control === "stepper" && Number.isFinite(value) ? `${label}  ${value}` : label;
-                const button = element("button", "pear-artifact-control-button", render_label());
+                const button = element("button", "legacy-artifact-control-button", render_label());
                 button.type = "button";
                 if (action !== "") {
                     button.dataset["action"] = action;
@@ -1290,9 +1293,9 @@ function mount_connectors(
         return () => undefined;
     }
     const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    overlay.setAttribute("class", "pear-artifact-connectors");
+    overlay.setAttribute("class", "legacy-artifact-connectors");
     overlay.setAttribute("aria-hidden", "true");
-    const marker_id = `pear-artifact-arrow-${connector_instance}`;
+    const marker_id = `legacy-artifact-arrow-${connector_instance}`;
     connector_instance += 1;
     const definitions = document.createElementNS("http://www.w3.org/2000/svg", "defs");
     const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
@@ -1305,7 +1308,7 @@ function mount_connectors(
     marker.setAttribute("orient", "auto-start-reverse");
     const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
     arrow.setAttribute("d", "M0 0 L8 4 L0 8 Z");
-    arrow.setAttribute("class", "pear-artifact-connector-arrow");
+    arrow.setAttribute("class", "legacy-artifact-connector-arrow");
     marker.append(arrow);
     definitions.append(marker);
     overlay.append(definitions);
@@ -1326,10 +1329,10 @@ function mount_connectors(
         overlay.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
         for (const [index, connector] of connectors.entries()) {
             const from = scene.querySelector<HTMLElement>(
-                `[data-pear-artifact-node="${CSS.escape(connector.from)}"]`,
+                `[data-legacy-artifact-node="${CSS.escape(connector.from)}"]`,
             );
             const to = scene.querySelector<HTMLElement>(
-                `[data-pear-artifact-node="${CSS.escape(connector.to)}"]`,
+                `[data-legacy-artifact-node="${CSS.escape(connector.to)}"]`,
             );
             if (from === null || to === null) {
                 continue;
@@ -1360,9 +1363,9 @@ function mount_connectors(
             line.setAttribute("x2", String(x2));
             line.setAttribute("y2", String(y2));
             line.setAttribute("pathLength", "1");
-            line.style.setProperty("--pear-artifact-order", String(index));
+            line.style.setProperty("--legacy-artifact-order", String(index));
             if (connector.id !== undefined) {
-                line.dataset["pearArtifactTarget"] = connector.id;
+                line.dataset["legacyArtifactTarget"] = connector.id;
             }
             const state = connector.current_state ?? connector.state;
             if (state !== undefined) {
@@ -1371,8 +1374,8 @@ function mount_connectors(
             line.setAttribute(
                 "class",
                 connector.directed
-                    ? "pear-artifact-connector is-directed"
-                    : "pear-artifact-connector",
+                    ? "legacy-artifact-connector is-directed"
+                    : "legacy-artifact-connector",
             );
             if (connector.directed) {
                 line.setAttribute("marker-end", `url(#${marker_id})`);
@@ -1389,7 +1392,7 @@ function mount_connectors(
                 }
                 label.setAttribute("x", String((x1 + x2) / 2 + normal_x * 9));
                 label.setAttribute("y", String((y1 + y2) / 2 + normal_y * 9));
-                label.setAttribute("class", "pear-artifact-connector-label");
+                label.setAttribute("class", "legacy-artifact-connector-label");
                 label.setAttribute("text-anchor", "middle");
                 label.textContent = connector.label;
                 overlay.append(label);
@@ -1446,7 +1449,7 @@ function set_semantic_state(element: Element, state: string | undefined): void {
 }
 
 function set_shape_label(element: HTMLElement, value: string | undefined): void {
-    const existing = element.querySelector<HTMLElement>(".pear-artifact-shape-label");
+    const existing = element.querySelector<HTMLElement>(".legacy-artifact-shape-label");
     if (value === undefined) {
         existing?.remove();
         return;
@@ -1455,7 +1458,7 @@ function set_shape_label(element: HTMLElement, value: string | undefined): void 
     if (existing === null) {
         element.append(label);
     }
-    label.className = "pear-artifact-shape-label";
+    label.className = "legacy-artifact-shape-label";
     set_artifact_text(label, value);
 }
 
@@ -1488,7 +1491,7 @@ function mount_scene_steps(
     const snapshots = new Map<string, SceneTargetSnapshot>();
     for (const target of target_ids) {
         const target_element = scene.querySelector<HTMLElement>(
-            `[data-pear-artifact-target="${CSS.escape(target)}"]`,
+            `[data-legacy-artifact-target="${CSS.escape(target)}"]`,
         );
         if (target_element === null) {
             continue;
@@ -1499,13 +1502,13 @@ function mount_scene_steps(
         if (target_element.dataset["state"] !== undefined) {
             snapshot.state = target_element.dataset["state"];
         }
-        const label = target_element.querySelector<HTMLElement>(".pear-artifact-shape-label");
+        const label = target_element.querySelector<HTMLElement>(".legacy-artifact-shape-label");
         if (label !== null) {
-            snapshot.label = label.dataset["pearArtifactSource"] ?? label.textContent ?? "";
+            snapshot.label = label.dataset["legacyArtifactSource"] ?? label.textContent ?? "";
         }
-        if (target_element.classList.contains("pear-artifact-text")) {
+        if (target_element.classList.contains("legacy-artifact-text")) {
             snapshot.text =
-                target_element.dataset["pearArtifactSource"] ?? target_element.textContent ?? "";
+                target_element.dataset["legacyArtifactSource"] ?? target_element.textContent ?? "";
         }
         snapshots.set(target, snapshot);
     }
@@ -1514,36 +1517,36 @@ function mount_scene_steps(
             connector.id === undefined ? [] : [[connector.id, connector] as const],
         ),
     );
-    const timeline = element("div", "pear-artifact-timeline");
+    const timeline = element("div", "legacy-artifact-timeline");
     timeline.setAttribute("role", "group");
     timeline.setAttribute("aria-label", "Scene playback");
-    const previous = element("button", "pear-artifact-step-button is-previous");
+    const previous = element("button", "legacy-artifact-step-button is-previous");
     previous.type = "button";
     previous.setAttribute("aria-label", "Previous step");
-    const play = element("button", "pear-artifact-step-button is-play");
+    const play = element("button", "legacy-artifact-step-button is-play");
     play.type = "button";
     play.setAttribute("aria-label", "Play animation");
-    const meta = element("div", "pear-artifact-step-meta");
-    const status = element("div", "pear-artifact-step-status");
+    const meta = element("div", "legacy-artifact-step-meta");
+    const status = element("div", "legacy-artifact-step-status");
     status.setAttribute("aria-hidden", "true");
-    const announcement = element("div", "pear-artifact-step-announcement");
-    const announcement_id = `pear-artifact-step-${scene_step_instance}`;
+    const announcement = element("div", "legacy-artifact-step-announcement");
+    const announcement_id = `legacy-artifact-step-${scene_step_instance}`;
     scene_step_instance += 1;
     announcement.id = announcement_id;
     announcement.setAttribute("aria-live", "polite");
     announcement.setAttribute("aria-atomic", "true");
     scene.setAttribute("aria-describedby", announcement_id);
-    const track = element("div", "pear-artifact-step-track");
+    const track = element("div", "legacy-artifact-step-track");
     track.tabIndex = 0;
     track.setAttribute("role", "slider");
     track.setAttribute("aria-label", "Scene step");
     track.setAttribute("aria-orientation", "horizontal");
     track.setAttribute("aria-valuemin", "1");
     track.setAttribute("aria-valuemax", String(steps.length));
-    const fill = element("span", "pear-artifact-step-fill");
+    const fill = element("span", "legacy-artifact-step-fill");
     track.append(fill);
     meta.append(status, track, announcement);
-    const next = element("button", "pear-artifact-step-button is-next");
+    const next = element("button", "legacy-artifact-step-button is-next");
     next.type = "button";
     next.setAttribute("aria-label", "Next step");
     timeline.append(previous, play, meta, next);
@@ -1561,7 +1564,7 @@ function mount_scene_steps(
     const sync_connectors = (): void => {
         for (const connector of connector_by_id.values()) {
             const line = scene.querySelector(
-                `[data-pear-artifact-target="${CSS.escape(connector.id!)}"]`,
+                `[data-legacy-artifact-target="${CSS.escape(connector.id!)}"]`,
             );
             if (line !== null) {
                 set_semantic_state(line, connector.current_state ?? connector.state);
@@ -1572,7 +1575,7 @@ function mount_scene_steps(
         current_index = Math.max(0, Math.min(steps.length - 1, index));
         for (const snapshot of snapshots.values()) {
             set_semantic_state(snapshot.element, snapshot.state);
-            if (snapshot.element.classList.contains("pear-artifact-shape")) {
+            if (snapshot.element.classList.contains("legacy-artifact-shape")) {
                 set_shape_label(snapshot.element, snapshot.label);
             }
             if (snapshot.text !== undefined) {
@@ -1646,7 +1649,7 @@ function mount_scene_steps(
             descriptions.length > 0 ? ` ${descriptions.join(". ")}.` : ""
         }`;
         fill.style.setProperty(
-            "--pear-artifact-step-progress",
+            "--legacy-artifact-step-progress",
             String((current_index + 1) / steps.length),
         );
         track.setAttribute("aria-valuenow", String(current_index + 1));
@@ -1824,12 +1827,12 @@ function mount_scene_steps(
 }
 
 function render_scene(
-    block: PearArtifactBlock,
+    block: ArmadaArtifactBlock,
     data: JsonObject,
     controller: AbortController,
 ): HTMLElement {
-    const frame = element("div", "pear-artifact-scene-frame");
-    const scene = element("div", "pear-artifact-scene");
+    const frame = element("div", "legacy-artifact-scene-frame");
+    const scene = element("div", "legacy-artifact-scene");
     if (typeof block["aspect"] === "string") {
         scene.dataset["aspect"] = block["aspect"];
     }
@@ -1842,7 +1845,7 @@ function render_scene(
         scene.append(root);
     }
     for (const graph of scene.querySelectorAll<HTMLElement>(
-        '.pear-artifact-group[data-layout="graph"]',
+        '.legacy-artifact-group[data-layout="graph"]',
     )) {
         layout_graph_group(graph, connectors);
     }
@@ -1871,14 +1874,14 @@ function render_scene(
     return frame;
 }
 
-function render_media(block: PearArtifactBlock, controller: AbortController): HTMLElement {
-    const figure = element("figure", "pear-artifact-media");
+function render_media(block: ArmadaArtifactBlock, controller: AbortController): HTMLElement {
+    const figure = element("figure", "legacy-artifact-media");
     if (typeof block["aspect"] === "string") {
         figure.dataset["aspect"] = block["aspect"];
     }
     figure.dataset["status"] = "loading";
-    const frame = element("div", "pear-artifact-media-frame");
-    const status = element("div", "pear-artifact-media-status", "Loading visual…");
+    const frame = element("div", "legacy-artifact-media-frame");
+    const status = element("div", "legacy-artifact-media-status", "Loading visual…");
     status.setAttribute("role", "status");
     const set_intrinsic_geometry = (width: number, height: number): void => {
         if (
@@ -1894,7 +1897,7 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
         const aspect =
             ratio < 0.85 ? "tall" : ratio < 1.2 ? "square" : ratio < 1.6 ? "standard" : "wide";
         figure.dataset["intrinsicAspect"] = aspect;
-        frame.style.setProperty("--pear-artifact-media-ratio", `${ratio}`);
+        frame.style.setProperty("--legacy-artifact-media-ratio", `${ratio}`);
     };
     const set_ready = (): void => {
         figure.dataset["status"] = "ready";
@@ -1907,7 +1910,7 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
 
     if (block["kind"] === "image") {
         const image = document.createElement("img");
-        image.className = "pear-artifact-media-content";
+        image.className = "legacy-artifact-media-content";
         image.alt = scalar_text(block["alt"]);
         image.loading = "lazy";
         image.decoding = "async";
@@ -1933,7 +1936,7 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
         frame.append(image);
     } else {
         const video = document.createElement("video");
-        video.className = "pear-artifact-media-content";
+        video.className = "legacy-artifact-media-content";
         video.setAttribute("aria-label", scalar_text(block["alt"]));
         video.controls = true;
         video.muted = true;
@@ -2017,7 +2020,7 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
     frame.append(status);
     figure.append(frame);
     if (typeof block["caption"] === "string" && block["caption"] !== "") {
-        const caption = element("figcaption", "pear-artifact-media-caption");
+        const caption = element("figcaption", "legacy-artifact-media-caption");
         set_artifact_text(caption, block["caption"]);
         figure.append(caption);
     }
@@ -2025,20 +2028,20 @@ function render_media(block: PearArtifactBlock, controller: AbortController): HT
 }
 
 function render_block(
-    block: PearArtifactBlock,
+    block: ArmadaArtifactBlock,
     data: JsonObject,
     controller: AbortController,
 ): HTMLElement {
-    const host = element("section", `pear-artifact-block pear-artifact-block-${block.type}`);
+    const host = element("section", `legacy-artifact-block legacy-artifact-block-${block.type}`);
     switch (block.type) {
         case "copy": {
             if (typeof block["eyebrow"] === "string") {
-                host.append(element("div", "pear-artifact-eyebrow", block["eyebrow"]));
+                host.append(element("div", "legacy-artifact-eyebrow", block["eyebrow"]));
             }
             if (typeof block["heading"] === "string") {
-                host.append(element("h3", "pear-artifact-heading", block["heading"]));
+                host.append(element("h3", "legacy-artifact-heading", block["heading"]));
             }
-            const copy = element("div", "pear-artifact-copy");
+            const copy = element("div", "legacy-artifact-copy");
             set_artifact_text(copy, scalar_text(block["body"]));
             host.append(copy);
 
@@ -2055,21 +2058,21 @@ function render_block(
             break;
         }
         case "metric": {
-            host.append(element("div", "pear-artifact-label", scalar_text(block["label"])));
+            host.append(element("div", "legacy-artifact-label", scalar_text(block["label"])));
             const value = element(
                 "div",
-                "pear-artifact-metric",
+                "legacy-artifact-metric",
                 scalar_text(data_value(data, block["bind"]) ?? block["value"]),
             );
             if (block["unit"]) {
-                value.append(element("span", "pear-artifact-unit", scalar_text(block["unit"])));
+                value.append(element("span", "legacy-artifact-unit", scalar_text(block["unit"])));
             }
             host.append(value);
             if (typeof block["delta"] === "number") {
                 const delta = block["delta"];
                 const delta_node = element(
                     "div",
-                    "pear-artifact-delta",
+                    "legacy-artifact-delta",
                     `${delta > 0 ? "+" : ""}${delta}`,
                 );
                 delta_node.dataset["direction"] = delta > 0 ? "up" : delta < 0 ? "down" : "flat";
@@ -2079,7 +2082,7 @@ function render_block(
             break;
         }
         case "meter": {
-            host.append(element("div", "pear-artifact-label", scalar_text(block["label"])));
+            host.append(element("div", "legacy-artifact-label", scalar_text(block["label"])));
             const total =
                 typeof block["total"] === "number" && block["total"] > 0 ? block["total"] : 100;
             const raw_current = data_value(data, block["bind"]) ?? block["value"];
@@ -2088,30 +2091,30 @@ function render_block(
                 ? numeric_current
                 : Number(block["value"]);
             const percent = Math.max(0, Math.min(100, (current / total) * 100));
-            const track = element("div", "pear-artifact-meter");
-            const fill = element("span", "pear-artifact-meter-fill");
-            fill.style.setProperty("--pear-artifact-progress", String(percent / 100));
+            const track = element("div", "legacy-artifact-meter");
+            const fill = element("span", "legacy-artifact-meter-fill");
+            fill.style.setProperty("--legacy-artifact-progress", String(percent / 100));
             track.append(fill);
             host.append(track);
             const unit = scalar_text(block["unit"]);
             host.append(
                 element(
                     "div",
-                    "pear-artifact-meter-meta",
+                    "legacy-artifact-meter-meta",
                     `${current} / ${total}${unit === "" ? "" : ` ${unit}`}`,
                 ),
             );
             if (block["detail"]) {
-                host.append(element("div", "pear-artifact-detail", scalar_text(block["detail"])));
+                host.append(element("div", "legacy-artifact-detail", scalar_text(block["detail"])));
             }
 
             break;
         }
         case "series": {
-            const label = element("div", "pear-artifact-label", scalar_text(block["label"]));
+            const label = element("div", "legacy-artifact-label", scalar_text(block["label"]));
             if (block["unit"]) {
                 label.append(
-                    element("span", "pear-artifact-series-unit", scalar_text(block["unit"])),
+                    element("span", "legacy-artifact-series-unit", scalar_text(block["unit"])),
                 );
             }
             host.append(label);
@@ -2125,16 +2128,16 @@ function render_block(
             break;
         }
         case "log": {
-            host.append(element("div", "pear-artifact-label", scalar_text(block["label"])));
-            const pre = element("pre", "pear-artifact-log");
+            host.append(element("div", "legacy-artifact-label", scalar_text(block["label"])));
+            const pre = element("pre", "legacy-artifact-log");
             pre.textContent = artifact_log_text(block, data);
             host.append(pre);
 
             break;
         }
         case "key_value": {
-            host.append(element("div", "pear-artifact-label", scalar_text(block["label"])));
-            const list = element("dl", "pear-artifact-key-values");
+            host.append(element("div", "legacy-artifact-label", scalar_text(block["label"])));
+            const list = element("dl", "legacy-artifact-key-values");
             const items = block["items"];
             if (Array.isArray(items)) {
                 for (const item of items) {
@@ -2158,7 +2161,7 @@ function render_block(
     return host;
 }
 
-function artifact_log_text(block: PearArtifactBlock, data: JsonObject): string {
+function artifact_log_text(block: ArmadaArtifactBlock, data: JsonObject): string {
     const bound_lines = data_value(data, block["bind"]);
     const lines = Array.isArray(bound_lines)
         ? bound_lines
@@ -2188,7 +2191,7 @@ function utility_button(
 ): HTMLButtonElement {
     const button = element(
         "button",
-        "pear-artifact-action pear-artifact-utility tippy-zulip-tooltip",
+        "legacy-artifact-action legacy-artifact-utility tippy-zulip-tooltip",
     );
     button.type = "button";
     set_utility_control_presentation(button, icon, aria_label);
@@ -2220,7 +2223,7 @@ async function copy_artifact_text(text: string, button: HTMLButtonElement): Prom
 function render_artifact_utilities(
     article: HTMLElement,
     body: HTMLElement,
-    document_value: PearArtifactDocument,
+    document_value: ArmadaArtifactDocument,
     data: JsonObject,
     controller: AbortController,
 ): HTMLElement[] {
@@ -2245,10 +2248,10 @@ function render_artifact_utilities(
     }
 
     const media_blocks = document_value.blocks.filter((block) => block.type === "media");
-    const media_hosts = article.querySelectorAll<HTMLElement>(".pear-artifact-media");
+    const media_hosts = article.querySelectorAll<HTMLElement>(".legacy-artifact-media");
     for (const [index, block] of media_blocks.entries()) {
         const media_host = media_hosts[index];
-        const media_frame = media_host?.querySelector<HTMLElement>(".pear-artifact-media-frame");
+        const media_frame = media_host?.querySelector<HTMLElement>(".legacy-artifact-media-frame");
         if (media_frame?.requestFullscreen !== undefined) {
             controls.push(
                 utility_button(
@@ -2264,7 +2267,8 @@ function render_artifact_utilities(
         const download_source = themed_media_value(block, "src");
         if (download_source !== "") {
             const download = document.createElement("a");
-            download.className = "pear-artifact-action pear-artifact-utility tippy-zulip-tooltip";
+            download.className =
+                "legacy-artifact-action legacy-artifact-utility tippy-zulip-tooltip";
             download.download = "";
             download.href = download_source;
             set_utility_control_presentation(download, "download", `Download media ${index + 1}`);
@@ -2279,8 +2283,8 @@ function render_artifact_utilities(
         }
     }
 
-    const raw = element("pre", "pear-artifact-log pear-artifact-raw-json");
-    const raw_id = `pear-artifact-raw-${raw_document_instance}`;
+    const raw = element("pre", "legacy-artifact-log legacy-artifact-raw-json");
+    const raw_id = `legacy-artifact-raw-${raw_document_instance}`;
     raw_document_instance += 1;
     raw.id = raw_id;
     raw.hidden = true;
@@ -2303,7 +2307,7 @@ function render_artifact_utilities(
     return controls;
 }
 
-function authored_node_count(document_value: PearArtifactDocument): number {
+function authored_node_count(document_value: ArmadaArtifactDocument): number {
     let count = 0;
     function visit(node: JsonObject): void {
         count += 1;
@@ -2327,25 +2331,25 @@ function authored_node_count(document_value: PearArtifactDocument): number {
     return count;
 }
 
-export function render_pear_artifact(
-    document_value: PearArtifactDocument,
-    options: PearArtifactRenderOptions,
+export function render_armada_artifact(
+    document_value: ArmadaArtifactDocument,
+    options: ArmadaArtifactRenderOptions,
 ): HTMLElement {
     const render_started = globalThis.performance?.now() ?? Date.now();
-    const article = element("article", "pear-artifact");
+    const article = element("article", "legacy-artifact");
     const controller = new AbortController();
     artifact_lifecycles.set(article, controller);
     article.dataset["density"] = options.density;
     article.dataset["lifecycle"] = "ready";
     if (document_value.title !== undefined) {
-        const header = element("header", "pear-artifact-header");
+        const header = element("header", "legacy-artifact-header");
         header.append(
-            element("span", "pear-artifact-kind", "explainer"),
-            element("h2", "pear-artifact-title", document_value.title),
+            element("span", "legacy-artifact-kind", "explainer"),
+            element("h2", "legacy-artifact-title", document_value.title),
         );
         article.append(header);
     }
-    const body = element("div", "pear-artifact-body");
+    const body = element("div", "legacy-artifact-body");
     const data = document_value.data ?? {};
     body.append(...document_value.blocks.map((block) => render_block(block, data, controller)));
     article.append(body);
@@ -2358,9 +2362,9 @@ export function render_pear_artifact(
     );
     const document_actions = document_value.actions ?? [];
     if (document_actions.length > 0 || options.onPin || utility_controls.length > 0) {
-        const actions = element("footer", "pear-artifact-actions");
+        const actions = element("footer", "legacy-artifact-actions");
         for (const action of document_actions) {
-            const button = element("button", "pear-artifact-action", action.label);
+            const button = element("button", "legacy-artifact-action", action.label);
             button.type = "button";
             button.addEventListener("click", () => options.onAction?.(action, button), {
                 signal: controller.signal,
@@ -2369,8 +2373,8 @@ export function render_pear_artifact(
         }
         actions.append(...utility_controls);
         if (options.onPin) {
-            const spacer = element("span", "pear-artifact-action-spacer");
-            const pin = element("button", "pear-artifact-pin", "↗ pin to wall");
+            const spacer = element("span", "legacy-artifact-action-spacer");
+            const pin = element("button", "legacy-artifact-pin", "↗ pin to wall");
             pin.type = "button";
             pin.addEventListener("click", () => options.onPin?.(pin), {
                 signal: controller.signal,
@@ -2388,14 +2392,14 @@ export function render_pear_artifact(
     return article;
 }
 
-export function mount_pear_artifact(
+export function mount_armada_artifact(
     $host: JQuery,
-    document_value: PearArtifactDocument,
-    options: PearArtifactRenderOptions,
+    document_value: ArmadaArtifactDocument,
+    options: ArmadaArtifactRenderOptions,
 ): HTMLElement {
-    const artifact = render_pear_artifact(document_value, options);
+    const artifact = render_armada_artifact(document_value, options);
     const controller = artifact_lifecycles.get(artifact);
-    replace_pear_artifact_host($host, artifact, () => {
+    replace_armada_artifact_host($host, artifact, () => {
         controller?.abort();
         artifact_lifecycles.delete(artifact);
     });

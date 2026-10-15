@@ -15,8 +15,7 @@ Armada is a Zulip server, so it installs the way Zulip does (a release
 tarball and `scripts/setup/install`), plus the things this file adds for the
 agent. Zulip's own production documentation (`docs/production/`) is right for
 everything that is not marked as Armada's. The agent is named Onix in the
-interface; the server, its settings and its bot account still say Pear
-until the rename.
+interface; its bot account still says Pear until the rename's last step.
 
 **What was tested and what was not.** On 14 October 2026, on the Armada dev
 VM (Ubuntu 24.04.5, 6 vCPU, 10 GB): the production asset build of the
@@ -75,9 +74,9 @@ costs.
 
 ### What an agent can do
 
-With the default isolation, `PEAR_TOPIC_ISOLATION_BACKEND = "codex-sandbox"`,
+With the default isolation, `ARMADA_TOPIC_ISOLATION_BACKEND = "codex-sandbox"`,
 every agent runs as the `zulip` user inside Codex's sandbox. With
-`PEAR_WORKER_SANDBOX = "workspace-write"` the sandbox stops writes outside the
+`ARMADA_WORKER_SANDBOX = "workspace-write"` the sandbox stops writes outside the
 topic's worktree and stops network access. **It does not stop reads.** An
 agent can read anything `zulip` can:
 
@@ -104,9 +103,9 @@ the VM can reach on the tailnet.
 ### The configuration this guide sets, and what each part costs
 
 1. **Only trusted people drive the agent.**
-   `PEAR_WORKER_TRUSTED_USERS_ONLY = True`, which the template sets: only
+   `ARMADA_WORKER_TRUSTED_USERS_ONLY = True`, which the template sets: only
    organization administrators and the user ids in
-   `PEAR_WORKER_TRUSTED_USER_IDS` may start a run, steer one, answer its
+   `ARMADA_WORKER_TRUSTED_USER_IDS` may start a run, steer one, answer its
    questions, set up a monitor, or give a new channel a repository URL.
    _Cost:_ everyone else can chat but not use Onix; when they address it,
    Onix answers that they are not allowed. In the beta, a message goes to
@@ -145,7 +144,7 @@ the VM can reach on the tailnet.
    `workspace-write` anyway unless the isolation is `os-user`.) _Cost:_ an
    agent cannot install packages or fetch anything; work that needs the
    network is done by a person.
-7. **Codex memories off.** `PEAR_WORKER_CODEX_MEMORIES = False`, which the
+7. **Codex memories off.** `ARMADA_WORKER_CODEX_MEMORIES = False`, which the
    template sets. With the default isolation, every topic's agent runs
    with one `CODEX_HOME`, `/home/zulip/.codex`, so to Codex they are all
    one user. With its
@@ -186,8 +185,8 @@ What the rule does not cover:
 - **Any member who can see a run may cancel, pause or resume it**
   (stopping the agent is open to everyone; resuming starts nothing new).
 - **Any member may change a topic's model and effort**
-  (`POST /json/pear/topic-context` has no trust check, and the model may be
-  any short name, not only those in `PEAR_WORKER_MODEL_CHOICES`). The next
+  (`POST /json/armada/topic-context` has no trust check, and the model may be
+  any short name, not only those in `ARMADA_WORKER_MODEL_CHOICES`). The next
   run in that topic then uses it. That changes cost, quota and speed, not
   what an agent can reach.
 
@@ -237,8 +236,8 @@ server.
 
 ### Per-topic Unix users (`os-user`): not for this beta
 
-`PEAR_TOPIC_ISOLATION_BACKEND = "os-user"` runs each topic's agent as its own
-Unix user, created by a root helper (`PEAR_TOPIC_ISOLATION_HELPER`) through
+`ARMADA_TOPIC_ISOLATION_BACKEND = "os-user"` runs each topic's agent as its own
+Unix user, created by a root helper (`ARMADA_TOPIC_ISOLATION_HELPER`) through
 sudo, so topics cannot read each other's worktrees or the server's secrets.
 In this tree:
 
@@ -534,17 +533,17 @@ The queue workers Armada adds run under supervisor like Zulip's own, in the
 group `zulip-workers` (`puppet/zulip/templates/supervisor/zulip.conf.template.erb`).
 `supervisorctl status` names them:
 
-| Program                                                                                      | What it does                                                                                                    |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `zulip-workers:zulip_events_pear_worker_slot0`, `…_slot1`                                    | Agent runs. Two slots, each consuming queues `pear_worker` and `pear_worker_1`, so two topics' runs go at once. |
-| `zulip-workers:zulip_events_pear_monitor_worker`                                             | Monitors (standing checks in a topic), on their own consumer.                                                   |
-| `zulip-workers:zulip_events_pear_addressing`, `zulip-workers:zulip_events_pear_presentation` | The optional Gemini router and live summaries; idle when those are off.                                         |
-| `zulip-workers:zulip_events_embedded_bots`                                                   | Delivers messages to the agent's bot account.                                                                   |
+| Program                                                                                          | What it does                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `zulip-workers:zulip_events_armada_worker_slot0`, `…_slot1`                                      | Agent runs. Two slots, each consuming queues `armada_worker` and `armada_worker_1`, so two topics' runs go at once. |
+| `zulip-workers:zulip_events_armada_monitor_worker`                                               | Monitors (standing checks in a topic), on their own consumer.                                                       |
+| `zulip-workers:zulip_events_armada_addressing`, `zulip-workers:zulip_events_armada_presentation` | The optional Gemini router and live summaries; idle when those are off.                                             |
+| `zulip-workers:zulip_events_embedded_bots`                                                       | Delivers messages to the agent's bot account.                                                                       |
 
 These separate programs exist only on a machine with more than 3.8 GB of
 memory; below that, Zulip runs every queue as threads of one program,
 `zulip-workers:zulip_events`, and only one agent slot runs. Logs are
-`/var/log/zulip/events_pear_*.log`.
+`/var/log/zulip/events_armada_*.log`.
 
 Puppet sets `HOME=/home/zulip` and `CODEX_HOME=/home/zulip/.codex` for the
 web server and every queue program, so the agent finds the Codex login of 6.3
@@ -563,24 +562,24 @@ repositories, worktrees and the coding agent", which explains each setting:
 
 ```python
 EMBEDDED_BOTS_ENABLED = True              # already set in a new install
-PEAR_WORKER_AGENT_RUNTIME = "codex-app-server"
-PEAR_WORKER_CODEX_BIN = "/opt/codex/bin/codex"
-PEAR_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
-PEAR_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
-PEAR_WORKER_SANDBOX = "workspace-write"
-PEAR_WORKER_TRUSTED_USERS_ONLY = True     # already set in a new install; see Security
-PEAR_WORKER_CODEX_MEMORIES = False        # already set in a new install; see Security
-PEAR_WORKER_TRUSTED_USER_IDS = []         # fill in after step 5
-PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
-PEAR_WORKER_MODEL = "gpt-6-astra"
-PEAR_WORKER_MODEL_CHOICES = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
-PEAR_WORKER_SERVICE_TIER = "ultrafast"
-PEAR_WORKER_REASONING_EFFORT = "medium"
+ARMADA_WORKER_AGENT_RUNTIME = "codex-app-server"
+ARMADA_WORKER_CODEX_BIN = "/opt/codex/bin/codex"
+ARMADA_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
+ARMADA_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
+ARMADA_WORKER_SANDBOX = "workspace-write"
+ARMADA_WORKER_TRUSTED_USERS_ONLY = True     # already set in a new install; see Security
+ARMADA_WORKER_CODEX_MEMORIES = False        # already set in a new install; see Security
+ARMADA_WORKER_TRUSTED_USER_IDS = []         # fill in after step 5
+ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
+ARMADA_WORKER_MODEL = "gpt-6-astra"
+ARMADA_WORKER_MODEL_CHOICES = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
+ARMADA_WORKER_SERVICE_TIER = "ultrafast"
+ARMADA_WORKER_REASONING_EFFORT = "medium"
 ```
 
 `workspace-write` lets an agent change files only inside its topic's
 worktree, with no network; the approval policy stays at its default,
-`on-request`. Leave `PEAR_ADDRESSING_ROUTER_RUNTIME` off unless you want a
+`on-request`. Leave `ARMADA_ADDRESSING_ROUTER_RUNTIME` off unless you want a
 Gemini model to guess which unmentioned messages are meant for the agent;
 without it, mention the agent (`@**Pear**`) to start a run.
 
@@ -595,7 +594,7 @@ for user in UserProfile.objects.filter(is_bot=False, is_active=True):
 "
 ```
 
-Put the people who may drive Onix in `PEAR_WORKER_TRUSTED_USER_IDS` and
+Put the people who may drive Onix in `ARMADA_WORKER_TRUSTED_USER_IDS` and
 restart (6.7). Organization administrators may always.
 
 Do not apply the settings yet; step 6 restarts the server once everything
@@ -606,7 +605,7 @@ is in place.
 Decided on 14 October: **`gpt-6-astra` on the `ultrafast` tier, effort
 `medium`**, with `gpt-6-sol` and `gpt-5.6-sol` also in the model picker (the
 settings above). The picker offers every model in
-`PEAR_WORKER_MODEL_CHOICES`, and always `PEAR_WORKER_MODEL`; a topic keeps
+`ARMADA_WORKER_MODEL_CHOICES`, and always `ARMADA_WORKER_MODEL`; a topic keeps
 the model someone picked for it.
 
 The tier is sent with every turn, whichever model the topic uses. Only
@@ -735,7 +734,7 @@ in again.
 ### 6.4 The worktree directory
 
 Every channel that is a repository gets a bare clone under
-`PEAR_TOPIC_WORKDIR_ROOT/projects/`, and every topic that has a worktree gets
+`ARMADA_TOPIC_WORKDIR_ROOT/projects/`, and every topic that has a worktree gets
 a full checkout beside it. The web server and the workers both write there.
 
 ```bash
@@ -808,10 +807,10 @@ you choose git's:
    ```bash
    cd /home/zulip/deployments/current
    ./manage.py shell -c "
-   from zerver.lib.armada_worker import configure_pear_channel_repository_workspace
+   from zerver.lib.armada_worker import configure_armada_channel_repository_workspace
    from zerver.models import UserProfile
    user = UserProfile.objects.get(delivery_email='YOU@example.com', realm_id=REALM_ID)
-   configure_pear_channel_repository_workspace(
+   configure_armada_channel_repository_workspace(
        user, stream='CHANNEL', repository_url='URL', fetch_timeout_seconds=3600
    )
    "
@@ -846,47 +845,47 @@ A run keeps its queue message unacknowledged until it ends, so a dead
 worker's run is retried. RabbitMQ cancels a consumer that holds a message
 longer than its consumer timeout, 30 minutes by default; the message is then
 delivered again and the run starts over (each run is tried twice at most,
-`PEAR_WORKER_MAX_CLAIM_ATTEMPTS`). Pear itself sets no limit on a run's
-length: `PEAR_WORKER_TIMEOUT_SECONDS` (5.5 hours) is an **idle** timeout, a
+`ARMADA_WORKER_MAX_CLAIM_ATTEMPTS`). Pear itself sets no limit on a run's
+length: `ARMADA_WORKER_TIMEOUT_SECONDS` (5.5 hours) is an **idle** timeout, a
 turn that produces nothing for that long. So the consumer timeout is the
-longest a run may take. Raise it to six hours for the agent queues and the
-monitor queue (monitor setup runs are agent runs too):
+longest a run may take. Puppet raises it to six hours for the agent queues
+and the monitor queue (monitor setup runs are agent runs too) with a
+RabbitMQ policy, `armada-consumer-timeout`, which it sets on every install
+and upgrade (`scripts/setup/configure-armada-rabbitmq-policy`; nothing to
+do by hand). Check it once the workers have started (6.7):
 
 ```bash
-rabbitmqctl set_policy -p / --priority 10 --apply-to queues pear-consumer-timeout \
-    '^(pear_worker(_1)?|pear_monitor_worker)$' '{"consumer-timeout":21600000}'
-rabbitmqctl list_queues name effective_policy_definition | grep pear
+rabbitmqctl list_queues name effective_policy_definition | grep armada
 ```
 
-The second command must show `consumer-timeout` on all three queues (the
-queues appear once the workers have started, 6.7). If it does not (the
-policy key is not tried on Ubuntu's RabbitMQ 3.12.1), the fallback is the
-server-wide setting: add `{consumer_timeout, 21600000}` to the `rabbit`
-section of `puppet/zulip/files/rabbitmq/rabbitmq.config` in the tree and
-build a new tarball. Do not edit `/etc/rabbitmq/rabbitmq.config` on the
-server: puppet rewrites it on every upgrade. A run that keeps working
-for more than six hours is cut off and tried again once. The policy is
-stored by RabbitMQ and survives restarts and upgrades.
+`armada_worker`, `armada_worker_1` and `armada_monitor_worker` must show
+`consumer-timeout` 21600000. Tested on the dev VM's RabbitMQ (3.12.1, the
+version Ubuntu 24.04 installs), in a vhost of its own: the script sets the
+policy once and then leaves it alone, its pattern reaches those three
+queues and not `armada_addressing`, and the same policy with five seconds
+cut off a consumer that held a message at the broker's next one-minute
+check ("Timeout used: 5000 ms"). A run that keeps working for more than
+six hours is cut off and tried again once.
 
 ### 6.7 Turn it on
 
 ```bash
 su zulip -c '/home/zulip/deployments/current/scripts/restart-server'
-supervisorctl status | grep pear
+supervisorctl status | grep armada
 ```
 
-Expect `zulip-workers:zulip_events_pear_worker_slot0` and `…_slot1`,
-`zulip-workers:zulip_events_pear_monitor_worker`, and the two Gemini
+Expect `zulip-workers:zulip_events_armada_worker_slot0` and `…_slot1`,
+`zulip-workers:zulip_events_armada_monitor_worker`, and the two Gemini
 programs, all `RUNNING`. Then create the agent's bot account, once, as an
 organization administrator. Your API key is in the old interface under
 Personal settings, "Account & privacy", "Manage your API key":
 
 ```bash
-curl -sS -X POST -u YOUR_EMAIL https://armada-beta.<tailnet>.ts.net/api/v1/pear/config
+curl -sS -X POST -u YOUR_EMAIL https://armada-beta.<tailnet>.ts.net/api/v1/armada/config
 # curl asks for the password: paste the API key there
 ```
 
-The answer's `pear_config` should say `"enabled": true`,
+The answer's `armada_config` should say `"enabled": true`,
 `"worker_runtime_ready": true` and `"worker_runtime_auth_ready": true`. The
 bot is called Pear; the interface shows it as Onix.
 
@@ -896,7 +895,7 @@ bot is called Pear; the interface shows it as Onix.
   channel and fill in its repository URL), open a topic in it and post
   `@**Pear** say hello in one line`. A run should start within seconds and
   answer in the topic; its log is in
-  `/var/log/zulip/events_pear_worker_slot*.log`.
+  `/var/log/zulip/events_armada_worker_slot*.log`.
 - As a member who is not trusted, the same message gets "This user is not
   allowed to start Pear worker runs."
 - Signed in, `/beta/` loads; signed out, it sends you to `/login/`. The old
@@ -963,6 +962,95 @@ After an upgrade, compare your settings with the new template
 new Armada settings. Upgrade the Codex CLI separately, when you choose, with
 the `npm install` line of 6.2 and a new version number.
 
+### Upgrade notes
+
+- **15 October 2026: the old code name was taken out.** The settings,
+  environment variables, queues and default paths that were named after
+  the agent's old code name were renamed. Upgrade when nobody is mid-run,
+  and:
+
+  1. **Before the upgrade, let the old queues empty.** The new version's
+     workers consume only the new queues (`armada_worker`,
+     `armada_worker_1`, `armada_addressing`, `armada_monitor_worker` and
+     `armada_presentation`, which puppet configures), so a message left in
+     an old queue is never processed. Wait until
+     `rabbitmqctl list_queues name messages` shows 0 for the five queues
+     named after the old code name, and delete them after the upgrade
+     (`rabbitmqctl delete_queue NAME`).
+  2. **Rename the settings.** Every Armada setting and environment
+     variable that began with the old code name and an underscore now
+     begins with `ARMADA_`, and the rest of its name is unchanged:
+     `ARMADA_WORKER_` followed by `AGENT_RUNTIME`, `CODEX_BIN`, `WORKDIR`,
+     `MODEL`, `MODEL_CHOICES`, `SERVICE_TIER`, `FAST_MODE`,
+     `REASONING_EFFORT`, `SANDBOX`, `APPROVAL_POLICY`, `TIMEOUT_SECONDS`,
+     `OUTPUT_LIMIT`, `CODEX_EPHEMERAL`, `CODEX_MEMORIES`,
+     `TRUSTED_USERS_ONLY`, `TRUSTED_USER_IDS`, `MAX_ACTIVE_RUNS_PER_TOPIC`
+     or `MAX_ACTIVE_RUNS_PER_REALM`; `ARMADA_TOPIC_WORKDIR_ROOT`,
+     `ARMADA_TOPIC_ISOLATION_BACKEND`, `ARMADA_TOPIC_ISOLATION_HELPER`,
+     `ARMADA_CODEX_SKILLS_DIR`, `ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES`,
+     `ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS`,
+     `ARMADA_ADDRESSING_ROUTER_RUNTIME`,
+     `ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL`,
+     `ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL`,
+     `ARMADA_GEMINI_INTERACTIONS_API_KEY`, `ARMADA_GEMINI_INTERACTIONS_URL`,
+     `ARMADA_PRESENTATION_GEMINI_MODEL` and
+     `ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL` (31 settings, each also an
+     environment variable); and the environment variable
+     `ARMADA_CODEX_PROTOCOL_CAPTURE`. The server reads only the new names,
+     and an old one left in place would leave its setting at the default
+     (for `ARMADA_WORKER_TRUSTED_USERS_ONLY`, every member could then drive
+     the agent). So the server's system check refuses an old name, with an
+     error `armada.E001` that names it and its new name: `upgrade-zulip`
+     runs the check before the migrations and the restart, and
+     `restart-server` and `start-server` before they start anything, and
+     each stops there. Rename each in `/etc/zulip/settings.py` and in any
+     environment you export, then upgrade again; do not pass
+     `--skip-checks`.
+  3. **Check the default paths that changed.** Each applies only where its
+     setting is not set:
+     - The worktree root (`ARMADA_TOPIC_WORKDIR_ROOT`) is now
+       `armada-workspaces` beside `ARMADA_WORKER_WORKDIR` (or beside the
+       server's working directory), and `/srv/armada-workspaces` under
+       `os-user`. The server refuses a worktree outside its root, so if
+       you relied on the default, set the root to the old directory, which
+       keeps every stored path valid. This guide's root
+       (`/srv/armada/worktrees`) is set, so it is unaffected.
+     - The skills directory (`ARMADA_CODEX_SKILLS_DIR`) is now
+       `armada/skills` beside the deployments directory. Set it to the old
+       directory or move the skills, or they are no longer provisioned.
+     - Under `os-user` (see [Security](#security)):
+       the isolation helper (`ARMADA_TOPIC_ISOLATION_HELPER`) is now
+       `/usr/local/sbin/armada-topic-isolate`, so set it to the installed
+       helper's path or install it, and its sudoers rule, under the new
+       name. Each topic's Unix user is now `armada-<hash>`, so every topic
+       gets a new user, and its worktree, owned by the old one, must be
+       given to the new one.
+  4. **After the upgrade, before the next run, fix the worktrees.** The
+     agent writes its outputs (artifacts, monitor recipes) to `.armada/` in
+     a worktree; before, the directory was named after the old code name,
+     and each worktree's `.git/info/exclude` ignores only that. The stored
+     artifacts already point to `.armada/` (migration `0811`). As `zulip`,
+     in the worktree root, move each old directory and its exclude line:
+
+     ```bash
+     cd /srv/armada/worktrees    # ARMADA_TOPIC_WORKDIR_ROOT
+     for exclude in */.git/info/exclude; do
+         worktree=${exclude%/.git/info/exclude}
+         old=$(sed -n '/^# Armada runtime outputs$/{n;p;q}' "$exclude")
+         [ -n "$old" ] && [ "$old" != .armada/ ] || continue
+         if [ -e "$worktree/$old" ]; then
+             [ ! -e "$worktree/.armada" ] || { echo "$worktree: both exist" >&2; continue; }
+             mv "$worktree/$old" "$worktree/.armada"
+         fi
+         sed -i "/^# Armada runtime outputs\$/{n;s|.*|.armada/|}" "$exclude"
+     done
+     ```
+
+     Puppet sets the RabbitMQ policy for the new queues (6.6). The one
+     that an earlier version of this guide set by hand matches only the
+     old queues: find it with `rabbitmqctl list_policies` and remove it
+     with `rabbitmqctl clear_policy NAME`.
+
 ## Back up
 
 _Stock Zulip, untested here._ Zulip's backup holds the database, uploaded
@@ -976,7 +1064,7 @@ su zulip -c '/home/zulip/deployments/current/manage.py backup --output=/home/zul
 
 Armada keeps two more things outside it (as root):
 
-- **The repositories and worktrees** (`PEAR_TOPIC_WORKDIR_ROOT`): every
+- **The repositories and worktrees** (`ARMADA_TOPIC_WORKDIR_ROOT`): every
   agent's uncommitted work and every topic branch that was not pushed.
   Back it up with the database, while no run is going:
   `tar -C /srv/armada -czf /home/zulip/backups/armada-worktrees-$(date +%F).tar.gz worktrees`.
@@ -1000,8 +1088,8 @@ tar -C /srv/armada -xzf armada-worktrees-DATE.tar.gz && chown -R zulip:zulip /sr
 tar -C /home/zulip -xzf armada-codex-DATE.tar.gz && chown -R zulip:zulip /home/zulip/.codex
 ```
 
-Then do section 6 again (6.4's directory already exists, and 6.6's policy
-must be set again on the new RabbitMQ).
+Then do section 6 again (6.4's directory already exists, and the install
+has set 6.6's policy on the new RabbitMQ).
 
 ## Sizing
 
@@ -1022,17 +1110,17 @@ estimates, not load tests; only the figures marked measured were measured.
   2 GB per kept upgrade.
 
 Two runs go at once, one per slot; the rest wait in the queue.
-`PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM` is how many runs may be queued or
+`ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM` is how many runs may be queued or
 running at once in the organization; beyond it a new request is refused.
 
 ## Troubleshooting
 
 - `worker_runtime_auth_ready` is false: Codex is not signed in as `zulip`
-  (6.3), or `PEAR_WORKER_CODEX_BIN` is not the path you installed.
+  (6.3), or `ARMADA_WORKER_CODEX_BIN` is not the path you installed.
 - A run fails at once with a sandbox error: the sysctl of 6.1 is not applied
   (`sysctl kernel.apparmor_restrict_unprivileged_userns` must print 0).
 - "This user is not allowed to start Pear worker runs" (or "to steer"): the
-  person is not an administrator and not in `PEAR_WORKER_TRUSTED_USER_IDS`
+  person is not an administrator and not in `ARMADA_WORKER_TRUSTED_USER_IDS`
   (step 4).
 - "Could not clone the Git repository": as `zulip`, `git ls-remote` the URL
   (6.5).
@@ -1041,8 +1129,10 @@ running at once in the organization; beyond it a new request is refused.
   seconds to fetch, and the whole request was rolled back. Attach it from
   the shell (6.5, "Large repositories").
 - A run starts over after 30 minutes or six hours: the consumer timeout of
-  6.6 (check the policy is in effect).
-- Runs stay queued: `supervisorctl status | grep pear_worker`; both slots
+  6.6 (check the policy is in effect; as root,
+  `/home/zulip/deployments/current/scripts/setup/configure-armada-rabbitmq-policy`
+  sets it again).
+- Runs stay queued: `supervisorctl status | grep armada_worker`; both slots
   must be `RUNNING`.
 - Nobody can reach the server: the Mac is asleep or the VM is stopped
   (`limactl list`), or the Tailscale rule does not let them in.

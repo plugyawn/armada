@@ -1,4 +1,4 @@
-export type PearWorkspaceMetricSnapshot = {
+export type ArmadaWorkspaceMetricSnapshot = {
     counts: Record<string, number>;
     lastDurationsMs: Record<string, number>;
 };
@@ -11,12 +11,12 @@ function now(): number {
     return globalThis.performance?.now?.() ?? Date.now();
 }
 
-export function begin_pear_workspace_metric(name: string): void {
+export function begin_armada_workspace_metric(name: string): void {
     starts.set(name, now());
     globalThis.performance?.mark?.(`${name}:start`);
 }
 
-export function finish_pear_workspace_metric(name: string): void {
+export function finish_armada_workspace_metric(name: string): void {
     const started = starts.get(name);
     if (started === undefined) {
         return;
@@ -24,7 +24,7 @@ export function finish_pear_workspace_metric(name: string): void {
     starts.delete(name);
     const duration = Math.max(0, now() - started);
     last_durations.set(name, duration);
-    increment_pear_workspace_counter(name);
+    increment_armada_workspace_counter(name);
     globalThis.performance?.mark?.(`${name}:end`);
     try {
         globalThis.performance?.measure?.(name, `${name}:start`, `${name}:end`);
@@ -33,25 +33,25 @@ export function finish_pear_workspace_metric(name: string): void {
     }
 }
 
-export function increment_pear_workspace_counter(name: string): void {
+export function increment_armada_workspace_counter(name: string): void {
     counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 
-export function record_pear_workspace_error(status: number | undefined): void {
-    increment_pear_workspace_counter("workspace_error");
+export function record_armada_workspace_error(status: number | undefined): void {
+    increment_armada_workspace_counter("workspace_error");
     if (status === 429) {
-        increment_pear_workspace_counter("workspace_429");
+        increment_armada_workspace_counter("workspace_429");
     }
 }
 
-export function pear_workspace_metrics_snapshot(): PearWorkspaceMetricSnapshot {
+export function armada_workspace_metrics_snapshot(): ArmadaWorkspaceMetricSnapshot {
     return {
         counts: Object.fromEntries(counts),
         lastDurationsMs: Object.fromEntries(last_durations),
     };
 }
 
-export function reset_pear_workspace_metrics_for_testing(): void {
+export function reset_armada_workspace_metrics_for_testing(): void {
     counts.clear();
     starts.clear();
     last_durations.clear();

@@ -54,7 +54,7 @@ def extract_methods_from_schema(schema_root: Path) -> set[str]:
 
 
 def extract_methods(binary_path: Path) -> set[str]:
-    with tempfile.TemporaryDirectory(prefix="pear-codex-schema-") as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="armada-codex-schema-") as temporary_directory:
         subprocess.run(
             [
                 binary_path,

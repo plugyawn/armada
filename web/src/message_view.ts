@@ -22,7 +22,7 @@ import {$t} from "./i18n.ts";
 import * as inbox_ui from "./inbox_ui.ts";
 import * as inbox_util from "./inbox_util.ts";
 import * as left_sidebar_navigation_area from "./left_sidebar_navigation_area.ts";
-import * as pear_panel from "./legacy_panel.ts";
+import * as legacy_panel from "./legacy_panel.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_feed_loading from "./message_feed_loading.ts";
 import * as message_feed_top_notices from "./message_feed_top_notices.ts";
@@ -1613,7 +1613,7 @@ function handle_post_view_change(
     }
 
     message_view_header.render_title_area();
-    pear_panel.handle_narrow_activated();
+    legacy_panel.handle_narrow_activated();
 
     narrow_title.update_narrow_title(filter);
     left_sidebar_navigation_area.handle_narrow_activated(filter);

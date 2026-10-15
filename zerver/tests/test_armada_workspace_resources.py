@@ -25,8 +25,8 @@ from zerver.lib.armada_workspace_io import (
     WorkspaceWriteResult,
 )
 from zerver.lib.armada_workspace_resources import (
-    PEAR_WORKSPACE_RAW_MAX_BYTES,
-    PEAR_WORKSPACE_TEXT_MAX_BYTES,
+    ARMADA_WORKSPACE_RAW_MAX_BYTES,
+    ARMADA_WORKSPACE_TEXT_MAX_BYTES,
     WorkspaceSnapshot,
     WorkspaceSnapshotError,
     _join_or_start_snapshot_build,
@@ -52,7 +52,7 @@ from zerver.models.bots import Workspace, WorkspaceEntryMutationReceipt
 from zerver.models.users import UserProfile
 
 
-class PearWorkspaceResourceEndpointTest(ZulipTestCase):
+class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
         clear_workspace_snapshot_cache()
@@ -75,7 +75,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             [
                 *git,
                 "-c",
-                "user.email=pear@example.com",
+                "user.email=armada@example.com",
                 "-c",
                 "user.name=Pear",
                 "commit",
@@ -104,10 +104,10 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
     def descriptor(self, node: Workspace) -> dict[str, object]:
         result = self.client_get(
-            f"/json/pear/workspaces/{node.uuid}",
+            f"/json/armada/workspaces/{node.uuid}",
             intentionally_undocumented=True,
         )
-        return self.assert_json_success(result)["pear_workspace"]
+        return self.assert_json_success(result)["armada_workspace"]
 
     def tree(
         self,
@@ -123,11 +123,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         if cursor is not None:
             parameters["cursor"] = cursor
         result = self.client_get(
-            f"/json/pear/workspaces/{node.uuid}/tree",
+            f"/json/armada/workspaces/{node.uuid}/tree",
             parameters,
             intentionally_undocumented=True,
         )
-        return self.assert_json_success(result)["pear_workspace_tree"]
+        return self.assert_json_success(result)["armada_workspace_tree"]
 
     def create_entry(
         self,
@@ -139,7 +139,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         content: str = "",
     ) -> dict[str, object]:
         result = self.client_post(
-            f"/json/pear/workspaces/{node.uuid}/entries",
+            f"/json/armada/workspaces/{node.uuid}/entries",
             {
                 "destination_path": destination_path,
                 "kind": kind,
@@ -148,7 +148,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             },
             intentionally_undocumented=True,
         )
-        return self.assert_json_success(result)["pear_workspace_mutation"]
+        return self.assert_json_success(result)["armada_workspace_mutation"]
 
     def rename_entry(
         self,
@@ -160,7 +160,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         workspace_revision: int,
     ) -> dict[str, object]:
         result = self.client_patch(
-            f"/json/pear/workspaces/{node.uuid}/entry",
+            f"/json/armada/workspaces/{node.uuid}/entry",
             {
                 "entry_id": entry_id,
                 "expected_path": expected_path,
@@ -169,7 +169,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             },
             intentionally_undocumented=True,
         )
-        return self.assert_json_success(result)["pear_workspace_mutation"]
+        return self.assert_json_success(result)["armada_workspace_mutation"]
 
     def delete_entry(
         self,
@@ -182,7 +182,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         confirm_irreversible: bool = False,
     ) -> dict[str, object]:
         result = self.client_delete(
-            f"/json/pear/workspaces/{node.uuid}/entry",
+            f"/json/armada/workspaces/{node.uuid}/entry",
             {
                 "entry_id": entry_id,
                 "expected_path": expected_path,
@@ -192,7 +192,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             },
             intentionally_undocumented=True,
         )
-        return self.assert_json_success(result)["pear_workspace_mutation"]
+        return self.assert_json_success(result)["armada_workspace_mutation"]
 
     def test_descriptor_tree_and_search_are_complete_opaque_and_relative(self) -> None:
         user = self.example_user("hamlet")
@@ -202,14 +202,14 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             repo = self.make_workspace(Path(temp_dir).resolve())
             node = self.make_node(user, stream.name, repo)
             descriptor_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}",
+                f"/json/armada/workspaces/{node.uuid}",
                 intentionally_undocumented=True,
             )
-            descriptor = self.assert_json_success(descriptor_result)["pear_workspace"]
+            descriptor = self.assert_json_success(descriptor_result)["armada_workspace"]
             root = self.tree(node, page_size=2)
             rest = self.tree(node, cursor=root["next_cursor"], page_size=20)
             search_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/search",
+                f"/json/armada/workspaces/{node.uuid}/search",
                 {"q": "guide", "limit": 10},
                 intentionally_undocumented=True,
             )
@@ -217,21 +217,21 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertNotIn(str(repo), descriptor_result.content.decode())
         self.assertRegex(
             descriptor_result.headers["Server-Timing"],
-            r'pear_workspace;dur=[0-9.]+;desc="descriptor"',
+            r'armada_workspace;dur=[0-9.]+;desc="descriptor"',
         )
         self.assertIn(
-            'pear_workspace_cache;desc="rebuild"', descriptor_result.headers["Server-Timing"]
+            'armada_workspace_cache;desc="rebuild"', descriptor_result.headers["Server-Timing"]
         )
         self.assertGreaterEqual(
-            int(descriptor_result.headers["X-Pear-Workspace-Operation-Count"]),
+            int(descriptor_result.headers["X-Armada-Workspace-Operation-Count"]),
             1,
         )
         self.assertRegex(
             search_result.headers["Server-Timing"],
-            r'pear_workspace;dur=[0-9.]+;desc="search"',
+            r'armada_workspace;dur=[0-9.]+;desc="search"',
         )
         self.assertIn(
-            'pear_workspace_cache;desc="local-hit"', search_result.headers["Server-Timing"]
+            'armada_workspace_cache;desc="local-hit"', search_result.headers["Server-Timing"]
         )
         self.assertEqual(descriptor["uuid"], str(node.uuid))
         self.assertEqual(descriptor["default_path"], "README.md")
@@ -243,7 +243,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertTrue(descriptor["capabilities"]["history"])
         self.assertEqual(
             descriptor["limits"]["raw_file_max_bytes"],
-            PEAR_WORKSPACE_RAW_MAX_BYTES,
+            ARMADA_WORKSPACE_RAW_MAX_BYTES,
         )
         entries = [*root["entries"], *rest["entries"]]
         paths = {entry["path"] for entry in entries}
@@ -252,7 +252,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         for entry in entries:
             self.assertNotEqual(entry["path"], entry["entry_id"])
             self.assertNotIn("/", entry["entry_id"])
-        search = self.assert_json_success(search_result)["pear_workspace_search"]
+        search = self.assert_json_success(search_result)["armada_workspace_search"]
         self.assertEqual([entry["path"] for entry in search["entries"]], ["docs/guide.md"])
         self.assertEqual(
             [ancestor["path"] for ancestor in search["entries"][0]["ancestors"]],
@@ -337,7 +337,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             assert isinstance(revision, int)
 
             hidden_result = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/entries",
+                f"/json/armada/workspaces/{node.uuid}/entries",
                 {
                     "destination_path": ".secret",
                     "kind": "file",
@@ -347,7 +347,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
             ignored_result = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/entries",
+                f"/json/armada/workspaces/{node.uuid}/entries",
                 {
                     "destination_path": "private.txt",
                     "kind": "file",
@@ -389,12 +389,12 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             self.assertEqual((repo / "notes/draft.md").read_text(), "scratch\n")
 
             stale_old_id = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": file_entry["entry_id"]},
                 intentionally_undocumented=True,
             )
             confirmation_result = self.client_delete(
-                f"/json/pear/workspaces/{node.uuid}/entry",
+                f"/json/armada/workspaces/{node.uuid}/entry",
                 {
                     "entry_id": renamed_entry["entry_id"],
                     "expected_path": "notes/draft.md",
@@ -443,7 +443,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                     [
                         *git,
                         "-c",
-                        "user.email=pear@example.com",
+                        "user.email=armada@example.com",
                         "-c",
                         "user.name=Pear",
                         "commit",
@@ -458,19 +458,19 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             entry_id = descriptor["default_entry"]["entry_id"]
             first_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/history",
+                f"/json/armada/workspaces/{node.uuid}/history",
                 {"entry_id": entry_id, "limit": 1},
                 intentionally_undocumented=True,
             )
-            first = self.assert_json_success(first_result)["pear_workspace_history"]
+            first = self.assert_json_success(first_result)["armada_workspace_history"]
             second_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/history",
+                f"/json/armada/workspaces/{node.uuid}/history",
                 {"entry_id": entry_id, "limit": 1, "cursor": first["next_cursor"]},
                 intentionally_undocumented=True,
             )
-            second = self.assert_json_success(second_result)["pear_workspace_history"]
+            second = self.assert_json_success(second_result)["armada_workspace_history"]
             tampered_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/history",
+                f"/json/armada/workspaces/{node.uuid}/history",
                 {
                     "entry_id": entry_id,
                     "limit": 1,
@@ -531,11 +531,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             readme_entry = descriptor["default_entry"]
             read_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": readme_entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            readme = self.assert_json_success(read_result)["pear_workspace_file"]
+            readme = self.assert_json_success(read_result)["armada_workspace_file"]
             delayed_rename_put = {
                 "entry_id": readme_entry["entry_id"],
                 "expected_path": "README.md",
@@ -559,7 +559,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 content="replacement after rename\n",
             )
             delayed_rename_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 delayed_rename_put,
                 intentionally_undocumented=True,
             )
@@ -574,11 +574,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             scratch_entry = scratch["entry"]
             assert isinstance(scratch_entry, dict)
             scratch_read_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": scratch_entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            scratch_file = self.assert_json_success(scratch_read_result)["pear_workspace_file"]
+            scratch_file = self.assert_json_success(scratch_read_result)["armada_workspace_file"]
             delayed_delete_put = {
                 "entry_id": scratch_entry["entry_id"],
                 "expected_path": "scratch.txt",
@@ -602,7 +602,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 content="replacement after delete\n",
             )
             delayed_delete_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 delayed_delete_put,
                 intentionally_undocumented=True,
             )
@@ -634,23 +634,23 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 entry["entry_id"] for entry in root["entries"] if entry["path"] == "raw.bin"
             )
             text_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": readme_id},
                 intentionally_undocumented=True,
             )
             binary_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": raw_id},
                 intentionally_undocumented=True,
             )
             raw_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/raw",
+                f"/json/armada/workspaces/{node.uuid}/raw",
                 {"entry_id": raw_id, "download": orjson.dumps(True).decode()},
                 intentionally_undocumented=True,
             )
             raw_content = b"".join(raw_result.streaming_content)
 
-        text = self.assert_json_success(text_result)["pear_workspace_file"]
+        text = self.assert_json_success(text_result)["armada_workspace_file"]
         self.assertEqual(text["content"].encode(), b"\xef\xbb\xbf# Notes\r\n\r\ntrailing  \r\n")
         self.assertTrue(text["editable"])
         self.assertTrue(text["rich_mode_eligible"])
@@ -676,7 +676,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             with patch("zerver.lib.armada_workspace_resources._enumerate_workspace") as enumerate:
                 result = self.client_get(
-                    f"/json/pear/workspaces/{node.uuid}/file",
+                    f"/json/armada/workspaces/{node.uuid}/file",
                     {"entry_id": descriptor["default_entry"]["entry_id"]},
                     intentionally_undocumented=True,
                 )
@@ -700,7 +700,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             )
             with patch("zerver.views.armada_workspace.read_workspace_node_file") as buffered_read:
                 result = self.client_get(
-                    f"/json/pear/workspaces/{node.uuid}/raw",
+                    f"/json/armada/workspaces/{node.uuid}/raw",
                     {"entry_id": raw_entry["entry_id"]},
                     intentionally_undocumented=True,
                 )
@@ -721,7 +721,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             repo = self.make_workspace(Path(temp_dir).resolve())
             with (repo / "oversized.bin").open("wb") as raw_file:
-                raw_file.seek(PEAR_WORKSPACE_RAW_MAX_BYTES)
+                raw_file.seek(ARMADA_WORKSPACE_RAW_MAX_BYTES)
                 raw_file.write(b"z")
             node = self.make_node(user, stream.name, repo)
             raw_entry = next(
@@ -731,7 +731,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 "zerver.lib.armada_workspace_io.WorkspaceRawFileStream.__next__"
             ) as stream_next:
                 result = self.client_get(
-                    f"/json/pear/workspaces/{node.uuid}/raw",
+                    f"/json/armada/workspaces/{node.uuid}/raw",
                     {"entry_id": raw_entry["entry_id"]},
                     intentionally_undocumented=True,
                 )
@@ -740,7 +740,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         self.assertEqual(orjson.loads(result.content)["error_code"], "file_too_large")
         self.assertEqual(
             orjson.loads(result.content)["max_bytes"],
-            PEAR_WORKSPACE_RAW_MAX_BYTES,
+            ARMADA_WORKSPACE_RAW_MAX_BYTES,
         )
         stream_next.assert_not_called()
 
@@ -846,7 +846,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -859,11 +859,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
 
             repaired = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/entries",
+                f"/json/armada/workspaces/{node.uuid}/entries",
                 request_data,
                 intentionally_undocumented=True,
             )
-            mutation = self.assert_json_success(repaired)["pear_workspace_mutation"]
+            mutation = self.assert_json_success(repaired)["armada_workspace_mutation"]
 
         self.assertEqual(mutation["workspace_revision"], revision + 1)
         node.refresh_from_db()
@@ -890,7 +890,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -900,7 +900,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             created.write_text("same bytes\n")
 
             retry = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/entries",
+                f"/json/armada/workspaces/{node.uuid}/entries",
                 request_data,
                 intentionally_undocumented=True,
             )
@@ -929,7 +929,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated post-filesystem failure"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -937,7 +937,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             (repo / "created-directory/attacker.txt").write_text("do not bless\n")
 
             retry = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/entries",
+                f"/json/armada/workspaces/{node.uuid}/entries",
                 request_data,
                 intentionally_undocumented=True,
             )
@@ -975,7 +975,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated post-rename failure"),
             ):
                 failed_rename = self.client_patch(
-                    f"/json/pear/workspaces/{node.uuid}/entry",
+                    f"/json/armada/workspaces/{node.uuid}/entry",
                     rename_request,
                     intentionally_undocumented=True,
                 )
@@ -986,12 +986,12 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             )
             self.assertEqual(rename_receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
             repaired_rename_response = self.client_patch(
-                f"/json/pear/workspaces/{node.uuid}/entry",
+                f"/json/armada/workspaces/{node.uuid}/entry",
                 rename_request,
                 intentionally_undocumented=True,
             )
             repaired_rename = self.assert_json_success(repaired_rename_response)[
-                "pear_workspace_mutation"
+                "armada_workspace_mutation"
             ]
             renamed_entry = repaired_rename["entry"]
             assert isinstance(renamed_entry, dict)
@@ -1008,7 +1008,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated post-delete failure"),
             ):
                 failed_delete = self.client_delete(
-                    f"/json/pear/workspaces/{node.uuid}/entry",
+                    f"/json/armada/workspaces/{node.uuid}/entry",
                     delete_request,
                     intentionally_undocumented=True,
                 )
@@ -1019,12 +1019,12 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             )
             self.assertEqual(delete_receipt.state, WorkspaceEntryMutationReceipt.APPLIED)
             repaired_delete_response = self.client_delete(
-                f"/json/pear/workspaces/{node.uuid}/entry",
+                f"/json/armada/workspaces/{node.uuid}/entry",
                 delete_request,
                 intentionally_undocumented=True,
             )
             repaired_delete = self.assert_json_success(repaired_delete_response)[
-                "pear_workspace_mutation"
+                "armada_workspace_mutation"
             ]
 
         self.assertIsNone(repaired_delete["entry"])
@@ -1052,7 +1052,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated abandoned request"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -1093,7 +1093,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated stage receipt failure"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -1105,7 +1105,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
             staged_descriptor = self.descriptor(node)
             with patch(
-                "zerver.views.armada_workspace.PEAR_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS",
+                "zerver.views.armada_workspace.ARMADA_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS",
                 0,
             ):
                 repaired_descriptor = self.descriptor(node)
@@ -1144,7 +1144,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated pre-publish stop"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -1189,7 +1189,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=WorkspaceSnapshotError("simulated pre-publish stop"),
             ):
                 failed = self.client_post(
-                    f"/json/pear/workspaces/{node.uuid}/entries",
+                    f"/json/armada/workspaces/{node.uuid}/entries",
                     request_data,
                     intentionally_undocumented=True,
                 )
@@ -1253,11 +1253,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
             get_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            original = self.assert_json_success(get_result)["armada_workspace_file"]
             desired = "# Exact\n\nno final newline  "
             request = {
                 "entry_id": entry["entry_id"],
@@ -1268,35 +1268,35 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 "edit_revision": 7,
             }
             mismatched_path_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {**request, "expected_path": "docs/guide.md"},
                 intentionally_undocumented=True,
             )
             self.assertEqual((repo / "README.md").read_bytes(), original["content"].encode())
             put_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 request,
                 intentionally_undocumented=True,
             )
-            saved = self.assert_json_success(put_result)["pear_workspace_file"]
+            saved = self.assert_json_success(put_result)["armada_workspace_file"]
             node.refresh_from_db()
             revision_after_save = node.content_revision
             retry_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 request,
                 intentionally_undocumented=True,
             )
-            retry = self.assert_json_success(retry_result)["pear_workspace_file"]
+            retry = self.assert_json_success(retry_result)["armada_workspace_file"]
             node.refresh_from_db()
             stale_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {**request, "content": "must not land", "edit_revision": 8},
                 intentionally_undocumented=True,
             )
             remote_content = "# Remote\n"
             (repo / "README.md").write_text(remote_content, encoding="utf-8")
             conflict_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": saved["entry_id"],
                     "expected_path": "README.md",
@@ -1353,11 +1353,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
             get_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            original = self.assert_json_success(get_result)["armada_workspace_file"]
             desired = b"saved before database bump\n"
             (repo / "README.md").write_bytes(desired)
             desired_stat = (repo / "README.md").stat()
@@ -1379,7 +1379,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 result_identity=result_identity,
             )
             result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": entry["entry_id"],
                     "expected_path": "README.md",
@@ -1390,7 +1390,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 },
                 intentionally_undocumented=True,
             )
-            payload = self.assert_json_success(result)["pear_workspace_file"]
+            payload = self.assert_json_success(result)["armada_workspace_file"]
             node.refresh_from_db()
 
         self.assertEqual(node.content_revision, descriptor["workspace_revision"] + 1)
@@ -1410,17 +1410,17 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
             get_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            original = self.assert_json_success(get_result)["armada_workspace_file"]
             delayed_content = b"delayed request bytes\n"
             replacement = repo / ".replacement"
             replacement.write_bytes(delayed_content)
             os.replace(replacement, repo / "README.md")
             put_result = self.client_put(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {
                     "entry_id": entry["entry_id"],
                     "expected_path": "README.md",
@@ -1432,7 +1432,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 intentionally_undocumented=True,
             )
             old_id_read = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
                 intentionally_undocumented=True,
             )
@@ -1460,7 +1460,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
 
             with patch("zerver.lib.armada_workspace_resources._enumerate_workspace") as enumerate:
                 first_read = self.client_get(
-                    f"/json/pear/workspaces/{node.uuid}/file",
+                    f"/json/armada/workspaces/{node.uuid}/file",
                     {"entry_id": scratch_entry["entry_id"]},
                     intentionally_undocumented=True,
                 )
@@ -1481,11 +1481,11 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             entry = descriptor["default_entry"]
             get_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": entry["entry_id"]},
                 intentionally_undocumented=True,
             )
-            original = self.assert_json_success(get_result)["pear_workspace_file"]
+            original = self.assert_json_success(get_result)["armada_workspace_file"]
             remote_data = b"agent mutation\n"
             remote_file = WorkspaceFile(
                 data=remote_data,
@@ -1516,7 +1516,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
                 side_effect=race_write,
             ):
                 conflict_result = self.client_put(
-                    f"/json/pear/workspaces/{node.uuid}/file",
+                    f"/json/armada/workspaces/{node.uuid}/file",
                     {
                         "entry_id": entry["entry_id"],
                         "expected_path": "README.md",
@@ -1551,26 +1551,26 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             old_cursor = first["next_cursor"]
             (repo / "new.txt").write_text("new\n", encoding="utf-8")
             refresh_result = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/refresh",
+                f"/json/armada/workspaces/{node.uuid}/refresh",
                 intentionally_undocumented=True,
             )
-            refresh = self.assert_json_success(refresh_result)["pear_workspace_refresh"]
+            refresh = self.assert_json_success(refresh_result)["armada_workspace_refresh"]
             stale_cursor_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/tree",
+                f"/json/armada/workspaces/{node.uuid}/tree",
                 {"cursor": old_cursor, "page_size": 1},
                 intentionally_undocumented=True,
             )
             stale_entry_result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}/file",
+                f"/json/armada/workspaces/{node.uuid}/file",
                 {"entry_id": old_entry_id},
                 intentionally_undocumented=True,
             )
             second_refresh_result = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/refresh",
+                f"/json/armada/workspaces/{node.uuid}/refresh",
                 intentionally_undocumented=True,
             )
             second_refresh = self.assert_json_success(second_refresh_result)[
-                "pear_workspace_refresh"
+                "armada_workspace_refresh"
             ]
 
         self.assertTrue(refresh["changed"])
@@ -1596,10 +1596,10 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             descriptor = self.descriptor(node)
             (repo / "README.md").write_text("second dirty version\n", encoding="utf-8")
             refresh_result = self.client_post(
-                f"/json/pear/workspaces/{node.uuid}/refresh",
+                f"/json/armada/workspaces/{node.uuid}/refresh",
                 intentionally_undocumented=True,
             )
-            refresh = self.assert_json_success(refresh_result)["pear_workspace_refresh"]
+            refresh = self.assert_json_success(refresh_result)["armada_workspace_refresh"]
 
         self.assertTrue(refresh["changed"])
         self.assertEqual(
@@ -1617,14 +1617,14 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             repo = self.make_workspace(Path(temp_dir).resolve())
             node = self.make_node(owner, private_stream.name, repo)
             result = self.client_get(
-                f"/json/pear/workspaces/{node.uuid}",
+                f"/json/armada/workspaces/{node.uuid}",
                 intentionally_undocumented=True,
             )
 
         self.assert_json_error(result, "Invalid channel name 'workspace-private'")
 
     def test_isolated_nodes_route_all_mutations_through_helper(self) -> None:
-        username = "pear-0123456789abcdef01234567"
+        username = "armada-0123456789abcdef01234567"
         data = b"hello\n"
         identity = WorkspaceEntryIdentity(1, 2, 3)
         file = WorkspaceFile(
@@ -1753,7 +1753,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             "/canonical/workspace",
             "README.md",
             data,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=file.version,
             expected_identity=identity,
             create=False,
@@ -1763,7 +1763,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
             "/canonical/workspace",
             "new.md",
             data,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=None,
             create=True,
             isolation_username=username,
@@ -1803,7 +1803,7 @@ class PearWorkspaceResourceEndpointTest(ZulipTestCase):
         )
 
 
-class PearWorkspaceResourcePayloadTest(ZulipTestCase):
+class ArmadaWorkspaceResourcePayloadTest(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
         clear_workspace_snapshot_cache()
@@ -1830,8 +1830,8 @@ class PearWorkspaceResourcePayloadTest(ZulipTestCase):
     def test_local_snapshot_cache_retains_more_than_four_workspaces(self) -> None:
         snapshots = [self.make_snapshot(number) for number in range(1, 7)]
         with self.settings(
-            PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
-            PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS=100,
+            ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
+            ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS=100,
         ):
             for snapshot in snapshots:
                 _local_cache_put(snapshot)
@@ -1843,8 +1843,8 @@ class PearWorkspaceResourcePayloadTest(ZulipTestCase):
     def test_local_snapshot_cache_evicts_by_path_budget(self) -> None:
         snapshots = [self.make_snapshot(number, path_count=2) for number in range(1, 4)]
         with self.settings(
-            PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
-            PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS=3,
+            ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES=8,
+            ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS=3,
         ):
             for snapshot in snapshots:
                 _local_cache_put(snapshot)
@@ -1918,7 +1918,7 @@ class PearWorkspaceResourcePayloadTest(ZulipTestCase):
             branch_name="main",
         )
         cache.set(
-            f"pear:workspace-index-fingerprint:v1:{node.uuid}",
+            f"armada:workspace-index-fingerprint:v1:{node.uuid}",
             {"revision": 1, "fingerprint": "a" * 64},
             timeout=60,
         )
@@ -1943,7 +1943,7 @@ class PearWorkspaceResourcePayloadTest(ZulipTestCase):
                 "zerver.lib.armada_workspace_resources._advance_revision_if_current",
                 side_effect=advance_revision,
             ),
-            patch("zerver.actions.armada.send_pear_workspace_changed_event") as send_event,
+            patch("zerver.actions.armada.send_armada_workspace_changed_event") as send_event,
         ):
             snapshot = get_workspace_snapshot(node, force=True)  # type: ignore[arg-type]
 

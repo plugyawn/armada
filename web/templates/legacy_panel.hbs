@@ -1,42 +1,42 @@
 {{#if panel_open}}
-<div class="pear-panel-inner">
+<div class="legacy-panel-inner">
     {{#if show_panel_header}}
-    <div class="pear-panel-header {{#unless active_run_show_status}}pear-panel-header-idle{{/unless}} {{#if panel_header_quiet}}pear-panel-header-quiet{{/if}}">
+    <div class="legacy-panel-header {{#unless active_run_show_status}}legacy-panel-header-idle{{/unless}} {{#if panel_header_quiet}}legacy-panel-header-quiet{{/if}}">
         {{#if active_run_show_status}}
-        <div class="pear-panel-title-row">
-            <div class="pear-run-status-row pear-run-status-{{active_run.status_class}}{{#if active_run.is_active}} pear-liveness-active{{/if}}" aria-label="{{active_run.status_label}}" title="{{active_run.status_label}}">
-                <span class="pear-panel-status-label">{{active_run.status_label}}</span>
-                <span class="pear-ui-glyph pear-run-status-glyph {{#if active_run.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
+        <div class="legacy-panel-title-row">
+            <div class="legacy-run-status-row legacy-run-status-{{active_run.status_class}}{{#if active_run.is_active}} legacy-liveness-active{{/if}}" aria-label="{{active_run.status_label}}" title="{{active_run.status_label}}">
+                <span class="legacy-panel-status-label">{{active_run.status_label}}</span>
+                <span class="legacy-ui-glyph legacy-run-status-glyph {{#if active_run.is_active}}legacy-thinking-glyph{{/if}}" aria-hidden="true">{{active_run.status_marker}}</span>
             </div>
         </div>
         {{/if}}
-        <div class="pear-panel-actions">
+        <div class="legacy-panel-actions">
             {{#if has_panel_menu}}
-            <details class="pear-run-actions pear-panel-run-actions" data-run-id="{{active_run.id}}">
-                <summary class="pear-run-actions-summary pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
+            <details class="legacy-run-actions legacy-panel-run-actions" data-run-id="{{active_run.id}}">
+                <summary class="legacy-run-actions-summary legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Pear work menu' }}" data-tippy-content="{{t 'Pear work menu' }}">
                     <i class="zulip-icon zulip-icon-more-vertical" aria-hidden="true"></i>
                 </summary>
-                <div class="pear-run-actions-menu">
+                <div class="legacy-run-actions-menu">
                     {{#if has_topic}}
-                        <button type="button" id="pear-panel-refresh" class="pear-run-action-menu-item">
+                        <button type="button" id="legacy-panel-refresh" class="legacy-run-action-menu-item">
                             <i class="zulip-icon zulip-icon-reset" aria-hidden="true"></i>
                             <span>{{t "Refresh" }}</span>
                         </button>
                     {{/if}}
                     {{#if active_run.can_pause}}
-                        <button type="button" class="pear-run-action pear-run-action-menu-item" data-action="pause" data-run-id="{{active_run.id}}">
+                        <button type="button" class="legacy-run-action legacy-run-action-menu-item" data-action="pause" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-stop-circle" aria-hidden="true"></i>
                             <span>{{t "Pause" }}</span>
                         </button>
                     {{/if}}
                     {{#if active_run.can_resume}}
-                        <button type="button" class="pear-run-action pear-run-action-menu-item" data-action="resume" data-run-id="{{active_run.id}}">
+                        <button type="button" class="legacy-run-action legacy-run-action-menu-item" data-action="resume" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-play-circle" aria-hidden="true"></i>
                             <span>{{t "Resume" }}</span>
                         </button>
                     {{/if}}
                     {{#if active_run.can_cancel}}
-                        <button type="button" class="pear-run-action pear-run-action-menu-item pear-run-action-danger" data-action="cancel" data-run-id="{{active_run.id}}">
+                        <button type="button" class="legacy-run-action legacy-run-action-menu-item legacy-run-action-danger" data-action="cancel" data-run-id="{{active_run.id}}">
                             <i class="zulip-icon zulip-icon-circle-x" aria-hidden="true"></i>
                             <span>{{t "Cancel" }}</span>
                         </button>
@@ -51,96 +51,96 @@
     {{#if show_workbench}}
     {{#if has_topic}}
         {{#if topic_context}}
-            <section class="pear-context-section">
-                <div class="pear-workbench" role="dialog" aria-modal="true" aria-label="{{t 'Pear work details' }}" tabindex="-1">
-                    <div class="pear-workbench-header">
-                        <div class="pear-workbench-context-strip">
-                            <div class="pear-workbench-context-item pear-workbench-context-repo">
-                                <span class="pear-workbench-control-label">{{t "Repo" }}</span>
-                                <span class="pear-workbench-control-value" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>
+            <section class="legacy-context-section">
+                <div class="legacy-workbench" role="dialog" aria-modal="true" aria-label="{{t 'Pear work details' }}" tabindex="-1">
+                    <div class="legacy-workbench-header">
+                        <div class="legacy-workbench-context-strip">
+                            <div class="legacy-workbench-context-item legacy-workbench-context-repo">
+                                <span class="legacy-workbench-control-label">{{t "Repo" }}</span>
+                                <span class="legacy-workbench-control-value" title="{{topic_context.panel_repo_label}}">{{topic_context.panel_repo_label}}</span>
                                 {{#if topic_context.panel_git_status_label}}
-                                    <span class="pear-workbench-status pear-workbench-status-{{topic_context.panel_git_status_class}}">{{topic_context.panel_git_status_label}}</span>
+                                    <span class="legacy-workbench-status legacy-workbench-status-{{topic_context.panel_git_status_class}}">{{topic_context.panel_git_status_label}}</span>
                                 {{/if}}
                             </div>
-                            <div class="pear-workbench-context-item pear-workbench-context-worktree">
-                                <span class="pear-workbench-control-label">{{t "Worktree" }}</span>
-                                <span class="pear-workbench-control-value" title="{{topic_context.panel_worktree_label}}">{{topic_context.panel_worktree_label}}</span>
+                            <div class="legacy-workbench-context-item legacy-workbench-context-worktree">
+                                <span class="legacy-workbench-control-label">{{t "Worktree" }}</span>
+                                <span class="legacy-workbench-control-value" title="{{topic_context.panel_worktree_label}}">{{topic_context.panel_worktree_label}}</span>
                                 {{#if topic_context.panel_git_ref_label}}
-                                    <span class="pear-workbench-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
+                                    <span class="legacy-workbench-ref" title="{{topic_context.panel_git_ref_label}}">{{topic_context.panel_git_ref_label}}</span>
                                 {{/if}}
                             </div>
                         </div>
-                        <div class="pear-workbench-title-row">
-                            <span class="pear-workbench-title" title="{{topic_context.workbench_title}}">{{topic_context.workbench_title}}</span>
+                        <div class="legacy-workbench-title-row">
+                            <span class="legacy-workbench-title" title="{{topic_context.workbench_title}}">{{topic_context.workbench_title}}</span>
                             {{#if topic_context.workbench_meta}}
-                                <span class="pear-workbench-meta" title="{{topic_context.workbench_meta}}">{{topic_context.workbench_meta}}</span>
+                                <span class="legacy-workbench-meta" title="{{topic_context.workbench_meta}}">{{topic_context.workbench_meta}}</span>
                             {{/if}}
                             {{#if panel_can_close}}
-                                <button type="button" class="pear-panel-close-action pear-workbench-close pear-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
+                                <button type="button" class="legacy-panel-close-action legacy-workbench-close legacy-icon-button icon-button icon-button-square icon-button-neutral tippy-zulip-delayed-tooltip" aria-label="{{t 'Hide Pear work details' }}" data-tippy-content="{{t 'Hide Pear work details' }}">
                                     <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
                                 </button>
                             {{/if}}
                         </div>
-                        <div class="pear-workbench-scope-note">{{topic_context.workbench_scope_note}}</div>
-                        <div class="pear-workbench-context-row">
-                            <div class="pear-workbench-tabs" role="tablist" aria-label="{{t 'Pear work views' }}">
-                                <button type="button" id="pear-workbench-tab-diff" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_diff_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_diff_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
+                        <div class="legacy-workbench-scope-note">{{topic_context.workbench_scope_note}}</div>
+                        <div class="legacy-workbench-context-row">
+                            <div class="legacy-workbench-tabs" role="tablist" aria-label="{{t 'Pear work views' }}">
+                                <button type="button" id="legacy-workbench-tab-diff" role="tab" aria-controls="legacy-workbench-panel" aria-selected="{{#if topic_context.workbench_diff_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_diff_selected}}0{{else}}-1{{/if}}" class="legacy-workbench-tab {{#if topic_context.workbench_diff_selected}}legacy-workbench-tab-selected{{/if}}" data-legacy-workbench-view="diff" {{#if topic_context.workbench_diff_disabled}}disabled{{/if}}>
                                     {{topic_context.diff_tab_label}}
                                 </button>
-                                <button type="button" id="pear-workbench-tab-history" role="tab" aria-controls="pear-workbench-panel" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_history_selected}}0{{else}}-1{{/if}}" class="pear-workbench-tab {{#if topic_context.workbench_history_selected}}pear-workbench-tab-selected{{/if}}" data-pear-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
+                                <button type="button" id="legacy-workbench-tab-history" role="tab" aria-controls="legacy-workbench-panel" aria-selected="{{#if topic_context.workbench_history_selected}}true{{else}}false{{/if}}" tabindex="{{#if topic_context.workbench_history_selected}}0{{else}}-1{{/if}}" class="legacy-workbench-tab {{#if topic_context.workbench_history_selected}}legacy-workbench-tab-selected{{/if}}" data-legacy-workbench-view="history" {{#if topic_context.workbench_history_disabled}}disabled{{/if}}>
                                     {{topic_context.history_tab_label}}
                                 </button>
                             </div>
                         </div>
                     </div>
-                    <div id="pear-workbench-panel" class="pear-workbench-body pear-workbench-view-{{topic_context.workbench_view}}" role="tabpanel" aria-labelledby="pear-workbench-tab-{{topic_context.workbench_view}}">
+                    <div id="legacy-workbench-panel" class="legacy-workbench-body legacy-workbench-view-{{topic_context.workbench_view}}" role="tabpanel" aria-labelledby="legacy-workbench-tab-{{topic_context.workbench_view}}">
                         {{#if topic_context.workbench_diff_selected}}
                             {{#if topic_context.has_workbench_diff}}
                                 {{#unless topic_context.has_changed_files}}
                                 {{#if topic_context.has_workbench_diff_summary}}
-                                    <div class="pear-workbench-summary" aria-label="{{topic_context.workbench_diff_summary_label}}">
+                                    <div class="legacy-workbench-summary" aria-label="{{topic_context.workbench_diff_summary_label}}">
                                         {{#if topic_context.workbench_diff_file_label}}
-                                            <span class="pear-workbench-summary-chip pear-workbench-summary-files">{{topic_context.workbench_diff_file_label}}</span>
+                                            <span class="legacy-workbench-summary-chip legacy-workbench-summary-files">{{topic_context.workbench_diff_file_label}}</span>
                                         {{/if}}
                                     </div>
                                 {{/if}}
                                 {{/unless}}
                                 {{#if topic_context.has_changed_files}}
-                                    <div class="pear-file-list">
+                                    <div class="legacy-file-list">
                                         {{#each topic_context.git.changed_files}}
-                                            <div class="pear-file-row pear-file-{{kind}}">
-                                                <span class="pear-file-status">{{status}}</span>
-                                                <span class="pear-file-path" title="{{path}}">{{path}}</span>
+                                            <div class="legacy-file-row legacy-file-{{kind}}">
+                                                <span class="legacy-file-status">{{status}}</span>
+                                                <span class="legacy-file-path" title="{{path}}">{{path}}</span>
                                             </div>
                                         {{/each}}
                                         {{#if topic_context.git.changed_files_truncated}}
-                                            <div class="pear-file-more">{{t "More changed files not shown." }}</div>
+                                            <div class="legacy-file-more">{{t "More changed files not shown." }}</div>
                                         {{/if}}
                                     </div>
                                 {{/if}}
                             {{else}}
-                                <div class="pear-workbench-empty">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
+                                <div class="legacy-workbench-empty">
+                                    <span class="legacy-ui-glyph legacy-workbench-empty-glyph" aria-hidden="true">·</span>
                                     <span>{{t "No local diff." }}</span>
                                 </div>
                             {{/if}}
                         {{/if}}
                         {{#if topic_context.workbench_history_selected}}
                             {{#if topic_context.has_recent_commits}}
-                                <div class="pear-commit-list">
+                                <div class="legacy-commit-list">
                                     {{#each topic_context.history_commits}}
-                                        <div class="pear-commit-row {{#if is_head}}pear-commit-row-head{{/if}}">
-                                            <span class="pear-commit-summary" title="{{summary}}">{{summary}}</span>
-                                            <span class="pear-commit-hash">{{hash}}</span>
+                                        <div class="legacy-commit-row {{#if is_head}}legacy-commit-row-head{{/if}}">
+                                            <span class="legacy-commit-summary" title="{{summary}}">{{summary}}</span>
+                                            <span class="legacy-commit-hash">{{hash}}</span>
                                             {{#if ref_label}}
-                                                <span class="pear-commit-ref">{{ref_label}}</span>
+                                                <span class="legacy-commit-ref">{{ref_label}}</span>
                                             {{/if}}
                                         </div>
                                     {{/each}}
                                 </div>
                             {{else}}
-                                <div class="pear-workbench-empty">
-                                    <span class="pear-ui-glyph pear-workbench-empty-glyph" aria-hidden="true">·</span>
+                                <div class="legacy-workbench-empty">
+                                    <span class="legacy-ui-glyph legacy-workbench-empty-glyph" aria-hidden="true">·</span>
                                     <span>{{t "No Git history." }}</span>
                                 </div>
                             {{/if}}
@@ -149,14 +149,14 @@
                 </div>
             </section>
         {{else}}
-            <div class="pear-empty-state">
-                <span class="pear-ui-glyph pear-empty-state-glyph pear-braille-spinner" aria-hidden="true"></span>
+            <div class="legacy-empty-state">
+                <span class="legacy-ui-glyph legacy-empty-state-glyph legacy-braille-spinner" aria-hidden="true"></span>
                 <span>{{t "Pear context is loading." }}</span>
             </div>
         {{/if}}
     {{else}}
-        <div class="pear-empty-state">
-            <span class="pear-ui-glyph pear-empty-state-glyph" aria-hidden="true">·</span>
+        <div class="legacy-empty-state">
+            <span class="legacy-ui-glyph legacy-empty-state-glyph" aria-hidden="true">·</span>
             <span>{{t "Open a topic to see Pear context." }}</span>
         </div>
     {{/if}}
@@ -165,10 +165,10 @@
 </div>
 {{/if}}
 {{#if error}}
-    <div class="pear-panel-error" role="status">
-        <span class="pear-ui-glyph pear-panel-error-glyph" aria-hidden="true">✷</span>
+    <div class="legacy-panel-error" role="status">
+        <span class="legacy-ui-glyph legacy-panel-error-glyph" aria-hidden="true">✷</span>
         <span>{{error}}</span>
-        <button type="button" class="pear-panel-error-dismiss pear-icon-button icon-button icon-button-square icon-button-neutral" aria-label="{{t 'Dismiss Pear status error' }}">
+        <button type="button" class="legacy-panel-error-dismiss legacy-icon-button icon-button icon-button-square icon-button-neutral" aria-label="{{t 'Dismiss Pear status error' }}">
             <i class="zulip-icon zulip-icon-close" aria-hidden="true"></i>
         </button>
     </div>

@@ -217,13 +217,13 @@ div.overlay {
     opacity: 0;
     visibility: hidden;
 
-    transition: var(--pear-dur-2) var(--pear-ease);
+    transition: var(--legacy-dur-2) var(--legacy-ease);
     transition-property: opacity, visibility;
     overflow: hidden;
 
     .overlay-content {
         transform: translateY(12px);
-        transition: transform var(--pear-dur-2) var(--pear-ease);
+        transition: transform var(--legacy-dur-2) var(--legacy-ease);
         z-index: 102;
     }
 
@@ -231,7 +231,7 @@ div.overlay {
         opacity: 1;
         pointer-events: all;
         visibility: visible;
-        transition: opacity var(--pear-dur-2) var(--pear-ease);
+        transition: opacity var(--legacy-dur-2) var(--legacy-ease);
 
         .overlay-content {
             transform: translateY(0);

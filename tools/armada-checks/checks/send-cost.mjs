@@ -44,7 +44,7 @@ function install_send_probe() {
                 token,
                 t0: performance.now(),
                 rows_before: ac.all("messageRow").length,
-                ack_before: ac.all("pearAck").length,
+                ack_before: ac.all("armadaAck").length,
                 compose_before: ac.rect("compose")?.h ?? null,
                 frames: [],
             };
@@ -61,7 +61,7 @@ function install_send_probe() {
                     top: box ? Math.round(box.top * 100) / 100 : null,
                     height: box ? Math.round(box.height * 100) / 100 : null,
                     rows: ac.all("messageRow").length,
-                    ack: ac.all("pearAck").length,
+                    ack: ac.all("armadaAck").length,
                     compose: ac.rect("compose")?.h ?? null,
                     scroll: ac.scroll_state().top,
                 });
@@ -367,8 +367,8 @@ export async function run(ctx) {
     await ctx.scenario("plain", async () => {
         await plain_sends(ctx);
     });
-    await ctx.scenario("pear", async () => {
-        await held_send(ctx, "pear", ctx.topics.short, "@**Pear** armada-checks TOKEN", {
+    await ctx.scenario("agent", async () => {
+        await held_send(ctx, "agent", ctx.topics.short, "@**Pear** armada-checks TOKEN", {
             expect_ack: true,
         });
     });

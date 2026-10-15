@@ -25,7 +25,7 @@ import * as dialog_widget from "./dialog_widget.ts";
 import * as drafts from "./drafts.ts";
 import * as flatpickr from "./flatpickr.ts";
 import {$t, $t_html} from "./i18n.ts";
-import * as compose_pear from "./legacy_agent_toggle.ts";
+import * as legacy_agent_toggle from "./legacy_agent_toggle.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_view from "./message_view.ts";
 import * as message_viewport from "./message_viewport.ts";
@@ -57,10 +57,10 @@ function setup_compose_actions_hooks(): void {
     compose_actions.register_compose_box_clear_hook(compose.clear_invites);
     compose_actions.register_compose_box_clear_hook(compose.clear_private_stream_alert);
     compose_actions.register_compose_box_clear_hook(compose.clear_preview_area);
-    compose_actions.register_compose_box_clear_hook(compose_pear.clear);
+    compose_actions.register_compose_box_clear_hook(legacy_agent_toggle.clear);
 
     compose_actions.register_compose_cancel_hook(abort_xhr);
-    compose_actions.register_compose_cancel_hook(compose_pear.clear);
+    compose_actions.register_compose_cancel_hook(legacy_agent_toggle.clear);
     compose_actions.register_compose_cancel_hook(() => {
         compose_call_session_manager.abandon_session("");
     });
@@ -460,10 +460,10 @@ export function initialize(): void {
         compose_call_ui.generate_and_insert_audio_or_video_call_link($(this), true);
     });
 
-    $("body").on("click", ".compose-pear-button", (e) => {
+    $("body").on("click", ".compose-legacy-button", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        compose_pear.toggle();
+        legacy_agent_toggle.toggle();
     });
 
     $("body").on("click", ".time_pick", function (this: HTMLElement, e) {

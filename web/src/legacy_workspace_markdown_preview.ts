@@ -7,7 +7,7 @@ import {gfm, gfmHtml} from "micromark-extension-gfm";
 // guard exists to protect edits; reading has no such constraint, so a
 // README with a centered logo should still read as a README.
 
-export type PearWorkspaceMarkdownPreviewOptions = {
+export type ArmadaWorkspaceMarkdownPreviewOptions = {
     // Path of the document being rendered, used to resolve relative URLs.
     path: string;
     // Maps a workspace-relative file path to a URL that serves its bytes,
@@ -40,9 +40,9 @@ function resolve_workspace_path(document_path: string, reference: string): strin
     return segments.length === 0 ? undefined : segments.join("/");
 }
 
-export function render_pear_workspace_markdown_preview(
+export function render_armada_workspace_markdown_preview(
     markdown: string,
-    options: PearWorkspaceMarkdownPreviewOptions,
+    options: ArmadaWorkspaceMarkdownPreviewOptions,
 ): DocumentFragment {
     const html = micromark(markdown.replace(frontmatter_pattern, ""), {
         allowDangerousHtml: true,
@@ -116,7 +116,7 @@ export function render_pear_workspace_markdown_preview(
 
     for (const table of fragment.querySelectorAll("table")) {
         const scroller = document.createElement("div");
-        scroller.className = "pear-workspace-preview__table";
+        scroller.className = "legacy-workspace-preview__table";
         table.replaceWith(scroller);
         scroller.append(table);
     }

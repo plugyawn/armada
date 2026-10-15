@@ -2,7 +2,7 @@ import $ from "jquery";
 
 import * as compose_actions from "./compose_actions.ts";
 import * as compose_ui from "./compose_ui.ts";
-import type {PearWorkspaceEditorSelectionContext} from "./legacy_workspace_editor_contract.ts";
+import type {ArmadaWorkspaceEditorSelectionContext} from "./legacy_workspace_editor_contract.ts";
 
 function inline_code(value: string): string {
     const longest_run = Math.max(0, ...[...value.matchAll(/`+/g)].map((match) => match[0].length));
@@ -10,8 +10,8 @@ function inline_code(value: string): string {
     return `${fence}${value}${fence}`;
 }
 
-export function format_pear_workspace_compose_context(
-    context: PearWorkspaceEditorSelectionContext,
+export function format_armada_workspace_compose_context(
+    context: ArmadaWorkspaceEditorSelectionContext,
 ): string {
     const lines =
         context.selectedText !== "" &&
@@ -30,12 +30,12 @@ export function format_pear_workspace_compose_context(
     return `Ask Pear about this workspace selection.\n\nPath: ${inline_code(context.path)}${lines}\n\n${fence}\n${context.selectedText}\n${fence}`;
 }
 
-export function fill_pear_compose_with_workspace_context(
-    context: PearWorkspaceEditorSelectionContext,
+export function fill_armada_compose_with_workspace_context(
+    context: ArmadaWorkspaceEditorSelectionContext,
 ): void {
     compose_actions.start({message_type: "stream", trigger: "workspace file context"});
     compose_ui.insert_syntax_and_focus(
-        format_pear_workspace_compose_context(context),
+        format_armada_workspace_compose_context(context),
         $<HTMLTextAreaElement>("textarea#compose-textarea"),
         "block",
         2,

@@ -9,15 +9,15 @@
        reply button and the new-message button. */
     align-items: stretch;
     padding: 3px;
-    border-top: 1px solid var(--pear-hairline);
-    background: var(--pear-surface-1);
+    border-top: 1px solid var(--legacy-hairline);
+    background: var(--legacy-surface-1);
 
     .compose_mobile_button {
         /* Keep the new message button sized to match
            adjacent buttons. */
         min-width: inherit;
         padding: 3px 10px;
-        border-radius: var(--pear-radius-px);
+        border-radius: var(--legacy-radius-px);
         outline: none;
         /* This is ugly, but necessary to use the
            text + for the compose button. An icon
@@ -57,7 +57,7 @@
         min-width: 0;
 
         /* Button-like styling */
-        border-radius: var(--pear-radius-px);
+        border-radius: var(--legacy-radius-px);
         background-color: var(
             --color-compose-collapsed-reply-button-area-background
         );
@@ -75,7 +75,7 @@
         }
 
         #left_bar_compose_reply_button_big,
-        #closed_compose_pear_button,
+        #closed_compose_armada_button,
         #new_conversation_button {
             /* Keep the new message button sized to match
                adjacent buttons. */
@@ -87,7 +87,7 @@
             border: none;
             color: var(--color-text-default);
             background: var(--color-compose-embedded-button-background);
-            border-radius: calc(var(--pear-radius-px) - 1px);
+            border-radius: calc(var(--legacy-radius-px) - 1px);
             line-height: var(--line-height-compose-buttons);
         }
 
@@ -127,12 +127,12 @@
             }
         }
 
-        #closed_compose_pear_button {
+        #closed_compose_armada_button {
             padding: 0 10px;
             margin: 1px;
             flex-shrink: 0;
             align-self: stretch;
-            font-family: var(--pear-font-pixel);
+            font-family: var(--legacy-font-pixel);
             font-weight: 400;
             color: var(--color-compose-embedded-button-text-color);
             border-left: 1px solid
@@ -178,7 +178,7 @@
         min-width: inherit;
         line-height: var(--line-height-compose-buttons);
         padding: 3px 10px;
-        border-radius: var(--pear-radius-px);
+        border-radius: var(--legacy-radius-px);
         outline: none;
         color: var(--color-text-default);
         background-color: var(--color-background-compose-new-message-button);
@@ -205,7 +205,7 @@
     background-color: var(--color-compose-box-background);
     padding: 4px 4px 6px;
     border: 1px solid var(--color-border-compose-content);
-    border-radius: var(--pear-radius-card) var(--pear-radius-card) 0 0;
+    border-radius: var(--legacy-radius-card) var(--legacy-radius-card) 0 0;
     box-shadow: 0 0 0 hsl(236deg 11% 28%);
     height: 100%;
     display: flex;
@@ -1068,7 +1068,7 @@
         width: 0;
         /* The progress updates seem to come every second or so,
         so this is the smoothest it can probably get. */
-        transition: width 1s var(--pear-ease); /* stylelint-disable-line plugin/no-low-performance-animation-properties */
+        transition: width 1s var(--legacy-ease); /* stylelint-disable-line plugin/no-low-performance-animation-properties */
         background: var(--color-background-main-view-banner-moving-bar);
         top: 0;
         bottom: 0;
@@ -1721,7 +1721,7 @@ textarea.compose-editor-textarea.sized-to-content {
         }
     }
 
-    .compose_pear_toolbar_button {
+    .compose_armada_toolbar_button {
         width: auto;
         min-width: 3.25em;
         padding: 0 0.55em;
@@ -1772,7 +1772,7 @@ textarea.compose-editor-textarea.sized-to-content {
     }
 }
 
-#compose.pear-compose-active #message-content-container {
+#compose.legacy-compose-active #message-content-container {
     border-color: var(--color-message-content-container-border-focus);
 }
 

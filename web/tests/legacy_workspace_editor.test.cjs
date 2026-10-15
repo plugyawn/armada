@@ -127,7 +127,7 @@ function harness() {
             throw new Error("chunk failed");
         }
         return {
-            async create_pear_workspace_markdown_editor(options) {
+            async create_armada_workspace_markdown_editor(options) {
                 const host = document.createElement("div");
                 host.className = "fake-rich";
                 options.root.replaceChildren(host);
@@ -199,7 +199,7 @@ function harness() {
         };
     }
 
-    const controller = workspace_editor.create_pear_workspace_editor({
+    const controller = workspace_editor.create_armada_workspace_editor({
         root,
         onUpdate(snapshot) {
             updates.push(snapshot);
@@ -223,7 +223,7 @@ function harness() {
             },
             async loadSourceEditor() {
                 source_loads += 1;
-                return {create_pear_workspace_source_editor: create_source};
+                return {create_armada_workspace_source_editor: create_source};
             },
             loadRichEditor: load_rich,
             scheduleSourceFlush: (callback) => scheduled(deferred, callback),

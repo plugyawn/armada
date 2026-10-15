@@ -24,69 +24,69 @@ import {
 } from "@codemirror/view";
 import {tags} from "@lezer/highlight";
 
-import type {PearWorkspaceSourceLanguage} from "./legacy_workspace_source_language.ts";
+import type {ArmadaWorkspaceSourceLanguage} from "./legacy_workspace_source_language.ts";
 
 export {
-    pear_workspace_source_language_for_path,
-    type PearWorkspaceSourceLanguage,
+    armada_workspace_source_language_for_path,
+    type ArmadaWorkspaceSourceLanguage,
 } from "./legacy_workspace_source_language.ts";
 
-export type PearWorkspaceSourceSelection = {
+export type ArmadaWorkspaceSourceSelection = {
     anchor: number;
     head: number;
 };
 
-export type PearWorkspaceSourceViewState = {
-    selection: PearWorkspaceSourceSelection;
+export type ArmadaWorkspaceSourceViewState = {
+    selection: ArmadaWorkspaceSourceSelection;
     scrollTop: number;
 };
 
-export type PearWorkspaceSourceSelectionContext = {
+export type ArmadaWorkspaceSourceSelectionContext = {
     selectedText: string;
     startLine: number;
     endLine: number;
 };
 
-export type PearWorkspaceSourceDirtyEvent = {
+export type ArmadaWorkspaceSourceDirtyEvent = {
     origin: "user";
-    selection: PearWorkspaceSourceSelection;
+    selection: ArmadaWorkspaceSourceSelection;
 };
 
-export type PearWorkspaceSourceLanguageError = {
-    language: Exclude<PearWorkspaceSourceLanguage, "plain">;
+export type ArmadaWorkspaceSourceLanguageError = {
+    language: Exclude<ArmadaWorkspaceSourceLanguage, "plain">;
     error: unknown;
 };
 
-export type PearWorkspaceSourceLanguageResult = "applied" | "failed" | "stale";
+export type ArmadaWorkspaceSourceLanguageResult = "applied" | "failed" | "stale";
 
-export type PearWorkspaceSourceEditorOptions = {
+export type ArmadaWorkspaceSourceEditorOptions = {
     root: HTMLElement;
     text: string;
-    selection?: PearWorkspaceSourceSelection;
+    selection?: ArmadaWorkspaceSourceSelection;
     scrollTop?: number;
     readOnly?: boolean;
-    language?: PearWorkspaceSourceLanguage;
+    language?: ArmadaWorkspaceSourceLanguage;
     ariaLabel?: string;
-    onDirty: (event: PearWorkspaceSourceDirtyEvent) => void;
-    onLanguageError?: (event: PearWorkspaceSourceLanguageError) => void;
+    onDirty: (event: ArmadaWorkspaceSourceDirtyEvent) => void;
+    onLanguageError?: (event: ArmadaWorkspaceSourceLanguageError) => void;
 };
 
-export type PearWorkspaceSourceHydration = {
+export type ArmadaWorkspaceSourceHydration = {
     text: string;
-    selection?: PearWorkspaceSourceSelection;
+    selection?: ArmadaWorkspaceSourceSelection;
     scrollTop?: number;
 };
 
-export type PearWorkspaceSourceEditor = {
-    languageReady: Promise<PearWorkspaceSourceLanguageResult>;
-    hydrate: (hydration: PearWorkspaceSourceHydration) => void;
+export type ArmadaWorkspaceSourceEditor = {
+    languageReady: Promise<ArmadaWorkspaceSourceLanguageResult>;
+    hydrate: (hydration: ArmadaWorkspaceSourceHydration) => void;
     setReadOnly: (read_only: boolean) => void;
     setLanguage: (
-        language: PearWorkspaceSourceLanguage,
-    ) => Promise<PearWorkspaceSourceLanguageResult>;
+        language: ArmadaWorkspaceSourceLanguage,
+    ) => Promise<ArmadaWorkspaceSourceLanguageResult>;
     getText: () => string;
-    getViewState: () => PearWorkspaceSourceViewState;
-    getSelectionContext: () => PearWorkspaceSourceSelectionContext;
+    getViewState: () => ArmadaWorkspaceSourceViewState;
+    getSelectionContext: () => ArmadaWorkspaceSourceSelectionContext;
     focus: () => void;
     hasFocus: () => boolean;
     destroy: () => void;
@@ -97,7 +97,7 @@ type TransactionOrigin = "hydrate" | "user";
 const transaction_origin = Annotation.define<TransactionOrigin>();
 
 const language_loaders: Record<
-    Exclude<PearWorkspaceSourceLanguage, "plain">,
+    Exclude<ArmadaWorkspaceSourceLanguage, "plain">,
     () => Promise<Extension>
 > = {
     async markdown() {
@@ -143,17 +143,17 @@ const editor_theme = EditorView.theme({
     },
 });
 
-const pear_highlight_style = HighlightStyle.define([
-    {tag: tags.heading, color: "var(--pear-ink-1)", fontWeight: "700"},
-    {tag: [tags.link, tags.url], color: "var(--pear-accent-ink)", textDecoration: "underline"},
-    {tag: [tags.comment, tags.meta], color: "var(--pear-ink-3)", fontStyle: "italic"},
-    {tag: [tags.keyword, tags.operatorKeyword], color: "var(--pear-accent-ink)"},
-    {tag: [tags.string, tags.special(tags.string)], color: "var(--pear-ink-2)"},
-    {tag: [tags.number, tags.bool, tags.null], color: "var(--pear-accent-ink)"},
-    {tag: [tags.typeName, tags.className, tags.namespace], color: "var(--pear-ink-1)"},
-    {tag: [tags.variableName, tags.propertyName], color: "var(--pear-ink-1)"},
-    {tag: [tags.punctuation, tags.bracket], color: "var(--pear-ink-2)"},
-    {tag: tags.invalid, color: "var(--pear-danger)", textDecoration: "underline wavy"},
+const armada_highlight_style = HighlightStyle.define([
+    {tag: tags.heading, color: "var(--legacy-ink-1)", fontWeight: "700"},
+    {tag: [tags.link, tags.url], color: "var(--legacy-accent-ink)", textDecoration: "underline"},
+    {tag: [tags.comment, tags.meta], color: "var(--legacy-ink-3)", fontStyle: "italic"},
+    {tag: [tags.keyword, tags.operatorKeyword], color: "var(--legacy-accent-ink)"},
+    {tag: [tags.string, tags.special(tags.string)], color: "var(--legacy-ink-2)"},
+    {tag: [tags.number, tags.bool, tags.null], color: "var(--legacy-accent-ink)"},
+    {tag: [tags.typeName, tags.className, tags.namespace], color: "var(--legacy-ink-1)"},
+    {tag: [tags.variableName, tags.propertyName], color: "var(--legacy-ink-1)"},
+    {tag: [tags.punctuation, tags.bracket], color: "var(--legacy-ink-2)"},
+    {tag: tags.invalid, color: "var(--legacy-danger)", textDecoration: "underline wavy"},
 ]);
 
 function normalize_text(text: string): string {
@@ -172,9 +172,9 @@ function clamp_position(position: number, document_length: number): number {
 }
 
 function clamp_selection(
-    selection: PearWorkspaceSourceSelection,
+    selection: ArmadaWorkspaceSourceSelection,
     document_length: number,
-): PearWorkspaceSourceSelection {
+): ArmadaWorkspaceSourceSelection {
     return {
         anchor: clamp_position(selection.anchor, document_length),
         head: clamp_position(selection.head, document_length),
@@ -231,9 +231,9 @@ function extension_for_read_only(read_only: boolean): Extension {
     return [EditorState.readOnly.of(read_only), EditorView.editable.of(!read_only)];
 }
 
-export function create_pear_workspace_source_editor(
-    options: PearWorkspaceSourceEditorOptions,
-): PearWorkspaceSourceEditor {
+export function create_armada_workspace_source_editor(
+    options: ArmadaWorkspaceSourceEditorOptions,
+): ArmadaWorkspaceSourceEditor {
     const language_compartment = new Compartment();
     const read_only_compartment = new Compartment();
     const history_compartment = new Compartment();
@@ -284,7 +284,7 @@ export function create_pear_workspace_source_editor(
             dropCursor(),
             EditorState.allowMultipleSelections.of(true),
             indentOnInput(),
-            syntaxHighlighting(pear_highlight_style, {fallback: true}),
+            syntaxHighlighting(armada_highlight_style, {fallback: true}),
             bracketMatching(),
             closeBrackets(),
             autocompletion(),
@@ -320,8 +320,8 @@ export function create_pear_workspace_source_editor(
     }
 
     async function set_language(
-        language: PearWorkspaceSourceLanguage,
-    ): Promise<PearWorkspaceSourceLanguageResult> {
+        language: ArmadaWorkspaceSourceLanguage,
+    ): Promise<ArmadaWorkspaceSourceLanguageResult> {
         assert_live();
         language_generation += 1;
         const generation = language_generation;
@@ -394,7 +394,7 @@ export function create_pear_workspace_source_editor(
                 view.state.doc.toString(),
             );
         },
-        getViewState(): PearWorkspaceSourceViewState {
+        getViewState(): ArmadaWorkspaceSourceViewState {
             assert_live();
             const selection = view.state.selection.main;
             return {
@@ -402,7 +402,7 @@ export function create_pear_workspace_source_editor(
                 scrollTop: view.scrollDOM.scrollTop,
             };
         },
-        getSelectionContext(): PearWorkspaceSourceSelectionContext {
+        getSelectionContext(): ArmadaWorkspaceSourceSelectionContext {
             assert_live();
             const selection = view.state.selection.main;
             const from = Math.min(selection.anchor, selection.head);

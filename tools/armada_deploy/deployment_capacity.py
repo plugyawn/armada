@@ -82,7 +82,7 @@ def estimate_capacity(
     *,
     remote_path: Path,
     git_common_dir: Path,
-    pear_skills_dir: Path,
+    armada_skills_dir: Path,
     snapshot_root: Path,
     asset_build_dir: Path,
     build_swap_bytes: int,
@@ -105,7 +105,7 @@ def estimate_capacity(
     snapshot_bytes = (
         source_bytes
         + allocated_bytes(git_common_dir)
-        + allocated_bytes(pear_skills_dir)
+        + allocated_bytes(armada_skills_dir)
         + generated_bytes
         + sum(allocated_bytes(path) for path in runtime_paths)
     )
@@ -128,7 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--remote-path", type=Path, required=True)
     parser.add_argument("--git-common-dir", type=Path, required=True)
-    parser.add_argument("--pear-skills-dir", type=Path, required=True)
+    parser.add_argument("--armada-skills-dir", type=Path, required=True)
     parser.add_argument("--snapshot-root", type=Path, required=True)
     parser.add_argument("--asset-build-dir", type=Path, required=True)
     parser.add_argument("--build-swap-bytes", type=int, default=0)
@@ -142,7 +142,7 @@ def main() -> None:
     estimate = estimate_capacity(
         remote_path=args.remote_path,
         git_common_dir=args.git_common_dir,
-        pear_skills_dir=args.pear_skills_dir,
+        armada_skills_dir=args.armada_skills_dir,
         snapshot_root=args.snapshot_root,
         asset_build_dir=args.asset_build_dir,
         build_swap_bytes=args.build_swap_bytes,

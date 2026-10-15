@@ -401,8 +401,8 @@ const BUILT_IN = {
         breaks: ["echo-semantics/steer.request-addresses-live-run"],
         edits: [
             {
-                find: /pear_followup: recipient\.type === "stream" && /g,
-                replace: "pear_followup: false && ",
+                find: /agent_followup: recipient\.type === "stream" && /g,
+                replace: "agent_followup: false && ",
                 min: 1,
             },
         ],

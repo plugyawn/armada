@@ -49,7 +49,7 @@ mock_esm("../src/ui_util", {
     },
 });
 
-const pear_run_trace = zrequire("legacy_run_trace");
+const legacy_run_trace = zrequire("legacy_run_trace");
 
 function reset() {
     requests.length = 0;
@@ -63,7 +63,7 @@ run_test("loads one shared root/child trace contract and coalesces in-flight eve
     const host = document.querySelector("#host");
     const status = document.querySelector("#status");
     let after_render_count = 0;
-    const controller = pear_run_trace.create_controller({
+    const controller = legacy_run_trace.create_controller({
         run_id: 7,
         thread_id: "child-2",
         host,
@@ -94,7 +94,7 @@ run_test("loads one shared root/child trace contract and coalesces in-flight eve
 run_test("destroy aborts the active request and rejects its stale success", () => {
     reset();
     const host = document.querySelector("#host");
-    const controller = pear_run_trace.create_controller({run_id: 9, host});
+    const controller = legacy_run_trace.create_controller({run_id: 9, host});
     controller.load();
     const request = requests[0];
     controller.destroy();
@@ -104,11 +104,11 @@ run_test("destroy aborts the active request and rejects its stale success", () =
 });
 
 run_test("pure trace selection helpers retain the root disclosure behavior", () => {
-    assert.equal(pear_run_trace.should_load_on_open_for_testing(true, false, false), false);
-    assert.equal(pear_run_trace.should_load_on_open_for_testing(true, true, false), true);
-    assert.equal(pear_run_trace.event_should_load_for_testing(false), false);
+    assert.equal(legacy_run_trace.should_load_on_open_for_testing(true, false, false), false);
+    assert.equal(legacy_run_trace.should_load_on_open_for_testing(true, true, false), true);
+    assert.equal(legacy_run_trace.event_should_load_for_testing(false), false);
     assert.equal(
-        pear_run_trace.duplicate_tail_count_for_testing(["P:old", "P:answer"], ["P:answer"]),
+        legacy_run_trace.duplicate_tail_count_for_testing(["P:old", "P:answer"], ["P:answer"]),
         1,
     );
 });

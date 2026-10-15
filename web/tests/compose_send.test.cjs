@@ -72,7 +72,7 @@ run_test("build_message_data resolves a threaded stream recipient", () => {
         recipient: {type: "stream", stream_id: 17, topic: "design"},
         content: "A canonical reply",
         draft_id: "draft-2",
-        pear_followup: true,
+        agent_followup: true,
         thread_root_message_id: 901,
     });
     assert.deepEqual(request, {
@@ -84,7 +84,7 @@ run_test("build_message_data resolves a threaded stream recipient", () => {
         to: "[17]",
         content: "A canonical reply",
         draft_id: "draft-2",
-        pear_followup: "true",
+        agent_followup: "true",
         thread_root_message_id: 901,
     });
 });

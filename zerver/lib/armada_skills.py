@@ -14,8 +14,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-PEAR_MANAGED_SKILLS_MANIFEST = ".pear-managed-skills.json"
-PEAR_MANAGED_SKILL_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+ARMADA_MANAGED_SKILLS_MANIFEST = ".armada-managed-skills.json"
+ARMADA_MANAGED_SKILL_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
 def _read_managed_skills_manifest(manifest_path: Path) -> set[str]:
@@ -33,7 +33,7 @@ def _read_managed_skills_manifest(manifest_path: Path) -> set[str]:
         raise OSError("Pear managed-skills manifest has an unsupported format.")
     raw_skills = manifest.get("skills")
     if not isinstance(raw_skills, list) or any(
-        not isinstance(name, str) or PEAR_MANAGED_SKILL_NAME_PATTERN.fullmatch(name) is None
+        not isinstance(name, str) or ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(name) is None
         for name in raw_skills
     ):
         raise OSError("Pear managed-skills manifest contains an invalid skill name.")
@@ -49,7 +49,7 @@ def _remove_managed_skill_path(path: Path) -> None:
 
 def _replace_managed_skill(source: Path, destination: Path) -> None:
     skills_home = destination.parent
-    temporary = Path(tempfile.mkdtemp(prefix=f".pear-skill-{destination.name}-", dir=skills_home))
+    temporary = Path(tempfile.mkdtemp(prefix=f".armada-skill-{destination.name}-", dir=skills_home))
     backup: Path | None = None
     try:
         shutil.copytree(
@@ -60,7 +60,7 @@ def _replace_managed_skill(source: Path, destination: Path) -> None:
         )
         if destination.exists() or destination.is_symlink():
             backup = Path(
-                tempfile.mkdtemp(prefix=f".pear-old-skill-{destination.name}-", dir=skills_home)
+                tempfile.mkdtemp(prefix=f".armada-old-skill-{destination.name}-", dir=skills_home)
             )
             backup.rmdir()
             os.replace(destination, backup)
@@ -82,7 +82,7 @@ def _replace_managed_skill(source: Path, destination: Path) -> None:
 
 def _write_managed_skills_manifest(manifest_path: Path, skills: list[str]) -> None:
     descriptor, temporary_name = tempfile.mkstemp(
-        prefix=".pear-managed-skills-",
+        prefix=".armada-managed-skills-",
         dir=manifest_path.parent,
         text=True,
     )
@@ -99,19 +99,19 @@ def _write_managed_skills_manifest(manifest_path: Path, skills: list[str]) -> No
         temporary.unlink(missing_ok=True)
 
 
-def reconcile_pear_codex_skills(source_dir: Path, codex_home: str | Path) -> list[str]:
+def reconcile_armada_codex_skills(source_dir: Path, codex_home: str | Path) -> list[str]:
     if not source_dir.is_dir():
         raise OSError("Pear skills source directory is unavailable.")
 
     skills_home = Path(codex_home).expanduser() / "skills"
     skills_home.mkdir(parents=True, exist_ok=True)
-    manifest_path = skills_home / PEAR_MANAGED_SKILLS_MANIFEST
+    manifest_path = skills_home / ARMADA_MANAGED_SKILLS_MANIFEST
     previously_managed = _read_managed_skills_manifest(manifest_path)
     source_skills: list[tuple[str, Path]] = []
     for source_skill_dir in sorted(source_dir.iterdir(), key=lambda path: path.name):
         if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
             continue
-        if PEAR_MANAGED_SKILL_NAME_PATTERN.fullmatch(source_skill_dir.name) is None:
+        if ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(source_skill_dir.name) is None:
             raise OSError("Pear skills source contains an invalid skill directory name.")
         source_skills.append((source_skill_dir.name, source_skill_dir))
 

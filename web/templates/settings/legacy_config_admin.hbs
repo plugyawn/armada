@@ -1,27 +1,27 @@
-<div id="admin-pear-config" class="settings-subsection-parent">
+<div id="admin-legacy-config" class="settings-subsection-parent">
     <div class="settings-section-title">{{t "Pear pair-programming" }}</div>
-    <div id="pear-config-status" class="alert-notification"></div>
+    <div id="legacy-config-status" class="alert-notification"></div>
     <div class="input-group">
         <label>{{t "Status" }}</label>
-        <div id="pear-config-readiness">{{t "Loading…" }}</div>
-        <ul id="pear-config-setup-steps" class="settings-choice-description"></ul>
-        <div id="pear-config-runtime-login" class="settings-choice-description"></div>
+        <div id="legacy-config-readiness">{{t "Loading…" }}</div>
+        <ul id="legacy-config-setup-steps" class="settings-choice-description"></ul>
+        <div id="legacy-config-runtime-login" class="settings-choice-description"></div>
     </div>
     <div class="input-group">
-        <label for="select-pear-bot">{{t "Selected Pear bot" }}</label>
-        <select id="select-pear-bot" class="setting-widget prop-element" disabled>
+        <label for="select-legacy-bot">{{t "Selected Pear bot" }}</label>
+        <select id="select-legacy-bot" class="setting-widget prop-element" disabled>
             <option value="">{{t "No Pear bot configured" }}</option>
         </select>
     </div>
     <div class="input-group">
         {{> ../components/action_button
-          id="provision-pear-bot"
+          id="provision-legacy-bot"
           label=(t "Provision Pear bot")
           variant="solid"
           intent="brand"
           }}
         {{> ../components/action_button
-          id="save-pear-bot-selection"
+          id="save-legacy-bot-selection"
           label=(t "Save selected bot")
           variant="subtle"
           intent="brand"

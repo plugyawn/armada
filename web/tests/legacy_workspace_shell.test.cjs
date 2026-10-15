@@ -52,9 +52,9 @@ function descriptor(workspace_id, revision = 1, overrides = {}) {
     return {
         uuid: workspace_id,
         display_root: "Scratch workspace",
-        stream: "pear",
+        stream: "armada",
         topic: "scratch",
-        branch: "pear-main",
+        branch: "armada-main",
         head: "abcdef1234567890",
         dirty: false,
         dirty_count: 0,
@@ -215,7 +215,7 @@ function harness(workspace_id, initial_room = "files") {
         return state;
     }
 
-    const controller = workspace_shell.create_pear_workspace_shell({
+    const controller = workspace_shell.create_armada_workspace_shell({
         root,
         workspaceId: workspace_id,
         initialRoom: initial_room,
@@ -247,7 +247,7 @@ function harness(workspace_id, initial_room = "files") {
             createFiles: create_files,
             async loadComposeIntegration() {
                 return {
-                    fill_pear_compose_with_workspace_context(context) {
+                    fill_armada_compose_with_workspace_context(context) {
                         compose_contexts.push(context);
                     },
                 };
@@ -308,11 +308,11 @@ run_test("README and Files rooms share one editor and restore the last working f
     await Promise.resolve();
     assert.equal(test.controller.getDebugState().room, "readme");
     assert.equal(test.controller.getDebugState().activePath, "README.md");
-    assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.room, "readme");
+    assert.equal(test.root.querySelector(".legacy-workspace-shell").dataset.room, "readme");
     assert.equal(test.editors.length, 1, "room changes keep the editor session warm");
     assert.equal(test.editors[0].opens.at(-1).preferredMode, "source");
     assert.equal(
-        new URL(window.location.href).searchParams.get("pear_mode"),
+        new URL(window.location.href).searchParams.get("armada_mode"),
         "source",
         "README first-open keeps the fast Source path authoritative",
     );
@@ -331,7 +331,7 @@ run_test("README room defaults to Source but honors an explicit Rich URL mode", 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=readme&pear_workspace=workspace-readme-mode&pear_mode=rich",
+        "/?armada_view=readme&armada_workspace=workspace-readme-mode&armada_mode=rich",
     );
     const test = harness("workspace-readme-mode", "readme");
     const readme = entry("README.md");
@@ -363,7 +363,7 @@ run_test("README room offers an intentional empty state", async () => {
     test.send_tree(0, current.root, []);
     const empty_state = test.root.querySelector("[data-role='readme-empty']");
     assert.equal(empty_state.hidden, false);
-    assert.equal(test.root.querySelector(".pear-workspace-shell").dataset.readmeState, "absent");
+    assert.equal(test.root.querySelector(".legacy-workspace-shell").dataset.readmeState, "absent");
 
     test.click(empty_state.querySelector("[data-action='create-readme']"));
     assert.equal(test.file_controllers[0].readmeCreates, 1);
@@ -410,10 +410,10 @@ run_test("Rich failures are explained beside a retryable mode control", async ()
     editor_root.replaceChildren();
     test.editors[0].update({richModeLoading: true});
     assert.equal(editor_root.getAttribute("aria-busy"), "true");
-    assert.ok(editor_root.querySelector(":scope > .pear-workspace-rich-loading") !== null);
+    assert.ok(editor_root.querySelector(":scope > .legacy-workspace-rich-loading") !== null);
     test.editors[0].update({richModeLoading: false});
     assert.equal(editor_root.getAttribute("aria-busy"), "false");
-    assert.equal(editor_root.querySelector(":scope > .pear-workspace-rich-loading"), null);
+    assert.equal(editor_root.querySelector(":scope > .legacy-workspace-rich-loading"), null);
 
     test.editors[0].update({
         richModeIssue: {
@@ -454,7 +454,7 @@ run_test("Ask Pear fills the existing compose with active file context", async (
     test.send_tree(0, current.root, [entry("README.md")]);
     test.click(test.root.querySelector("[data-entry-id='r1:README.md']"));
 
-    const button = test.root.querySelector("[data-action='ask-pear']");
+    const button = test.root.querySelector("[data-action='ask-armada']");
     assert.equal(button.hidden, false);
     test.click(button);
     await Promise.resolve();
@@ -499,7 +499,7 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=files&pear_workspace=workspace-location&pear_path=A.md&pear_mode=rich",
+        "/?armada_view=files&armada_workspace=workspace-location&armada_path=A.md&armada_mode=rich",
     );
     const test = harness("workspace-location");
     const a = entry("A.md");
@@ -516,13 +516,13 @@ run_test("URL path and mode follow navigation and popstate without remounting", 
 
     test.click(test.root.querySelector("[data-entry-id='r1:B.md']"));
     const location = new URL(window.location.href);
-    assert.equal(location.searchParams.get("pear_path"), "B.md");
-    assert.equal(location.searchParams.get("pear_mode"), "source");
+    assert.equal(location.searchParams.get("armada_path"), "B.md");
+    assert.equal(location.searchParams.get("armada_mode"), "source");
 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=files&pear_workspace=workspace-location&pear_path=A.md&pear_mode=source",
+        "/?armada_view=files&armada_workspace=workspace-location&armada_path=A.md&armada_mode=source",
     );
     window.dispatchEvent(new window.PopStateEvent("popstate"));
     await Promise.resolve();
@@ -576,9 +576,9 @@ run_test(
 
         test.click(test.root.querySelector("[data-entry-id='r1:A.md']"));
         const file_tab = test.root.querySelector("[data-tab-path='A.md']");
-        assert.equal(file_tab.classList.contains("pear-workspace-file-tab"), true);
+        assert.equal(file_tab.classList.contains("legacy-workspace-file-tab"), true);
         assert.equal(
-            file_tab.classList.contains("pear-workspace-tab"),
+            file_tab.classList.contains("legacy-workspace-tab"),
             false,
             "file tabs must not collide with the top-level Chat/Workspace delegation",
         );
@@ -692,7 +692,7 @@ run_test("file tabs, mobile drawer, and Escape preserve focus and unsaved work",
         }),
     );
     assert.equal(
-        test.root.querySelector("#pear-workspace-explorer").contains(document.activeElement),
+        test.root.querySelector("#legacy-workspace-explorer").contains(document.activeElement),
         true,
     );
     assert.notEqual(document.activeElement, test.root.querySelector("[data-role='search-input']"));
@@ -790,7 +790,7 @@ run_test("quick-open searches the complete workspace and breadcrumbs reveal fold
         new window.KeyboardEvent("keydown", {key: "Enter", bubbles: true, cancelable: true}),
     );
     assert.equal(test.controller.getDebugState().activePath, "docs/guide.md");
-    assert.equal(document.activeElement.id, "pear-workspace-document-panel");
+    assert.equal(document.activeElement.id, "legacy-workspace-document-panel");
     assert.equal(input.placeholder, "Filter files");
 
     return_focus.focus();
@@ -912,20 +912,20 @@ run_test("a pushed Workspace revision refreshes only its mounted shell once", as
     test.send_descriptor(first);
     test.send_tree(0, first.root, []);
 
-    workspace_events.apply_pear_workspace_changed_event({
-        type: "pear_workspace_changed",
+    workspace_events.apply_armada_workspace_changed_event({
+        type: "workspace_changed",
         workspace_id: "another-workspace",
         revision: 2,
     });
     assert.equal(test.refreshes.length, 0);
 
     const event = {
-        type: "pear_workspace_changed",
+        type: "workspace_changed",
         workspace_id: "workspace-push",
         revision: 2,
     };
-    workspace_events.apply_pear_workspace_changed_event(event);
-    workspace_events.apply_pear_workspace_changed_event(event);
+    workspace_events.apply_armada_workspace_changed_event(event);
+    workspace_events.apply_armada_workspace_changed_event(event);
     assert.equal(test.refreshes.length, 1, "duplicate revision events must not restart refresh");
     assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, true);
 
@@ -935,7 +935,7 @@ run_test("a pushed Workspace revision refreshes only its mounted shell once", as
     assert.equal(test.file_controllers[0].contexts.at(-1).authorityStale, false);
 
     await test.controller.destroy();
-    workspace_events.apply_pear_workspace_changed_event({...event, revision: 3});
+    workspace_events.apply_armada_workspace_changed_event({...event, revision: 3});
     assert.equal(test.refreshes.length, 1, "destroy must unsubscribe the shell");
     test.root.remove();
 });

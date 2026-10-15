@@ -41,7 +41,7 @@ def materialize_generated_emoji(
             "generated emoji link must target /srv/zulip-emoji-cache/<build>/static"
         )
 
-    temporary = Path(tempfile.mkdtemp(prefix=".pear-emoji-", dir=emoji_link.parent))
+    temporary = Path(tempfile.mkdtemp(prefix=".armada-emoji-", dir=emoji_link.parent))
     shutil.rmtree(temporary)
     try:
         # The cache includes aliases as symlinks.  Materialize every one here

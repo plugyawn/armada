@@ -13,7 +13,7 @@ export function parts_from_html(html) {
     const text_of = (element) => element.textContent.replaceAll(/\s+/g, " ").trim();
     const is_block = (element) =>
         element.matches(
-            "div.codehilite, pre, table, div.spoiler-block, div.message_inline_image, div.message_embed, div.message_inline_video, div.youtube-video, div.pear-diff, div.inline-preview-twitter",
+            "div.codehilite, pre, table, div.spoiler-block, div.message_inline_image, div.message_embed, div.message_inline_video, div.youtube-video, div.legacy-diff, div.inline-preview-twitter",
         ) ||
         (element.matches("p") &&
             element.children.length === 1 &&

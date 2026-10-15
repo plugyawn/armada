@@ -6,11 +6,11 @@ import * as state_data from "./state_data.ts";
 // The left sidebar's workspace marks (design §8.3): repo-bound
 // channels wear a quiet ◉ and worktree-backed topics wear the branch
 // glyph. Which channels are bound arrives with /register
-// (pear_project_stream_ids); which topics have worktrees is fetched
+// (repository_stream_ids); which topics have worktrees is fetched
 // lazily per channel, the first time its topic list renders.
 
 const workspace_topics_response_schema = z.object({
-    pear_workspace_topics: z.array(
+    armada_workspace_topics: z.array(
         z.object({
             topic: z.string(),
             branch: z.string(),
@@ -32,12 +32,12 @@ export function initialize(initial_hooks: Hooks): void {
     hooks = initial_hooks;
 }
 
-export function topic_has_pear_worktree(stream_id: number, topic_name: string): boolean {
+export function topic_has_armada_worktree(stream_id: number, topic_name: string): boolean {
     return workspace_topics_by_stream.get(stream_id)?.has(topic_name.toLowerCase()) ?? false;
 }
 
 export function ensure_workspace_topics(stream_id: number, stream_name: string): void {
-    if (!state_data.stream_has_pear_project(stream_id)) {
+    if (!state_data.stream_has_armada_project(stream_id)) {
         return;
     }
     if (workspace_topics_by_stream.has(stream_id) || inflight_stream_ids.has(stream_id)) {
@@ -45,7 +45,7 @@ export function ensure_workspace_topics(stream_id: number, stream_name: string):
     }
     inflight_stream_ids.add(stream_id);
     void channel.get({
-        url: "/json/pear/workspace-topics",
+        url: "/json/armada/workspace-topics",
         data: {stream: stream_name},
         success(raw_data) {
             inflight_stream_ids.delete(stream_id);
@@ -55,7 +55,7 @@ export function ensure_workspace_topics(stream_id: number, stream_name: string):
             }
             workspace_topics_by_stream.set(
                 stream_id,
-                new Set(parsed.data.pear_workspace_topics.map((row) => row.topic.toLowerCase())),
+                new Set(parsed.data.armada_workspace_topics.map((row) => row.topic.toLowerCase())),
             );
             hooks?.redraw_stream_topics(stream_id);
         },
@@ -69,7 +69,7 @@ export function ensure_workspace_topics(stream_id: number, stream_name: string):
 // patches its own view when the topic context it fetched anyway
 // reports a bound repository or a fresh worktree.
 export function note_pinned_repo_for_stream(stream_id: number): void {
-    if (state_data.add_pear_project_stream_id(stream_id)) {
+    if (state_data.add_armada_project_stream_id(stream_id)) {
         workspace_topics_by_stream.delete(stream_id);
         hooks?.redraw_stream_list();
     }

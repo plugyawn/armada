@@ -6,8 +6,8 @@ from unittest import mock
 from django.db import OperationalError, connection, connections, transaction
 from typing_extensions import override
 
-from zerver.lib.armada import PearWorkerLeaseLostError
-from zerver.lib.armada_worker import PearDatabaseWorkerRunStore
+from zerver.lib.armada import ArmadaWorkerLeaseLostError
+from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
 from zerver.lib.test_classes import ZulipTransactionTestCase
 from zerver.models import AgentRun, Workspace
 
@@ -28,7 +28,7 @@ class RacingThread(threading.Thread):
             connections.close_all()
 
 
-class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
+class ArmadaWorkerCompletionRaceTest(ZulipTransactionTestCase):
     @override
     def setUp(self) -> None:
         super().setUp()
@@ -48,10 +48,10 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         *,
         message_id: int,
         topic: str,
-    ) -> tuple[PearDatabaseWorkerRunStore, AgentRun]:
+    ) -> tuple[ArmadaDatabaseWorkerRunStore, AgentRun]:
         workspace = Workspace.objects.create(
             realm=self.owner.realm,
-            stream_name="pear-lock-race",
+            stream_name="armada-lock-race",
             topic_name=topic,
         )
         run = AgentRun.objects.create(
@@ -65,7 +65,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
             status=AgentRun.RUNNING,
             attempts=1,
         )
-        store = PearDatabaseWorkerRunStore()
+        store = ArmadaDatabaseWorkerRunStore()
         store._remember_claimed_attempt(run)
         self.created_workspace_ids.append(workspace.id)
         self.created_run_ids.append(run.id)
@@ -76,7 +76,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         self.assertFalse(thread.is_alive())
         self.assertIsNone(thread.error, repr(thread.error))
 
-    @mock.patch("zerver.lib.armada_worker.refresh_pear_workspace_after_terminal_run")
+    @mock.patch("zerver.lib.armada_worker.refresh_armada_workspace_after_terminal_run")
     def test_cancel_and_completion_have_one_terminal_winner(
         self,
         _refresh_workspace: mock.Mock,
@@ -112,7 +112,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
                 with connection.cursor() as cursor:
                     cursor.execute("SET LOCAL lock_timeout = '250ms'")
                 locked_run = AgentRun.objects.select_for_update().get(id=completion_run.id)
-                PearDatabaseWorkerRunStore().cancel_locked_run(
+                ArmadaDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
                     summary="Cancelled.",
                 )
@@ -125,7 +125,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         with transaction.atomic(savepoint=False):
             locked_run = AgentRun.objects.select_for_update().get(id=completion_run.id)
             self.assertFalse(
-                PearDatabaseWorkerRunStore().cancel_locked_run(
+                ArmadaDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
                     summary="Cancelled.",
                 )
@@ -141,7 +141,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         def hold_cancel_lock() -> None:
             with transaction.atomic(savepoint=False):
                 locked_run = AgentRun.objects.select_for_update().get(id=cancelled_run.id)
-                if not PearDatabaseWorkerRunStore().cancel_locked_run(
+                if not ArmadaDatabaseWorkerRunStore().cancel_locked_run(
                     locked_run,
                     summary="Cancelled.",
                 ):
@@ -168,7 +168,7 @@ class PearWorkerCompletionRaceTest(ZulipTransactionTestCase):
         self.assert_thread_finished(cancel_thread)
         entered_completion = False
         with (
-            self.assertRaisesRegex(PearWorkerLeaseLostError, "lost attempt 1"),
+            self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"),
             cancelled_store.worker_completion(
                 self.bot_handler,
                 cancelled_run.trigger_message_id,

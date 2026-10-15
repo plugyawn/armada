@@ -10,7 +10,7 @@ import * as zcommand from "./zcommand.ts";
 
 export type ComposeDestination = {
     recipient: compose_send.ResolvedComposeRecipient;
-    pear_followup?: boolean;
+    agent_followup?: boolean;
     thread_root_message_id?: number;
 };
 
@@ -128,9 +128,9 @@ export function create(adapter: ComposeControllerAdapter): ComposeController {
             recipient: destination.recipient,
             content: adapter.get_content(),
             draft_id,
-            ...(destination.pear_followup === undefined
+            ...(destination.agent_followup === undefined
                 ? {}
-                : {pear_followup: destination.pear_followup}),
+                : {agent_followup: destination.agent_followup}),
             ...(destination.thread_root_message_id === undefined
                 ? {}
                 : {thread_root_message_id: destination.thread_root_message_id}),

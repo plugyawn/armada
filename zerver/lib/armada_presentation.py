@@ -1,14 +1,14 @@
 import json
 from typing import Any
 
-from zerver.lib.armada import trim_pear_text
-from zerver.lib.armada_agent import PearGeminiInteractionsClient
+from zerver.lib.armada import trim_armada_text
+from zerver.lib.armada_agent import ArmadaGeminiInteractionsClient
 from zerver.models.bots import AgentRun, AgentRunEvent
 
-PEAR_PRESENTATION_OVERVIEW_MAX_CHARS = 48
+ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS = 48
 
 
-def pear_presentation_plan(run: AgentRun) -> list[dict[str, str]] | None:
+def armada_presentation_plan(run: AgentRun) -> list[dict[str, str]] | None:
     for event in run.events.filter(event_type="transcript", payload__kind="plan").order_by("-id")[
         :1
     ]:
@@ -29,22 +29,22 @@ def pear_presentation_plan(run: AgentRun) -> list[dict[str, str]] | None:
     return None
 
 
-def pear_presentation_current_step(plan: list[dict[str, str]]) -> str:
+def armada_presentation_current_step(plan: list[dict[str, str]]) -> str:
     current_step = next(
         (item for item in plan if item.get("status") == "in_progress"),
         next((item for item in plan if item.get("status") == "pending"), plan[-1]),
     )
-    return trim_pear_text(str(current_step["step"]), limit=120)
+    return trim_armada_text(str(current_step["step"]), limit=120)
 
 
-def pear_presentation_event(event: AgentRunEvent) -> dict[str, str] | None:
+def armada_presentation_event(event: AgentRunEvent) -> dict[str, str] | None:
     payload = event.payload if isinstance(event.payload, dict) else {}
     if event.event_type == "transcript":
         kind = payload.get("kind")
         if kind == "assistant":
             body = payload.get("body")
             return (
-                {"kind": "assistant_update", "text": trim_pear_text(body, limit=120)}
+                {"kind": "assistant_update", "text": trim_armada_text(body, limit=120)}
                 if isinstance(body, str) and body.strip()
                 else None
             )
@@ -62,7 +62,7 @@ def pear_presentation_event(event: AgentRunEvent) -> dict[str, str] | None:
     return None
 
 
-def build_pear_presentation_input(
+def build_armada_presentation_input(
     *,
     plan: list[dict[str, str]],
     events: list[AgentRunEvent],
@@ -83,22 +83,22 @@ def build_pear_presentation_input(
     event_items = [
         item
         for event in events[latest_plan_index + 1 :]
-        if (item := pear_presentation_event(event))
+        if (item := armada_presentation_event(event))
     ]
     bounded_events = [
-        {"kind": item["kind"], "text": trim_pear_text(item["text"], limit=120)}
+        {"kind": item["kind"], "text": trim_armada_text(item["text"], limit=120)}
         for item in event_items[-4:]
     ]
     return json.dumps(
         {
-            "current_step": pear_presentation_current_step(plan),
+            "current_step": armada_presentation_current_step(plan),
             "recent_events": bounded_events,
         },
         ensure_ascii=False,
     )
 
 
-def parse_pear_presentation_output(output: str) -> str:
+def parse_armada_presentation_output(output: str) -> str:
     try:
         payload: Any = json.loads(output)
     except json.JSONDecodeError:
@@ -112,14 +112,14 @@ def parse_pear_presentation_output(output: str) -> str:
     words = overview.split()
     if len(words) > 6:
         overview = f"{' '.join(words[:6])}…"
-    if len(overview) <= PEAR_PRESENTATION_OVERVIEW_MAX_CHARS:
+    if len(overview) <= ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS:
         return overview
-    clipped = overview[: PEAR_PRESENTATION_OVERVIEW_MAX_CHARS - 1].rsplit(" ", 1)[0]
-    return f"{clipped or overview[: PEAR_PRESENTATION_OVERVIEW_MAX_CHARS - 1]}…"
+    clipped = overview[: ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS - 1].rsplit(" ", 1)[0]
+    return f"{clipped or overview[: ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS - 1]}…"
 
 
-def request_pear_presentation_overview(
-    client: PearGeminiInteractionsClient,
+def request_armada_presentation_overview(
+    client: ArmadaGeminiInteractionsClient,
     *,
     model: str,
     thinking_level: str | None,
@@ -154,4 +154,4 @@ def request_pear_presentation_overview(
         },
         thinking_level=thinking_level,
     )
-    return parse_pear_presentation_output(output)
+    return parse_armada_presentation_output(output)

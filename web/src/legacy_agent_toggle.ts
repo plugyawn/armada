@@ -15,11 +15,11 @@ function is_stream_compose(): boolean {
 
 function update_controls(): void {
     const active = followup_enabled && is_stream_compose();
-    $("#compose").toggleClass("pear-compose-active", active);
+    $("#compose").toggleClass("legacy-compose-active", active);
     const label = active
         ? $t({defaultMessage: "Pear will respond to this message"})
         : $t({defaultMessage: "Ask Pear in this topic"});
-    $(".compose-pear-button")
+    $(".compose-legacy-button")
         .toggleClass("active", active)
         .attr("aria-pressed", active ? "true" : "false")
         .attr("aria-label", label)
@@ -58,7 +58,7 @@ export function enable(): void {
     if (!compose_state.composing() || !is_stream_compose()) {
         compose_actions.start({
             message_type: "stream",
-            trigger: "pear compose",
+            trigger: "armada compose",
             keep_composebox_empty: false,
         });
     }

@@ -20,7 +20,7 @@ type SendMessageData = {
     content: string;
     resend?: boolean;
     locally_echoed?: boolean;
-    pear_followup?: string;
+    agent_followup?: string;
 } & (
     | {
           type: "stream";

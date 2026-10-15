@@ -19,7 +19,7 @@ import * as drafts from "./drafts.ts";
 import * as dropdown_widget from "./dropdown_widget.ts";
 import type {DropdownWidget, Option} from "./dropdown_widget.ts";
 import {$t} from "./i18n.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import * as pm_conversations from "./pm_conversations.ts";
@@ -584,14 +584,17 @@ export let update_compose_area_placeholder_text = (): void => {
     // The steering state also wears a quiet accent hairline on the
     // compose box; keep it in lockstep with the placeholder.
     $("#compose").toggleClass(
-        "pear-steering",
+        "legacy-steering",
         message_type === "stream" &&
-            pear_run_state.topic_has_active_run(compose_state.stream_name(), compose_state.topic()),
+            legacy_run_state.topic_has_active_run(
+                compose_state.stream_name(),
+                compose_state.topic(),
+            ),
     );
     compose_ui.autosize_textarea($textarea);
 };
 
-pear_run_state.on_active_run_topic_changed(() => {
+legacy_run_state.on_active_run_topic_changed(() => {
     update_compose_area_placeholder_text();
 });
 

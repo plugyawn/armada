@@ -52,8 +52,8 @@ const root_entry = {
 
 const descriptor = {
     uuid: "12345678-1234-5678-1234-567812345678",
-    display_root: "pear-sandbox / first run",
-    stream: "pear-sandbox",
+    display_root: "armada-sandbox / first run",
+    stream: "armada-sandbox",
     topic: "first run",
     branch: "first-run",
     head: "abc123",
@@ -116,11 +116,11 @@ function last_request() {
 run_test("descriptor parsing is strict and returns only the resource", () => {
     requests = [];
     const result = callbacks();
-    workspace_api.get_pear_workspace(descriptor.uuid, result.callbacks);
+    workspace_api.get_armada_workspace(descriptor.uuid, result.callbacks);
     const request = last_request();
     assert.equal(request.method, "get");
-    assert.equal(request.options.url, `/json/pear/workspaces/${descriptor.uuid}`);
-    request.options.success({pear_workspace: descriptor});
+    assert.equal(request.options.url, `/json/armada/workspaces/${descriptor.uuid}`);
+    request.options.success({armada_workspace: descriptor});
     assert.deepEqual(result.successes, [descriptor]);
     assert.deepEqual(result.errors, []);
 
@@ -128,17 +128,17 @@ run_test("descriptor parsing is strict and returns only the resource", () => {
         ...descriptor,
         limits: {...descriptor.limits, raw_file_max_bytes: null},
     };
-    request.options.success({pear_workspace: streamed_raw});
+    request.options.success({armada_workspace: streamed_raw});
     assert.deepEqual(result.successes.at(-1), streamed_raw);
 
-    request.options.success({pear_workspace: {...descriptor, workspace_revision: "wrong"}});
+    request.options.success({armada_workspace: {...descriptor, workspace_revision: "wrong"}});
     assert.equal(result.errors.at(-1).kind, "invalid_response");
 });
 
 run_test("tree and search serialize only present query parameters", () => {
     requests = [];
     const tree = callbacks();
-    workspace_api.get_pear_workspace_tree(
+    workspace_api.get_armada_workspace_tree(
         descriptor.uuid,
         {directoryId: root_entry.entry_id, pageSize: 200},
         tree.callbacks,
@@ -146,7 +146,7 @@ run_test("tree and search serialize only present query parameters", () => {
     let request = last_request();
     assert.deepEqual(request.options.data, {directory_id: root_entry.entry_id, page_size: 200});
     request.options.success({
-        pear_workspace_tree: {
+        armada_workspace_tree: {
             workspace_uuid: descriptor.uuid,
             workspace_revision: 7,
             directory: root_entry,
@@ -157,11 +157,11 @@ run_test("tree and search serialize only present query parameters", () => {
     assert.deepEqual(tree.successes[0].entries, [entry]);
 
     const search = callbacks();
-    workspace_api.search_pear_workspace(descriptor.uuid, "read", undefined, search.callbacks);
+    workspace_api.search_armada_workspace(descriptor.uuid, "read", undefined, search.callbacks);
     request = last_request();
     assert.deepEqual(request.options.data, {q: "read"});
     request.options.success({
-        pear_workspace_search: {
+        armada_workspace_search: {
             workspace_uuid: descriptor.uuid,
             workspace_revision: 7,
             query: "read",
@@ -174,14 +174,14 @@ run_test("tree and search serialize only present query parameters", () => {
 run_test("file GET and PUT preserve the identity and edit revision contract", () => {
     requests = [];
     const get = callbacks();
-    workspace_api.get_pear_workspace_file(descriptor.uuid, entry.entry_id, get.callbacks);
+    workspace_api.get_armada_workspace_file(descriptor.uuid, entry.entry_id, get.callbacks);
     let request = last_request();
     assert.deepEqual(request.options.data, {entry_id: entry.entry_id});
-    request.options.success({pear_workspace_file: file});
+    request.options.success({armada_workspace_file: file});
     assert.deepEqual(get.successes, [file]);
 
     const put = callbacks();
-    workspace_api.put_pear_workspace_file(
+    workspace_api.put_armada_workspace_file(
         descriptor.uuid,
         {
             entryId: entry.entry_id,
@@ -204,7 +204,7 @@ run_test("file GET and PUT preserve the identity and edit revision contract", ()
         edit_revision: 4,
     });
     request.options.success({
-        pear_workspace_file: {
+        armada_workspace_file: {
             ...file,
             workspace_revision: 8,
             entry_id: "new-revision-entry",
@@ -218,7 +218,7 @@ run_test("file GET and PUT preserve the identity and edit revision contract", ()
 run_test("typed conflicts and transport failures stay distinct", () => {
     requests = [];
     const conflict = callbacks();
-    workspace_api.put_pear_workspace_file(
+    workspace_api.put_armada_workspace_file(
         descriptor.uuid,
         {
             entryId: entry.entry_id,
@@ -246,7 +246,7 @@ run_test("typed conflicts and transport failures stay distinct", () => {
     assert.equal(conflict.errors[0].error.remote_file.entry_id, "remote-entry");
 
     const transport = callbacks();
-    workspace_api.get_pear_workspace(descriptor.uuid, transport.callbacks);
+    workspace_api.get_armada_workspace(descriptor.uuid, transport.callbacks);
     last_request().options.error({status: 503, statusText: "Unavailable", responseJSON: {}});
     assert.deepEqual(transport.errors, [{kind: "transport", status: 503, message: "Unavailable"}]);
 });
@@ -254,7 +254,7 @@ run_test("typed conflicts and transport failures stay distinct", () => {
 run_test("entry mutations preserve revision and path identity contracts", () => {
     requests = [];
     const created = callbacks();
-    workspace_api.create_pear_workspace_entry(
+    workspace_api.create_armada_workspace_entry(
         descriptor.uuid,
         {
             destinationPath: "notes/today.md",
@@ -266,7 +266,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
     );
     let request = last_request();
     assert.equal(request.method, "post");
-    assert.equal(request.options.url, `/json/pear/workspaces/${descriptor.uuid}/entries`);
+    assert.equal(request.options.url, `/json/armada/workspaces/${descriptor.uuid}/entries`);
     assert.deepEqual(request.options.data, {
         destination_path: "notes/today.md",
         kind: "file",
@@ -281,7 +281,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
         status: "untracked",
     };
     request.options.success({
-        pear_workspace_mutation: {
+        armada_workspace_mutation: {
             operation: "create",
             workspace_uuid: descriptor.uuid,
             workspace_revision: 8,
@@ -294,7 +294,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
     assert.equal(created.successes[0].entry.entry_id, "created-entry");
 
     const renamed = callbacks();
-    workspace_api.rename_pear_workspace_entry(
+    workspace_api.rename_armada_workspace_entry(
         descriptor.uuid,
         {
             entryId: created_entry.entry_id,
@@ -314,7 +314,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
     });
 
     const deleted = callbacks();
-    workspace_api.delete_pear_workspace_entry(
+    workspace_api.delete_armada_workspace_entry(
         descriptor.uuid,
         {
             entryId: "renamed-entry",
@@ -335,7 +335,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
         confirm_irreversible: true,
     });
     request.options.success({
-        pear_workspace_mutation: {
+        armada_workspace_mutation: {
             operation: "delete",
             workspace_uuid: descriptor.uuid,
             workspace_revision: 10,
@@ -351,7 +351,7 @@ run_test("entry mutations preserve revision and path identity contracts", () => 
 run_test("entry history serializes pagination and rejects malformed commits", () => {
     requests = [];
     const history = callbacks();
-    workspace_api.get_pear_workspace_history(
+    workspace_api.get_armada_workspace_history(
         descriptor.uuid,
         entry.entry_id,
         {cursor: "opaque-cursor", limit: 25},
@@ -359,14 +359,14 @@ run_test("entry history serializes pagination and rejects malformed commits", ()
     );
     const request = last_request();
     assert.equal(request.method, "get");
-    assert.equal(request.options.url, `/json/pear/workspaces/${descriptor.uuid}/history`);
+    assert.equal(request.options.url, `/json/armada/workspaces/${descriptor.uuid}/history`);
     assert.deepEqual(request.options.data, {
         entry_id: entry.entry_id,
         cursor: "opaque-cursor",
         limit: 25,
     });
     request.options.success({
-        pear_workspace_history: {
+        armada_workspace_history: {
             workspace_uuid: descriptor.uuid,
             workspace_revision: 7,
             entry,
@@ -384,7 +384,7 @@ run_test("entry history serializes pagination and rejects malformed commits", ()
     assert.equal(history.successes[0].commits[0].subject, "Document the workspace");
 
     request.options.success({
-        pear_workspace_history: {
+        armada_workspace_history: {
             workspace_uuid: descriptor.uuid,
             workspace_revision: 7,
             entry,
@@ -396,7 +396,7 @@ run_test("entry history serializes pagination and rejects malformed commits", ()
 });
 
 run_test("request guard aborts superseded work and rejects late attachment", () => {
-    const guard = workspace_api.create_pear_workspace_request_guard();
+    const guard = workspace_api.create_armada_workspace_request_guard();
     const first = {
         aborted: 0,
         abort() {
@@ -436,7 +436,7 @@ run_test("request guard aborts superseded work and rejects late attachment", () 
 
 run_test("raw URLs are encoded and opt into attachment disposition", () => {
     assert.equal(
-        workspace_api.pear_workspace_raw_url("workspace/with slash", "entry + slash/", true),
-        "/json/pear/workspaces/workspace%2Fwith%20slash/raw?entry_id=entry+%2B+slash%2F&download=true",
+        workspace_api.armada_workspace_raw_url("workspace/with slash", "entry + slash/", true),
+        "/json/armada/workspaces/workspace%2Fwith%20slash/raw?entry_id=entry+%2B+slash%2F&download=true",
     );
 });

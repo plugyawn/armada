@@ -5,46 +5,46 @@ const assert = require("node:assert/strict");
 const {clock, zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
-const pear_run_state = zrequire("legacy_run_state");
+const legacy_run_state = zrequire("legacy_run_state");
 
 function test(label, f) {
     run_test(label, () => {
-        pear_run_state.clear_for_testing();
+        legacy_run_state.clear_for_testing();
         clock.reset();
         try {
             f();
         } finally {
-            pear_run_state.clear_for_testing();
+            legacy_run_state.clear_for_testing();
         }
     });
 }
 
 test("set_active_run_result_messages tracks only active result messages", () => {
-    pear_run_state.set_active_run_result_messages([
+    legacy_run_state.set_active_run_result_messages([
         {status: "queued", result_message_id: 1},
         {status: "running", result_message_id: 2},
         {status: "done", result_message_id: 3},
         {status: "running", result_message_id: null},
     ]);
 
-    assert.ok(pear_run_state.is_active_run_result_message(1));
-    assert.ok(pear_run_state.is_active_run_result_message(2));
-    assert.ok(!pear_run_state.is_active_run_result_message(3));
+    assert.ok(legacy_run_state.is_active_run_result_message(1));
+    assert.ok(legacy_run_state.is_active_run_result_message(2));
+    assert.ok(!legacy_run_state.is_active_run_result_message(3));
 });
 
 test("ambient run ids are retained by result message", () => {
-    pear_run_state.set_active_run_result_messages([
+    legacy_run_state.set_active_run_result_messages([
         {id: 41, status: "done", ambient_triggered: true, result_message_id: 301},
         {id: 42, status: "done", ambient_triggered: false, result_message_id: 302},
     ]);
 
-    assert.equal(pear_run_state.get_ambient_run_id(301), 41);
-    assert.equal(pear_run_state.get_ambient_run_id(302), undefined);
+    assert.equal(legacy_run_state.get_ambient_run_id(301), 41);
+    assert.equal(legacy_run_state.get_ambient_run_id(302), undefined);
 
-    pear_run_state.set_active_run_result_messages([
+    legacy_run_state.set_active_run_result_messages([
         {id: 41, status: "done", ambient_triggered: false, result_message_id: 301},
     ]);
-    assert.equal(pear_run_state.get_ambient_run_id(301), undefined);
+    assert.equal(legacy_run_state.get_ambient_run_id(301), undefined);
 });
 
 test("agent snapshots hydrate once and unrelated push events preserve them", () => {
@@ -55,7 +55,7 @@ test("agent snapshots hydrate once and unrelated push events preserve them", () 
             status: "active",
         },
     ];
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 44,
             status: "running",
@@ -64,9 +64,9 @@ test("agent snapshots hydrate once and unrelated push events preserve them", () 
             agents,
         },
     ]);
-    assert.deepEqual(pear_run_state.get_run_view_by_id(44).agents, agents);
+    assert.deepEqual(legacy_run_state.get_run_view_by_id(44).agents, agents);
 
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 1,
         run_id: 44,
@@ -87,11 +87,11 @@ test("agent snapshots hydrate once and unrelated push events preserve them", () 
         date_created: 11,
         agent_thread_id: null,
     });
-    assert.deepEqual(pear_run_state.get_run_view_by_id(44).agents, agents);
+    assert.deepEqual(legacy_run_state.get_run_view_by_id(44).agents, agents);
 });
 
 test("native agent activity merges into an existing descriptor", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 46,
             status: "running",
@@ -108,7 +108,7 @@ test("native agent activity merges into an existing descriptor", () => {
         },
     ]);
 
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 1,
         run_id: 46,
@@ -134,7 +134,7 @@ test("native agent activity merges into an existing descriptor", () => {
         },
     });
 
-    assert.deepEqual(pear_run_state.get_run_view_by_id(46).agents, [
+    assert.deepEqual(legacy_run_state.get_run_view_by_id(46).agents, [
         {
             thread_id: "child-a",
             nickname: "Scout",
@@ -152,7 +152,7 @@ test("native agent activity never invents an unknown child descriptor", () => {
             status: "active",
         },
     ];
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 47,
             status: "running",
@@ -162,7 +162,7 @@ test("native agent activity never invents an unknown child descriptor", () => {
         },
     ]);
 
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 1,
         run_id: 47,
@@ -188,7 +188,7 @@ test("native agent activity never invents an unknown child descriptor", () => {
         },
     });
 
-    assert.deepEqual(pear_run_state.get_run_view_by_id(47).agents, agents);
+    assert.deepEqual(legacy_run_state.get_run_view_by_id(47).agents, agents);
 });
 
 test("native agent event identity reaches listeners with the refreshed snapshot", () => {
@@ -200,13 +200,13 @@ test("native agent event identity reaches listeners with the refreshed snapshot"
         },
     ];
     let observed;
-    const unsubscribe = pear_run_state.on_run_state_changed((run, event) => {
+    const unsubscribe = legacy_run_state.on_run_state_changed((run, event) => {
         if (event !== undefined) {
             observed = {run, event};
         }
     });
     try {
-        pear_run_state.apply_pear_run_event({
+        legacy_run_state.apply_armada_run_event({
             version: 1,
             sequence: 1,
             run_id: 45,
@@ -237,15 +237,17 @@ test("native agent event identity reaches listeners with the refreshed snapshot"
 
 test("done run clears active result message immediately", () => {
     const changes = [];
-    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
+    const unsubscribe = legacy_run_state.on_active_run_result_messages_changed((change) =>
         changes.push(change),
     );
     try {
-        pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 4}]);
-        assert.ok(pear_run_state.is_active_run_result_message(4));
+        legacy_run_state.set_active_run_result_messages([
+            {status: "running", result_message_id: 4},
+        ]);
+        assert.ok(legacy_run_state.is_active_run_result_message(4));
 
-        pear_run_state.set_active_run_result_messages([{status: "done", result_message_id: 4}]);
-        assert.ok(!pear_run_state.is_active_run_result_message(4));
+        legacy_run_state.set_active_run_result_messages([{status: "done", result_message_id: 4}]);
+        assert.ok(!legacy_run_state.is_active_run_result_message(4));
         assert.deepEqual(
             changes.map((change) => change.removed_message_ids),
             [[], [4]],
@@ -256,7 +258,7 @@ test("done run clears active result message immediately", () => {
 });
 
 test("topic reconciliation preserves active messages in other rendered topics", () => {
-    pear_run_state.set_active_run_result_messages(
+    legacy_run_state.set_active_run_result_messages(
         [
             {
                 id: 51,
@@ -269,7 +271,7 @@ test("topic reconciliation preserves active messages in other rendered topics", 
         ],
         {stream: "devel", topic: "alpha"},
     );
-    pear_run_state.set_active_run_result_messages(
+    legacy_run_state.set_active_run_result_messages(
         [
             {
                 id: 52,
@@ -283,18 +285,18 @@ test("topic reconciliation preserves active messages in other rendered topics", 
         {stream: "devel", topic: "beta"},
     );
 
-    pear_run_state.set_active_run_result_messages([], {
+    legacy_run_state.set_active_run_result_messages([], {
         stream: "devel",
         topic: "alpha",
         force_reconcile: true,
     });
 
-    assert.ok(!pear_run_state.is_active_run_result_message(501));
-    assert.ok(pear_run_state.is_active_run_result_message(502));
+    assert.ok(!legacy_run_state.is_active_run_result_message(501));
+    assert.ok(legacy_run_state.is_active_run_result_message(502));
 });
 
 test("result message rebind retires the previous active message", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 53,
             status: "running",
@@ -305,7 +307,7 @@ test("result message rebind retires the previous active message", () => {
             date_created: 100,
         },
     ]);
-    pear_run_state.set_active_run_result_messages(
+    legacy_run_state.set_active_run_result_messages(
         [
             {
                 id: 53,
@@ -320,11 +322,11 @@ test("result message rebind retires the previous active message", () => {
         {stream: "devel", topic: "rebind"},
     );
     const changes = [];
-    const unsubscribe = pear_run_state.on_active_run_result_messages_changed((change) =>
+    const unsubscribe = legacy_run_state.on_active_run_result_messages_changed((change) =>
         changes.push(change),
     );
     try {
-        pear_run_state.apply_pear_run_event({
+        legacy_run_state.apply_armada_run_event({
             version: 1,
             sequence: 1,
             run_id: 53,
@@ -345,12 +347,12 @@ test("result message rebind retires the previous active message", () => {
             date_created: 110,
         });
 
-        assert.ok(!pear_run_state.is_active_run_result_message(503));
-        assert.ok(pear_run_state.is_active_run_result_message(504));
-        assert.equal(pear_run_state.get_run_view(503), undefined);
-        assert.equal(pear_run_state.get_run_view(504).id, 53);
-        assert.equal(pear_run_state.get_ambient_run_id(503), undefined);
-        assert.equal(pear_run_state.get_ambient_run_id(504), 53);
+        assert.ok(!legacy_run_state.is_active_run_result_message(503));
+        assert.ok(legacy_run_state.is_active_run_result_message(504));
+        assert.equal(legacy_run_state.get_run_view(503), undefined);
+        assert.equal(legacy_run_state.get_run_view(504).id, 53);
+        assert.equal(legacy_run_state.get_ambient_run_id(503), undefined);
+        assert.equal(legacy_run_state.get_ambient_run_id(504), 53);
         assert.deepEqual(changes[0].removed_message_ids, [503]);
     } finally {
         unsubscribe();
@@ -358,10 +360,10 @@ test("result message rebind retires the previous active message", () => {
 });
 
 test("quiet active result message remains active until a terminal event", () => {
-    pear_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
+    legacy_run_state.set_active_run_result_messages([{status: "running", result_message_id: 6}]);
     clock.tick(60_000);
-    assert.ok(pear_run_state.is_active_run_result_message(6));
-    pear_run_state.apply_pear_run_event({
+    assert.ok(legacy_run_state.is_active_run_result_message(6));
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 10,
         run_id: 2,
@@ -381,8 +383,8 @@ test("quiet active result message remains active until a terminal event", () => 
         run_date_created: 100,
         date_created: 110,
     });
-    assert.ok(!pear_run_state.is_active_run_result_message(6));
-    assert.deepEqual(pear_run_state.get_run_footer(6), {
+    assert.ok(!legacy_run_state.is_active_run_result_message(6));
+    assert.deepEqual(legacy_run_state.get_run_footer(6), {
         status: "done",
         duration_seconds: 12.5,
         total_tokens: 1200,
@@ -392,7 +394,7 @@ test("quiet active result message remains active until a terminal event", () => 
 });
 
 test("settled footer retains the last non-empty step-bound overview", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 3,
             status: "running",
@@ -402,7 +404,7 @@ test("settled footer retains the last non-empty step-bound overview", () => {
             date_updated: 100,
         },
     ]);
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 11,
         run_id: 3,
@@ -422,7 +424,7 @@ test("settled footer retains the last non-empty step-bound overview", () => {
         run_date_created: 90,
         date_created: 105,
     });
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 12,
         run_id: 3,
@@ -443,7 +445,7 @@ test("settled footer retains the last non-empty step-bound overview", () => {
         date_created: 110,
     });
 
-    assert.deepEqual(pear_run_state.get_run_footer(7), {
+    assert.deepEqual(legacy_run_state.get_run_footer(7), {
         status: "done",
         duration_seconds: 5,
         total_tokens: 500,
@@ -453,7 +455,7 @@ test("settled footer retains the last non-empty step-bound overview", () => {
 });
 
 test("stale hydration cannot overwrite a newer push event", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 9,
             snapshot_sequence: 10,
@@ -466,7 +468,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
             date_updated: 100,
         },
     ]);
-    pear_run_state.set_active_run_result_messages([
+    legacy_run_state.set_active_run_result_messages([
         {
             id: 9,
             status: "running",
@@ -475,7 +477,7 @@ test("stale hydration cannot overwrite a newer push event", () => {
             date_updated: 100,
         },
     ]);
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 20,
         run_id: 9,
@@ -507,15 +509,15 @@ test("stale hydration cannot overwrite a newer push event", () => {
         date_created: 90,
         date_updated: 105,
     };
-    pear_run_state.remember_runs([stale_run]);
-    pear_run_state.set_active_run_result_messages([stale_run]);
+    legacy_run_state.remember_runs([stale_run]);
+    legacy_run_state.set_active_run_result_messages([stale_run]);
 
-    assert.equal(pear_run_state.get_run_view(90).status, "done");
-    assert.ok(!pear_run_state.is_active_run_result_message(90));
+    assert.equal(legacy_run_state.get_run_view(90).status, "done");
+    assert.ok(!legacy_run_state.is_active_run_result_message(90));
 });
 
 test("authoritative snapshot advances the event watermark", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 10,
             snapshot_sequence: 30,
@@ -529,7 +531,7 @@ test("authoritative snapshot advances the event watermark", () => {
         },
     ]);
 
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 29,
         run_id: 10,
@@ -550,9 +552,9 @@ test("authoritative snapshot advances the event watermark", () => {
         date_created: 290,
     });
 
-    assert.equal(pear_run_state.get_run_view(100).status, "done");
-    assert.ok(pear_run_state.event_is_latest(10, 30));
-    assert.ok(!pear_run_state.event_is_latest(10, 29));
+    assert.equal(legacy_run_state.get_run_view(100).status, "done");
+    assert.ok(legacy_run_state.event_is_latest(10, 30));
+    assert.ok(!legacy_run_state.event_is_latest(10, 29));
 });
 
 test("authoritative snapshot hydrates a newer agent graph despite an older heartbeat", () => {
@@ -561,7 +563,7 @@ test("authoritative snapshot hydrates a newer agent graph despite an older heart
         nickname: "Scout",
         status: "active",
     };
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 40,
         run_id: 11,
@@ -592,7 +594,7 @@ test("authoritative snapshot hydrates a newer agent graph despite an older heart
             status: "idle",
         },
     ];
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 11,
             snapshot_sequence: 40,
@@ -608,11 +610,11 @@ test("authoritative snapshot hydrates a newer agent graph despite an older heart
         },
     ]);
 
-    assert.deepEqual(pear_run_state.get_run_view_by_id(11).agents, authoritative_agents);
+    assert.deepEqual(legacy_run_state.get_run_view_by_id(11).agents, authoritative_agents);
 });
 
 test("typed assistant-visible push retires the placeholder immediately", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 12,
             status: "running",
@@ -622,9 +624,9 @@ test("typed assistant-visible push retires the placeholder immediately", () => {
             live: {has_visible_assistant_text: false, updated_at: 1},
         },
     ]);
-    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, false);
+    assert.equal(legacy_run_state.get_run_view(120).has_visible_assistant_text, false);
 
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 20,
         run_id: 12,
@@ -644,9 +646,9 @@ test("typed assistant-visible push retires the placeholder immediately", () => {
         run_date_created: 90,
         date_created: 200,
     });
-    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
+    assert.equal(legacy_run_state.get_run_view(120).has_visible_assistant_text, true);
 
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 12,
             status: "running",
@@ -656,12 +658,12 @@ test("typed assistant-visible push retires the placeholder immediately", () => {
             live: {has_visible_assistant_text: false, updated_at: 199},
         },
     ]);
-    assert.equal(pear_run_state.get_run_view(120).has_visible_assistant_text, true);
-    assert.equal(pear_run_state.get_run_view(120).updated_at, 200);
+    assert.equal(legacy_run_state.get_run_view(120).has_visible_assistant_text, true);
+    assert.equal(legacy_run_state.get_run_view(120).updated_at, 200);
 });
 
 test("plan updates clear overview copy from the previous step", () => {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 13,
             status: "running",
@@ -672,7 +674,7 @@ test("plan updates clear overview copy from the previous step", () => {
             date_updated: 100,
         },
     ]);
-    pear_run_state.apply_pear_run_event({
+    legacy_run_state.apply_armada_run_event({
         version: 1,
         sequence: 21,
         run_id: 13,
@@ -693,5 +695,5 @@ test("plan updates clear overview copy from the previous step", () => {
         date_created: 201,
     });
 
-    assert.equal(pear_run_state.get_run_view(130).overview, null);
+    assert.equal(legacy_run_state.get_run_view(130).overview, null);
 });

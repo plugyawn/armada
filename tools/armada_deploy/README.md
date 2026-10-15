@@ -1,12 +1,12 @@
 # Pear staging deployment
 
 This directory contains the reproducible path for hosting this checkout as a
-friends-only Zulip development server at `https://pear.backpropaganda.net`.
+friends-only Zulip development server at `https://armada.backpropaganda.net`.
 
 The deployment is intentionally a normal VM, not a tunnel:
 
 - DigitalOcean hosts an Ubuntu droplet.
-- GoDaddy points `pear.backpropaganda.net` at that droplet.
+- GoDaddy points `armada.backpropaganda.net` at that droplet.
 - Caddy terminates public HTTPS without an outer username/password prompt.
 - The current local checkout is synced to `/home/zulipdev/zulip`.
 - `tools/run-dev --production-assets` serves prebuilt, content-hashed assets
@@ -24,11 +24,11 @@ The scripts load exported environment variables and also load
   `DIGITAL_OCEAN_API`
 - GoDaddy key: `GODADDY_API_KEY` or `GODADDY_API_PROD_KEY`
 - GoDaddy secret: `GODADDY_API_SECRET` or `GODADDY_API_PROD_SECRET`
-- Gemini Interactions client: `PEAR_GEMINI_INTERACTIONS_API_KEY`,
+- Gemini Interactions client: `ARMADA_GEMINI_INTERACTIONS_API_KEY`,
   `GEMINI_API_KEY`, `GEMINI_KEY`, `GOOGLE_API_KEY`, or
   `GOOGLE_GENAI_API_KEY`
 
-Do not commit `env.local`, `output/pear-staging/`, or `.codex/auth.json`.
+Do not commit `env.local`, `output/armada-staging/`, or `.codex/auth.json`.
 
 ## Access boundary
 
@@ -38,7 +38,7 @@ username/password prompt. Anyone who discovers the URL can choose a listed
 development user, including an administrator, and the development API-key
 endpoint is also reachable.
 
-Keep only disposable scratch data on this instance. `PEAR_WORKER_TRUSTED_USER_IDS`
+Keep only disposable scratch data on this instance. `ARMADA_WORKER_TRUSTED_USER_IDS`
 can limit which selected Zulip identities may start runs, but it is not an
 authentication boundary while passwordless devlogin is public. Restore a real
 identity provider or an outer access layer before storing sensitive data or
@@ -53,10 +53,10 @@ python3 tools/armada_deploy/armada_do.py create
 ```
 
 This is idempotent. It reuses the existing droplet named
-`pear-backpropaganda` unless `--recreate` is passed. It writes:
+`armada-backpropaganda` unless `--recreate` is passed. It writes:
 
-- `output/pear-staging/server.json`
-- `output/pear-staging/ssh_config`
+- `output/armada-staging/server.json`
+- `output/armada-staging/ssh_config`
 
 ## Bootstrap, sync, and start services
 
@@ -71,16 +71,16 @@ auth, builds and validates production assets, creates/selects the embedded
 starts:
 
 - `armada-zulip-dev.service`
-- `pear-embedded-bots.service`
+- `armada-embedded-bots.service`
 - `armada-worker.service`
 - `armada-worker-1.service`
-- `pear-monitor-worker.service`
-- `pear-thumbnail.service`
+- `armada-monitor-worker.service`
+- `armada-thumbnail.service`
 - `caddy.service`
 
 The two Codex worker queues retain an unacknowledged RabbitMQ delivery while a
 turn is running. Bootstrap and guarded updates therefore install the vhost `/`
-policy `pear-worker-consumer-timeout` on `pear_worker` and `pear_worker_1`, with
+policy `armada-worker-consumer-timeout` on `armada_worker` and `armada_worker_1`, with
 a six-hour acknowledgement timeout, before either worker starts. The deploy
 then verifies that both queues are classic, durable, and effectively carry the
 policy. This policy is intentionally additive broker state: a code rollback
@@ -112,15 +112,15 @@ re-creates the embedded `Pear` bot.
 ## SSH
 
 ```bash
-ssh -F output/pear-staging/ssh_config pear-staging
-ssh -F output/pear-staging/ssh_config pear-staging-root
+ssh -F output/armada-staging/ssh_config armada-staging
+ssh -F output/armada-staging/ssh_config armada-staging-root
 ```
 
 Useful service checks:
 
 ```bash
-sudo systemctl status pear-zulip-dev pear-embedded-bots pear-worker pear-worker-1 caddy
-sudo journalctl -u pear-zulip-dev -u pear-embedded-bots -u pear-worker -u pear-worker-1 -f
+sudo systemctl status armada-zulip-dev armada-embedded-bots armada-worker armada-worker-1 caddy
+sudo journalctl -u armada-zulip-dev -u armada-embedded-bots -u armada-worker -u armada-worker-1 -f
 ```
 
 ## Re-sync after local edits
@@ -142,7 +142,7 @@ allowlist of server-only Pear and test changes instead reuses the already
 validated hashed graph; unknown paths fail closed to a rebuild. It then stops
 app ingress, drains and stops the queue workers, copies only regular single-link
 generated outputs into a root-owned frozen tree when rebuilding, and snapshots
-the drained source, prior assets, Git metadata, Pear skills, Caddy auth/config, `pear.env`,
+the drained source, prior assets, Git metadata, Pear skills, Caddy auth/config, `armada.env`,
 privileged helper, deployment record, wrapper, and systemd units. Privileged
 deployment managers, templates, and helper source are staged directly from the
 pinned local commit in a root-only directory; root never executes tooling from
@@ -152,7 +152,7 @@ services, verifies the
 backend tests, rejects webpack/autoreload processes and the legacy `/webpack/`
 route, checks live worker/queue health, and records the coordinated SHA,
 `asset_mode=production-hashed`, and exact `asset_source_zulip_sha` in root-owned
-`/var/lib/pear/deployed-sha`. A pre-snapshot failure restarts the untouched
+`/var/lib/armada/deployed-sha`. A pre-snapshot failure restarts the untouched
 services; a post-snapshot failure restores every covered domain before
 restarting the old services.
 

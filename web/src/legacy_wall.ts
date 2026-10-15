@@ -10,13 +10,16 @@
 import $ from "jquery";
 import * as z from "zod/mini";
 
-import render_pear_wall from "../templates/legacy_wall.hbs";
+import render_legacy_wall from "../templates/legacy_wall.hbs";
 
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
-import type {PearArtifactDocument, PearArtifactModule} from "./legacy_artifact.ts";
-import {send_pear_artifact_action} from "./legacy_artifact_actions.ts";
-import {mount_pear_artifact_lifecycle, unmount_pear_artifact} from "./legacy_artifact_lifecycle.ts";
+import type {ArmadaArtifactDocument, ArmadaArtifactModule} from "./legacy_artifact.ts";
+import {send_armada_artifact_action} from "./legacy_artifact_actions.ts";
+import {
+    mount_armada_artifact_lifecycle,
+    unmount_armada_artifact,
+} from "./legacy_artifact_lifecycle.ts";
 import * as narrow_state from "./narrow_state.ts";
 
 const monitor_schema = z.object({
@@ -31,37 +34,37 @@ const monitor_schema = z.object({
     last_error: z.string(),
     position: z.number(),
 });
-type PearMonitorPayload = z.infer<typeof monitor_schema>;
+type ArmadaMonitorPayload = z.infer<typeof monitor_schema>;
 
 const monitors_response_schema = z.object({
-    pear_monitors: z.array(monitor_schema),
+    armada_monitors: z.array(monitor_schema),
 });
 
 const POLL_MIN_MS = 5000;
 const POLL_MAX_MS = 30000;
 const CADENCE_PRESETS = [5, 20, 60, 300, 3600, 86400];
 
-let monitors: PearMonitorPayload[] = [];
+let monitors: ArmadaMonitorPayload[] = [];
 let poll_timer: ReturnType<typeof setTimeout> | undefined;
 let backoff_ms = 0;
 let last_render_signature = "";
 let last_context_key = "";
 const collapsed_ids = new Set<number>();
 const seen_versions = new Map<number, number>();
-let artifact_module: PearArtifactModule | undefined;
-let artifact_module_promise: Promise<PearArtifactModule> | undefined;
-const last_valid_artifacts = new Map<number, PearArtifactDocument>();
+let artifact_module: ArmadaArtifactModule | undefined;
+let artifact_module_promise: Promise<ArmadaArtifactModule> | undefined;
+const last_valid_artifacts = new Map<number, ArmadaArtifactDocument>();
 const rendered_versions = new Map<number, number>();
 
 type CachedMonitorArtifact = {
     version: number;
-    document_value: PearArtifactDocument | undefined;
+    document_value: ArmadaArtifactDocument | undefined;
 };
 
-class PearWallArtifactCache {
+class ArmadaWallArtifactCache {
     readonly #entries = new Map<number, CachedMonitorArtifact>();
 
-    resolve(monitor: PearMonitorPayload, module: PearArtifactModule): CachedMonitorArtifact {
+    resolve(monitor: ArmadaMonitorPayload, module: ArmadaArtifactModule): CachedMonitorArtifact {
         const cached = this.#entries.get(monitor.id);
         if (cached?.version === monitor.version) {
             return cached;
@@ -79,7 +82,7 @@ class PearWallArtifactCache {
         const serialized_document = JSON.stringify(raw_document);
         const entry = {
             version: monitor.version,
-            document_value: module.parse_pear_artifact(serialized_document),
+            document_value: module.parse_armada_artifact(serialized_document),
         };
         this.#entries.set(monitor.id, entry);
         return entry;
@@ -98,7 +101,7 @@ class PearWallArtifactCache {
     }
 }
 
-const parsed_artifacts = new PearWallArtifactCache();
+const parsed_artifacts = new ArmadaWallArtifactCache();
 
 function wall_context(): {stream: string; topic: string} | undefined {
     const stream = narrow_state.stream_name();
@@ -129,7 +132,7 @@ function render_context(): Record<string, unknown> {
         ask: monitor.ask,
         status: monitor.status,
         collapsed: collapsed_ids.has(monitor.id),
-        collapsed_class: collapsed_ids.has(monitor.id) ? "pear-wall-collapsed" : "",
+        collapsed_class: collapsed_ids.has(monitor.id) ? "legacy-wall-collapsed" : "",
         aria_expanded: collapsed_ids.has(monitor.id) ? "false" : "true",
         collapse_glyph: collapsed_ids.has(monitor.id) ? "▸" : "▾",
         is_provisioning: monitor.status === "provisioning",
@@ -152,11 +155,11 @@ function pulse_changed_blocks($wall: JQuery): void {
         const seen = seen_versions.get(monitor.id);
         if (seen !== undefined && seen !== monitor.version) {
             const $dot = $wall
-                .find(`.pear-wall-block[data-monitor-id="${monitor.id}"] .pear-wall-dot`)
-                .removeClass("pear-wall-dot-pulse");
+                .find(`.legacy-wall-block[data-monitor-id="${monitor.id}"] .legacy-wall-dot`)
+                .removeClass("legacy-wall-dot-pulse");
             // Force a restart of the animation for back-to-back samples.
             void $dot.get(0)?.offsetWidth;
-            $dot.addClass("pear-wall-dot-pulse");
+            $dot.addClass("legacy-wall-dot-pulse");
         }
         seen_versions.set(monitor.id, monitor.version);
     }
@@ -174,26 +177,31 @@ async function settle_artifact_module(): Promise<void> {
             return;
         }
         artifact_module = await pending;
-        render_artifacts($("#pear-wall"));
+        render_artifacts($("#legacy-wall"));
     } catch {
         for (const monitor of monitors) {
             if (monitor.status !== "live" && monitor.status !== "paused") {
                 continue;
             }
-            const $host = $("#pear-wall").find(
-                `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+            const $host = $("#legacy-wall").find(
+                `.legacy-wall-block[data-monitor-id="${monitor.id}"] [data-legacy-artifact-host]`,
             );
-            mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact renderer unavailable");
+            mount_armada_artifact_lifecycle(
+                $host,
+                "wall",
+                "failed",
+                "artifact renderer unavailable",
+            );
         }
     }
 }
 
 function mount_monitor_artifact(
     $host: JQuery,
-    document_value: PearArtifactDocument,
-    module: PearArtifactModule | undefined = artifact_module,
+    document_value: ArmadaArtifactDocument,
+    module: ArmadaArtifactModule | undefined = artifact_module,
 ): void {
-    module?.mount_pear_artifact($host, document_value, {
+    module?.mount_armada_artifact($host, document_value, {
         density: "wall",
         onAction(action, button) {
             const target = wall_context();
@@ -203,7 +211,7 @@ function mount_monitor_artifact(
             const label = button.textContent ?? action.label;
             button.disabled = true;
             button.textContent = $t({defaultMessage: "asking…"});
-            send_pear_artifact_action(target, action.prompt, {
+            send_armada_artifact_action(target, action.prompt, {
                 success() {
                     button.textContent = $t({defaultMessage: "asked ✓"});
                 },
@@ -218,8 +226,8 @@ function mount_monitor_artifact(
 
 export function render_artifacts(
     $wall: JQuery,
-    render_monitors: PearMonitorPayload[] = monitors,
-    module: PearArtifactModule | undefined = artifact_module,
+    render_monitors: ArmadaMonitorPayload[] = monitors,
+    module: ArmadaArtifactModule | undefined = artifact_module,
 ): void {
     const monitor_ids = new Set(render_monitors.map((monitor) => monitor.id));
     parsed_artifacts.retain(monitor_ids);
@@ -238,10 +246,10 @@ export function render_artifacts(
     if (module === undefined) {
         for (const monitor of renderable) {
             const $host = $wall.find(
-                `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+                `.legacy-wall-block[data-monitor-id="${monitor.id}"] [data-legacy-artifact-host]`,
             );
             if ($host.children().length === 0) {
-                mount_pear_artifact_lifecycle($host, "wall", "preparing", "preparing artifact…");
+                mount_armada_artifact_lifecycle($host, "wall", "preparing", "preparing artifact…");
             }
         }
         if (artifact_module_promise === undefined) {
@@ -253,7 +261,7 @@ export function render_artifacts(
 
     for (const monitor of renderable) {
         const $host = $wall.find(
-            `.pear-wall-block[data-monitor-id="${monitor.id}"] [data-pear-artifact-host]`,
+            `.legacy-wall-block[data-monitor-id="${monitor.id}"] [data-legacy-artifact-host]`,
         );
         const cached = parsed_artifacts.resolve(monitor, module);
         mount_cached_monitor_artifact($host, monitor, cached.document_value, module);
@@ -262,49 +270,49 @@ export function render_artifacts(
 
 function mount_cached_monitor_artifact(
     $host: JQuery,
-    monitor: PearMonitorPayload,
-    parsed: PearArtifactDocument | undefined,
-    module: PearArtifactModule,
+    monitor: ArmadaMonitorPayload,
+    parsed: ArmadaArtifactDocument | undefined,
+    module: ArmadaArtifactModule,
 ): void {
     if (parsed === undefined) {
         const last_valid = last_valid_artifacts.get(monitor.id);
-        if (last_valid !== undefined && $host.children(".pear-artifact").length === 0) {
+        if (last_valid !== undefined && $host.children(".legacy-artifact").length === 0) {
             mount_monitor_artifact($host, last_valid, module);
         }
-        const existing = $host.children(".pear-artifact")[0];
+        const existing = $host.children(".legacy-artifact")[0];
         if (last_valid !== undefined && existing !== undefined) {
             existing.dataset["lifecycle"] = "stale";
             existing.removeAttribute("aria-busy");
             existing.setAttribute("aria-label", "Showing the last valid artifact update");
         } else {
-            mount_pear_artifact_lifecycle($host, "wall", "failed", "artifact update rejected");
+            mount_armada_artifact_lifecycle($host, "wall", "failed", "artifact update rejected");
         }
         return;
     }
     last_valid_artifacts.set(monitor.id, parsed);
     if (
         rendered_versions.get(monitor.id) === monitor.version &&
-        $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
+        $host.children('.legacy-artifact[data-lifecycle="ready"]').length > 0
     ) {
         return;
     }
-    const existing = $host.children(".pear-artifact")[0];
+    const existing = $host.children(".legacy-artifact")[0];
     existing?.setAttribute("data-lifecycle", "updating");
     existing?.setAttribute("aria-busy", "true");
     mount_monitor_artifact($host, parsed, module);
-    $host.attr("data-pear-artifact-version", String(monitor.version));
+    $host.attr("data-legacy-artifact-version", String(monitor.version));
     rendered_versions.set(monitor.id, monitor.version);
 }
 
 function render(): void {
-    const $wall = $("#pear-wall");
+    const $wall = $("#legacy-wall");
     if ($wall.length === 0) {
         return;
     }
     const context = wall_context();
     if (context === undefined) {
-        for (const host of $wall.find("[data-pear-artifact-host]")) {
-            unmount_pear_artifact(host);
+        for (const host of $wall.find("[data-legacy-artifact-host]")) {
+            unmount_armada_artifact(host);
         }
         $wall.attr("hidden", "hidden");
         return;
@@ -319,18 +327,18 @@ function render(): void {
     }
     last_render_signature = signature;
 
-    const $input = $wall.find<HTMLInputElement>(".pear-wall-input");
+    const $input = $wall.find<HTMLInputElement>(".legacy-wall-input");
     const input_value = $input.val() ?? "";
     const input_focused = $input.is(":focus");
 
-    for (const host of $wall.find("[data-pear-artifact-host]")) {
-        unmount_pear_artifact(host);
+    for (const host of $wall.find("[data-legacy-artifact-host]")) {
+        unmount_armada_artifact(host);
     }
-    $wall.html(render_pear_wall(template_context));
+    $wall.html(render_legacy_wall(template_context));
 
     render_artifacts($wall);
 
-    const $new_input = $wall.find<HTMLInputElement>(".pear-wall-input");
+    const $new_input = $wall.find<HTMLInputElement>(".legacy-wall-input");
     $new_input.val(input_value);
     if (input_focused) {
         $new_input.trigger("focus");
@@ -404,13 +412,13 @@ export function refresh(): void {
         return;
     }
     void channel.get({
-        url: "/json/pear/monitors",
+        url: "/json/armada/monitors",
         data: {stream: context.stream, topic: context.topic},
         success(raw_data) {
             backoff_ms = 0;
             const parsed = monitors_response_schema.safeParse(raw_data);
             if (parsed.success) {
-                monitors = parsed.data.pear_monitors;
+                monitors = parsed.data.armada_monitors;
                 render();
             }
         },
@@ -433,7 +441,7 @@ function monitor_action(
     extra: Record<string, string> = {},
 ): void {
     void channel.patch({
-        url: `/json/pear/monitors/${monitor_id}`,
+        url: `/json/armada/monitors/${monitor_id}`,
         data: {action, ...extra},
         success() {
             refresh();
@@ -447,14 +455,14 @@ function create_monitor(ask: string): void {
         return;
     }
     void channel.post({
-        url: "/json/pear/monitors",
+        url: "/json/armada/monitors",
         data: {stream: context.stream, topic: context.topic, request: ask},
         success() {
             refresh();
         },
         error(xhr) {
             const parsed = z.object({msg: z.string()}).safeParse(xhr.responseJSON ?? {});
-            const $input = $("#pear-wall .pear-wall-input");
+            const $input = $("#legacy-wall .legacy-wall-input");
             $input.attr(
                 "placeholder",
                 parsed.success ? parsed.data.msg : $t({defaultMessage: "could not create monitor"}),
@@ -467,9 +475,9 @@ function create_monitor(ask: string): void {
 }
 
 export function initialize(): void {
-    const $wall = $("#pear-wall");
+    const $wall = $("#legacy-wall");
 
-    $wall.on("keydown", ".pear-wall-input", (event) => {
+    $wall.on("keydown", ".legacy-wall-input", (event) => {
         if (event.key !== "Enter") {
             return;
         }
@@ -488,7 +496,7 @@ export function initialize(): void {
         const $button = $(event.currentTarget);
         const action = $button.attr("data-wall-action");
         const monitor_id = Number(
-            $button.closest(".pear-wall-block").attr("data-monitor-id") ?? "0",
+            $button.closest(".legacy-wall-block").attr("data-monitor-id") ?? "0",
         );
         const monitor = monitors.find((entry) => entry.id === monitor_id);
         if (action === "collapse") {
@@ -528,15 +536,15 @@ export function initialize(): void {
             }
             case "delete": {
                 // Two-step delete: first click arms, second within 2s fires.
-                if (!$button.hasClass("pear-wall-armed")) {
-                    $button.addClass("pear-wall-armed").text($t({defaultMessage: "sure?"}));
+                if (!$button.hasClass("legacy-wall-armed")) {
+                    $button.addClass("legacy-wall-armed").text($t({defaultMessage: "sure?"}));
                     setTimeout(() => {
-                        $button.removeClass("pear-wall-armed").text("✕");
+                        $button.removeClass("legacy-wall-armed").text("✕");
                     }, 2000);
                     return;
                 }
                 void channel.del({
-                    url: `/json/pear/monitors/${monitor_id}`,
+                    url: `/json/armada/monitors/${monitor_id}`,
                     success() {
                         refresh();
                     },
@@ -554,7 +562,7 @@ export function initialize(): void {
         }
     });
     // Leaving a topic for Inbox or Recent changes the hash; entering one
-    // arrives through pear_panel's narrow hook (handle_narrow_changed).
+    // arrives through armada_panel's narrow hook (handle_narrow_changed).
     window.addEventListener("hashchange", () => {
         handle_narrow_changed();
     });

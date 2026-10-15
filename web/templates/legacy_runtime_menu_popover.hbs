@@ -1,75 +1,75 @@
-<div class="popover-menu" id="pear-runtime-menu-popover" aria-label="{{t 'Pear runtime' }}" data-simplebar data-simplebar-tab-index="-1">
+<div class="popover-menu" id="legacy-runtime-menu-popover" aria-label="{{t 'Pear runtime' }}" data-simplebar data-simplebar-tab-index="-1">
     <ul role="menu" class="popover-menu-list">
         {{#if has_runtime}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-menu-section text-item" role="none">{{t 'Model' }}</div>
+            <div class="legacy-runtime-menu-section text-item" role="none">{{t 'Model' }}</div>
         </li>
         {{#each model_choices}}
             <li role="none" class="link-item">
-                <label class="pear-runtime-menu-choice pear-runtime-model-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-model="{{value}}" tabindex="0">
-                    <input type="radio" class="pear-runtime-model-choice" name="pear-runtime-model" value="{{value}}" {{#if selected}}checked{{/if}}/>
-                    <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
+                <label class="legacy-runtime-menu-choice legacy-runtime-model-menu-choice popover-menu-link {{#if selected}}legacy-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-model="{{value}}" tabindex="0">
+                    <input type="radio" class="legacy-runtime-model-choice" name="legacy-runtime-model" value="{{value}}" {{#if selected}}checked{{/if}}/>
+                    <i class="legacy-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
                     <span class="popover-menu-label">{{label}}</span>
                 </label>
             </li>
         {{/each}}
         <li role="separator" class="popover-menu-separator"></li>
         <li role="none" class="link-item">
-            <div class="pear-runtime-menu-section text-item" role="none">{{t 'Thinking' }}</div>
+            <div class="legacy-runtime-menu-section text-item" role="none">{{t 'Thinking' }}</div>
         </li>
         {{#each effort_choices}}
             <li role="none" class="link-item">
-                <label class="pear-runtime-menu-choice pear-runtime-effort-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-effort="{{value}}" tabindex="0">
-                    <input type="radio" class="pear-runtime-effort-choice" name="pear-runtime-effort" value="{{value}}" {{#if selected}}checked{{/if}}/>
-                    <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
+                <label class="legacy-runtime-menu-choice legacy-runtime-effort-menu-choice popover-menu-link {{#if selected}}legacy-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-effort="{{value}}" tabindex="0">
+                    <input type="radio" class="legacy-runtime-effort-choice" name="legacy-runtime-effort" value="{{value}}" {{#if selected}}checked{{/if}}/>
+                    <i class="legacy-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
                     <span class="popover-menu-label">{{label}}</span>
                 </label>
             </li>
         {{/each}}
         <li role="separator" class="popover-menu-separator"></li>
         <li role="none" class="link-item">
-            <div class="pear-runtime-menu-section text-item" role="none">{{t 'Presence' }}</div>
+            <div class="legacy-runtime-menu-section text-item" role="none">{{t 'Presence' }}</div>
         </li>
         {{#each presence_choices}}
             <li role="none" class="link-item">
-                <label class="pear-runtime-menu-choice pear-runtime-presence-menu-choice popover-menu-link {{#if selected}}pear-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-policy="{{value}}" tabindex="0">
-                    <input type="radio" class="pear-runtime-presence-choice" name="pear-runtime-presence" value="{{value}}" {{#if selected}}checked{{/if}}/>
-                    <i class="pear-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
+                <label class="legacy-runtime-menu-choice legacy-runtime-presence-menu-choice popover-menu-link {{#if selected}}legacy-runtime-menu-choice-selected{{/if}}" role="menuitemradio" aria-checked="{{#if selected}}true{{else}}false{{/if}}" data-policy="{{value}}" tabindex="0">
+                    <input type="radio" class="legacy-runtime-presence-choice" name="legacy-runtime-presence" value="{{value}}" {{#if selected}}checked{{/if}}/>
+                    <i class="legacy-runtime-choice-check zulip-icon zulip-icon-check" aria-hidden="true"></i>
                     <span class="popover-menu-label">{{label}}</span>
                 </label>
             </li>
         {{/each}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-presence-note" role="note">{{t '@Pear always works' }}</div>
+            <div class="legacy-runtime-presence-note" role="note">{{t '@Pear always works' }}</div>
         </li>
         {{#if runtime_usage_meter.has_meter}}
         <li role="separator" class="popover-menu-separator"></li>
         <li role="none" class="link-item">
-            <div class="pear-runtime-meter-block {{#if runtime_usage_meter.is_hot}}pear-runtime-meter-hot{{/if}}" role="none">
-                <div class="pear-runtime-meter-row">
+            <div class="legacy-runtime-meter-block {{#if runtime_usage_meter.is_hot}}legacy-runtime-meter-hot{{/if}}" role="none">
+                <div class="legacy-runtime-meter-row">
                     <span>{{runtime_usage_meter.label}}</span>
                     <span>{{runtime_usage_meter.value}}</span>
                 </div>
-                <span class="pear-runtime-meter-line" aria-hidden="true">
-                    <span class="pear-runtime-meter-fill"></span>
+                <span class="legacy-runtime-meter-line" aria-hidden="true">
+                    <span class="legacy-runtime-meter-fill"></span>
                 </span>
             </div>
         </li>
         {{/if}}
         {{#if has_runtime_usage}}
         <li role="none" class="link-item">
-            <div class="pear-runtime-usage" role="none" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>
+            <div class="legacy-runtime-usage" role="none" {{#if runtime_usage_title}}title="{{runtime_usage_title}}"{{/if}}>
                 {{#each runtime_usage_rows}}
-                    <span class="pear-runtime-usage-label">{{label}}</span>
-                    <span class="pear-runtime-usage-value">{{value}}</span>
+                    <span class="legacy-runtime-usage-label">{{label}}</span>
+                    <span class="legacy-runtime-usage-value">{{value}}</span>
                 {{/each}}
             </div>
         </li>
         {{/if}}
         {{else}}
         <li role="none" class="link-item">
-            <label class="pear-runtime-group-header pear-runtime-summary {{#if runtime_status.is_active}}pear-liveness-active{{/if}} popover-menu-link" role="menuitem">
-                <span class="pear-ui-glyph pear-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}pear-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
+            <label class="legacy-runtime-group-header legacy-runtime-summary {{#if runtime_status.is_active}}legacy-liveness-active{{/if}} popover-menu-link" role="menuitem">
+                <span class="legacy-ui-glyph legacy-runtime-summary-glyph {{runtime_status.class_name}} {{#if runtime_status.is_active}}legacy-thinking-glyph{{/if}}" aria-hidden="true">{{runtime_status.glyph}}</span>
                 <span class="popover-menu-label">{{status_message}}</span>
             </label>
         </li>

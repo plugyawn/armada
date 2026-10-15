@@ -18,18 +18,18 @@ run_test("progress identity ignores runtime-only glyph animation state", () => {
         {step: "Inspect", status: "completed"},
         {step: "Verify", status: "in_progress"},
     ];
-    const signature = live_dom.pear_live_progress_signature(plan, "Running focused tests");
+    const signature = live_dom.armada_live_progress_signature(plan, "Running focused tests");
     const current = document.createElement("section");
-    current.dataset.pearProgressSignature = signature;
+    current.dataset.legacyProgressSignature = signature;
     const glyph = document.createElement("span");
-    glyph.className = "pear-thinking-glyph pear-thinking-glyph-animated";
+    glyph.className = "legacy-thinking-glyph legacy-thinking-glyph-animated";
     current.append(glyph);
 
-    assert.equal(live_dom.pear_live_progress_matches(current, signature), true);
+    assert.equal(live_dom.armada_live_progress_matches(current, signature), true);
     assert.equal(
-        live_dom.pear_live_progress_matches(
+        live_dom.armada_live_progress_matches(
             current,
-            live_dom.pear_live_progress_signature([...plan], "Reading focused results"),
+            live_dom.armada_live_progress_signature([...plan], "Reading focused results"),
         ),
         false,
     );
@@ -38,18 +38,18 @@ run_test("progress identity ignores runtime-only glyph animation state", () => {
 run_test("unchanged overview keeps its DOM identity", () => {
     const current = document.createElement("section");
     const overview = document.createElement("div");
-    overview.className = "pear-live-overview";
-    overview.dataset.pearOverviewKey = '[7,"Verify","Running focused tests"]';
+    overview.className = "legacy-live-overview";
+    overview.dataset.legacyOverviewKey = '[7,"Verify","Running focused tests"]';
     overview.dataset.animationStarted = "true";
     current.append(overview);
 
     const next = document.createElement("section");
     const replacement = document.createElement("div");
-    replacement.className = "pear-live-overview";
-    replacement.dataset.pearOverviewKey = overview.dataset.pearOverviewKey;
+    replacement.className = "legacy-live-overview";
+    replacement.dataset.legacyOverviewKey = overview.dataset.legacyOverviewKey;
     next.append(replacement);
 
-    assert.equal(live_dom.preserve_unchanged_pear_overview(current, next), true);
+    assert.equal(live_dom.preserve_unchanged_armada_overview(current, next), true);
     assert.equal(next.firstElementChild, overview);
     assert.equal(next.firstElementChild.dataset.animationStarted, "true");
 });
@@ -57,16 +57,16 @@ run_test("unchanged overview keeps its DOM identity", () => {
 run_test("changed overview receives a new DOM node", () => {
     const current = document.createElement("section");
     const overview = document.createElement("div");
-    overview.className = "pear-live-overview";
-    overview.dataset.pearOverviewKey = '[7,"Verify","Running tests"]';
+    overview.className = "legacy-live-overview";
+    overview.dataset.legacyOverviewKey = '[7,"Verify","Running tests"]';
     current.append(overview);
 
     const next = document.createElement("section");
     const replacement = document.createElement("div");
-    replacement.className = "pear-live-overview";
-    replacement.dataset.pearOverviewKey = '[7,"Verify","Reading results"]';
+    replacement.className = "legacy-live-overview";
+    replacement.dataset.legacyOverviewKey = '[7,"Verify","Reading results"]';
     next.append(replacement);
 
-    assert.equal(live_dom.preserve_unchanged_pear_overview(current, next), false);
+    assert.equal(live_dom.preserve_unchanged_armada_overview(current, next), false);
     assert.equal(next.firstElementChild, replacement);
 });

@@ -560,7 +560,7 @@
         }
 
         .inbox-header-name-text {
-            font-family: var(--pear-font-pixel);
+            font-family: var(--legacy-font-pixel);
             font-size: 12px;
             font-style: normal;
             font-weight: 400;

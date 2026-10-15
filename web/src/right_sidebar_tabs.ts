@@ -4,7 +4,7 @@ export type SidebarTab = "agents" | "people";
 
 /* The right sidebar is one workbench surface with two tabs: Agents (the
    agent roster plus the thread pane) and People (the classic user list,
-   pear rail, and wall). Tab state lives here; visibility is CSS-driven
+   armada rail, and wall). Tab state lives here; visibility is CSS-driven
    off body.right-sidebar-tab-agents. */
 
 let current_tab: SidebarTab = "people";

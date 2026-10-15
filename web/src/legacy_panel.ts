@@ -1,30 +1,30 @@
 import $ from "jquery";
 import * as z from "zod/mini";
 
-import render_pear_panel from "../templates/legacy_panel.hbs";
-import render_pear_topic_header_controls from "../templates/legacy_topic_header_controls.hbs";
-import render_pear_workspace_rail from "../templates/legacy_workspace_rail.hbs";
+import render_legacy_panel from "../templates/legacy_panel.hbs";
+import render_legacy_topic_header_controls from "../templates/legacy_topic_header_controls.hbs";
+import render_legacy_workspace_rail from "../templates/legacy_workspace_rail.hbs";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
 import {$t} from "./i18n.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import {
     active_plan_presentation,
     compact_reasoning_effort,
     context_key,
     model_reasoning_efforts,
 } from "./legacy_runtime_shared.ts";
-import * as pear_wall from "./legacy_wall.ts";
-import * as pear_workspace from "./legacy_workspace.ts";
-import * as pear_workspace_marks from "./legacy_workspace_marks.ts";
+import * as legacy_wall from "./legacy_wall.ts";
+import * as legacy_workspace from "./legacy_workspace.ts";
+import * as legacy_workspace_marks from "./legacy_workspace_marks.ts";
 import * as message_lists from "./message_lists.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as stream_data from "./stream_data.ts";
 import * as timerender from "./timerender.ts";
 import * as typing_events from "./typing_events.ts";
 
-const pear_run_event_schema = z.object({
+const armada_run_event_schema = z.object({
     id: z.number(),
     event_type: z.string(),
     summary: z.string(),
@@ -38,7 +38,7 @@ const pear_run_event_schema = z.object({
     ),
 });
 
-const pear_usage_schema = z.object({
+const armada_usage_schema = z.object({
     input_tokens: z.optional(z.number()),
     cached_input_tokens: z.optional(z.number()),
     output_tokens: z.optional(z.number()),
@@ -49,14 +49,14 @@ const pear_usage_schema = z.object({
     summary: z.optional(z.string()),
 });
 
-const pear_live_run_schema = z.object({
+const armada_live_run_schema = z.object({
     status: z.string(),
     updated_at: z.number(),
     operation: z.nullish(z.object({kind: z.string(), label: z.string()})),
     has_visible_assistant_text: z.optional(z.boolean()),
 });
 
-const pear_agent_thread_schema = z.object({
+const armada_agent_thread_schema = z.object({
     thread_id: z.string(),
     nickname: z.nullish(z.string()),
     role: z.nullish(z.string()),
@@ -65,7 +65,7 @@ const pear_agent_thread_schema = z.object({
     current_activity: z.optional(z.string()),
 });
 
-const pear_run_schema = z.object({
+const armada_run_schema = z.object({
     id: z.number(),
     snapshot_sequence: z.optional(z.number()),
     trigger_message_id: z.number(),
@@ -84,42 +84,42 @@ const pear_run_schema = z.object({
     workdir: z.string(),
     codex_thread_id: z.string(),
     ambient_triggered: z.boolean(),
-    usage: z.nullish(pear_usage_schema),
+    usage: z.nullish(armada_usage_schema),
     tool_count: z.optional(z.number()),
     date_created: z.optional(z.number()),
     date_updated: z.optional(z.number()),
     plan: z.nullish(z.array(z.object({step: z.string(), status: z.string()}))),
     overview: z.nullish(z.string()),
-    live: z.nullish(pear_live_run_schema),
-    agents: z.optional(z.array(pear_agent_thread_schema)),
-    events: z.optional(z.array(pear_run_event_schema)),
+    live: z.nullish(armada_live_run_schema),
+    agents: z.optional(z.array(armada_agent_thread_schema)),
+    events: z.optional(z.array(armada_run_event_schema)),
 });
 
-const pear_reasoning_effort_schema = z.object({
+const armada_reasoning_effort_schema = z.object({
     effort: z.string(),
     label: z.string(),
     description: z.optional(z.string()),
 });
 
-const pear_model_catalog_entry_schema = z.object({
+const armada_model_catalog_entry_schema = z.object({
     slug: z.string(),
     display_name: z.string(),
     default_reasoning_level: z.optional(z.string()),
-    supported_reasoning_levels: z.optional(z.array(pear_reasoning_effort_schema)),
+    supported_reasoning_levels: z.optional(z.array(armada_reasoning_effort_schema)),
 });
 
-const pear_git_changed_file_schema = z.object({
+const armada_git_changed_file_schema = z.object({
     status: z.string(),
     kind: z.string(),
     path: z.string(),
 });
 
-const pear_git_commit_schema = z.object({
+const armada_git_commit_schema = z.object({
     hash: z.string(),
     summary: z.string(),
 });
 
-const pear_git_context_schema = z.object({
+const armada_git_context_schema = z.object({
     available: z.boolean(),
     workdir: z.optional(z.string()),
     repo_name: z.optional(z.string()),
@@ -136,9 +136,9 @@ const pear_git_context_schema = z.object({
     changed_count: z.optional(z.number()),
     detached: z.optional(z.boolean()),
     branch_matches_topic: z.optional(z.boolean()),
-    changed_files: z.optional(z.array(pear_git_changed_file_schema)),
+    changed_files: z.optional(z.array(armada_git_changed_file_schema)),
     changed_files_truncated: z.optional(z.boolean()),
-    recent_commits: z.optional(z.array(pear_git_commit_schema)),
+    recent_commits: z.optional(z.array(armada_git_commit_schema)),
     last_commit: z.optional(
         z.object({
             sha: z.string(),
@@ -150,16 +150,16 @@ const pear_git_context_schema = z.object({
     commit_count: z.optional(z.number()),
 });
 
-const pear_topic_context_schema = z.object({
+const armada_topic_context_schema = z.object({
     stream: z.string(),
     topic: z.string(),
     model: z.string(),
     default_model: z.string(),
     model_choices: z.array(z.string()),
-    model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
+    model_catalog: z.optional(z.array(armada_model_catalog_entry_schema)),
     reasoning_effort: z.string(),
     default_reasoning_effort: z.string(),
-    reasoning_efforts: z.array(pear_reasoning_effort_schema),
+    reasoning_efforts: z.array(armada_reasoning_effort_schema),
     response_policy: z.union([z.literal("ambient"), z.literal("mentions_only")]),
     github_repo: z.string(),
     pinned_repo: z.optional(z.string()),
@@ -170,37 +170,37 @@ const pear_topic_context_schema = z.object({
     branch: z.optional(z.string()),
     branch_is_topic_default: z.optional(z.boolean()),
     workspace_uuid: z.string(),
-    git: pear_git_context_schema,
+    git: armada_git_context_schema,
 });
 
-const pear_runs_response_schema = z.object({
-    pear_runs: z.array(pear_run_schema),
-    pear_topic_context: z.nullish(pear_topic_context_schema),
+const armada_runs_response_schema = z.object({
+    armada_runs: z.array(armada_run_schema),
+    armada_topic_context: z.nullish(armada_topic_context_schema),
     runtime_config: z.optional(
         z.object({
             model: z.nullish(z.string()),
             model_choices: z.optional(z.array(z.string())),
-            model_catalog: z.optional(z.array(pear_model_catalog_entry_schema)),
+            model_catalog: z.optional(z.array(armada_model_catalog_entry_schema)),
             reasoning_effort: z.nullish(z.string()),
-            reasoning_efforts: z.optional(z.array(pear_reasoning_effort_schema)),
+            reasoning_efforts: z.optional(z.array(armada_reasoning_effort_schema)),
         }),
     ),
 });
 
-type PearRunEvent = z.infer<typeof pear_run_event_schema>;
-type PearRun = z.infer<typeof pear_run_schema>;
-type PearRunsResponse = z.infer<typeof pear_runs_response_schema>;
-type PearGitContext = z.infer<typeof pear_git_context_schema>;
-type PearWorkspaceContext = z.infer<typeof pear_topic_context_schema>;
-type PearGitCommit = z.infer<typeof pear_git_commit_schema>;
+type ArmadaRunEvent = z.infer<typeof armada_run_event_schema>;
+type ArmadaRun = z.infer<typeof armada_run_schema>;
+type ArmadaRunsResponse = z.infer<typeof armada_runs_response_schema>;
+type ArmadaGitContext = z.infer<typeof armada_git_context_schema>;
+type ArmadaWorkspaceContext = z.infer<typeof armada_topic_context_schema>;
+type ArmadaGitCommit = z.infer<typeof armada_git_commit_schema>;
 
-type PearWorkbenchView = "diff" | "history";
-type PearDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
+type ArmadaWorkbenchView = "diff" | "history";
+type ArmadaDisplayTopicContext = NonNullable<ReturnType<typeof display_topic_context>>;
 
 let initialized = false;
 let last_error = "";
-let last_runs: PearRun[] = [];
-let last_topic_context: PearWorkspaceContext | null | undefined;
+let last_runs: ArmadaRun[] = [];
+let last_topic_context: ArmadaWorkspaceContext | null | undefined;
 let resize_render_frame_id: number | undefined;
 let live_render_frame_id: number | undefined;
 let last_render_state_key = "";
@@ -212,8 +212,8 @@ const dismissed_error_by_context = new Map<string, string>();
 // Contexts whose last runs payload included an active run; used to detect
 // the active→idle transition that retires the Pear typing line.
 const contexts_with_active_run = new Set<string>();
-const workbench_view_by_context = new Map<string, PearWorkbenchView>();
-const topic_context_by_context = new Map<string, PearWorkspaceContext>();
+const workbench_view_by_context = new Map<string, ArmadaWorkbenchView>();
+const topic_context_by_context = new Map<string, ArmadaWorkspaceContext>();
 type RefreshOptions = {force_context?: boolean; live?: boolean};
 type RefreshRequest = {
     generation: number;
@@ -305,7 +305,7 @@ function status_marker(status: string): string {
 export const status_marker_for_testing = status_marker;
 export const status_label_for_testing = status_label;
 
-function next_effort_for_model(topic_context: PearWorkspaceContext, model: string): string {
+function next_effort_for_model(topic_context: ArmadaWorkspaceContext, model: string): string {
     const efforts = model_reasoning_efforts(topic_context, model);
     if (efforts.some((choice) => choice.effort === topic_context.reasoning_effort)) {
         return topic_context.reasoning_effort;
@@ -331,7 +331,7 @@ export function panel_runtime_label_for_testing(options: {
 }
 
 function full_reasoning_effort_label(
-    topic_context: PearWorkspaceContext,
+    topic_context: ArmadaWorkspaceContext,
     effort = topic_context.reasoning_effort,
 ): string {
     return first_nonempty(
@@ -341,7 +341,7 @@ function full_reasoning_effort_label(
     );
 }
 
-function display_model_label(topic_context: PearWorkspaceContext): string {
+function display_model_label(topic_context: ArmadaWorkspaceContext): string {
     const catalog_entry = topic_context.model_catalog?.find(
         (entry) => entry.slug === topic_context.model,
     );
@@ -363,11 +363,11 @@ function reasoning_effort_meter_class(effort: string | undefined): string {
     return "medium";
 }
 
-function is_pear_runs_response(data: unknown): data is PearRunsResponse {
-    return pear_runs_response_schema.safeParse(data).success;
+function is_armada_runs_response(data: unknown): data is ArmadaRunsResponse {
+    return armada_runs_response_schema.safeParse(data).success;
 }
 
-function display_event(event: PearRunEvent): PearRunEvent & {
+function display_event(event: ArmadaRunEvent): ArmadaRunEvent & {
     event_label: string;
     detail: string;
     has_detail: boolean;
@@ -398,10 +398,10 @@ function current_context_key(): string {
 }
 
 function topic_context_matches(
-    topic_context: PearWorkspaceContext | null | undefined,
+    topic_context: ArmadaWorkspaceContext | null | undefined,
     stream: string | undefined,
     topic: string | undefined,
-): topic_context is PearWorkspaceContext {
+): topic_context is ArmadaWorkspaceContext {
     return (
         stream !== undefined &&
         topic !== undefined &&
@@ -413,16 +413,16 @@ function topic_context_matches(
 function cached_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-): PearWorkspaceContext | undefined {
+): ArmadaWorkspaceContext | undefined {
     return topic_context_by_context.get(context_key(stream, topic));
 }
 
 export function topic_context_for_display_for_testing(options: {
     stream: string | undefined;
     topic: string | undefined;
-    render_topic_context: PearWorkspaceContext | null | undefined;
-    cached_topic_context: PearWorkspaceContext | undefined;
-}): PearWorkspaceContext | undefined {
+    render_topic_context: ArmadaWorkspaceContext | null | undefined;
+    cached_topic_context: ArmadaWorkspaceContext | undefined;
+}): ArmadaWorkspaceContext | undefined {
     if (topic_context_matches(options.render_topic_context, options.stream, options.topic)) {
         return options.render_topic_context;
     }
@@ -432,8 +432,8 @@ export function topic_context_for_display_for_testing(options: {
 function display_source_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-    topic_context: PearWorkspaceContext | null | undefined = last_topic_context,
-): PearWorkspaceContext | undefined {
+    topic_context: ArmadaWorkspaceContext | null | undefined = last_topic_context,
+): ArmadaWorkspaceContext | undefined {
     return topic_context_for_display_for_testing({
         stream,
         topic,
@@ -479,7 +479,7 @@ function panel_has_active_status_for_testing(status: string | undefined): boolea
     );
 }
 
-function git_status_label(git: PearGitContext, changed_label: string): string {
+function git_status_label(git: ArmadaGitContext, changed_label: string): string {
     if (!git.available) {
         return "";
     }
@@ -501,7 +501,7 @@ function git_status_label(git: PearGitContext, changed_label: string): string {
     return $t({defaultMessage: "clean"});
 }
 
-function git_status_class(git: PearGitContext): string {
+function git_status_class(git: ArmadaGitContext): string {
     if (!git.available) {
         return "unavailable";
     }
@@ -511,16 +511,16 @@ function git_status_class(git: PearGitContext): string {
     return "clean";
 }
 
-function git_ref_label(git: PearGitContext): string {
+function git_ref_label(git: ArmadaGitContext): string {
     const branch = git.detached === true ? $t({defaultMessage: "detached"}) : (git.branch ?? "");
     return [branch.trim(), (git.head_short ?? "").trim()].filter((part) => part !== "").join(" / ");
 }
 
-function git_has_diff(git: PearGitContext): boolean {
+function git_has_diff(git: ArmadaGitContext): boolean {
     return (git.changed_files ?? []).length > 0;
 }
 
-function git_has_history(git: PearGitContext): boolean {
+function git_has_history(git: ArmadaGitContext): boolean {
     return git.available || (git.recent_commits ?? []).length > 0;
 }
 
@@ -528,7 +528,7 @@ export function workbench_view_for_testing(options: {
     requested: string | undefined;
     has_diff: boolean;
     has_history: boolean;
-}): PearWorkbenchView {
+}): ArmadaWorkbenchView {
     if (options.requested === "history") {
         return "history";
     }
@@ -544,7 +544,7 @@ export function workbench_view_for_testing(options: {
     return "history";
 }
 
-export function workbench_view_for_artifact_label(label: string): PearWorkbenchView | undefined {
+export function workbench_view_for_artifact_label(label: string): ArmadaWorkbenchView | undefined {
     const normalized_label = label.trim().toLowerCase();
     if (normalized_label === "diff") {
         return "diff";
@@ -561,7 +561,7 @@ export function workbench_view_for_artifact_label(label: string): PearWorkbenchV
             "pull request",
             "session",
             "session record",
-            "pear session",
+            "armada session",
             "codex session",
         ].includes(normalized_label)
     ) {
@@ -571,7 +571,7 @@ export function workbench_view_for_artifact_label(label: string): PearWorkbenchV
 }
 
 export function open_work_details(
-    requested_view?: PearWorkbenchView,
+    requested_view?: ArmadaWorkbenchView,
     anchor_element?: HTMLElement,
 ): void {
     const key = current_context_key();
@@ -604,7 +604,7 @@ export function open_work_details(
     if (!viewport_allows_workbench) {
         return;
     }
-    const workbench = document.querySelector<HTMLElement>("#pear-panel .pear-workbench");
+    const workbench = document.querySelector<HTMLElement>("#legacy-panel .legacy-workbench");
     if (workbench !== null) {
         position_workbench_popover();
         if (!workbench.contains(document.activeElement)) {
@@ -615,7 +615,7 @@ export function open_work_details(
     refresh({force_context: true});
 }
 
-function select_workbench_view(view: PearWorkbenchView): void {
+function select_workbench_view(view: ArmadaWorkbenchView): void {
     const key = current_context_key();
     if (key === "") {
         return;
@@ -635,7 +635,7 @@ function workbench_focusable_elements(workbench: HTMLElement): HTMLElement[] {
 
 export function open_work_details_for_artifact_label(label: string): void {
     if (["doc", "document"].includes(label.trim().toLowerCase())) {
-        pear_workspace.set_tab("readme");
+        legacy_workspace.set_tab("readme");
         return;
     }
     open_work_details(workbench_view_for_artifact_label(label));
@@ -669,7 +669,7 @@ function close_work_details(options: {restore_focus?: boolean} = {}): void {
     }
 }
 
-function display_run(run: PearRun): PearRun & {
+function display_run(run: ArmadaRun): ArmadaRun & {
     status_class: string;
     status_label: string;
     status_marker: string;
@@ -685,7 +685,7 @@ function display_run(run: PearRun): PearRun & {
     can_cancel: boolean;
     has_actions: boolean;
     has_events: boolean;
-    events: PearRunEvent[];
+    events: ArmadaRunEvent[];
 } {
     const events = (run.events ?? []).map((event) => display_event(event));
     const source_label =
@@ -720,21 +720,21 @@ function display_run(run: PearRun): PearRun & {
     };
 }
 
-function display_topic_context(topic_context: PearWorkspaceContext | undefined | null):
-    | (PearWorkspaceContext & {
+function display_topic_context(topic_context: ArmadaWorkspaceContext | undefined | null):
+    | (ArmadaWorkspaceContext & {
           has_changed_files: boolean;
           has_recent_commits: boolean;
           changed_label: string;
           has_workbench_diff: boolean;
           has_workbench_history: boolean;
-          workbench_view: PearWorkbenchView;
+          workbench_view: ArmadaWorkbenchView;
           workbench_diff_selected: boolean;
           workbench_history_selected: boolean;
           workbench_diff_disabled: boolean;
           workbench_history_disabled: boolean;
           diff_tab_label: string;
           history_tab_label: string;
-          history_commits: (PearGitCommit & {is_head: boolean; ref_label: string})[];
+          history_commits: (ArmadaGitCommit & {is_head: boolean; ref_label: string})[];
           workbench_title: string;
           workbench_meta: string;
           workbench_scope_note: string;
@@ -907,27 +907,28 @@ function display_topic_context(topic_context: PearWorkspaceContext | undefined |
     };
 }
 
-const pear_topic_header_status_selector = ".pear-topic-header-status";
-const pear_topic_header_control_selector = ".pear-topic-header-status, .pear-topic-header-control";
+const armada_topic_header_status_selector = ".legacy-topic-header-status";
+const armada_topic_header_control_selector =
+    ".legacy-topic-header-status, .legacy-topic-header-control";
 
-function ensure_pear_panel_host(): HTMLElement | undefined {
-    let panel = document.querySelector<HTMLElement>("body > #pear-panel");
+function ensure_armada_panel_host(): HTMLElement | undefined {
+    let panel = document.querySelector<HTMLElement>("body > #legacy-panel");
     if (panel === null) {
-        panel = document.querySelector<HTMLElement>("#pear-panel");
+        panel = document.querySelector<HTMLElement>("#legacy-panel");
         if (panel === null) {
             return undefined;
         }
         document.body.append(panel);
     }
-    $("#pear-panel").not(panel).remove();
+    $("#legacy-panel").not(panel).remove();
     return panel;
 }
 
-function topic_header_work_label(display_context: PearDisplayTopicContext): string {
+function topic_header_work_label(display_context: ArmadaDisplayTopicContext): string {
     return display_context.panel_header_git_label;
 }
 
-function commit_meta_sentence(git: PearGitContext): string {
+function commit_meta_sentence(git: ArmadaGitContext): string {
     // The GitHub-grammar tail of the header commit sentence:
     // "— author · 2m ago · 12 commits". Parts degrade independently.
     const last_commit = git.last_commit;
@@ -953,7 +954,7 @@ function commit_meta_sentence(git: PearGitContext): string {
     return parts.join(" · ");
 }
 
-function topic_header_git_label(git: PearGitContext, changed_count: number): string {
+function topic_header_git_label(git: ArmadaGitContext, changed_count: number): string {
     if (!git.available) {
         return $t({defaultMessage: "no repo"});
     }
@@ -996,12 +997,12 @@ function topic_header_git_title(options: {
 function render_topic_header_controls(options: {
     stream: string | undefined;
     topic: string | undefined;
-    topic_context: PearDisplayTopicContext | undefined;
+    topic_context: ArmadaDisplayTopicContext | undefined;
     active_run_status: string | undefined;
 }): void {
     const {stream, topic, topic_context} = options;
     const workspace_uuid = topic_context?.workspace_uuid.trim();
-    pear_workspace.sync({
+    legacy_workspace.sync({
         stream,
         topic,
         workspaceId: workspace_uuid === "" ? undefined : workspace_uuid,
@@ -1044,7 +1045,7 @@ function render_topic_header_controls(options: {
         return;
     }
 
-    $(pear_topic_header_control_selector)
+    $(armada_topic_header_control_selector)
         .filter((_index, element) => ![...$headers].some((header) => header.contains(element)))
         .remove();
 
@@ -1054,22 +1055,24 @@ function render_topic_header_controls(options: {
             return;
         }
         let $status_cluster = $(header)
-            .find(pear_topic_header_status_selector)
+            .find(armada_topic_header_status_selector)
             .filter(
-                (_inner_index, element) => $(element).attr("data-pear-header-key") === control_key,
+                (_inner_index, element) =>
+                    $(element).attr("data-legacy-header-key") === control_key,
             )
             .first();
         $(header)
-            .find(pear_topic_header_status_selector)
+            .find(armada_topic_header_status_selector)
             .filter(
-                (_inner_index, element) => $(element).attr("data-pear-header-key") !== control_key,
+                (_inner_index, element) =>
+                    $(element).attr("data-legacy-header-key") !== control_key,
             )
             .remove();
         if ($status_cluster.length === 0) {
             // The static skeleton comes from the template; the label and
             // tooltip updates below fill it in place so tippy instances
             // survive re-renders.
-            $status_cluster = $(render_pear_topic_header_controls({control_key}));
+            $status_cluster = $(render_legacy_topic_header_controls({control_key}));
             $controls.before($status_cluster);
         }
         // Skip the label/tooltip updates below when nothing this cluster
@@ -1092,13 +1095,13 @@ function render_topic_header_controls(options: {
             git_status_class: topic_context.panel_git_status_class,
             has_workbench_diff: topic_context.has_workbench_diff,
         });
-        if ($status_cluster.attr("data-pear-header-signature") === header_signature) {
+        if ($status_cluster.attr("data-legacy-header-signature") === header_signature) {
             return;
         }
-        $status_cluster.attr("data-pear-header-signature", header_signature);
-        $status_cluster.toggleClass("pear-topic-header-running", runtime_active);
+        $status_cluster.attr("data-legacy-header-signature", header_signature);
+        $status_cluster.toggleClass("legacy-topic-header-running", runtime_active);
 
-        const $runtime_controls = $status_cluster.find(".pear-topic-header-runtime-control");
+        const $runtime_controls = $status_cluster.find(".legacy-topic-header-runtime-control");
         $runtime_controls.removeClass("tippy-zulip-delayed-tooltip").each((_index, element) => {
             const tippy_element: HTMLElement & {_tippy?: {destroy: () => void}} = element;
             tippy_element._tippy?.destroy();
@@ -1107,21 +1110,21 @@ function render_topic_header_controls(options: {
             "aria-label": runtime_title,
             "data-tippy-content": runtime_title,
         });
-        $runtime_controls.toggleClass("pear-topic-header-running", runtime_active);
+        $runtime_controls.toggleClass("legacy-topic-header-running", runtime_active);
         $status_cluster
-            .find(".pear-runtime-menu-model-label")
+            .find(".legacy-runtime-menu-model-label")
             .text(topic_context.panel_model_label ?? runtime_label);
         $status_cluster
-            .find(".pear-runtime-menu-effort-label")
+            .find(".legacy-runtime-menu-effort-label")
             .text(topic_context.panel_reasoning_effort_label ?? "");
 
-        const $branch_control = $status_cluster.find(".pear-topic-header-branch-control");
+        const $branch_control = $status_cluster.find(".legacy-topic-header-branch-control");
         $branch_control.attr({
             "aria-label": branch_title,
             "data-tippy-content": branch_title,
         });
         $branch_control
-            .find(".pear-topic-header-branch-label")
+            .find(".legacy-topic-header-branch-label")
             .text(topic_context.panel_header_branch_label);
 
         // Hide the branch chip when it has no label, or when the branch
@@ -1130,33 +1133,33 @@ function render_topic_header_controls(options: {
         const branch_label_present =
             topic_context.panel_header_branch_label !== "" &&
             !topic_context.panel_branch_is_topic_default;
-        $branch_control.toggleClass("pear-topic-header-control-hidden", !branch_label_present);
+        $branch_control.toggleClass("legacy-topic-header-control-hidden", !branch_label_present);
 
         // The commit line (design §8.2): silence is the empty state — no
         // commits, no line, no "no repo" furniture.
         $status_cluster
-            .find(".pear-topic-header-commitline")
-            .toggleClass("pear-topic-header-control-hidden", !topic_context.panel_has_commitline);
+            .find(".legacy-topic-header-commitline")
+            .toggleClass("legacy-topic-header-control-hidden", !topic_context.panel_has_commitline);
 
-        const $work_control = $status_cluster.find(".pear-topic-header-git-control");
+        const $work_control = $status_cluster.find(".legacy-topic-header-git-control");
         $work_control
             .removeClass(
-                "pear-topic-header-work-clean pear-topic-header-work-dirty pear-topic-header-work-unknown",
+                "legacy-topic-header-work-clean legacy-topic-header-work-dirty legacy-topic-header-work-unknown",
             )
-            .addClass(`pear-topic-header-work-${topic_context.panel_git_status_class}`);
+            .addClass(`legacy-topic-header-work-${topic_context.panel_git_status_class}`);
         $work_control.attr({
             "aria-label": $t({defaultMessage: "Open Pear Git details: {work_label}"}, {work_label}),
             title: first_nonempty(work_title, work_label),
-            "data-pear-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
+            "data-legacy-workbench-view": topic_context.has_workbench_diff ? "diff" : "history",
         });
-        $work_control.find(".pear-commitline-sha").text(topic_context.panel_commit_sha);
-        $work_control.find(".pear-commitline-subject").text(topic_context.panel_commit_subject);
-        $work_control.find(".pear-commitline-meta").text(topic_context.panel_commit_meta);
+        $work_control.find(".legacy-commitline-sha").text(topic_context.panel_commit_sha);
+        $work_control.find(".legacy-commitline-subject").text(topic_context.panel_commit_subject);
+        $work_control.find(".legacy-commitline-meta").text(topic_context.panel_commit_meta);
 
         // A freshly injected cluster carries the template's hidden,
         // unselected tab strip; reapply the strip state in the same
         // pass or it blinks until the next panel render.
-        pear_workspace.refresh_tab_strips();
+        legacy_workspace.refresh_tab_strips();
     });
 }
 
@@ -1176,7 +1179,7 @@ export function refresh_topic_header_controls(): void {
 }
 
 function anchor_kind_for_element(element: HTMLElement): WorkbenchAnchorKind {
-    return element.classList.contains("pear-topic-header-git-control") ? "git" : "context";
+    return element.classList.contains("legacy-topic-header-git-control") ? "git" : "context";
 }
 
 function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement | undefined {
@@ -1187,8 +1190,8 @@ function visible_header_anchor_for_kind(kind: WorkbenchAnchorKind): HTMLElement 
     }
     const selector =
         kind === "context"
-            ? ".message_header_stream .pear-topic-header-runtime-control"
-            : ".message_header_stream .pear-topic-header-git-control";
+            ? ".message_header_stream .legacy-topic-header-runtime-control"
+            : ".message_header_stream .legacy-topic-header-git-control";
     return [...document.querySelectorAll<HTMLElement>(selector)].find((element) => {
         const header = element.closest<HTMLElement>(".message_header_stream");
         return (
@@ -1241,8 +1244,8 @@ export function workbench_popover_top_for_testing(options: {
 }
 
 function position_workbench_popover(): void {
-    const panel = ensure_pear_panel_host();
-    if (!panel?.classList.contains("pear-workbench-popover-open")) {
+    const panel = ensure_armada_panel_host();
+    if (!panel?.classList.contains("legacy-workbench-popover-open")) {
         return;
     }
     const anchor = visible_header_anchor();
@@ -1270,37 +1273,37 @@ function position_workbench_popover(): void {
         min_body_height: WORKBENCH_POPOVER_MIN_BODY_PX,
     });
     const arrow_left = Math.min(Math.max(anchor_center - left, 18), width - 18);
-    panel.style.setProperty("--pear-workbench-popover-left", `${Math.round(left)}px`);
-    panel.style.setProperty("--pear-workbench-popover-top", `${Math.round(top)}px`);
-    panel.style.setProperty("--pear-workbench-popover-width", `${Math.round(width)}px`);
+    panel.style.setProperty("--legacy-workbench-popover-left", `${Math.round(left)}px`);
+    panel.style.setProperty("--legacy-workbench-popover-top", `${Math.round(top)}px`);
+    panel.style.setProperty("--legacy-workbench-popover-width", `${Math.round(width)}px`);
     // Available space below the (clamped) top; the body scrolls internally if
     // its content is taller, so it can never extend past the viewport bottom.
     panel.style.setProperty(
-        "--pear-workbench-popover-max-height",
+        "--legacy-workbench-popover-max-height",
         `${Math.max(margin, Math.round(viewport_height - top - margin))}px`,
     );
-    panel.style.setProperty("--pear-workbench-popover-arrow-left", `${Math.round(arrow_left)}px`);
+    panel.style.setProperty("--legacy-workbench-popover-arrow-left", `${Math.round(arrow_left)}px`);
 }
 
 function set_workbench_popover_open(workbench_open: boolean): void {
-    const panel = ensure_pear_panel_host();
+    const panel = ensure_armada_panel_host();
     if (panel === undefined) {
         return;
     }
     const $panel = $(panel);
-    $panel.toggleClass("pear-workbench-popover-open", workbench_open);
+    $panel.toggleClass("legacy-workbench-popover-open", workbench_open);
     if (workbench_open) {
         position_workbench_popover();
         return;
     }
-    panel.style.removeProperty("--pear-workbench-popover-left");
-    panel.style.removeProperty("--pear-workbench-popover-top");
-    panel.style.removeProperty("--pear-workbench-popover-width");
-    panel.style.removeProperty("--pear-workbench-popover-max-height");
-    panel.style.removeProperty("--pear-workbench-popover-arrow-left");
+    panel.style.removeProperty("--legacy-workbench-popover-left");
+    panel.style.removeProperty("--legacy-workbench-popover-top");
+    panel.style.removeProperty("--legacy-workbench-popover-width");
+    panel.style.removeProperty("--legacy-workbench-popover-max-height");
+    panel.style.removeProperty("--legacy-workbench-popover-arrow-left");
 }
 
-function active_display_run(runs: PearRun[]): ReturnType<typeof display_run> | undefined {
+function active_display_run(runs: ArmadaRun[]): ReturnType<typeof display_run> | undefined {
     const active_run =
         runs.find(
             (run) => run.status === "running" || run.status === "queued" || run.status === "paused",
@@ -1399,7 +1402,7 @@ function record_context_refresh(stream: string | undefined, topic: string | unde
     last_context_refresh_at = Date.now();
 }
 
-function remember_topic_context(topic_context: PearWorkspaceContext | null | undefined): void {
+function remember_topic_context(topic_context: ArmadaWorkspaceContext | null | undefined): void {
     if (topic_context === undefined || topic_context === null) {
         return;
     }
@@ -1415,10 +1418,10 @@ function remember_topic_context(topic_context: PearWorkspaceContext | null | und
         const has_pinned_repo =
             topic_context.pinned_repo !== undefined && topic_context.pinned_repo !== "";
         if (has_pinned_repo || topic_context.workdir !== "") {
-            pear_workspace_marks.note_pinned_repo_for_stream(sub.stream_id);
+            legacy_workspace_marks.note_pinned_repo_for_stream(sub.stream_id);
         }
         if (topic_context.workdir !== "") {
-            pear_workspace_marks.note_topic_workspace(sub.stream_id, topic_context.topic);
+            legacy_workspace_marks.note_topic_workspace(sub.stream_id, topic_context.topic);
         }
     }
 }
@@ -1441,15 +1444,15 @@ function notify_topic_context_listeners(): void {
 export function shared_topic_context(
     stream: string | undefined,
     topic: string | undefined,
-): PearWorkspaceContext | undefined {
+): ArmadaWorkspaceContext | undefined {
     return cached_topic_context(stream, topic);
 }
 
-export function shared_runs(): PearRun[] {
+export function shared_runs(): ArmadaRun[] {
     return last_runs;
 }
 
-export function handle_pear_run_event(event: {
+export function handle_armada_run_event(event: {
     sequence: number;
     run_id: number;
     status: string;
@@ -1461,23 +1464,23 @@ export function handle_pear_run_event(event: {
     plan: {step: string; status: string}[] | null;
     overview: string | null;
     has_visible_assistant_text: boolean | null;
-    usage: z.infer<typeof pear_usage_schema> | null;
+    usage: z.infer<typeof armada_usage_schema> | null;
     duration_seconds: number | null;
     agent_thread_id?: string | null | undefined;
-    agent?: pear_run_state.PearAgentThreadDelta | null | undefined;
-    agents?: pear_run_state.PearAgentThread[] | null | undefined;
+    agent?: legacy_run_state.ArmadaAgentThreadDelta | null | undefined;
+    agents?: legacy_run_state.ArmadaAgentThread[] | null | undefined;
 }): void {
     const {stream, topic} = current_context();
     if (stream !== event.stream || topic !== event.topic) {
         return;
     }
-    if (!pear_run_state.event_is_latest(event.run_id, event.sequence)) {
+    if (!legacy_run_state.event_is_latest(event.run_id, event.sequence)) {
         return;
     }
     const run_index = last_runs.findIndex((run) => run.id === event.run_id);
     if (run_index === -1) {
         // One reconciliation fetch establishes immutable run metadata for a
-        // newly observed run; subsequent progress arrives only as pear_run.
+        // newly observed run; subsequent progress arrives only as agent_run.
         refresh({live: true});
         return;
     }
@@ -1490,7 +1493,7 @@ export function handle_pear_run_event(event: {
         tool_count: event.tool_count,
         plan: event.plan ?? run.plan,
         overview: event.overview ?? (event.plan === null ? run.overview : null),
-        agents: pear_run_state.get_run_view_by_id(event.run_id)?.agents ?? run.agents,
+        agents: legacy_run_state.get_run_view_by_id(event.run_id)?.agents ?? run.agents,
         usage: {
             ...run.usage,
             ...event.usage,
@@ -1543,14 +1546,14 @@ export function liveness_reconciliation_needs_timer_for_testing(options: {
 
 function visible_working_placeholder_message_id(): number | undefined {
     const rows = document.querySelectorAll<HTMLElement>(
-        '.focused-message-list .message_row[data-pear-working-placeholder="true"]',
+        '.focused-message-list .message_row[data-legacy-working-placeholder="true"]',
     );
     const row = rows.item(rows.length - 1);
     const message_id = Number.parseInt(row?.dataset["messageId"] ?? "", 10);
     return Number.isInteger(message_id) ? message_id : undefined;
 }
 
-function arm_liveness_reconciliation(run: PearRun | undefined): void {
+function arm_liveness_reconciliation(run: ArmadaRun | undefined): void {
     const owner = liveness_reconciliation_owner_for_testing({
         run_id: run?.id,
         run_status: run?.status,
@@ -1631,13 +1634,13 @@ function refresh_request_is_current(options: {
 }
 
 export function reconcile_run_snapshot_for_testing(
-    run: PearRun,
-    previous: PearRun | undefined,
-): PearRun {
-    if (pear_run_state.snapshot_is_current(run.id, run.snapshot_sequence)) {
+    run: ArmadaRun,
+    previous: ArmadaRun | undefined,
+): ArmadaRun {
+    if (legacy_run_state.snapshot_is_current(run.id, run.snapshot_sequence)) {
         return run;
     }
-    const view = pear_run_state.get_run_view_by_id(run.id);
+    const view = legacy_run_state.get_run_view_by_id(run.id);
     if (view === undefined) {
         return previous ?? run;
     }
@@ -1669,7 +1672,7 @@ export function reconcile_run_snapshot_for_testing(
     };
 }
 
-function reconcile_run_snapshots(runs: PearRun[]): PearRun[] {
+function reconcile_run_snapshots(runs: ArmadaRun[]): ArmadaRun[] {
     const previous_by_id = new Map(last_runs.map((run) => [run.id, run]));
     return runs.map((run) => reconcile_run_snapshot_for_testing(run, previous_by_id.get(run.id)));
 }
@@ -1679,7 +1682,7 @@ export function remember_saved_topic_context(raw_topic_context: unknown): void {
     // the header pill and panel reflect the change immediately instead
     // of waiting out the next context refresh. The menu parses the save
     // response with its own (narrower) schema, so re-validate here.
-    const parsed = pear_topic_context_schema.safeParse(raw_topic_context);
+    const parsed = armada_topic_context_schema.safeParse(raw_topic_context);
     if (!parsed.success) {
         return;
     }
@@ -1689,7 +1692,7 @@ export function remember_saved_topic_context(raw_topic_context: unknown): void {
 }
 
 export function handle_narrow_activated(): void {
-    pear_wall.handle_narrow_changed();
+    legacy_wall.handle_narrow_changed();
     const key = current_context_key();
     if (key === last_observed_context_key) {
         render();
@@ -1711,10 +1714,10 @@ function render_state_key(render_state: object): string {
 export function topic_context_after_refresh_for_testing(options: {
     include_context: boolean;
     live: boolean;
-    response_topic_context: PearWorkspaceContext | null | undefined;
-    last_topic_context: PearWorkspaceContext | null | undefined;
-    cached_topic_context?: PearWorkspaceContext | null | undefined;
-}): PearWorkspaceContext | null | undefined {
+    response_topic_context: ArmadaWorkspaceContext | null | undefined;
+    last_topic_context: ArmadaWorkspaceContext | null | undefined;
+    cached_topic_context?: ArmadaWorkspaceContext | null | undefined;
+}): ArmadaWorkspaceContext | null | undefined {
     if (options.response_topic_context !== undefined && options.response_topic_context !== null) {
         return options.response_topic_context;
     }
@@ -1733,7 +1736,7 @@ export function render_state_changed_for_testing(
 
 let last_workspace_rail_signature = "";
 
-function pear_rail_duration_label(duration_seconds: number): string {
+function armada_rail_duration_label(duration_seconds: number): string {
     const total_seconds = Math.round(duration_seconds);
     if (total_seconds < 60) {
         return `${total_seconds}s`;
@@ -1741,7 +1744,7 @@ function pear_rail_duration_label(duration_seconds: number): string {
     return `${Math.floor(total_seconds / 60)}m ${total_seconds % 60}s`;
 }
 
-type PearRailRunEntry = {
+type ArmadaRailRunEntry = {
     glyph: string;
     failed_class: string;
     label: string;
@@ -1750,7 +1753,7 @@ type PearRailRunEntry = {
     result_message_id: number | undefined;
 };
 
-type PearRailPlanStep = {
+type ArmadaRailPlanStep = {
     step: string;
     status_glyph: string;
     status_class: string;
@@ -1759,7 +1762,7 @@ type PearRailPlanStep = {
     is_current?: boolean;
 };
 
-export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanStep[] {
+export function armada_rail_plan_steps_for_testing(runs: ArmadaRun[]): ArmadaRailPlanStep[] {
     // Plans are run-scoped. While a new run is active, never fall back to a
     // completed checklist from an earlier turn. Keep the rail resident from
     // the first queued event with the same quiet Working state used by chat.
@@ -1773,8 +1776,8 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
             {
                 step: $t({defaultMessage: "Working"}),
                 status_glyph: "",
-                status_class: "pear-rail-plan-active",
-                glyph_class: "pear-thinking-glyph",
+                status_class: "legacy-rail-plan-active",
+                glyph_class: "legacy-thinking-glyph",
                 is_current: true,
             },
         ];
@@ -1784,7 +1787,7 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
             return {
                 step: "…",
                 status_glyph: "",
-                status_class: "pear-rail-plan-ellipsis",
+                status_class: "legacy-rail-plan-ellipsis",
                 glyph_class: "",
                 is_ellipsis: true,
             };
@@ -1793,8 +1796,8 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
             return {
                 step: row.step,
                 status_glyph: row.status === "completed" ? "✓" : "",
-                status_class: "pear-rail-plan-active",
-                glyph_class: row.status === "completed" ? "" : "pear-thinking-glyph",
+                status_class: "legacy-rail-plan-active",
+                glyph_class: row.status === "completed" ? "" : "legacy-thinking-glyph",
                 is_current: true,
             };
         }
@@ -1802,27 +1805,27 @@ export function pear_rail_plan_steps_for_testing(runs: PearRun[]): PearRailPlanS
             return {
                 step: row.step,
                 status_glyph: "✓",
-                status_class: "pear-rail-plan-done",
+                status_class: "legacy-rail-plan-done",
                 glyph_class: "",
             };
         }
         return {
             step: row.step,
             status_glyph: "○",
-            status_class: "pear-rail-plan-pending",
+            status_class: "legacy-rail-plan-pending",
             glyph_class: "",
         };
     });
 }
 
-function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
+function armada_rail_run_entries(runs: ArmadaRun[]): ArmadaRailRunEntry[] {
     const settled = runs.filter((run) => ["done", "failed", "cancelled"].includes(run.status));
     return settled.slice(0, 3).map((run) => {
         const failed = run.status !== "done";
         const parts: string[] = [];
         const duration = run.usage?.duration_seconds;
         if (typeof duration === "number" && duration > 0) {
-            parts.push(pear_rail_duration_label(duration));
+            parts.push(armada_rail_duration_label(duration));
         }
         const tool_count = run.tool_count ?? 0;
         if (tool_count > 0) {
@@ -1840,7 +1843,7 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
         const result_message_id = run.result_message_id ?? undefined;
         return {
             glyph: failed ? "✗" : "✓",
-            failed_class: failed ? "pear-rail-run-failed" : "",
+            failed_class: failed ? "legacy-rail-run-failed" : "",
             label: first_nonempty(parts.join(" · "), run.status),
             when,
             has_result_message_id: result_message_id !== undefined,
@@ -1850,14 +1853,14 @@ function pear_rail_run_entries(runs: PearRun[]): PearRailRunEntry[] {
 }
 
 function render_workspace_rail(
-    topic_context: PearWorkspaceContext | undefined,
-    runs: PearRun[] = last_runs,
+    topic_context: ArmadaWorkspaceContext | undefined,
+    runs: ArmadaRun[] = last_runs,
 ): void {
-    const $rail = $("#pear-workspace-rail");
+    const $rail = $("#legacy-workspace-rail");
     if ($rail.length === 0) {
         return;
     }
-    const plan_steps = pear_rail_plan_steps_for_testing(runs);
+    const plan_steps = armada_rail_plan_steps_for_testing(runs);
     const has_workspace = topic_context !== undefined && topic_context.workdir !== "";
     if (!has_workspace && plan_steps.length === 0) {
         if (last_workspace_rail_signature !== "") {
@@ -1882,17 +1885,17 @@ function render_workspace_rail(
     );
     const dirty = git?.dirty === true;
     const changed_count = git?.changed_count ?? 0;
-    const run_entries = pear_rail_run_entries(runs);
+    const run_entries = armada_rail_run_entries(runs);
     const active_runs = runs.filter((run) => run.status === "running" || run.status === "queued");
     const active_run = active_runs[0];
     const active_meta_parts: string[] = [];
     if (active_run !== undefined) {
         const duration = active_run.usage?.duration_seconds;
         if (typeof duration === "number" && duration > 0) {
-            active_meta_parts.push(pear_rail_duration_label(duration));
+            active_meta_parts.push(armada_rail_duration_label(duration));
         } else if (typeof active_run.date_created === "number") {
             active_meta_parts.push(
-                pear_rail_duration_label(Date.now() / 1000 - active_run.date_created),
+                armada_rail_duration_label(Date.now() / 1000 - active_run.date_created),
             );
         }
         if ((active_run.tool_count ?? 0) > 0) {
@@ -1903,7 +1906,7 @@ function render_workspace_rail(
                 ),
             );
         }
-        const queue_depth = pear_rail_queue_depth_for_testing(active_runs);
+        const queue_depth = armada_rail_queue_depth_for_testing(active_runs);
         if (queue_depth > 0) {
             active_meta_parts.push(
                 $t(
@@ -1915,7 +1918,7 @@ function render_workspace_rail(
     }
     const args = {
         has_workspace,
-        repo_label: pear_rail_repo_display_label(repo_label),
+        repo_label: armada_rail_repo_display_label(repo_label),
         repo_title: repo_label,
         branch_label,
         head_short: git?.head_short?.trim() ?? "",
@@ -1941,7 +1944,7 @@ function render_workspace_rail(
         return;
     }
     const template = document.createElement("template");
-    template.innerHTML = render_pear_workspace_rail(args);
+    template.innerHTML = render_legacy_workspace_rail(args);
     $rail.empty();
     rail.append(template.content);
     $rail.removeAttr("hidden");
@@ -1949,14 +1952,14 @@ function render_workspace_rail(
 
 // A clone URL is the repository's address, not its name: the rail says
 // "pallets/click" and keeps the full URL for the tooltip.
-export function pear_rail_repo_display_label(label: string): string {
+export function armada_rail_repo_display_label(label: string): string {
     const match = /^(?:[a-z][a-z\d+.-]*:\/\/|git@)[^/:]+[/:](.+?)(?:\.git)?\/?$/i.exec(
         label.trim(),
     );
     return match?.[1] ?? label;
 }
 
-export function pear_rail_queue_depth_for_testing(runs: {status: string}[]): number {
+export function armada_rail_queue_depth_for_testing(runs: {status: string}[]): number {
     return Math.max(
         0,
         runs.filter((run) => run.status === "running" || run.status === "queued").length - 1,
@@ -1971,8 +1974,8 @@ export function visible_panel_error_for_testing(
 }
 
 function render(
-    runs: PearRun[] = last_runs,
-    topic_context: PearWorkspaceContext | null | undefined = last_topic_context,
+    runs: ArmadaRun[] = last_runs,
+    topic_context: ArmadaWorkspaceContext | null | undefined = last_topic_context,
 ): void {
     last_runs = runs;
     const {stream, topic} = current_context();
@@ -1994,7 +1997,7 @@ function render(
         // run rows are not (yet) visible in the runs payload.
         const typing_stream_id = stream_data.get_stream_id(stream);
         if (typing_stream_id !== undefined) {
-            typing_events.clear_pear_typists_for_topic(typing_stream_id, topic);
+            typing_events.clear_armada_typists_for_topic(typing_stream_id, topic);
         }
     }
     if (active_run === undefined) {
@@ -2013,15 +2016,15 @@ function render(
         manually_open: viewport_allows_workbench && manual_workbench_open,
     });
     const panel_open = workbench_open;
-    pear_run_state.remember_runs(runs);
+    legacy_run_state.remember_runs(runs);
     if (has_topic) {
-        pear_run_state.set_active_run_result_messages(runs, {
+        legacy_run_state.set_active_run_result_messages(runs, {
             force_reconcile: active_run === undefined,
             stream,
             topic,
         });
     }
-    pear_run_state.set_active_run_topic(
+    legacy_run_state.set_active_run_topic(
         active_run === undefined ? undefined : stream,
         active_run === undefined ? undefined : topic,
     );
@@ -2051,7 +2054,7 @@ function render(
         render_workspace_rail(display_context, runs);
         last_auxiliary_render_key = auxiliary_render_key;
     }
-    pear_workspace.refresh_if_open_on_settle(active_run !== undefined);
+    legacy_workspace.refresh_if_open_on_settle(active_run !== undefined);
     const panel_header_state = panel_header_state_for_testing(active_run, {
         has_topic,
         show_workbench: workbench_open,
@@ -2093,7 +2096,7 @@ function render(
         status_class: status_class(panel_status),
     };
     const next_render_state_key = render_state_key(render_state);
-    const panel = ensure_pear_panel_host();
+    const panel = ensure_armada_panel_host();
     if (panel === undefined) {
         return;
     }
@@ -2104,8 +2107,8 @@ function render(
         const focused = document.activeElement;
         const focused_id =
             focused instanceof HTMLElement && panel.contains(focused) ? focused.id : "";
-        $panel.html(render_pear_panel(render_state));
-        $panel.toggleClass("pear-panel-collapsed", !panel_open && visible_error === "");
+        $panel.html(render_legacy_panel(render_state));
+        $panel.toggleClass("legacy-panel-collapsed", !panel_open && visible_error === "");
         set_workbench_popover_open(workbench_open);
         if (focused_id !== "") {
             const refocused = panel.querySelector(`#${focused_id}`);
@@ -2113,10 +2116,10 @@ function render(
                 refocused.focus();
             }
         }
-        pear_run_state.notify_liveness_markers_changed();
+        legacy_run_state.notify_liveness_markers_changed();
         last_render_state_key = next_render_state_key;
     }
-    $panel.toggleClass("pear-panel-collapsed", !panel_open && visible_error === "");
+    $panel.toggleClass("legacy-panel-collapsed", !panel_open && visible_error === "");
     set_workbench_popover_open(workbench_open);
     notify_topic_context_listeners();
 }
@@ -2130,7 +2133,7 @@ export function refresh_paused_for_testing(options: {
     return options.hidden && !options.force_context;
 }
 
-export function set_refresh_state_for_testing(options: {runs: PearRun[]; error?: string}): void {
+export function set_refresh_state_for_testing(options: {runs: ArmadaRun[]; error?: string}): void {
     last_runs = options.runs;
     last_error = options.error ?? "";
 }
@@ -2183,38 +2186,38 @@ export function refresh(options: RefreshOptions = {}): void {
             latest_generation: refresh_requests_by_context.get(request_context_key)?.generation,
         });
     void channel.get({
-        url: "/json/pear/runs",
+        url: "/json/armada/runs",
         data,
         success(raw_data) {
             if (!request_is_current()) {
                 return;
             }
-            if (!is_pear_runs_response(raw_data)) {
+            if (!is_armada_runs_response(raw_data)) {
                 last_error = $t({defaultMessage: "Pear returned an invalid runs payload."});
                 render();
                 return;
             }
             const data = {
                 ...raw_data,
-                pear_runs: reconcile_run_snapshots(raw_data.pear_runs),
+                armada_runs: reconcile_run_snapshots(raw_data.armada_runs),
             };
             last_error = "";
             dismissed_error_by_context.delete(request_context_key);
             const had_active_run = has_active_run(last_runs);
-            const has_active_run_after_refresh = has_active_run(data.pear_runs);
+            const has_active_run_after_refresh = has_active_run(data.armada_runs);
             const previous_topic_context = display_source_topic_context(stream, topic);
             const topic_context = topic_context_after_refresh_for_testing({
                 include_context,
                 live,
-                response_topic_context: data.pear_topic_context,
+                response_topic_context: data.armada_topic_context,
                 last_topic_context: previous_topic_context,
                 cached_topic_context: cached_topic_context(stream, topic),
             });
             remember_topic_context(topic_context);
-            if (data.pear_topic_context !== undefined && data.pear_topic_context !== null) {
+            if (data.armada_topic_context !== undefined && data.armada_topic_context !== null) {
                 record_context_refresh(stream, topic);
             }
-            render(data.pear_runs, topic_context);
+            render(data.armada_runs, topic_context);
             if (had_active_run && !has_active_run_after_refresh && !include_context) {
                 refresh({force_context: true});
             }
@@ -2251,7 +2254,7 @@ export function refresh(options: RefreshOptions = {}): void {
 
 function post_run_action(run_id: string, action: string): void {
     void channel.post({
-        url: `/json/pear/runs/${run_id}/${action}`,
+        url: `/json/armada/runs/${run_id}/${action}`,
         success() {
             refresh({force_context: true});
         },
@@ -2264,9 +2267,9 @@ function post_run_action(run_id: string, action: string): void {
 }
 
 export function optimistic_topic_context_for_testing(
-    topic_context: PearWorkspaceContext,
+    topic_context: ArmadaWorkspaceContext,
     options: {model?: string; reasoning_effort?: string},
-): PearWorkspaceContext {
+): ArmadaWorkspaceContext {
     const model = options.model ?? topic_context.model;
     const reasoning_effort =
         options.reasoning_effort ??
@@ -2289,18 +2292,18 @@ export function initialize(): void {
     // A freshly built workspace-pane shell needs its header cluster
     // and rail filled right away, even when the topic/run signatures are
     // unchanged from the DOM shell that Zulip just replaced.
-    $(document).on("pear:pane-shell-rendered.pear_panel", () => {
+    $(document).on("armada:pane-shell-rendered.armada_panel", () => {
         last_auxiliary_render_key = "";
         last_workspace_rail_signature = "";
         schedule_live_render();
     });
-    $(document).on(`${pear_run_state.PEAR_LIVENESS_MARKERS_CHANGED_EVENT}.pear_panel`, () => {
+    $(document).on(`${legacy_run_state.ARMADA_LIVENESS_MARKERS_CHANGED_EVENT}.armada_panel`, () => {
         arm_liveness_reconciliation(active_display_run(last_runs));
     });
-    $("body").on("click.pear_panel", "#pear-panel-refresh", () => {
+    $("body").on("click.armada_panel", "#legacy-panel-refresh", () => {
         refresh({force_context: true});
     });
-    $("body").on("click.pear_panel", ".pear-panel-error-dismiss", (e) => {
+    $("body").on("click.armada_panel", ".legacy-panel-error-dismiss", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const key = current_context_key();
@@ -2309,15 +2312,15 @@ export function initialize(): void {
         }
         schedule_live_render();
     });
-    $("body").on("click.pear_panel", ".pear-panel-close-action", () => {
+    $("body").on("click.armada_panel", ".legacy-panel-close-action", () => {
         close_work_details();
     });
-    $("body").on("click.pear_panel", ".pear-rail-workspace-line", (e) => {
+    $("body").on("click.armada_panel", ".legacy-rail-workspace-line", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        pear_workspace.set_tab("files");
+        legacy_workspace.set_tab("files");
     });
-    $("body").on("click.pear_panel", ".pear-rail-run", (e) => {
+    $("body").on("click.armada_panel", ".legacy-rail-run", (e) => {
         const message_id = Number.parseInt($(e.currentTarget).attr("data-message-id") ?? "", 10);
         if (!Number.isInteger(message_id)) {
             return;
@@ -2326,17 +2329,17 @@ export function initialize(): void {
         e.stopPropagation();
         message_lists.current?.select_id(message_id, {then_scroll: true});
     });
-    $("body").on("click.pear_panel", ".pear-panel-open-action", (e) => {
+    $("body").on("click.armada_panel", ".legacy-panel-open-action", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const requested_view = $(e.currentTarget).attr("data-pear-workbench-view");
+        const requested_view = $(e.currentTarget).attr("data-legacy-workbench-view");
         open_work_details(
             requested_view === "diff" || requested_view === "history" ? requested_view : undefined,
             e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined,
         );
     });
-    $(document).on("keydown.pear_panel", (e) => {
-        const workbench = $(e.target).closest(".pear-workbench")[0];
+    $(document).on("keydown.armada_panel", (e) => {
+        const workbench = $(e.target).closest(".legacy-workbench")[0];
         if (!(workbench instanceof HTMLElement)) {
             return;
         }
@@ -2369,12 +2372,12 @@ export function initialize(): void {
                       : (current_index + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) %
                         tabs.length;
             const next_tab = tabs[next_index];
-            const view = next_tab?.dataset["pearWorkbenchView"];
+            const view = next_tab?.dataset["legacyWorkbenchView"];
             if (view === "diff" || view === "history") {
                 select_workbench_view(view);
                 document
                     .querySelector<HTMLElement>(
-                        `#pear-panel .pear-workbench-tab[data-pear-workbench-view="${view}"]`,
+                        `#legacy-panel .legacy-workbench-tab[data-legacy-workbench-view="${view}"]`,
                     )
                     ?.focus({preventScroll: true});
             }
@@ -2398,24 +2401,24 @@ export function initialize(): void {
             first.focus({preventScroll: true});
         }
     });
-    $(document).on("click.pear_panel", (e) => {
+    $(document).on("click.armada_panel", (e) => {
         // Ignore clicks inside the workbench itself.  Using a target check here
-        // instead of stopPropagation on #pear-panel means other delegated
+        // instead of stopPropagation on #legacy-panel means other delegated
         // document handlers (e.g. Zulip's own popovers closing on outside
         // click) still see clicks that land inside the Pear panel.
-        if ($(e.target).closest("#pear-panel").length > 0) {
+        if ($(e.target).closest("#legacy-panel").length > 0) {
             return;
         }
         close_work_details({restore_focus: false});
     });
-    $("body").on("click.pear_panel", ".pear-workbench-tab", function () {
-        const view = $(this).attr("data-pear-workbench-view");
+    $("body").on("click.armada_panel", ".legacy-workbench-tab", function () {
+        const view = $(this).attr("data-legacy-workbench-view");
         if (view !== "diff" && view !== "history") {
             return;
         }
         select_workbench_view(view);
     });
-    $("body").on("click.pear_panel", ".pear-run-action", function () {
+    $("body").on("click.armada_panel", ".legacy-run-action", function () {
         const $button = $(this);
         const run_id = $button.attr("data-run-id");
         const action = $button.attr("data-action");
@@ -2424,7 +2427,7 @@ export function initialize(): void {
         }
         post_run_action(run_id, action);
     });
-    $(window).on("resize.pear_panel", () => {
+    $(window).on("resize.armada_panel", () => {
         // Coalesce the resize-event burst into one render per frame.
         if (resize_render_frame_id !== undefined) {
             return;
@@ -2434,10 +2437,10 @@ export function initialize(): void {
             render();
         });
     });
-    $(window).on("scroll.pear_panel", () => {
+    $(window).on("scroll.armada_panel", () => {
         position_workbench_popover();
     });
-    $(document).on("visibilitychange.pear_panel", () => {
+    $(document).on("visibilitychange.armada_panel", () => {
         if (!document.hidden) {
             refresh({force_context: true});
         }
@@ -2450,14 +2453,14 @@ export function initialize(): void {
 }
 
 export function stop(): void {
-    $(window).off("resize.pear_panel");
-    $(window).off("scroll.pear_panel");
-    $(document).off("click.pear_panel");
-    $(document).off("visibilitychange.pear_panel");
-    $(document).off("keydown.pear_panel");
-    $(document).off("pear:pane-shell-rendered.pear_panel");
-    $(document).off(`${pear_run_state.PEAR_LIVENESS_MARKERS_CHANGED_EVENT}.pear_panel`);
-    $("body").off(".pear_panel");
+    $(window).off("resize.armada_panel");
+    $(window).off("scroll.armada_panel");
+    $(document).off("click.armada_panel");
+    $(document).off("visibilitychange.armada_panel");
+    $(document).off("keydown.armada_panel");
+    $(document).off("armada:pane-shell-rendered.armada_panel");
+    $(document).off(`${legacy_run_state.ARMADA_LIVENESS_MARKERS_CHANGED_EVENT}.armada_panel`);
+    $("body").off(".armada_panel");
     clear_liveness_reconciliation_timer();
     liveness_reconciliation_owner = undefined;
     liveness_reconciliation_attempted = false;

@@ -1,6 +1,6 @@
-<div class="pear-wall-header">
+<div class="legacy-wall-header">
     <input
-      class="pear-wall-input"
+      class="legacy-wall-input"
       type="text"
       autocomplete="off"
       maxlength="500"
@@ -9,54 +9,54 @@
       />
 </div>
 {{#if has_blocks}}
-    <div class="pear-wall-blocks">
+    <div class="legacy-wall-blocks">
         {{#each blocks}}
             <section
-              class="pear-wall-block pear-wall-status-{{status}}
+              class="legacy-wall-block legacy-wall-status-{{status}}
               {{collapsed_class}}"
               data-monitor-id="{{id}}"
               >
-                <header class="pear-wall-block-header">
+                <header class="legacy-wall-block-header">
                     <button
                       type="button"
-                      class="pear-wall-collapse"
+                      class="legacy-wall-collapse"
                       data-wall-action="collapse"
                       aria-expanded="{{aria_expanded}}"
                       >{{collapse_glyph}}</button>
                     <span
-                      class="pear-wall-title"
+                      class="legacy-wall-title"
                       title="{{ask}}"
                       >{{title}}</span>
-                    <span class="pear-wall-dot" aria-hidden="true"></span>
+                    <span class="legacy-wall-dot" aria-hidden="true"></span>
                 </header>
                 {{#unless collapsed}}
-                    <div class="pear-wall-body">
+                    <div class="legacy-wall-body">
                         {{#if is_provisioning}}
-                            <div class="pear-wall-provisioning">
-                                <span class="pear-thinking-glyph-animated"></span>
+                            <div class="legacy-wall-provisioning">
+                                <span class="legacy-thinking-glyph-animated"></span>
                                 <span>{{t "setting up…"}}</span>
                             </div>
                         {{else if is_error}}
-                            <div class="pear-wall-error">
+                            <div class="legacy-wall-error">
                                 <span
-                                  class="pear-wall-error-text"
+                                  class="legacy-wall-error-text"
                                   title="{{last_error}}"
                                   >{{last_error_short}}</span>
                                 <button
                                   type="button"
-                                  class="pear-wall-foot-action"
+                                  class="legacy-wall-foot-action"
                                   data-wall-action="rebuild"
                                   >⟳ {{t "rebuild"}}</button>
                             </div>
                         {{else}}
-                            <div class="pear-artifact-wall-host" data-pear-artifact-host></div>
+                            <div class="legacy-artifact-wall-host" data-legacy-artifact-host></div>
                         {{/if}}
                     </div>
-                    <footer class="pear-wall-block-footer">
+                    <footer class="legacy-wall-block-footer">
                         {{#if show_cadence}}
                             <button
                               type="button"
-                              class="pear-wall-foot-action"
+                              class="legacy-wall-foot-action"
                               data-wall-action="cadence"
                               data-tippy-content="{{t 'Change cadence'}}"
                               >{{t "every"}} {{cadence_label}}</button>
@@ -64,13 +64,13 @@
                         {{#if is_live}}
                             <button
                               type="button"
-                              class="pear-wall-foot-action"
+                              class="legacy-wall-foot-action"
                               data-wall-action="refresh"
                               data-tippy-content="{{t 'Refresh now'}}"
                               >⟳</button>
                             <button
                               type="button"
-                              class="pear-wall-foot-action"
+                              class="legacy-wall-foot-action"
                               data-wall-action="pause"
                               data-tippy-content="{{t 'Pause'}}"
                               >⏸</button>
@@ -78,15 +78,15 @@
                         {{#if is_paused}}
                             <button
                               type="button"
-                              class="pear-wall-foot-action"
+                              class="legacy-wall-foot-action"
                               data-wall-action="resume"
                               data-tippy-content="{{t 'Resume'}}"
                               >▶</button>
                         {{/if}}
-                        <span class="pear-wall-foot-spacer"></span>
+                        <span class="legacy-wall-foot-spacer"></span>
                         <button
                           type="button"
-                          class="pear-wall-foot-action pear-wall-delete"
+                          class="legacy-wall-foot-action legacy-wall-delete"
                           data-wall-action="delete"
                           data-tippy-content="{{t 'Remove'}}"
                           >✕</button>
@@ -96,5 +96,5 @@
         {{/each}}
     </div>
 {{else}}
-    <div class="pear-wall-empty">{{t "type above — pear keeps it live here"}}</div>
+    <div class="legacy-wall-empty">{{t "type above — armada keeps it live here"}}</div>
 {{/if}}

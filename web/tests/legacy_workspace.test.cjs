@@ -14,20 +14,20 @@ const dom = new JSDOM(
         <div class="column-middle-inner">
             <div id="message_feed_container">
                 <div class="message_header_stream" data-height="42" data-header="old">
-                    <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
-                        <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
-                        <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
+                    <span class="legacy-workspace-tabs legacy-workspace-tabs-hidden" role="tablist">
+                        <button class="legacy-workspace-mode-tab legacy-workspace-tab-selected" data-legacy-tab="chat" role="tab">Chat</button>
+                        <button class="legacy-workspace-mode-tab" data-legacy-tab="readme" role="tab">README</button>
+                        <button class="legacy-workspace-mode-tab" data-legacy-tab="files" role="tab">Files</button>
                     </span>
                 </div>
             </div>
         </div>
         <header data-armada="header">
             <div class="message_header_stream" data-header="active">
-                <span class="pear-workspace-tabs pear-workspace-tabs-hidden" role="tablist">
-                    <button class="pear-workspace-mode-tab pear-workspace-tab-selected" data-pear-tab="chat" role="tab">Chat</button>
-                    <button class="pear-workspace-mode-tab" data-pear-tab="readme" role="tab">README</button>
-                    <button class="pear-workspace-mode-tab" data-pear-tab="files" role="tab">Files</button>
+                <span class="legacy-workspace-tabs legacy-workspace-tabs-hidden" role="tablist">
+                    <button class="legacy-workspace-mode-tab legacy-workspace-tab-selected" data-legacy-tab="chat" role="tab">Chat</button>
+                    <button class="legacy-workspace-mode-tab" data-legacy-tab="readme" role="tab">README</button>
+                    <button class="legacy-workspace-mode-tab" data-legacy-tab="files" role="tab">Files</button>
                 </span>
             </div>
         </header>
@@ -52,7 +52,7 @@ mock_jquery(jQueryFactory(window));
 const mounts = [];
 let reject_next_ready = false;
 mock_esm("../src/legacy_workspace_shell", {
-    create_pear_workspace_shell(options) {
+    create_armada_workspace_shell(options) {
         const reject_ready = reject_next_ready;
         reject_next_ready = false;
         const mounted = {
@@ -85,7 +85,7 @@ mock_esm("../src/legacy_workspace_shell", {
 });
 
 const {route} = zrequire("armada/state/route");
-const pear_workspace = zrequire("legacy_workspace");
+const legacy_workspace = zrequire("legacy_workspace");
 
 function click(selector) {
     const element = document.querySelector(selector);
@@ -107,53 +107,53 @@ async function settle() {
 
 run_test("Chat, README, and Files keep one warm shell with separate rooms", async () => {
     window.history.replaceState({}, "", "/");
-    sessionStorage.setItem('pear-tab:["devel","topic"]', "retired-document-view");
-    pear_workspace.initialize();
-    pear_workspace.sync({
+    sessionStorage.setItem('legacy-tab:["devel","topic"]', "retired-document-view");
+    legacy_workspace.initialize();
+    legacy_workspace.sync({
         stream: "Devel",
         topic: "Topic",
         workspaceId: "workspace-1",
     });
-    assert.equal(pear_workspace.pane_is_open(), false);
+    assert.equal(legacy_workspace.pane_is_open(), false);
     assert.equal(
         document
-            .querySelector(".pear-workspace-tabs")
-            .classList.contains("pear-workspace-tabs-hidden"),
+            .querySelector(".legacy-workspace-tabs")
+            .classList.contains("legacy-workspace-tabs-hidden"),
         false,
     );
 
     const active_header = document.querySelector("[data-header='active']");
     route.set({place: "worktree", view: "chat"});
-    const chat_tab = active_header.querySelector('[data-pear-tab="chat"]');
+    const chat_tab = active_header.querySelector('[data-legacy-tab="chat"]');
     chat_tab.focus();
     keydown(chat_tab, "ArrowRight");
     await settle();
-    assert.equal(pear_workspace.pane_is_open(), true);
-    assert.equal(new URL(window.location.href).searchParams.get("pear_view"), "readme");
+    assert.equal(legacy_workspace.pane_is_open(), true);
+    assert.equal(new URL(window.location.href).searchParams.get("armada_view"), "readme");
     assert.equal(mounts.length, 1);
     assert.equal(mounts[0].options.workspaceId, "workspace-1");
-    assert.equal(document.querySelector("#pear-workspace-pane").hasAttribute("hidden"), false);
+    assert.equal(document.querySelector("#legacy-workspace-pane").hasAttribute("hidden"), false);
     // The frame shows the view in front; the chat keeps its place under it.
     assert.deepEqual(route.get(), {place: "worktree", view: "readme"});
     assert.equal(
-        document.querySelector('[data-pear-tab="readme"]').getAttribute("aria-selected"),
+        document.querySelector('[data-legacy-tab="readme"]').getAttribute("aria-selected"),
         "true",
     );
-    assert.equal(document.activeElement.dataset.pearTab, "readme");
-    const quick_open_event = new window.Event("pear:workspace-quick-open", {cancelable: true});
+    assert.equal(document.activeElement.dataset.legacyTab, "readme");
+    const quick_open_event = new window.Event("armada:workspace-quick-open", {cancelable: true});
     assert.equal(document.dispatchEvent(quick_open_event), false);
     assert.equal(mounts[0].quickOpens, 1);
     assert.equal(
-        document.querySelector('[data-pear-tab="files"]').getAttribute("aria-selected"),
+        document.querySelector('[data-legacy-tab="files"]').getAttribute("aria-selected"),
         "true",
     );
     assert.deepEqual(mounts[0].rooms, ["readme", "files"]);
     assert.deepEqual(route.get(), {place: "worktree", view: "files"});
 
-    keydown(document.querySelector("#pear-workspace-pane"), "Escape");
-    assert.equal(pear_workspace.pane_is_open(), false);
-    assert.equal(new URL(window.location.href).searchParams.has("pear_view"), false);
-    assert.equal(document.activeElement.dataset.pearTab, "chat");
+    keydown(document.querySelector("#legacy-workspace-pane"), "Escape");
+    assert.equal(legacy_workspace.pane_is_open(), false);
+    assert.equal(new URL(window.location.href).searchParams.has("armada_view"), false);
+    assert.equal(document.activeElement.dataset.legacyTab, "chat");
     assert.equal(
         document.activeElement.closest(".message_header_stream"),
         active_header,
@@ -161,68 +161,68 @@ run_test("Chat, README, and Files keep one warm shell with separate rooms", asyn
     );
     assert.equal(mounts[0].destroys, 0, "Escape keeps the warm shell mounted");
     assert.deepEqual(route.get(), {place: "worktree", view: "chat"});
-    click('[data-pear-tab="readme"]');
+    click('[data-legacy-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 1);
 
-    click('[data-pear-tab="chat"]');
-    assert.equal(pear_workspace.pane_is_open(), false);
+    click('[data-legacy-tab="chat"]');
+    assert.equal(legacy_workspace.pane_is_open(), false);
     assert.equal(mounts[0].destroys, 0, "Chat keeps the workspace shell warm");
-    click('[data-pear-tab="files"]');
+    click('[data-legacy-tab="files"]');
     await settle();
     assert.equal(mounts.length, 1, "returning to Files reuses the shell");
 
-    pear_workspace.refresh_if_open_on_settle(true);
-    pear_workspace.refresh_if_open_on_settle(false);
+    legacy_workspace.refresh_if_open_on_settle(true);
+    legacy_workspace.refresh_if_open_on_settle(false);
     assert.equal(mounts[0].refreshes, 1);
 
-    pear_workspace.sync({
+    legacy_workspace.sync({
         stream: "Devel",
         topic: "Other topic",
         workspaceId: "workspace-2",
     });
     await settle();
     assert.equal(mounts[0].destroys, 1);
-    assert.equal(pear_workspace.pane_is_open(), false, "a new context starts in Chat");
+    assert.equal(legacy_workspace.pane_is_open(), false, "a new context starts in Chat");
 
-    pear_workspace.sync({stream: "Devel", topic: "Other topic", workspaceId: undefined});
+    legacy_workspace.sync({stream: "Devel", topic: "Other topic", workspaceId: undefined});
     assert.equal(
         document
-            .querySelector(".pear-workspace-tabs")
-            .classList.contains("pear-workspace-tabs-hidden"),
+            .querySelector(".legacy-workspace-tabs")
+            .classList.contains("legacy-workspace-tabs-hidden"),
         false,
         "the views stand before the worktree's context arrives",
     );
     await settle();
 
-    pear_workspace.sync({
+    legacy_workspace.sync({
         stream: "Devel",
         topic: "Retry topic",
         workspaceId: "workspace-retry",
     });
     reject_next_ready = true;
     blueslip.expect("error", "Pear workspace shell failed to load");
-    click('[data-pear-tab="readme"]');
+    click('[data-legacy-tab="readme"]');
     await settle();
     assert.equal(mounts.length, 2);
     assert.equal(mounts[1].destroys, 1);
-    assert.match(document.querySelector(".pear-workspace-host").textContent, /failed to load/);
+    assert.match(document.querySelector(".legacy-workspace-host").textContent, /failed to load/);
 
-    document.querySelector(".pear-workspace-load-error button").focus();
-    click(".pear-workspace-load-error button");
-    assert.equal(document.activeElement, document.querySelector(".pear-workspace-host"));
+    document.querySelector(".legacy-workspace-load-error button").focus();
+    click(".legacy-workspace-load-error button");
+    assert.equal(document.activeElement, document.querySelector(".legacy-workspace-host"));
     await settle();
     assert.equal(mounts.length, 3);
     assert.equal(mounts[2].options.workspaceId, "workspace-retry");
-    assert.equal(document.querySelector(".pear-workspace-host").hasAttribute("aria-busy"), false);
+    assert.equal(document.querySelector(".legacy-workspace-host").hasAttribute("aria-busy"), false);
 
     window.history.replaceState(
         {},
         "",
-        "/?pear_view=readme&pear_workspace=workspace-retry&pear_path=README.md&pear_mode=rich",
+        "/?armada_view=readme&armada_workspace=workspace-retry&armada_path=README.md&armada_mode=rich",
     );
     window.dispatchEvent(new window.PopStateEvent("popstate"));
     await settle();
-    assert.equal(pear_workspace.pane_is_open(), true);
+    assert.equal(legacy_workspace.pane_is_open(), true);
     assert.equal(mounts[2].locationApplies, 1);
 });

@@ -29,20 +29,20 @@ from zerver.models.users import get_active_user
 
 
 def get_bot_handler(service_name: str) -> Any:
-    if service_name == "pear":
-        from zerver.lib.armada import PearEmbeddedBotHandler
+    if service_name == "armada":
+        from zerver.lib.armada import ArmadaEmbeddedBotHandler
         from zerver.lib.armada_worker import (
-            PearDatabaseWorkerRunStore,
-            PearQueueWorkerDispatcher,
-            build_pear_addressing_intent_classifier_from_settings,
-            load_pear_active_session_from_zulip,
+            ArmadaDatabaseWorkerRunStore,
+            ArmadaQueueWorkerDispatcher,
+            build_armada_addressing_intent_classifier_from_settings,
+            load_armada_active_session_from_zulip,
         )
 
-        return PearEmbeddedBotHandler(
-            active_session_loader=load_pear_active_session_from_zulip,
-            worker_run_store=PearDatabaseWorkerRunStore(),
-            worker_dispatcher=PearQueueWorkerDispatcher(),
-            addressing_intent_classifier=build_pear_addressing_intent_classifier_from_settings(),
+        return ArmadaEmbeddedBotHandler(
+            active_session_loader=load_armada_active_session_from_zulip,
+            worker_run_store=ArmadaDatabaseWorkerRunStore(),
+            worker_dispatcher=ArmadaQueueWorkerDispatcher(),
+            addressing_intent_classifier=build_armada_addressing_intent_classifier_from_settings(),
         )
 
     # Check that this service is present in EMBEDDED_BOTS, add exception handling.

@@ -4,42 +4,46 @@ from unittest.mock import Mock, patch
 
 from django.core.cache import cache
 
-from zerver.lib.armada import PEAR_DEFAULT_STREAM, PEAR_DEFAULT_TOPIC, PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada import (
+    ARMADA_DEFAULT_STREAM,
+    ARMADA_DEFAULT_TOPIC,
+    ARMADA_EMBEDDED_BOT_SERVICE,
+)
 from zerver.lib.armada_presentation import (
-    PEAR_PRESENTATION_OVERVIEW_MAX_CHARS,
-    build_pear_presentation_input,
-    parse_pear_presentation_output,
+    ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS,
+    build_armada_presentation_input,
+    parse_armada_presentation_output,
 )
 from zerver.lib.armada_worker import (
-    PEAR_PRESENTATION_CADENCE_SECONDS,
-    PEAR_PRESENTATION_QUEUE_NAME,
-    mark_pear_run_attended,
-    maybe_enqueue_pear_run_presentation,
+    ARMADA_PRESENTATION_CADENCE_SECONDS,
+    ARMADA_PRESENTATION_QUEUE_NAME,
+    mark_armada_run_attended,
+    maybe_enqueue_armada_run_presentation,
 )
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import UserProfile
 from zerver.models.bots import AgentRun, AgentRunEvent
-from zerver.worker.pear_presentation import PearPresentationWorker
+from zerver.worker.armada_presentation import ArmadaPresentationWorker
 
 
-class PearPresentationTest(ZulipTestCase):
+class ArmadaPresentationTest(ZulipTestCase):
     def create_run(self) -> AgentRun:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear-presentation",
+        armada_bot = self.create_test_bot(
+            "armada-presentation",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         return AgentRun.objects.create(
             realm=owner.realm,
-            bot_profile=pear_bot,
+            bot_profile=armada_bot,
             requesting_user=owner,
             trigger_message_id=7001,
             result_message_id=7002,
-            stream_name=PEAR_DEFAULT_STREAM,
-            topic_name=PEAR_DEFAULT_TOPIC,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.RUNNING,
             current_activity="Reading files",
         )
@@ -76,7 +80,7 @@ class PearPresentationTest(ZulipTestCase):
             ),
         ]
 
-        input_text = build_pear_presentation_input(
+        input_text = build_armada_presentation_input(
             plan=[{"step": "Inspect", "status": "in_progress"}],
             events=events,  # type: ignore[arg-type]
         )
@@ -95,20 +99,20 @@ class PearPresentationTest(ZulipTestCase):
         self.assertLessEqual(len(input_text), 3000)
         self.assertEqual(presentation_input["current_step"], "Inspect")
         self.assertEqual(
-            parse_pear_presentation_output(json.dumps({"overview": "  Waiting   for tests.\n"})),
+            parse_armada_presentation_output(json.dumps({"overview": "  Waiting   for tests.\n"})),
             "Waiting for tests",
         )
         self.assertEqual(
-            parse_pear_presentation_output('{"overview":"fine","title":"Invented"}'),
+            parse_armada_presentation_output('{"overview":"fine","title":"Invented"}'),
             "",
         )
-        clipped = parse_pear_presentation_output(
+        clipped = parse_armada_presentation_output(
             json.dumps({"overview": "Compiling " + "a very long document " * 10})
         )
-        self.assertLessEqual(len(clipped), PEAR_PRESENTATION_OVERVIEW_MAX_CHARS)
+        self.assertLessEqual(len(clipped), ARMADA_PRESENTATION_OVERVIEW_MAX_CHARS)
         self.assertTrue(clipped.endswith("…"))
         self.assertEqual(
-            parse_pear_presentation_output(
+            parse_armada_presentation_output(
                 json.dumps(
                     {"overview": "Counting tracked TypeScript files and comparing their totals"}
                 )
@@ -117,16 +121,16 @@ class PearPresentationTest(ZulipTestCase):
         )
 
     def test_presentation_queue_is_attended_and_cadence_gated(self) -> None:
-        self.assertEqual(PEAR_PRESENTATION_CADENCE_SECONDS, 5)
+        self.assertEqual(ARMADA_PRESENTATION_CADENCE_SECONDS, 5)
         cache.clear()
         with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
-            self.assertFalse(maybe_enqueue_pear_run_presentation(17, 30))
-            mark_pear_run_attended(17)
-            self.assertTrue(maybe_enqueue_pear_run_presentation(17, 30))
-            self.assertFalse(maybe_enqueue_pear_run_presentation(17, 31))
+            self.assertFalse(maybe_enqueue_armada_run_presentation(17, 30))
+            mark_armada_run_attended(17)
+            self.assertTrue(maybe_enqueue_armada_run_presentation(17, 30))
+            self.assertFalse(maybe_enqueue_armada_run_presentation(17, 31))
 
         publish.assert_called_once_with(
-            PEAR_PRESENTATION_QUEUE_NAME,
+            ARMADA_PRESENTATION_QUEUE_NAME,
             {"run_id": 17, "source_event_id": 30},
         )
 
@@ -147,13 +151,13 @@ class PearPresentationTest(ZulipTestCase):
             summary="Read files",
             payload={"kind": "command", "title": "Reading four files"},
         )
-        mark_pear_run_attended(run.id)
-        worker = object.__new__(PearPresentationWorker)
+        mark_armada_run_attended(run.id)
+        worker = object.__new__(ArmadaPresentationWorker)
         worker.client = Mock()
         worker.client.api_key = "test-key"
         worker.client.interact.return_value = '{"overview":"Reading four files."}'
 
-        with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
+        with patch("zerver.worker.armada_presentation.send_armada_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
             presentation_request = worker.client.interact.call_args.kwargs
             self.assertIn(
@@ -195,8 +199,8 @@ class PearPresentationTest(ZulipTestCase):
             summary="Read files",
             payload={"kind": "command", "title": "Reading four files"},
         )
-        mark_pear_run_attended(run.id)
-        worker = object.__new__(PearPresentationWorker)
+        mark_armada_run_attended(run.id)
+        worker = object.__new__(ArmadaPresentationWorker)
         worker.client = Mock()
         worker.client.api_key = "test-key"
 
@@ -213,7 +217,7 @@ class PearPresentationTest(ZulipTestCase):
             return '{"overview":"Reading four files."}'
 
         worker.client.interact.side_effect = advance_plan
-        with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
+        with patch("zerver.worker.armada_presentation.send_armada_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
 
         self.assertFalse(AgentRunEvent.objects.filter(run=run, event_type="presentation").exists())
@@ -236,8 +240,8 @@ class PearPresentationTest(ZulipTestCase):
             summary="Read files",
             payload={"kind": "command", "title": "Reading four files"},
         )
-        mark_pear_run_attended(run.id)
-        worker = object.__new__(PearPresentationWorker)
+        mark_armada_run_attended(run.id)
+        worker = object.__new__(ArmadaPresentationWorker)
         worker.client = Mock()
         worker.client.api_key = "test-key"
 
@@ -246,7 +250,7 @@ class PearPresentationTest(ZulipTestCase):
             return '{"overview":"Reading four files."}'
 
         worker.client.interact.side_effect = finish_run
-        with patch("zerver.worker.pear_presentation.send_pear_run_event") as send_event:
+        with patch("zerver.worker.armada_presentation.send_armada_run_event") as send_event:
             worker.consume({"run_id": run.id, "source_event_id": source_event.id})
 
         self.assertFalse(AgentRunEvent.objects.filter(run=run, event_type="presentation").exists())
@@ -260,8 +264,8 @@ class PearPresentationTest(ZulipTestCase):
             summary="Read files",
             payload={"kind": "command", "title": "Reading four files"},
         )
-        mark_pear_run_attended(run.id)
-        worker = object.__new__(PearPresentationWorker)
+        mark_armada_run_attended(run.id)
+        worker = object.__new__(ArmadaPresentationWorker)
         worker.client = Mock()
         worker.client.api_key = "test-key"
 

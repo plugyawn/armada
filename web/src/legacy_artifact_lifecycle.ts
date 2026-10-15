@@ -1,9 +1,9 @@
-export type PearArtifactDensity = "chat" | "wall";
-export type PearArtifactLifecycle = "preparing" | "rendering" | "failed";
+export type ArmadaArtifactDensity = "chat" | "wall";
+export type ArmadaArtifactLifecycle = "preparing" | "rendering" | "failed";
 
-type PearArtifactHostCleanup = () => void;
+type ArmadaArtifactHostCleanup = () => void;
 
-const mounted_artifact_hosts = new Map<HTMLElement, PearArtifactHostCleanup>();
+const mounted_artifact_hosts = new Map<HTMLElement, ArmadaArtifactHostCleanup>();
 let disconnect_observer: MutationObserver | undefined;
 
 function host_element(host: JQuery | HTMLElement): HTMLElement | undefined {
@@ -28,14 +28,14 @@ function watch_for_disconnected_hosts(): void {
     disconnect_observer = new MutationObserver(() => {
         for (const host of mounted_artifact_hosts.keys()) {
             if (!host.isConnected) {
-                unmount_pear_artifact(host);
+                unmount_armada_artifact(host);
             }
         }
     });
     disconnect_observer.observe(document.documentElement, {childList: true, subtree: true});
 }
 
-export function unmount_pear_artifact(host: JQuery | HTMLElement): void {
+export function unmount_armada_artifact(host: JQuery | HTMLElement): void {
     const element = host_element(host);
     if (element === undefined) {
         return;
@@ -50,17 +50,17 @@ export function unmount_pear_artifact(host: JQuery | HTMLElement): void {
     }
 }
 
-export function replace_pear_artifact_host(
+export function replace_armada_artifact_host(
     host: JQuery | HTMLElement,
     content: HTMLElement,
-    cleanup?: PearArtifactHostCleanup,
+    cleanup?: ArmadaArtifactHostCleanup,
 ): void {
     const element = host_element(host);
     if (element === undefined) {
         cleanup?.();
         return;
     }
-    unmount_pear_artifact(element);
+    unmount_armada_artifact(element);
     element.append(content);
     if (cleanup !== undefined) {
         mounted_artifact_hosts.set(element, cleanup);
@@ -68,31 +68,31 @@ export function replace_pear_artifact_host(
     }
 }
 
-export function mount_pear_artifact_lifecycle(
+export function mount_armada_artifact_lifecycle(
     $host: JQuery,
-    density: PearArtifactDensity,
-    lifecycle: PearArtifactLifecycle,
+    density: ArmadaArtifactDensity,
+    lifecycle: ArmadaArtifactLifecycle,
     label: string,
 ): void {
     const shell = document.createElement("div");
-    shell.className = "pear-artifact pear-artifact-lifecycle";
+    shell.className = "legacy-artifact legacy-artifact-lifecycle";
     shell.dataset["density"] = density;
     shell.dataset["lifecycle"] = lifecycle;
     shell.setAttribute("role", lifecycle === "failed" ? "alert" : "status");
     shell.setAttribute("aria-live", "polite");
 
     const cells = document.createElement("span");
-    cells.className = "pear-artifact-lifecycle-cells";
+    cells.className = "legacy-artifact-lifecycle-cells";
     cells.setAttribute("aria-hidden", "true");
     for (let index = 0; index < 3; index += 1) {
         const cell = document.createElement("span");
-        cell.className = "pear-artifact-lifecycle-cell";
+        cell.className = "legacy-artifact-lifecycle-cell";
         cells.append(cell);
     }
 
     const text = document.createElement("span");
-    text.className = "pear-artifact-lifecycle-label";
+    text.className = "legacy-artifact-lifecycle-label";
     text.textContent = label;
     shell.append(cells, text);
-    replace_pear_artifact_host($host, shell);
+    replace_armada_artifact_host($host, shell);
 }

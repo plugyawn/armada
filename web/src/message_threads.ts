@@ -11,8 +11,8 @@ import {
     display_name_for_testing,
     status_tone_for_testing,
 } from "./legacy_agent_sigil.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
-import * as pear_run_trace from "./legacy_run_trace.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
+import * as legacy_run_trace from "./legacy_run_trace.ts";
 import * as message_fetch from "./message_fetch.ts";
 import {MessageList} from "./message_list.ts";
 import {MessageListData} from "./message_list_data.ts";
@@ -45,8 +45,8 @@ type RootThreadView = {
 };
 
 type PaneAgentEntry = {
-    agent: pear_run_state.PearAgentThread;
-    run: pear_run_state.PearRunLiveView;
+    agent: legacy_run_state.ArmadaAgentThread;
+    run: legacy_run_state.ArmadaRunLiveView;
 };
 
 type PaneElements = {
@@ -83,7 +83,7 @@ let pane_elements: PaneElements | undefined;
 let open_message_id: number | undefined;
 let selected_thread_key: string | undefined;
 let trace_thread_id: string | undefined;
-let trace_controller: pear_run_trace.PearRunTraceController | undefined;
+let trace_controller: legacy_run_trace.ArmadaRunTraceController | undefined;
 let anchor_element: HTMLElement | undefined;
 let anchor_message_id: number | undefined;
 let anchor_thread_key: string | undefined;
@@ -104,7 +104,7 @@ export {
 } from "./legacy_agent_sigil.ts";
 
 export function selection_after_update_for_testing(
-    agents: pear_run_state.PearAgentThread[],
+    agents: legacy_run_state.ArmadaAgentThread[],
     selected: string | undefined,
 ): string {
     if (selected === HUMAN_THREAD_KEY) {
@@ -116,7 +116,7 @@ export function selection_after_update_for_testing(
     return agents[0]?.thread_id ?? HUMAN_THREAD_KEY;
 }
 
-export function cycle_order_for_testing(agents: pear_run_state.PearAgentThread[]): string[] {
+export function cycle_order_for_testing(agents: legacy_run_state.ArmadaAgentThread[]): string[] {
     // The human thread (Main) always leads; agents follow in stable
     // first-seen spawn order.
     return [HUMAN_THREAD_KEY, ...agents.map((agent) => agent.thread_id)];
@@ -132,7 +132,7 @@ export function cycle_selection_for_testing(
     return order[(start + delta + order.length) % order.length] ?? HUMAN_THREAD_KEY;
 }
 
-export function agent_is_dimmed_for_testing(agent: pear_run_state.PearAgentThread): boolean {
+export function agent_is_dimmed_for_testing(agent: legacy_run_state.ArmadaAgentThread): boolean {
     // Closed/finished agents are shown dimmed in the cycler.
     return status_tone_for_testing(agent.status) !== "active";
 }
@@ -169,7 +169,7 @@ function create_avatar(
     return fallback;
 }
 
-function agent_signature(agent: pear_run_state.PearAgentThread): string {
+function agent_signature(agent: legacy_run_state.ArmadaAgentThread): string {
     return [
         agent.thread_id,
         agent.nickname ?? "",
@@ -321,8 +321,8 @@ function create_pane_elements(pane: HTMLElement): PaneElements {
         older: required_button(pane, ".message-thread-load-older"),
         composer: required_element(pane, ".message-thread-composer-host"),
         trace_root: required_element(pane, ".message-thread-agent-trace"),
-        trace_host: required_element(pane, ".pear-run-trace"),
-        trace_status: required_element(pane, ".pear-run-trace-status"),
+        trace_host: required_element(pane, ".legacy-run-trace"),
+        trace_status: required_element(pane, ".legacy-run-trace-status"),
         close: required_button(pane, ".message-thread-pane-close"),
     };
 }
@@ -371,13 +371,13 @@ function ensure_initialized(): PaneElements | undefined {
 function run_views_for_root(
     message_id: number,
     replies = message_store.get_thread_replies(message_id),
-): pear_run_state.PearRunLiveView[] {
+): legacy_run_state.ArmadaRunLiveView[] {
     const messages = [message_store.get(message_id), ...replies].filter(
         (message) => message !== undefined,
     );
-    const runs = new Map<number, pear_run_state.PearRunLiveView>();
+    const runs = new Map<number, legacy_run_state.ArmadaRunLiveView>();
     for (const message of messages) {
-        const run = pear_run_state.get_run_view(message.id);
+        const run = legacy_run_state.get_run_view(message.id);
         if (run !== undefined) {
             runs.set(run.id, run);
         }
@@ -971,8 +971,8 @@ function mount_selected_agent_trace(selected: PaneAgentEntry): void {
     trace_controller?.destroy();
     trace_thread_id = agent.thread_id;
     elements.trace_host.replaceChildren();
-    elements.trace_host.dataset["pearThreadId"] = agent.thread_id;
-    trace_controller = pear_run_trace.create_controller({
+    elements.trace_host.dataset["legacyThreadId"] = agent.thread_id;
+    trace_controller = legacy_run_trace.create_controller({
         run_id: run.id,
         thread_id: agent.thread_id,
         host: elements.trace_host,
@@ -1449,7 +1449,7 @@ function create_reply_preview(
 
 function create_agent_preview(
     message_id: number,
-    agents: pear_run_state.PearAgentThread[],
+    agents: legacy_run_state.ArmadaAgentThread[],
     enhance_trace: TraceEnhancer,
 ): HTMLElement {
     const cluster = document.createElement("div");
@@ -1555,7 +1555,7 @@ export function render_for_message_row(
     const summary = root_message?.reply_summary;
     const replies = message_store.get_thread_replies(root_message_id);
     const runs = run_views_for_root(root_message_id, replies);
-    const agents_by_thread_id = new Map<string, pear_run_state.PearAgentThread>();
+    const agents_by_thread_id = new Map<string, legacy_run_state.ArmadaAgentThread>();
     for (const run of runs) {
         for (const agent of run.agents ?? []) {
             agents_by_thread_id.set(agent.thread_id, agent);
@@ -1605,7 +1605,7 @@ function render_registered_rows(message_id: number): void {
     }
 }
 
-pear_run_state.on_run_state_changed((run, event) => {
+legacy_run_state.on_run_state_changed((run, event) => {
     if (!document_is_available()) {
         return;
     }

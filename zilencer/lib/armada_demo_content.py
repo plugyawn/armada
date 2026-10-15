@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from zerver.models.bots import AgentMonitor, Workspace
-from zerver.views.armada import update_pear_run_control_event
+from zerver.views.armada import update_armada_run_control_event
 from zilencer.lib.armada_demo import DemoSeeder, ScriptedTurn, png
 
 COMPLETED = "demo-completed-run"
@@ -517,7 +517,7 @@ def seed_paused_topic(seeder: DemoSeeder) -> None:
     )
     assert run is not None
     seeder.post("desdemona", PAUSED, "Pausing Pear here while we talk through the release plan.")
-    update_pear_run_control_event(seeder.user("desdemona"), run.id, "pause", "Paused by user.")
+    update_armada_run_control_event(seeder.user("desdemona"), run.id, "pause", "Paused by user.")
     seeder.shift(60)
     seeder.post("othello", PAUSED, "Fine by me. I would cut 8.6 after the completion fix lands.")
     seeder.request("hamlet", PAUSED, "can you start on the `SIGWINCH` one?")
@@ -863,7 +863,7 @@ def seed_artifacts(seeder: DemoSeeder) -> None:
     for dark in (False, True):
         seeder.write_media(
             ARTIFACTS,
-            f".pear/artifacts/help-capture{'-dark' if dark else ''}.png",
+            f".armada/artifacts/help-capture{'-dark' if dark else ''}.png",
             terminal_capture(dark),
         )
     seeder.request(
@@ -872,12 +872,12 @@ def seed_artifacts(seeder: DemoSeeder) -> None:
         "show me what grouped `--help` looks like in a real terminal.",
         artifact_turn(
             media_artifact(
-                ".pear/artifacts/help-capture.png", ".pear/artifacts/help-capture-dark.png"
+                ".armada/artifacts/help-capture.png", ".armada/artifacts/help-capture-dark.png"
             ),
             "Captured from the `naval` example. Light and dark variants are attached; "
             "the artifact follows your theme.",
             "python examples/naval/naval.py ship move --help",
-            "python tools/capture_terminal.py --out .pear/artifacts/help-capture.png",
+            "python tools/capture_terminal.py --out .armada/artifacts/help-capture.png",
         ),
     )
     seeder.post("iago", ARTIFACTS, "That is exactly the layout I had in mind.")
@@ -1348,7 +1348,7 @@ class Scenario:
 
 
 # Settled topics first.  A frozen or queued run holds one of the realm's
-# three run slots (PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM) from the moment it
+# three run slots (ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM) from the moment it
 # exists, and the three at the end fill them: nothing can run after those.
 SCENARIOS = [
     Scenario(

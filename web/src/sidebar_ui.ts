@@ -13,13 +13,13 @@ import * as compose_ui from "./compose_ui.ts";
 import {$t} from "./i18n.ts";
 import * as keydown_util from "./keydown_util.ts";
 import * as left_sidebar_navigation_area from "./left_sidebar_navigation_area.ts";
-import * as pear_agent_roster from "./legacy_agent_roster.ts";
-import * as pear_moments from "./legacy_moments.ts";
-import * as pear_panel from "./legacy_panel.ts";
-import {print_pear_signature} from "./legacy_signature.ts";
-import * as pear_wall from "./legacy_wall.ts";
-import * as pear_workspace from "./legacy_workspace.ts";
-import * as pear_workspace_marks from "./legacy_workspace_marks.ts";
+import * as legacy_agent_roster from "./legacy_agent_roster.ts";
+import * as legacy_moments from "./legacy_moments.ts";
+import * as legacy_panel from "./legacy_panel.ts";
+import {print_armada_signature} from "./legacy_signature.ts";
+import * as legacy_wall from "./legacy_wall.ts";
+import * as legacy_workspace from "./legacy_workspace.ts";
+import * as legacy_workspace_marks from "./legacy_workspace_marks.ts";
 import {ListCursor} from "./list_cursor.ts";
 import {localstorage} from "./localstorage.ts";
 import * as message_lists from "./message_lists.ts";
@@ -395,7 +395,7 @@ export function initialize_left_sidebar(): void {
     });
 
     $("#left-sidebar-container").html(rendered_sidebar);
-    pear_workspace_marks.initialize({
+    legacy_workspace_marks.initialize({
         redraw_stream_list() {
             stream_list.build_stream_list(true);
         },
@@ -427,12 +427,12 @@ export function initialize_right_sidebar(): void {
 
     buddy_list.initialize_tooltips();
     right_sidebar_tabs.initialize();
-    pear_agent_roster.initialize();
-    pear_panel.initialize();
-    pear_wall.initialize();
-    print_pear_signature();
-    pear_moments.initialize();
-    pear_workspace.initialize();
+    legacy_agent_roster.initialize();
+    legacy_panel.initialize();
+    legacy_wall.initialize();
+    print_armada_signature();
+    legacy_moments.initialize();
+    legacy_workspace.initialize();
 
     update_invite_user_option();
 

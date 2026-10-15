@@ -189,7 +189,7 @@
         "measured": 12,
         "unit": "",
         "threshold": "<= 6",
-        "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/pear/monitors.",
+        "audit": "var/armada-overhaul/maps/runtime-semantics.md, Measured facts: a wall with 5 monitors costs about 610 layouts, 3,625 style recalcs and 2.18 s of main thread per minute, plus 12 GET /json/armada/monitors.",
         "since": "2026-10-13"
     },
     "interaction-stability/composer.open.conversation.drift": {
@@ -349,11 +349,11 @@
         "audit": "var/armada-overhaul/maps/perf-input.md, Send: local echo is skipped for media links, YouTube URLs, @**topic** (markdown.ts:26-47) and slash commands (echo.ts:330); the row waits for the server.",
         "since": "2026-10-13"
     },
-    "send-cost/pear.client-ack-before-server": {
+    "send-cost/agent.client-ack-before-server": {
         "measured": 0,
         "unit": "",
         "threshold": "== 1",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@Pear: 0 of 12 sends produced any client-side Pear indicator before server data\"; the working line appears only on the pear_run server event.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Send: \"@Pear: 0 of 12 sends produced any client-side Pear indicator before server data\"; the working line appears only on the agent_run server event.",
         "since": "2026-10-13"
     },
     "send-cost/plain.content-replaced-by-server-echo": {
@@ -445,24 +445,24 @@
         "measured": 20.02,
         "unit": "px",
         "threshold": "<= 0.5",
-        "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #4: topic text shifts +20px when the worktree icon arrives from /json/pear/workspace-topics (legacy_workspace_marks.ts:39-66).",
+        "audit": "var/armada-overhaul/maps/left-sidebar.md, Instability #4: topic text shifts +20px when the worktree icon arrives from /json/armada/workspace-topics (legacy_workspace_marks.ts:39-66).",
         "since": "2026-10-13"
     },
     "size/initial-css.minified-kb": {
-        "measured": 1035,
+        "measured": 1040,
         "unit": "kB",
         "threshold": "<= 160",
-        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 1.22 MB of minified CSS before first paint; the old sheets go stage by stage. F2b (2026-10-14) set the browser targets (K-95): light-dark() and color-mix() are no longer expanded, 1,284 kB to 1,035 kB on the same tree (var/armada-overhaul/build/F2b.md).",
+        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 1.22 MB of minified CSS before first paint; the old sheets go stage by stage. F2b (2026-10-14) set the browser targets (K-95): light-dark() and color-mix() are no longer expanded, 1,284 kB to 1,035 kB on the same tree (var/armada-overhaul/build/F2b.md). R1 (2026-10-15) raised the ceiling to 1,040 kB: the rename's rule A gave the old interface's class names, custom properties and attributes the prefix legacy-, two letters longer than the old one, in about 2,200 places: 1,034,357 to 1,038,953 bytes on exported trees, 1,039,617 in the dev checkout (var/armada-overhaul/build/R1.md).",
         "since": "2026-10-14",
-        "max": 1035
+        "max": 1040
     },
     "size/initial-js.minified-kb": {
-        "measured": 5104,
+        "measured": 5106,
         "unit": "kB",
         "threshold": "<= 2000",
-        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 5.94 MB on 13 October. F2 took the Handlebars compiler, KaTeX and both emoji stylesheets out of the first load; Sentry, jquery-validation and core-js waited on the user's answers (var/armada-overhaul/build/F2.md). 5,423 kB at F2's report, 5,424 kB after its verification fixes (the help's math filled in late, the composer fallback's box-sizing). The ceiling has no headroom: any addition to the app entry turns it red. It steps down as stages delete code. F2b (2026-10-14) took Sentry (K-93), jquery-validation (K-92) and core-js (K-95) out and made the development stack-trace display a chunk of its own: 5,103 kB at 18:15, 5,104 kB at its last runs (other packages' edits in between), still above the plan's 4,900 (var/armada-overhaul/build/F2b.md). Again no headroom.",
+        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 5.94 MB on 13 October. F2 took the Handlebars compiler, KaTeX and both emoji stylesheets out of the first load; Sentry, jquery-validation and core-js waited on the user's answers (var/armada-overhaul/build/F2.md). 5,423 kB at F2's report, 5,424 kB after its verification fixes (the help's math filled in late, the composer fallback's box-sizing). The ceiling has no headroom: any addition to the app entry turns it red. It steps down as stages delete code. F2b (2026-10-14) took Sentry (K-93), jquery-validation (K-92) and core-js (K-95) out and made the development stack-trace display a chunk of its own: 5,103 kB at 18:15, 5,104 kB at its last runs (other packages' edits in between), still above the plan's 4,900 (var/armada-overhaul/build/F2b.md). Again no headroom. R1 (2026-10-15) raised the ceiling to 5,106 kB: the same rename gave the old interface's class names and templates the longer prefix legacy-: 5,104,229 to 5,105,830 bytes measured on exported trees (var/armada-overhaul/build/R1.md).",
         "since": "2026-10-14",
-        "max": 5104
+        "max": 5106
     },
     "size/lazy-chunk.largest-minified-kb": {
         "measured": 1708,
@@ -507,7 +507,7 @@
         "measured": 38,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
         "max": 60
     },
@@ -515,7 +515,7 @@
         "measured": 188,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Found by this check: once the answer is longer than the condense limit the live message is cut by \"Show more\" (condense.ts), so the newest words are not on screen while they stream. Fixed by C2; CUTS.md removes condensing.",
         "since": "2026-10-13"
     },
     "stream-cost/1200wps.layouts-per-event": {
@@ -530,7 +530,7 @@
         "measured": 80.274,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
         "since": "2026-10-13"
     },
     "stream-cost/1200wps.writes-per-event": {
@@ -545,7 +545,7 @@
         "measured": 34,
         "unit": "",
         "threshold": "<= 0",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). Fixed by C2 (stream writer), on B6's deltas. It was 34 to 53 over fifteen runs; the ceiling stops it from growing.",
         "since": "2026-10-13",
         "max": 60
     },
@@ -561,7 +561,7 @@
         "measured": 81.927,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
+        "audit": "var/armada-overhaul/design/final/SPEC-ENGINEERING.md, sections 6 and 8 (Stream): today an answer arrives as whole-message edits every 200 ms (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS) and each one re-renders the row (var/armada-overhaul/maps/feed-agent.md, Instability). A word waits up to the 200 ms between edits plus the re-render. Fixed by B6 (deltas) and C2.",
         "since": "2026-10-13"
     },
     "stream-cost/400wps.writes-per-event": {
@@ -604,7 +604,7 @@
         "measured": 3,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/pear/runs and /json/pear/monitors, even for a cached view.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/armada/runs and /json/armada/monitors, even for a cached view.",
         "since": "2026-10-13"
     },
     "topic-switch-cost/revisit-long.revisit-ms.median": {
@@ -625,7 +625,7 @@
         "measured": 3,
         "unit": "",
         "threshold": "<= 2",
-        "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/pear/runs and /json/pear/monitors, even for a cached view.",
+        "audit": "var/armada-overhaul/maps/perf-input.md, Navigation: every topic switch sends GET /json/messages plus /json/armada/runs and /json/armada/monitors, even for a cached view.",
         "since": "2026-10-13"
     },
     "topic-switch-cost/revisit-short.revisit-ms.median": {

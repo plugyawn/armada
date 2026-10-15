@@ -53,7 +53,7 @@
     width: 37.1428em; /* 520px at 14px em */
     overflow: hidden;
     border: 1px solid var(--color-border-modal);
-    border-radius: var(--pear-radius-card);
+    border-radius: var(--legacy-radius-card);
     box-sizing: border-box;
 }
 
@@ -173,7 +173,7 @@
 }
 
 #api_key_value {
-    font-family: var(--pear-font-mono);
+    font-family: var(--legacy-font-mono);
     font-size: 1em;
 }
 

@@ -676,8 +676,8 @@ html_rules: list["Rule"] = [
             "templates/corporate/support/support_request_thanks.html",
             "templates/zerver/emails/support_request.html",
         },
-        # pear-commitline-subject is the subject line of a git commit.
-        "exclude_pattern": "email subject|pear-commitline-subject",
+        # legacy-commitline-subject is the subject line of a git commit.
+        "exclude_pattern": "email subject|legacy-commitline-subject",
         "description": "avoid subject in templates",
         "good_lines": ["topic_name"],
         "bad_lines": ['subject="foo"', " MAX_SUBJECT_LEN"],

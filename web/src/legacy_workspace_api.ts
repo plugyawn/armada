@@ -2,7 +2,7 @@ import * as z from "zod/mini";
 
 import * as channel from "./channel.ts";
 
-export const pear_workspace_entry_schema = z.object({
+export const armada_workspace_entry_schema = z.object({
     entry_id: z.string(),
     path: z.string(),
     name: z.string(),
@@ -12,7 +12,7 @@ export const pear_workspace_entry_schema = z.object({
     size: z.nullable(z.number()),
 });
 
-const pear_workspace_capabilities_schema = z.object({
+const armada_workspace_capabilities_schema = z.object({
     read_file: z.boolean(),
     write_file: z.boolean(),
     refresh: z.boolean(),
@@ -22,12 +22,12 @@ const pear_workspace_capabilities_schema = z.object({
     history: z.boolean(),
 });
 
-const pear_workspace_limits_schema = z.object({
+const armada_workspace_limits_schema = z.object({
     text_file_max_bytes: z.number(),
     raw_file_max_bytes: z.nullable(z.number()),
 });
 
-export const pear_workspace_descriptor_schema = z.object({
+export const armada_workspace_descriptor_schema = z.object({
     uuid: z.string(),
     display_root: z.string(),
     stream: z.string(),
@@ -37,41 +37,41 @@ export const pear_workspace_descriptor_schema = z.object({
     dirty: z.boolean(),
     dirty_count: z.number(),
     workspace_revision: z.number(),
-    root: pear_workspace_entry_schema,
+    root: armada_workspace_entry_schema,
     default_path: z.nullable(z.string()),
-    default_entry: z.nullable(pear_workspace_entry_schema),
-    capabilities: pear_workspace_capabilities_schema,
-    limits: pear_workspace_limits_schema,
+    default_entry: z.nullable(armada_workspace_entry_schema),
+    capabilities: armada_workspace_capabilities_schema,
+    limits: armada_workspace_limits_schema,
 });
 
-export const pear_workspace_descriptor_response_schema = z.object({
-    pear_workspace: pear_workspace_descriptor_schema,
+export const armada_workspace_descriptor_response_schema = z.object({
+    armada_workspace: armada_workspace_descriptor_schema,
 });
 
-export const pear_workspace_tree_response_schema = z.object({
-    pear_workspace_tree: z.object({
+export const armada_workspace_tree_response_schema = z.object({
+    armada_workspace_tree: z.object({
         workspace_uuid: z.string(),
         workspace_revision: z.number(),
-        directory: pear_workspace_entry_schema,
-        entries: z.array(pear_workspace_entry_schema),
+        directory: armada_workspace_entry_schema,
+        entries: z.array(armada_workspace_entry_schema),
         next_cursor: z.nullable(z.string()),
     }),
 });
 
-const pear_workspace_search_entry_schema = z.extend(pear_workspace_entry_schema, {
-    ancestors: z.array(pear_workspace_entry_schema),
+const armada_workspace_search_entry_schema = z.extend(armada_workspace_entry_schema, {
+    ancestors: z.array(armada_workspace_entry_schema),
 });
 
-export const pear_workspace_search_response_schema = z.object({
-    pear_workspace_search: z.object({
+export const armada_workspace_search_response_schema = z.object({
+    armada_workspace_search: z.object({
         workspace_uuid: z.string(),
         workspace_revision: z.number(),
         query: z.string(),
-        entries: z.array(pear_workspace_search_entry_schema),
+        entries: z.array(armada_workspace_search_entry_schema),
     }),
 });
 
-export const pear_workspace_file_schema = z.object({
+export const armada_workspace_file_schema = z.object({
     workspace_uuid: z.string(),
     workspace_revision: z.number(),
     entry_id: z.string(),
@@ -87,67 +87,71 @@ export const pear_workspace_file_schema = z.object({
     edit_revision: z.optional(z.number()),
 });
 
-export const pear_workspace_file_response_schema = z.object({
-    pear_workspace_file: pear_workspace_file_schema,
+export const armada_workspace_file_response_schema = z.object({
+    armada_workspace_file: armada_workspace_file_schema,
 });
 
-export const pear_workspace_refresh_response_schema = z.object({
-    pear_workspace_refresh: z.object({
+export const armada_workspace_refresh_response_schema = z.object({
+    armada_workspace_refresh: z.object({
         changed: z.boolean(),
-        workspace: pear_workspace_descriptor_schema,
+        workspace: armada_workspace_descriptor_schema,
     }),
 });
 
-export const pear_workspace_mutation_schema = z.object({
+export const armada_workspace_mutation_schema = z.object({
     operation: z.enum(["create", "rename", "delete"]),
     workspace_uuid: z.string(),
     workspace_revision: z.number(),
     previous_entry_id: z.nullable(z.string()),
-    entry: z.nullable(pear_workspace_entry_schema),
+    entry: z.nullable(armada_workspace_entry_schema),
     path: z.string(),
     removed_entries: z.optional(z.number()),
 });
 
-export const pear_workspace_mutation_response_schema = z.object({
-    pear_workspace_mutation: pear_workspace_mutation_schema,
+export const armada_workspace_mutation_response_schema = z.object({
+    armada_workspace_mutation: armada_workspace_mutation_schema,
 });
 
-const pear_workspace_history_commit_schema = z.object({
+const armada_workspace_history_commit_schema = z.object({
     commit: z.string(),
     authored_at: z.number(),
     author_name: z.string(),
     subject: z.string(),
 });
 
-export const pear_workspace_history_response_schema = z.object({
-    pear_workspace_history: z.object({
+export const armada_workspace_history_response_schema = z.object({
+    armada_workspace_history: z.object({
         workspace_uuid: z.string(),
         workspace_revision: z.number(),
-        entry: pear_workspace_entry_schema,
-        commits: z.array(pear_workspace_history_commit_schema),
+        entry: armada_workspace_entry_schema,
+        commits: z.array(armada_workspace_history_commit_schema),
         next_cursor: z.nullable(z.string()),
     }),
 });
 
-export const pear_workspace_error_schema = z.object({
+export const armada_workspace_error_schema = z.object({
     result: z.literal("error"),
     msg: z.string(),
     error_code: z.string(),
     workspace_revision: z.optional(z.number()),
-    remote_file: z.optional(pear_workspace_file_schema),
+    remote_file: z.optional(armada_workspace_file_schema),
 });
 
-export type PearWorkspaceEntry = z.infer<typeof pear_workspace_entry_schema>;
-export type PearWorkspaceDescriptor = z.infer<typeof pear_workspace_descriptor_schema>;
-export type PearWorkspaceTreeResponse = z.infer<typeof pear_workspace_tree_response_schema>;
-export type PearWorkspaceSearchResponse = z.infer<typeof pear_workspace_search_response_schema>;
-export type PearWorkspaceFile = z.infer<typeof pear_workspace_file_schema>;
-export type PearWorkspaceRefreshResponse = z.infer<typeof pear_workspace_refresh_response_schema>;
-export type PearWorkspaceMutation = z.infer<typeof pear_workspace_mutation_schema>;
-export type PearWorkspaceHistoryResponse = z.infer<typeof pear_workspace_history_response_schema>;
-export type PearWorkspaceServerError = z.infer<typeof pear_workspace_error_schema>;
+export type ArmadaWorkspaceEntry = z.infer<typeof armada_workspace_entry_schema>;
+export type ArmadaWorkspaceDescriptor = z.infer<typeof armada_workspace_descriptor_schema>;
+export type ArmadaWorkspaceTreeResponse = z.infer<typeof armada_workspace_tree_response_schema>;
+export type ArmadaWorkspaceSearchResponse = z.infer<typeof armada_workspace_search_response_schema>;
+export type ArmadaWorkspaceFile = z.infer<typeof armada_workspace_file_schema>;
+export type ArmadaWorkspaceRefreshResponse = z.infer<
+    typeof armada_workspace_refresh_response_schema
+>;
+export type ArmadaWorkspaceMutation = z.infer<typeof armada_workspace_mutation_schema>;
+export type ArmadaWorkspaceHistoryResponse = z.infer<
+    typeof armada_workspace_history_response_schema
+>;
+export type ArmadaWorkspaceServerError = z.infer<typeof armada_workspace_error_schema>;
 
-export type PearWorkspaceApiError =
+export type ArmadaWorkspaceApiError =
     | {
           kind: "invalid_response";
           message: string;
@@ -155,7 +159,7 @@ export type PearWorkspaceApiError =
     | {
           kind: "server";
           status: number;
-          error: PearWorkspaceServerError;
+          error: ArmadaWorkspaceServerError;
       }
     | {
           kind: "transport";
@@ -163,9 +167,9 @@ export type PearWorkspaceApiError =
           message: string;
       };
 
-export type PearWorkspaceRequestCallbacks<T> = {
+export type ArmadaWorkspaceRequestCallbacks<T> = {
     success: (value: T) => void;
-    error: (error: PearWorkspaceApiError) => void;
+    error: (error: ArmadaWorkspaceApiError) => void;
 };
 
 type AbortableRequest = {
@@ -177,7 +181,7 @@ type ActiveRequest = {
     request: AbortableRequest | undefined;
 };
 
-export type PearWorkspaceRequestGuard = {
+export type ArmadaWorkspaceRequestGuard = {
     begin: (lane: string) => number;
     attach: (lane: string, generation: number, request: AbortableRequest | undefined) => boolean;
     isCurrent: (lane: string, generation: number) => boolean;
@@ -186,7 +190,7 @@ export type PearWorkspaceRequestGuard = {
     cancelAll: () => void;
 };
 
-export function create_pear_workspace_request_guard(): PearWorkspaceRequestGuard {
+export function create_armada_workspace_request_guard(): ArmadaWorkspaceRequestGuard {
     const active = new Map<string, ActiveRequest>();
     const last_generation = new Map<string, number>();
 
@@ -233,13 +237,13 @@ export function create_pear_workspace_request_guard(): PearWorkspaceRequestGuard
 }
 
 function workspace_url(workspace_uuid: string, suffix = ""): string {
-    return `/json/pear/workspaces/${encodeURIComponent(workspace_uuid)}${suffix}`;
+    return `/json/armada/workspaces/${encodeURIComponent(workspace_uuid)}${suffix}`;
 }
 
 function parse_success<T>(
     schema: z.ZodMiniType<T>,
     raw: unknown,
-    callbacks: PearWorkspaceRequestCallbacks<T>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<T>,
 ): void {
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
@@ -249,8 +253,8 @@ function parse_success<T>(
     callbacks.success(parsed.data);
 }
 
-function parse_error(xhr: JQuery.jqXHR<unknown>): PearWorkspaceApiError {
-    const parsed = pear_workspace_error_schema.safeParse(xhr.responseJSON);
+function parse_error(xhr: JQuery.jqXHR<unknown>): ArmadaWorkspaceApiError {
+    const parsed = armada_workspace_error_schema.safeParse(xhr.responseJSON);
     if (parsed.success) {
         return {kind: "server", status: xhr.status, error: parsed.data};
     }
@@ -262,23 +266,23 @@ function parse_error(xhr: JQuery.jqXHR<unknown>): PearWorkspaceApiError {
 }
 
 function error_callback<T>(
-    callbacks: PearWorkspaceRequestCallbacks<T>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<T>,
 ): JQuery.Ajax.ErrorCallback<unknown> {
     return (xhr: JQuery.jqXHR<unknown>) => {
         callbacks.error(parse_error(xhr));
     };
 }
 
-export function get_pear_workspace(
+export function get_armada_workspace(
     workspace_uuid: string,
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceDescriptor>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceDescriptor>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.get({
         url: workspace_url(workspace_uuid),
         success(raw): void {
-            parse_success(pear_workspace_descriptor_response_schema, raw, {
+            parse_success(armada_workspace_descriptor_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace);
+                    callbacks.success(value.armada_workspace);
                 },
                 error: callbacks.error,
             });
@@ -287,14 +291,16 @@ export function get_pear_workspace(
     });
 }
 
-export function get_pear_workspace_tree(
+export function get_armada_workspace_tree(
     workspace_uuid: string,
     options: {
         directoryId?: string;
         cursor?: string;
         pageSize?: number;
     },
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceTreeResponse["pear_workspace_tree"]>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<
+        ArmadaWorkspaceTreeResponse["armada_workspace_tree"]
+    >,
 ): JQuery.jqXHR<unknown> | undefined {
     const data: Record<string, string | number> = {};
     if (options.directoryId !== undefined) {
@@ -310,9 +316,9 @@ export function get_pear_workspace_tree(
         url: workspace_url(workspace_uuid, "/tree"),
         data,
         success(raw): void {
-            parse_success(pear_workspace_tree_response_schema, raw, {
+            parse_success(armada_workspace_tree_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_tree);
+                    callbacks.success(value.armada_workspace_tree);
                 },
                 error: callbacks.error,
             });
@@ -321,11 +327,13 @@ export function get_pear_workspace_tree(
     });
 }
 
-export function search_pear_workspace(
+export function search_armada_workspace(
     workspace_uuid: string,
     query: string,
     limit: number | undefined,
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceSearchResponse["pear_workspace_search"]>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<
+        ArmadaWorkspaceSearchResponse["armada_workspace_search"]
+    >,
 ): JQuery.jqXHR<unknown> | undefined {
     const data: Record<string, string | number> = {q: query};
     if (limit !== undefined) {
@@ -335,9 +343,9 @@ export function search_pear_workspace(
         url: workspace_url(workspace_uuid, "/search"),
         data,
         success(raw): void {
-            parse_success(pear_workspace_search_response_schema, raw, {
+            parse_success(armada_workspace_search_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_search);
+                    callbacks.success(value.armada_workspace_search);
                 },
                 error: callbacks.error,
             });
@@ -346,18 +354,18 @@ export function search_pear_workspace(
     });
 }
 
-export function get_pear_workspace_file(
+export function get_armada_workspace_file(
     workspace_uuid: string,
     entry_id: string,
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceFile>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceFile>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.get({
         url: workspace_url(workspace_uuid, "/file"),
         data: {entry_id},
         success(raw): void {
-            parse_success(pear_workspace_file_response_schema, raw, {
+            parse_success(armada_workspace_file_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_file);
+                    callbacks.success(value.armada_workspace_file);
                 },
                 error: callbacks.error,
             });
@@ -366,7 +374,7 @@ export function get_pear_workspace_file(
     });
 }
 
-export function put_pear_workspace_file(
+export function put_armada_workspace_file(
     workspace_uuid: string,
     request: {
         entryId: string;
@@ -376,7 +384,7 @@ export function put_pear_workspace_file(
         workspaceRevision: number;
         editRevision: number;
     },
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceFile>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceFile>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.put({
         url: workspace_url(workspace_uuid, "/file"),
@@ -389,9 +397,9 @@ export function put_pear_workspace_file(
             edit_revision: request.editRevision,
         },
         success(raw): void {
-            parse_success(pear_workspace_file_response_schema, raw, {
+            parse_success(armada_workspace_file_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_file);
+                    callbacks.success(value.armada_workspace_file);
                 },
                 error: callbacks.error,
             });
@@ -400,7 +408,7 @@ export function put_pear_workspace_file(
     });
 }
 
-export function create_pear_workspace_entry(
+export function create_armada_workspace_entry(
     workspace_uuid: string,
     request: {
         destinationPath: string;
@@ -408,7 +416,7 @@ export function create_pear_workspace_entry(
         workspaceRevision: number;
         content?: string;
     },
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceMutation>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.post({
         url: workspace_url(workspace_uuid, "/entries"),
@@ -419,9 +427,9 @@ export function create_pear_workspace_entry(
             ...(request.content === undefined ? {} : {content: request.content}),
         },
         success(raw): void {
-            parse_success(pear_workspace_mutation_response_schema, raw, {
+            parse_success(armada_workspace_mutation_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_mutation);
+                    callbacks.success(value.armada_workspace_mutation);
                 },
                 error: callbacks.error,
             });
@@ -430,7 +438,7 @@ export function create_pear_workspace_entry(
     });
 }
 
-export function rename_pear_workspace_entry(
+export function rename_armada_workspace_entry(
     workspace_uuid: string,
     request: {
         entryId: string;
@@ -438,7 +446,7 @@ export function rename_pear_workspace_entry(
         destinationPath: string;
         workspaceRevision: number;
     },
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceMutation>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.patch({
         url: workspace_url(workspace_uuid, "/entry"),
@@ -449,9 +457,9 @@ export function rename_pear_workspace_entry(
             workspace_revision: request.workspaceRevision,
         },
         success(raw): void {
-            parse_success(pear_workspace_mutation_response_schema, raw, {
+            parse_success(armada_workspace_mutation_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_mutation);
+                    callbacks.success(value.armada_workspace_mutation);
                 },
                 error: callbacks.error,
             });
@@ -460,7 +468,7 @@ export function rename_pear_workspace_entry(
     });
 }
 
-export function delete_pear_workspace_entry(
+export function delete_armada_workspace_entry(
     workspace_uuid: string,
     request: {
         entryId: string;
@@ -469,7 +477,7 @@ export function delete_pear_workspace_entry(
         recursive?: boolean;
         confirmIrreversible?: boolean;
     },
-    callbacks: PearWorkspaceRequestCallbacks<PearWorkspaceMutation>,
+    callbacks: ArmadaWorkspaceRequestCallbacks<ArmadaWorkspaceMutation>,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.del({
         url: workspace_url(workspace_uuid, "/entry"),
@@ -481,9 +489,9 @@ export function delete_pear_workspace_entry(
             confirm_irreversible: request.confirmIrreversible ?? false,
         },
         success(raw): void {
-            parse_success(pear_workspace_mutation_response_schema, raw, {
+            parse_success(armada_workspace_mutation_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_mutation);
+                    callbacks.success(value.armada_workspace_mutation);
                 },
                 error: callbacks.error,
             });
@@ -492,12 +500,12 @@ export function delete_pear_workspace_entry(
     });
 }
 
-export function get_pear_workspace_history(
+export function get_armada_workspace_history(
     workspace_uuid: string,
     entry_id: string,
     options: {cursor?: string; limit?: number},
-    callbacks: PearWorkspaceRequestCallbacks<
-        PearWorkspaceHistoryResponse["pear_workspace_history"]
+    callbacks: ArmadaWorkspaceRequestCallbacks<
+        ArmadaWorkspaceHistoryResponse["armada_workspace_history"]
     >,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.get({
@@ -508,9 +516,9 @@ export function get_pear_workspace_history(
             ...(options.limit === undefined ? {} : {limit: options.limit}),
         },
         success(raw): void {
-            parse_success(pear_workspace_history_response_schema, raw, {
+            parse_success(armada_workspace_history_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_history);
+                    callbacks.success(value.armada_workspace_history);
                 },
                 error: callbacks.error,
             });
@@ -519,18 +527,18 @@ export function get_pear_workspace_history(
     });
 }
 
-export function refresh_pear_workspace(
+export function refresh_armada_workspace(
     workspace_uuid: string,
-    callbacks: PearWorkspaceRequestCallbacks<
-        PearWorkspaceRefreshResponse["pear_workspace_refresh"]
+    callbacks: ArmadaWorkspaceRequestCallbacks<
+        ArmadaWorkspaceRefreshResponse["armada_workspace_refresh"]
     >,
 ): JQuery.jqXHR<unknown> | undefined {
     return channel.post({
         url: workspace_url(workspace_uuid, "/refresh"),
         success(raw): void {
-            parse_success(pear_workspace_refresh_response_schema, raw, {
+            parse_success(armada_workspace_refresh_response_schema, raw, {
                 success(value): void {
-                    callbacks.success(value.pear_workspace_refresh);
+                    callbacks.success(value.armada_workspace_refresh);
                 },
                 error: callbacks.error,
             });
@@ -539,7 +547,7 @@ export function refresh_pear_workspace(
     });
 }
 
-export function pear_workspace_raw_url(
+export function armada_workspace_raw_url(
     workspace_uuid: string,
     entry_id: string,
     download = false,

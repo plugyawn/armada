@@ -228,7 +228,7 @@ mock_esm("../src/legacy_run_trace", {
     },
 });
 
-const pear_run_state = zrequire("legacy_run_state");
+const legacy_run_state = zrequire("legacy_run_state");
 const message_store = zrequire("message_store");
 const message_threads = zrequire("message_threads");
 
@@ -276,7 +276,7 @@ function root_message() {
         avatar_url: "/avatar/5",
         content: "<p>Original thread message</p>",
         timestamp: 90,
-        is_pear_message: true,
+        is_agent_message: true,
         display_recipient: "devel",
     };
 }
@@ -295,7 +295,7 @@ function child_message() {
 
 function reset_dom() {
     message_threads.clear_for_testing();
-    pear_run_state.clear_for_testing();
+    legacy_run_state.clear_for_testing();
     message_store.set_messages_for_tests([{message: root_message()}, {message: child_message()}]);
     for (const host of document.querySelectorAll(".message-thread-host")) {
         host.replaceChildren();
@@ -337,7 +337,7 @@ function render_row(message_id = 31) {
 }
 
 function remember_agents() {
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 4,
             status: "running",
@@ -988,7 +988,7 @@ run_test("unread replies are marked only while visible and focused", () => {
 run_test("agent cycler aggregates side runs attached to replies", () => {
     reset_dom();
     remember_agents();
-    pear_run_state.remember_runs([
+    legacy_run_state.remember_runs([
         {
             id: 5,
             status: "running",

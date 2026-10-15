@@ -22,11 +22,11 @@ export const SELECTORS = {
         "#message_view_header .message-header-navbar-title",
     ],
     headerSentence: ["[data-armada=sentence]"],
-    headerViews: ["[data-armada=views]", "[data-armada=header] .pear-workspace-tabs"],
+    headerViews: ["[data-armada=views]", "[data-armada=header] .legacy-workspace-tabs"],
     // The worktree's facts once they have arrived (B2 fixes their lateness).
     headerValues: [
         "[data-armada=header-values]",
-        "[data-armada=header] .pear-commitline-sha:not(:empty)",
+        "[data-armada=header] .legacy-commitline-sha:not(:empty)",
     ],
     more: ["[data-armada=more]"],
     pane: ["[data-armada=pane]"],
@@ -77,14 +77,14 @@ export const SELECTORS = {
 
     // Topic bar and its tabs.
     // A worktree's bar is the header since F5: one element on every place.
-    topicBar: ["[data-armada=header]", ".pear-topic-bar"],
-    tabStrip: ["[data-armada=views]", "[data-armada=header] .pear-workspace-tabs"],
-    tabChat: ["[data-armada=header] .pear-workspace-mode-tab[data-pear-tab=chat]"],
-    tabReadme: ["[data-armada=header] .pear-workspace-mode-tab[data-pear-tab=readme]"],
-    tabFiles: ["[data-armada=header] .pear-workspace-mode-tab[data-pear-tab=files]"],
-    workspacePane: ["#pear-workspace-pane"],
-    runtimePicker: [".pear-runtime-menu-trigger"],
-    workDetails: [".pear-topic-header-git-control", ".pear-topic-header-commitline"],
+    topicBar: ["[data-armada=header]", ".legacy-topic-bar"],
+    tabStrip: ["[data-armada=views]", "[data-armada=header] .legacy-workspace-tabs"],
+    tabChat: ["[data-armada=header] .legacy-workspace-mode-tab[data-legacy-tab=chat]"],
+    tabReadme: ["[data-armada=header] .legacy-workspace-mode-tab[data-legacy-tab=readme]"],
+    tabFiles: ["[data-armada=header] .legacy-workspace-mode-tab[data-legacy-tab=files]"],
+    workspacePane: ["#legacy-workspace-pane"],
+    runtimePicker: [".legacy-runtime-menu-trigger"],
+    workDetails: [".legacy-topic-header-git-control", ".legacy-topic-header-commitline"],
 
     // Feed.
     // The header of a run of messages of one topic in a multi-topic view.
@@ -123,7 +123,7 @@ export const SELECTORS = {
     failedRetry: [".focused-message-list .refresh-failed-message"],
     composeSend: ["#compose-send-button"],
     // The control that addresses the composer's message to the agent.
-    composeAgent: ["#compose .compose-pear-button"],
+    composeAgent: ["#compose .compose-legacy-button"],
     // The picker `:` opens for the selected message: today the emoji
     // picker, in the rebuild the four reactions.
     reactionPicker: ["[data-armada=reactions]", ".emoji-picker-popover"],
@@ -143,43 +143,43 @@ export const SELECTORS = {
     popover: [
         "[data-tippy-root] .tippy-box",
         ".popover-menu",
-        "#pear-runtime-menu-popover",
-        ".pear-popover",
+        "#legacy-runtime-menu-popover",
+        ".legacy-popover",
         "[popover]:popover-open",
     ],
 
     // An open menu, as opposed to a tooltip.
-    menu: ["[data-tippy-root] .popover-menu", ".popover-menu", "#pear-runtime-menu-popover"],
+    menu: ["[data-tippy-root] .popover-menu", ".popover-menu", "#legacy-runtime-menu-popover"],
 
     // The list of rows of the view in front, and the agent's message
     // that is being written.
     feedList: [".focused-message-list"],
-    agentLiveRow: [".focused-message-list .message_row.pear-active-message"],
+    agentLiveRow: [".focused-message-list .message_row.legacy-active-message"],
     // The mark that says a message to the agent was accepted; the rebuild
     // names it [data-run-ack].
     agentAck: [
         "[data-run-ack]",
-        "[data-pear-ack]",
-        ".pear-run-pending",
-        ".pear-working",
-        ".pear-liveness-active",
-        ".pear-active-message",
-        ".pear-live-progress",
+        "[data-legacy-ack]",
+        ".legacy-run-pending",
+        ".legacy-working",
+        ".legacy-liveness-active",
+        ".legacy-active-message",
+        ".legacy-live-progress",
     ],
 
-    runtimeMenu: ["#pear-runtime-menu-popover"],
-    workDetailsPanel: [".pear-workbench-popover-open"],
+    runtimeMenu: ["#legacy-runtime-menu-popover"],
+    workDetailsPanel: [".legacy-workbench-popover-open"],
     typingNotice: ["#typing_notifications .typing_notification"],
 
     // A client-side acknowledgement that a message addressed to the agent
     // was accepted: any of these becoming visible before server data counts.
-    pearAck: [
-        "[data-pear-ack]",
-        ".pear-run-pending",
-        ".pear-working",
-        ".pear-liveness-active",
-        ".pear-active-message",
-        ".pear-live-progress",
+    armadaAck: [
+        "[data-legacy-ack]",
+        ".legacy-run-pending",
+        ".legacy-working",
+        ".legacy-liveness-active",
+        ".legacy-active-message",
+        ".legacy-live-progress",
     ],
 };
 

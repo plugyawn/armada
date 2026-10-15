@@ -16,7 +16,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
-class PearHealthReport:
+class ArmadaHealthReport:
     active_run_count: int
     stale_active_run_count: int
     stale_run_age_seconds: int
@@ -49,10 +49,10 @@ def setup_django() -> tuple[Any, Any, int, Any]:
     from django.db.models import Q
     from django.utils.timezone import now as timezone_now
 
-    from zerver.lib.armada_worker import pear_worker_stale_after_seconds
+    from zerver.lib.armada_worker import armada_worker_stale_after_seconds
     from zerver.models.bots import AgentRun
 
-    return AgentRun, Q, pear_worker_stale_after_seconds(), timezone_now
+    return AgentRun, Q, armada_worker_stale_after_seconds(), timezone_now
 
 
 def run_sample(run: Any) -> dict[str, Any]:
@@ -67,7 +67,7 @@ def run_sample(run: Any) -> dict[str, Any]:
     }
 
 
-def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> PearHealthReport:
+def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> ArmadaHealthReport:
     AgentRun, Q, default_stale_age, timezone_now = setup_django()
     stale_age = stale_run_age_seconds or default_stale_age
     active_runs = AgentRun.objects.filter(status__in=["queued", "running"]).order_by(
@@ -79,7 +79,7 @@ def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> P
         | Q(status="running", heartbeat_at__lte=cutoff)
         | Q(status="running", heartbeat_at__isnull=True, date_updated__lte=cutoff)
     )
-    return PearHealthReport(
+    return ArmadaHealthReport(
         active_run_count=active_runs.count(),
         stale_active_run_count=stale_runs.count(),
         stale_run_age_seconds=stale_age,
@@ -88,7 +88,7 @@ def collect_health(*, stale_run_age_seconds: int | None, sample_limit: int) -> P
     )
 
 
-def render_report(report: PearHealthReport) -> str:
+def render_report(report: ArmadaHealthReport) -> str:
     lines = [
         "Pear live health:",
         f"active_runs={report.active_run_count}",

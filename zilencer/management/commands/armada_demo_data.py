@@ -85,8 +85,8 @@ No model is called and nothing touches the network.  Development only.
             # The fixtures end with three busy runs, which is exactly the
             # realm's limit; lift it for this process so an unrelated busy
             # run elsewhere in the realm cannot make the load fail.
-            run_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
-            settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 0
+            run_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+            settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 0
             try:
                 with time_machine.travel(timezone_now(), tick=False) as traveller:
                     seeder = DemoSeeder(realm, traveller)
@@ -95,7 +95,7 @@ No model is called and nothing touches the network.  Development only.
                         scenario.seed(seeder)
                     seeder.mark_everything_read()
             finally:
-                settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM = run_limit
+                settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = run_limit
                 turn_logger.setLevel(previous_level)
             self.stdout.write(
                 self.style.SUCCESS(

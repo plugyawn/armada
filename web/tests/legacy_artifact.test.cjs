@@ -112,11 +112,11 @@ delete require.cache[require.resolve("katex")];
 const artifact = zrequire("legacy_artifact");
 
 function graph_column(node) {
-    return node.style.getPropertyValue("--pear-artifact-grid-column");
+    return node.style.getPropertyValue("--legacy-artifact-grid-column");
 }
 
 function graph_row(node) {
-    return node.style.getPropertyValue("--pear-artifact-grid-row");
+    return node.style.getPropertyValue("--legacy-artifact-grid-row");
 }
 
 function valid_document() {
@@ -154,7 +154,7 @@ function valid_document() {
 }
 
 run_test("parses the generated artifact contract and rejects authored presentation", () => {
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(valid_document()));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(valid_document()));
     assert.equal(parsed.title, "Newton's laws");
 
     for (const hostile of [
@@ -165,7 +165,7 @@ run_test("parses the generated artifact contract and rejects authored presentati
     ]) {
         const document = valid_document();
         Object.assign(document.blocks[1].root, hostile);
-        assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+        assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
     }
 });
 
@@ -185,18 +185,18 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
         ],
     };
     window.document.documentElement.classList.add("dark-theme");
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    const image = rendered.querySelector(".pear-artifact-media-content");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    const image = rendered.querySelector(".legacy-artifact-media-content");
     assert.equal(image.getAttribute("src"), "/user_uploads/1/cd/diagram-dark.svg");
     assert.equal(image.getAttribute("alt"), "A geometric construction.");
     assert.equal(
-        rendered.querySelector(".pear-artifact-media-status").textContent,
+        rendered.querySelector(".legacy-artifact-media-status").textContent,
         "Loading visual…",
     );
     image.dispatchEvent(new window.Event("load"));
-    assert.equal(rendered.querySelector(".pear-artifact-media").dataset.status, "ready");
+    assert.equal(rendered.querySelector(".legacy-artifact-media").dataset.status, "ready");
     assert.equal(
         rendered.querySelector("figcaption").textContent,
         "Constraints determine the geometry.",
@@ -206,10 +206,10 @@ run_test("renders durable theme-aware media and rejects workspace paths", () => 
     document.blocks[0] = {
         type: "media",
         kind: "image",
-        source: ".pear/artifacts/diagram.svg",
+        source: ".armada/artifacts/diagram.svg",
         alt: "Unresolved workspace image.",
     };
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 });
 
 run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", () => {
@@ -228,16 +228,16 @@ run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", 
         alt: "A tangent construction.",
         caption: "The step stays in $$T_{x_t}M$$.",
     });
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelectorAll(".pear-artifact-copy .katex").length, 2);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-copy .katex-display").length, 1);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-shape-label .katex").length, 1);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-media-caption .katex").length, 1);
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-copy .katex").length, 2);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-copy .katex-display").length, 1);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-shape-label .katex").length, 1);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-media-caption .katex").length, 1);
     const visible_artifact_text = [
         ...rendered.querySelectorAll(
-            ".pear-artifact-copy, .pear-artifact-shape-label, .pear-artifact-media-caption",
+            ".legacy-artifact-copy, .legacy-artifact-shape-label, .legacy-artifact-media-caption",
         ),
     ]
         .map((node) => node.textContent)
@@ -247,7 +247,7 @@ run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", 
 
     rendered.querySelector('[aria-label="Next step"]').click();
     assert.equal(
-        rendered.querySelector('[data-pear-artifact-target="a"] annotation').textContent,
+        rendered.querySelector('[data-legacy-artifact-target="a"] annotation').textContent,
         "x_{t+1}",
     );
 });
@@ -255,17 +255,17 @@ run_test("renders bounded KaTeX in artifact prose, captions, and scene labels", 
 run_test("rejects the coordinate-free free layout", () => {
     const document = valid_document();
     document.blocks[1].root.layout = "free";
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 });
 
 run_test("rejects unresolved connectors and duplicate ids", () => {
     const missing = valid_document();
     missing.blocks[1].root.children[2].to = "missing";
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(missing)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(missing)), undefined);
 
     const duplicate = valid_document();
     duplicate.blocks[1].root.children[1].id = "a";
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(duplicate)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(duplicate)), undefined);
 });
 
 run_test("rejects primitive fields that the renderer would ignore", () => {
@@ -281,41 +281,42 @@ run_test("rejects primitive fields that the renderer would ignore", () => {
     ]) {
         const document = valid_document();
         Object.assign(document.blocks[1].root.children[0], ignored);
-        assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+        assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
     }
 });
 
 run_test("renders native semantic nodes without exposing source JSON or adopting SVG", () => {
-    const document = artifact.parse_pear_artifact(JSON.stringify(valid_document()));
+    const document = artifact.parse_armada_artifact(JSON.stringify(valid_document()));
     assert.ok(document);
     const host = window.document.querySelector("#host");
-    const rendered = artifact.mount_pear_artifact($(host), document, {density: "chat"});
+    const rendered = artifact.mount_armada_artifact($(host), document, {density: "chat"});
     assert.equal(rendered.dataset.density, "chat");
-    assert.equal(rendered.querySelector(".pear-artifact-title").textContent, "Newton's laws");
-    assert.equal(rendered.querySelectorAll(".pear-artifact-shape").length, 2);
-    const authored_action = [...rendered.querySelectorAll(".pear-artifact-action")].find(
+    assert.equal(rendered.querySelector(".legacy-artifact-title").textContent, "Newton's laws");
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-shape").length, 2);
+    const authored_action = [...rendered.querySelectorAll(".legacy-artifact-action")].find(
         (control) => control.textContent === "Explain",
     );
     assert.ok(authored_action);
-    assert.equal(authored_action.classList.contains("pear-artifact-utility"), false);
-    assert.equal(rendered.querySelector(".pear-artifact-raw-json").hidden, true);
+    assert.equal(authored_action.classList.contains("legacy-artifact-utility"), false);
+    assert.equal(rendered.querySelector(".legacy-artifact-raw-json").hidden, true);
     assert.equal(rendered.querySelectorAll("script, iframe, foreignObject").length, 0);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-connectors line").length, 1);
-    assert.equal(rendered.querySelector(".pear-artifact-scene").getAttribute("role"), "img");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-connectors line").length, 1);
+    assert.equal(rendered.querySelector(".legacy-artifact-scene").getAttribute("role"), "img");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="b"]')), "2");
     assert.equal(
-        rendered.querySelector(".pear-artifact-connectors line").dataset.state,
+        rendered.querySelector(".legacy-artifact-connectors line").dataset.state,
         "selected",
     );
     assert.match(
-        rendered.querySelector(".pear-artifact-connectors line").getAttribute("marker-end"),
-        /^url\(#pear-artifact-arrow-/,
+        rendered.querySelector(".legacy-artifact-connectors line").getAttribute("marker-end"),
+        /^url\(#legacy-artifact-arrow-/,
     );
-    assert.equal(rendered.querySelector(".pear-artifact-connector-label").textContent, "force");
+    assert.equal(rendered.querySelector(".legacy-artifact-connector-label").textContent, "force");
     assert.equal(
-        rendered.querySelector('.pear-artifact-connectors [data-pear-artifact-target="force-edge"]')
-            .dataset.state,
+        rendered.querySelector(
+            '.legacy-artifact-connectors [data-legacy-artifact-target="force-edge"]',
+        ).dataset.state,
         "selected",
     );
 });
@@ -336,12 +337,12 @@ run_test("offers one shared utility surface for copy, media, and raw JSON", asyn
             },
         ],
     };
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelectorAll(".pear-artifact-actions").length, 1);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-utility").length, 5);
-    for (const utility of rendered.querySelectorAll(".pear-artifact-utility")) {
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-actions").length, 1);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-utility").length, 5);
+    for (const utility of rendered.querySelectorAll(".legacy-artifact-utility")) {
         assert.equal(utility.textContent, "");
         assert.equal(utility.querySelectorAll(".zulip-icon").length, 1);
         assert.equal(
@@ -373,7 +374,7 @@ run_test("offers one shared utility surface for copy, media, and raw JSON", asyn
 
     const raw_toggle = rendered.querySelector('[aria-label="View raw artifact JSON"]');
     assert.ok(raw_toggle.querySelector(".zulip-icon-code"));
-    const raw = rendered.querySelector(".pear-artifact-raw-json");
+    const raw = rendered.querySelector(".legacy-artifact-raw-json");
     assert.equal(raw.textContent, "");
     raw_toggle.click();
     assert.equal(raw.hidden, false);
@@ -400,27 +401,27 @@ run_test("plays cumulative semantic scene steps with local controls", () => {
             ],
         },
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    const a = rendered.querySelector('[data-pear-artifact-target="a"]');
-    const b = rendered.querySelector('[data-pear-artifact-target="b"]');
-    const edge = () => rendered.querySelector('[data-pear-artifact-target="force-edge"]');
-    const status = rendered.querySelector(".pear-artifact-step-status");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    const a = rendered.querySelector('[data-legacy-artifact-target="a"]');
+    const b = rendered.querySelector('[data-legacy-artifact-target="b"]');
+    const edge = () => rendered.querySelector('[data-legacy-artifact-target="force-edge"]');
+    const status = rendered.querySelector(".legacy-artifact-step-status");
     assert.equal(a.dataset.state, "running");
     assert.equal(a.textContent, "A  0");
     assert.equal(edge().dataset.state, "neutral");
     assert.equal(status.textContent, "1/2  Start at A");
     assert.match(
-        rendered.querySelector(".pear-artifact-step-announcement").textContent,
+        rendered.querySelector(".legacy-artifact-step-announcement").textContent,
         /Step 1 of 2: Start at A\. a is running\. a label: A {2}0\./,
     );
     assert.equal(
-        rendered.querySelector(".pear-artifact-scene").getAttribute("aria-describedby"),
-        rendered.querySelector(".pear-artifact-step-announcement").id,
+        rendered.querySelector(".legacy-artifact-scene").getAttribute("aria-describedby"),
+        rendered.querySelector(".legacy-artifact-step-announcement").id,
     );
-    assert.equal(rendered.querySelector(".pear-artifact-scene").getAttribute("role"), "group");
-    const track = rendered.querySelector(".pear-artifact-step-track");
+    assert.equal(rendered.querySelector(".legacy-artifact-scene").getAttribute("role"), "group");
+    const track = rendered.querySelector(".legacy-artifact-step-track");
     assert.equal(track.getAttribute("role"), "slider");
     assert.equal(track.getAttribute("aria-valuemin"), "1");
     assert.equal(track.getAttribute("aria-valuemax"), "2");
@@ -454,14 +455,14 @@ run_test("creates and resets labels on initially unlabeled shapes", () => {
         {label: "Name A", changes: [{target: "a", label: "A  0"}]},
         {label: "Update A", changes: [{target: "a", label: "A  1"}]},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  0");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector('[data-legacy-artifact-target="a"]').textContent, "A  0");
     rendered.querySelector('[aria-label="Next step"]').click();
-    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  1");
+    assert.equal(rendered.querySelector('[data-legacy-artifact-target="a"]').textContent, "A  1");
     rendered.querySelector('[aria-label="Previous step"]').click();
-    assert.equal(rendered.querySelector('[data-pear-artifact-target="a"]').textContent, "A  0");
+    assert.equal(rendered.querySelector('[data-legacy-artifact-target="a"]').textContent, "A  0");
 });
 
 run_test("rejects scene steps with missing or empty targets", () => {
@@ -470,15 +471,15 @@ run_test("rejects scene steps with missing or empty targets", () => {
         {label: "One", changes: [{target: "missing", state: "running"}]},
         {label: "Two", changes: [{target: "a", state: "success"}]},
     ];
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 
     document.blocks[1].steps[0].changes[0] = {target: "a"};
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 
     document.blocks[1].steps[0].changes[0] = {target: "a", state: "warning"};
     document.blocks[1].root.children.push({type: "text", id: "caption", text: "caption"});
     document.blocks[1].steps[0].changes[0] = {target: "caption", state: "warning"};
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 });
 
 run_test("owns autoplay and connector observers across remounts", () => {
@@ -487,10 +488,10 @@ run_test("owns autoplay and connector observers across remounts", () => {
         {label: "Start", changes: [{target: "a", state: "running"}]},
         {label: "Finish", changes: [{target: "a", state: "success"}]},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
     const host = window.document.querySelector("#host");
-    const first = artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    const first = artifact.mount_armada_artifact($(host), parsed, {density: "chat"});
     const first_intersection = intersection_observers.at(-1);
     const first_resize = resize_observers.at(-1);
     first_intersection.set_visible(true);
@@ -500,7 +501,7 @@ run_test("owns autoplay and connector observers across remounts", () => {
     first.querySelector('[aria-label="Next step"]').click();
     assert.ok(frame_count > before_step);
 
-    artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    artifact.mount_armada_artifact($(host), parsed, {density: "chat"});
     assert.equal(first_intersection.disconnected, true);
     assert.equal(first_resize.disconnected, true);
     assert.equal(first.querySelector(".is-play").dataset.playing, "false");
@@ -512,16 +513,16 @@ run_test("owns autoplay and connector observers across remounts", () => {
     const latest_intersection = intersection_observers.at(-1);
     latest_intersection.set_visible(true);
     assert.equal(host.querySelector(".is-play").dataset.playing, "false");
-    assert.equal(host.querySelector(".pear-artifact-step-fill").style.transition, "none");
+    assert.equal(host.querySelector(".legacy-artifact-step-fill").style.transition, "none");
     reduced_motion = false;
 });
 
 run_test("reports mounted geometry changes and stops observing on unmount", () => {
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(valid_document()));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(valid_document()));
     assert.ok(parsed);
     const host = window.document.querySelector("#host");
     const changes = [];
-    const rendered = artifact.mount_pear_artifact($(host), parsed, {
+    const rendered = artifact.mount_armada_artifact($(host), parsed, {
         density: "chat",
         onGeometryChange(element, previous_height, next_height) {
             changes.push({element, previous_height, next_height});
@@ -534,17 +535,17 @@ run_test("reports mounted geometry changes and stops observing on unmount", () =
     observer.set_height(320);
     assert.deepEqual(changes, [{element: rendered, previous_height: 240, next_height: 320}]);
 
-    artifact.mount_pear_artifact($(host), parsed, {density: "chat"});
+    artifact.mount_armada_artifact($(host), parsed, {density: "chat"});
     assert.equal(observer.disconnected, true);
 });
 
 run_test("uses intrinsic minimum geometry when an aspect was not authored", () => {
     const scene_document = valid_document();
     delete scene_document.blocks[1].aspect;
-    const parsed_scene = artifact.parse_pear_artifact(JSON.stringify(scene_document));
+    const parsed_scene = artifact.parse_armada_artifact(JSON.stringify(scene_document));
     assert.ok(parsed_scene);
-    const rendered_scene = artifact.render_pear_artifact(parsed_scene, {density: "chat"});
-    assert.equal(rendered_scene.querySelector(".pear-artifact-scene").dataset.aspect, undefined);
+    const rendered_scene = artifact.render_armada_artifact(parsed_scene, {density: "chat"});
+    assert.equal(rendered_scene.querySelector(".legacy-artifact-scene").dataset.aspect, undefined);
 
     const media_document = {
         version: 1,
@@ -557,12 +558,12 @@ run_test("uses intrinsic minimum geometry when an aspect was not authored", () =
             },
         ],
     };
-    const parsed_media = artifact.parse_pear_artifact(JSON.stringify(media_document));
+    const parsed_media = artifact.parse_armada_artifact(JSON.stringify(media_document));
     assert.ok(parsed_media);
-    const rendered_media = artifact.render_pear_artifact(parsed_media, {density: "chat"});
-    const media = rendered_media.querySelector(".pear-artifact-media");
-    const image = media.querySelector(".pear-artifact-media-content");
-    const frame = media.querySelector(".pear-artifact-media-frame");
+    const rendered_media = artifact.render_armada_artifact(parsed_media, {density: "chat"});
+    const media = rendered_media.querySelector(".legacy-artifact-media");
+    const image = media.querySelector(".legacy-artifact-media-content");
+    const frame = media.querySelector(".legacy-artifact-media-frame");
     assert.equal(media.dataset.aspect, undefined);
     Object.defineProperties(image, {
         naturalWidth: {value: 1000},
@@ -570,7 +571,7 @@ run_test("uses intrinsic minimum geometry when an aspect was not authored", () =
     });
     image.dispatchEvent(new window.Event("load"));
     assert.equal(media.dataset.intrinsicAspect, "standard");
-    assert.equal(frame.style.getPropertyValue("--pear-artifact-media-ratio"), `${1000 / 700}`);
+    assert.equal(frame.style.getPropertyValue("--legacy-artifact-media-ratio"), `${1000 / 700}`);
 });
 
 run_test("lays out undirected graph branches by topological distance", () => {
@@ -585,16 +586,16 @@ run_test("lays out undirected graph branches by topological distance", () => {
         {type: "connector", from: "b", to: "d", directed: false},
         {type: "connector", from: "c", to: "d", directed: false},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="c"]')), "2");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="d"]')), "3");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="b"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="c"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="d"]')), "3");
     assert.notEqual(
-        graph_row(rendered.querySelector('[data-pear-artifact-node="b"]')),
-        graph_row(rendered.querySelector('[data-pear-artifact-node="c"]')),
+        graph_row(rendered.querySelector('[data-legacy-artifact-node="b"]')),
+        graph_row(rendered.querySelector('[data-legacy-artifact-node="c"]')),
     );
 });
 
@@ -609,15 +610,15 @@ run_test("stacks dense explanatory chains instead of squeezing them into one row
         {type: "connector", from: "b", to: "c", directed: true},
         {type: "connector", from: "c", to: "d", directed: true},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    const graph = rendered.querySelector('.pear-artifact-group[data-layout="graph"]');
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    const graph = rendered.querySelector('.legacy-artifact-group[data-layout="graph"]');
     assert.equal(graph.dataset.graphDirection, "vertical");
-    assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-columns"), "1");
-    assert.equal(graph.style.getPropertyValue("--pear-artifact-graph-rows"), "4");
-    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
-    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="d"]')), "4");
+    assert.equal(graph.style.getPropertyValue("--legacy-artifact-graph-columns"), "1");
+    assert.equal(graph.style.getPropertyValue("--legacy-artifact-graph-rows"), "4");
+    assert.equal(graph_row(rendered.querySelector('[data-legacy-artifact-node="a"]')), "1");
+    assert.equal(graph_row(rendered.querySelector('[data-legacy-artifact-node="d"]')), "4");
 });
 
 run_test("falls back to distance layout for directed cycles", () => {
@@ -630,12 +631,12 @@ run_test("falls back to distance layout for directed cycles", () => {
         {type: "connector", from: "b", to: "c", directed: true},
         {type: "connector", from: "c", to: "a", directed: true},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="a"]')), "1");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="b"]')), "2");
-    assert.equal(graph_column(rendered.querySelector('[data-pear-artifact-node="c"]')), "2");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="a"]')), "1");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="b"]')), "2");
+    assert.equal(graph_column(rendered.querySelector('[data-legacy-artifact-node="c"]')), "2");
 });
 
 run_test("orders graph layers to reduce connector crossings", () => {
@@ -652,11 +653,11 @@ run_test("orders graph layers to reduce connector crossings", () => {
         {type: "connector", from: "c", to: "d", directed: false},
         {type: "connector", from: "b", to: "e", directed: false},
     ];
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="e"]')), "1");
-    assert.equal(graph_row(rendered.querySelector('[data-pear-artifact-node="d"]')), "2");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(graph_row(rendered.querySelector('[data-legacy-artifact-node="e"]')), "1");
+    assert.equal(graph_row(rendered.querySelector('[data-legacy-artifact-node="d"]')), "2");
 });
 
 run_test("renders bounded repeat data and keeps interactions local", () => {
@@ -677,10 +678,10 @@ run_test("renders bounded repeat data and keeps interactions local", () => {
             },
         ],
     };
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    const values = [...rendered.querySelectorAll(".pear-artifact-text")];
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    const values = [...rendered.querySelectorAll(".legacy-artifact-text")];
     assert.deepEqual(
         values.map((node) => node.textContent),
         ["alpha", "beta", "gamma"],
@@ -689,7 +690,7 @@ run_test("renders bounded repeat data and keeps interactions local", () => {
     assert.equal(values[0].getAttribute("aria-pressed"), "true");
 
     document.blocks[0].root.id = "unsafe-repeat-id";
-    assert.equal(artifact.parse_pear_artifact(JSON.stringify(document)), undefined);
+    assert.equal(artifact.parse_armada_artifact(JSON.stringify(document)), undefined);
 });
 
 run_test("renders every accepted numeric field without leaking invalid live values", () => {
@@ -728,18 +729,18 @@ run_test("renders every accepted numeric field without leaking invalid live valu
             },
         ],
     };
-    const parsed = artifact.parse_pear_artifact(JSON.stringify(document));
+    const parsed = artifact.parse_armada_artifact(JSON.stringify(document));
     assert.ok(parsed);
-    const rendered = artifact.render_pear_artifact(parsed, {density: "chat"});
-    assert.equal(rendered.querySelector(".pear-artifact-delta").textContent, "+2");
-    assert.equal(rendered.querySelector(".pear-artifact-meter-meta").textContent, "4 / 8 steps");
-    assert.equal(rendered.querySelector(".pear-artifact-series-unit").textContent, "ms");
+    const rendered = artifact.render_armada_artifact(parsed, {density: "chat"});
+    assert.equal(rendered.querySelector(".legacy-artifact-delta").textContent, "+2");
+    assert.equal(rendered.querySelector(".legacy-artifact-meter-meta").textContent, "4 / 8 steps");
+    assert.equal(rendered.querySelector(".legacy-artifact-series-unit").textContent, "ms");
     assert.equal(rendered.textContent.includes("NaN"), false);
-    assert.equal(rendered.querySelector(".pear-artifact-text").textContent, "unavailable");
-    assert.equal(rendered.querySelectorAll(".pear-artifact-series-point").length, 3);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-series-area").length, 1);
-    assert.equal(rendered.querySelectorAll(".pear-artifact-series-arc").length, 3);
-    const stepper = rendered.querySelector(".pear-artifact-control-button");
+    assert.equal(rendered.querySelector(".legacy-artifact-text").textContent, "unavailable");
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-series-point").length, 3);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-series-area").length, 1);
+    assert.equal(rendered.querySelectorAll(".legacy-artifact-series-arc").length, 3);
+    const stepper = rendered.querySelector(".legacy-artifact-control-button");
     assert.equal(stepper.dataset.action, "advance");
     stepper.click();
     stepper.click();

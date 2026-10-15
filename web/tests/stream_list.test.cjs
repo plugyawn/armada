@@ -585,7 +585,7 @@ test_ui("rename_stream", ({mock_template, override, override_rewire}) => {
             can_post_messages: true,
             is_empty_topic_only_channel: false,
             cannot_create_topics_in_channel: false,
-            has_pear_project: false,
+            has_armada_project: false,
         });
         return "<li-stub>";
     });

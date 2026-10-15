@@ -64,7 +64,7 @@ import * as invite from "./invite.ts";
 import * as left_sidebar_navigation_area from "./left_sidebar_navigation_area.ts";
 import * as left_sidebar_navigation_area_popovers from "./left_sidebar_navigation_area_popovers.ts";
 import * as left_sidebar_tooltips from "./left_sidebar_tooltips.ts";
-import * as pear_runtime_menu from "./legacy_runtime_menu.ts";
+import * as legacy_runtime_menu from "./legacy_runtime_menu.ts";
 import * as lightbox from "./lightbox.ts";
 import * as linkifiers from "./linkifiers.ts";
 import * as loading_error from "./loading_error.ts";
@@ -137,9 +137,9 @@ import * as starred_messages_ui from "./starred_messages_ui.ts";
 import {
     current_user,
     realm,
+    set_armada_bot_user_ids,
+    set_armada_project_stream_ids,
     set_current_user,
-    set_pear_bot_user_ids,
-    set_pear_project_stream_ids,
     set_realm,
     set_realm_billing,
     state_data_schema,
@@ -464,8 +464,8 @@ export async function initialize_everything(state_data) {
     set_current_user(state_data.current_user);
     set_realm(state_data.realm);
     set_realm_billing(state_data.realm_billing);
-    set_pear_bot_user_ids(state_data.bot.pear_bot_user_ids ?? []);
-    set_pear_project_stream_ids(state_data.stream_data.pear_project_stream_ids ?? []);
+    set_armada_bot_user_ids(state_data.bot.agent_user_ids ?? []);
+    set_armada_project_stream_ids(state_data.stream_data.repository_stream_ids ?? []);
 
     if (page_params.narrow_stream !== undefined) {
         // In the /?stream=X mini-window flow, the user's main Zulip
@@ -706,7 +706,7 @@ export async function initialize_everything(state_data) {
     gear_menu.initialize();
     navbar_help_menu.initialize();
     // Registers delegated handlers for Pear panel runtime controls.
-    pear_runtime_menu.initialize();
+    legacy_runtime_menu.initialize();
     gif_picker_ui.initialize();
     presence.initialize(state_data.presence);
     settings_preferences.initialize();

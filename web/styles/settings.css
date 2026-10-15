@@ -2096,7 +2096,7 @@ label.preferences-radio-choice-label {
             border: none;
 
             transform: translateX(101%);
-            transition: transform 0.25s var(--pear-ease);
+            transition: transform 0.25s var(--legacy-ease);
             z-index: 10;
 
             &.show {
@@ -2453,7 +2453,7 @@ label.preferences-radio-choice-label {
     }
 
     .integration-url {
-        font-family: var(--pear-font-mono);
+        font-family: var(--legacy-font-mono);
         background-color: var(--color-background-integration-url);
         padding: 10px;
         font-size: 0.85rem;

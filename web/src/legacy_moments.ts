@@ -26,7 +26,7 @@ function spawn_sparkle_rain(): void {
     }
     rain_active = true;
     const overlay = document.createElement("div");
-    overlay.className = "pear-sparkle-rain";
+    overlay.className = "legacy-sparkle-rain";
     overlay.setAttribute("aria-hidden", "true");
     for (let index = 0; index < 36; index += 1) {
         const drop = document.createElement("span");

@@ -25,18 +25,21 @@ const lifecycle = zrequire("legacy_artifact_lifecycle");
 
 run_test("mounts one truthful shared lifecycle shell without authored content", () => {
     const $host = $(document.querySelector("#host"));
-    lifecycle.mount_pear_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
-    const shell = document.querySelector(".pear-artifact-lifecycle");
+    lifecycle.mount_armada_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
+    const shell = document.querySelector(".legacy-artifact-lifecycle");
     assert.equal(shell.dataset.density, "chat");
     assert.equal(shell.dataset.lifecycle, "preparing");
     assert.equal(shell.getAttribute("role"), "status");
-    assert.equal(shell.querySelectorAll(".pear-artifact-lifecycle-cell").length, 3);
+    assert.equal(shell.querySelectorAll(".legacy-artifact-lifecycle-cell").length, 3);
     assert.match(shell.textContent, /preparing artifact/);
 
-    lifecycle.mount_pear_artifact_lifecycle($host, "wall", "failed", "update rejected");
-    assert.equal(document.querySelectorAll(".pear-artifact-lifecycle").length, 1);
-    assert.equal(document.querySelector(".pear-artifact-lifecycle").dataset.density, "wall");
-    assert.equal(document.querySelector(".pear-artifact-lifecycle").getAttribute("role"), "alert");
+    lifecycle.mount_armada_artifact_lifecycle($host, "wall", "failed", "update rejected");
+    assert.equal(document.querySelectorAll(".legacy-artifact-lifecycle").length, 1);
+    assert.equal(document.querySelector(".legacy-artifact-lifecycle").dataset.density, "wall");
+    assert.equal(
+        document.querySelector(".legacy-artifact-lifecycle").getAttribute("role"),
+        "alert",
+    );
 });
 
 run_test("uses one cleanup path for replacement, explicit unmount, and disconnection", async () => {
@@ -44,20 +47,20 @@ run_test("uses one cleanup path for replacement, explicit unmount, and disconnec
     const $host = $(host);
     let cleanup_count = 0;
 
-    lifecycle.replace_pear_artifact_host($host, document.createElement("article"), () => {
+    lifecycle.replace_armada_artifact_host($host, document.createElement("article"), () => {
         cleanup_count += 1;
     });
-    lifecycle.mount_pear_artifact_lifecycle($host, "chat", "preparing", "replacing");
+    lifecycle.mount_armada_artifact_lifecycle($host, "chat", "preparing", "replacing");
     assert.equal(cleanup_count, 1);
 
-    lifecycle.replace_pear_artifact_host(host, document.createElement("article"), () => {
+    lifecycle.replace_armada_artifact_host(host, document.createElement("article"), () => {
         cleanup_count += 1;
     });
-    lifecycle.unmount_pear_artifact($host);
+    lifecycle.unmount_armada_artifact($host);
     assert.equal(cleanup_count, 2);
     assert.equal(host.children.length, 0);
 
-    lifecycle.replace_pear_artifact_host(host, document.createElement("article"), () => {
+    lifecycle.replace_armada_artifact_host(host, document.createElement("article"), () => {
         cleanup_count += 1;
     });
     host.remove();
@@ -69,9 +72,9 @@ run_test("uses one cleanup path for replacement, explicit unmount, and disconnec
 
 run_test("clears a host even when artifact cleanup fails", () => {
     const host = document.querySelector("#host");
-    lifecycle.replace_pear_artifact_host(host, document.createElement("article"), () => {
+    lifecycle.replace_armada_artifact_host(host, document.createElement("article"), () => {
         throw new Error("cleanup failed");
     });
-    assert.throws(() => lifecycle.unmount_pear_artifact(host), /cleanup failed/);
+    assert.throws(() => lifecycle.unmount_armada_artifact(host), /cleanup failed/);
     assert.equal(host.children.length, 0);
 });

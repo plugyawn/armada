@@ -36,8 +36,8 @@
         outline: 1px solid var(--color-outline-input);
         outline-offset: -1px;
         border: none;
-        border-radius: var(--pear-radius-chip);
-        transition: 0.1s var(--pear-ease);
+        border-radius: var(--legacy-radius-chip);
+        transition: 0.1s var(--legacy-ease);
         transition-property: outline-color, box-shadow;
 
         &:hover {

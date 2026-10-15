@@ -151,6 +151,10 @@ class zulip::app_frontend_base {
   $queues_multiprocess_default = $zulip::common::total_memory_mb > 3800
   $queues_multiprocess = zulipconf('application_server', 'queue_workers_multiprocess', $queues_multiprocess_default)
   $queues = [
+    'armada_addressing',
+    'armada_monitor_worker',
+    'armada_presentation',
+    'armada_worker',
     'deferred_work',
     'digest_emails',
     'email_mirror',
@@ -161,10 +165,6 @@ class zulip::app_frontend_base {
     'missedmessage_emails',
     'missedmessage_mobile_notifications',
     'outgoing_webhooks',
-    'pear_addressing',
-    'pear_monitor_worker',
-    'pear_presentation',
-    'pear_worker',
     'thumbnail',
     'user_activity',
     'user_activity_interval',

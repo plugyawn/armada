@@ -2,13 +2,13 @@
 
 const assert = require("node:assert/strict");
 
-const render_pear_panel = require("../templates/legacy_panel.hbs");
-const render_pear_workspace_rail = require("../templates/legacy_workspace_rail.hbs");
+const render_legacy_panel = require("../templates/legacy_panel.hbs");
+const render_legacy_workspace_rail = require("../templates/legacy_workspace_rail.hbs");
 
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
-const pear_panel = zrequire("legacy_panel");
+const legacy_panel = zrequire("legacy_panel");
 
 run_test("render_state_changed_for_testing", () => {
     const first_state = {
@@ -29,17 +29,17 @@ run_test("render_state_changed_for_testing", () => {
         status_label: "done",
     };
 
-    assert.ok(pear_panel.render_state_changed_for_testing("", first_state));
+    assert.ok(legacy_panel.render_state_changed_for_testing("", first_state));
     assert.ok(
-        !pear_panel.render_state_changed_for_testing(JSON.stringify(first_state), same_state),
+        !legacy_panel.render_state_changed_for_testing(JSON.stringify(first_state), same_state),
     );
     assert.ok(
-        pear_panel.render_state_changed_for_testing(JSON.stringify(first_state), changed_state),
+        legacy_panel.render_state_changed_for_testing(JSON.stringify(first_state), changed_state),
     );
 });
 
 run_test("rail plan uses Working instead of leaking an older completed plan", () => {
-    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+    const steps = legacy_panel.armada_rail_plan_steps_for_testing([
         {id: 2, status: "running", plan: null},
         {
             id: 1,
@@ -52,15 +52,15 @@ run_test("rail plan uses Working instead of leaking an older completed plan", ()
         {
             step: "translated: Working",
             status_glyph: "",
-            status_class: "pear-rail-plan-active",
-            glyph_class: "pear-thinking-glyph",
+            status_class: "legacy-rail-plan-active",
+            glyph_class: "legacy-thinking-glyph",
             is_current: true,
         },
     ]);
 });
 
 run_test("rail plan renders only the active run checklist", () => {
-    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+    const steps = legacy_panel.armada_rail_plan_steps_for_testing([
         {
             id: 2,
             status: "running",
@@ -81,27 +81,27 @@ run_test("rail plan renders only the active run checklist", () => {
         {
             step: "Inspect",
             status_glyph: "✓",
-            status_class: "pear-rail-plan-done",
+            status_class: "legacy-rail-plan-done",
             glyph_class: "",
         },
         {
             step: "Implement",
             status_glyph: "",
-            status_class: "pear-rail-plan-active",
-            glyph_class: "pear-thinking-glyph",
+            status_class: "legacy-rail-plan-active",
+            glyph_class: "legacy-thinking-glyph",
             is_current: true,
         },
         {
             step: "Verify",
             status_glyph: "○",
-            status_class: "pear-rail-plan-pending",
+            status_class: "legacy-rail-plan-pending",
             glyph_class: "",
         },
     ]);
 });
 
 run_test("rail plan keeps a bounded window around the active step", () => {
-    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+    const steps = legacy_panel.armada_rail_plan_steps_for_testing([
         {
             id: 2,
             status: "running",
@@ -123,7 +123,7 @@ run_test("rail plan keeps a bounded window around the active step", () => {
 });
 
 run_test("rail plan disappears when no Codex run is active", () => {
-    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+    const steps = legacy_panel.armada_rail_plan_steps_for_testing([
         {
             id: 2,
             status: "done",
@@ -138,7 +138,7 @@ run_test("rail plan disappears when no Codex run is active", () => {
 });
 
 run_test("rail keeps the last completed Codex step current while the run finalizes", () => {
-    const steps = pear_panel.pear_rail_plan_steps_for_testing([
+    const steps = legacy_panel.armada_rail_plan_steps_for_testing([
         {
             id: 3,
             status: "running",
@@ -152,38 +152,38 @@ run_test("rail keeps the last completed Codex step current while the run finaliz
     assert.deepEqual(steps.at(-1), {
         step: "Report",
         status_glyph: "✓",
-        status_class: "pear-rail-plan-active",
+        status_class: "legacy-rail-plan-active",
         glyph_class: "",
         is_current: true,
     });
 });
 
 run_test("workspace rail keeps a plan visible before workspace context arrives", () => {
-    const html = render_pear_workspace_rail({
+    const html = render_legacy_workspace_rail({
         has_workspace: false,
         has_plan: true,
         plan_steps: [
             {
                 step: "Working",
                 status_glyph: "",
-                status_class: "pear-rail-plan-active",
-                glyph_class: "pear-thinking-glyph",
+                status_class: "legacy-rail-plan-active",
+                glyph_class: "legacy-thinking-glyph",
             },
         ],
         has_runs: false,
         show_workspace_line: false,
     });
 
-    assert.ok(html.includes("pear-rail-plan"));
-    assert.ok(html.includes("pear-thinking-glyph"));
+    assert.ok(html.includes("legacy-rail-plan"));
+    assert.ok(html.includes("legacy-thinking-glyph"));
     assert.ok(html.includes("Working"));
-    assert.ok(!html.includes("pear-rail-overview"));
-    assert.ok(!html.includes("pear-workspace-rail-card"));
-    assert.ok(!html.includes("pear-rail-plan-title"));
+    assert.ok(!html.includes("legacy-rail-overview"));
+    assert.ok(!html.includes("legacy-workspace-rail-card"));
+    assert.ok(!html.includes("legacy-rail-plan-title"));
 });
 
 run_test("workspace rail uses explicit booleans for numeric message ids", () => {
-    const html = render_pear_workspace_rail({
+    const html = render_legacy_workspace_rail({
         has_workspace: false,
         has_plan: false,
         has_runs: true,
@@ -201,43 +201,46 @@ run_test("workspace rail uses explicit booleans for numeric message ids", () => 
     });
 
     assert.ok(html.includes('data-message-id="903"'));
-    assert.ok(!html.includes("pear-panel-open-action"));
+    assert.ok(!html.includes("legacy-panel-open-action"));
 });
 
 run_test("status_marker_for_testing", () => {
-    assert.equal(pear_panel.status_marker_for_testing("running"), "·");
-    assert.equal(pear_panel.status_marker_for_testing("queued"), "·");
-    assert.equal(pear_panel.status_marker_for_testing("paused"), "✧");
-    assert.equal(pear_panel.status_marker_for_testing("failed"), "✷");
-    assert.equal(pear_panel.status_marker_for_testing("cancelled"), "✷");
-    assert.equal(pear_panel.status_marker_for_testing("done"), "·");
-    assert.equal(pear_panel.status_marker_for_testing("unknown"), "·");
+    assert.equal(legacy_panel.status_marker_for_testing("running"), "·");
+    assert.equal(legacy_panel.status_marker_for_testing("queued"), "·");
+    assert.equal(legacy_panel.status_marker_for_testing("paused"), "✧");
+    assert.equal(legacy_panel.status_marker_for_testing("failed"), "✷");
+    assert.equal(legacy_panel.status_marker_for_testing("cancelled"), "✷");
+    assert.equal(legacy_panel.status_marker_for_testing("done"), "·");
+    assert.equal(legacy_panel.status_marker_for_testing("unknown"), "·");
 });
 
 run_test("status_label_for_testing", () => {
-    assert.equal(pear_panel.status_label_for_testing("running"), "translated: working");
-    assert.equal(pear_panel.status_label_for_testing("queued"), "translated: queued");
-    assert.equal(pear_panel.status_label_for_testing("paused"), "translated: paused");
-    assert.equal(pear_panel.status_label_for_testing("failed"), "translated: failed");
-    assert.equal(pear_panel.status_label_for_testing("cancelled"), "translated: cancelled");
-    assert.equal(pear_panel.status_label_for_testing("done"), "translated: done");
+    assert.equal(legacy_panel.status_label_for_testing("running"), "translated: working");
+    assert.equal(legacy_panel.status_label_for_testing("queued"), "translated: queued");
+    assert.equal(legacy_panel.status_label_for_testing("paused"), "translated: paused");
+    assert.equal(legacy_panel.status_label_for_testing("failed"), "translated: failed");
+    assert.equal(legacy_panel.status_label_for_testing("cancelled"), "translated: cancelled");
+    assert.equal(legacy_panel.status_label_for_testing("done"), "translated: done");
 });
 
 run_test("panel_runtime_label_for_testing", () => {
-    assert.equal(pear_panel.panel_runtime_label_for_testing({}), "");
+    assert.equal(legacy_panel.panel_runtime_label_for_testing({}), "");
     assert.equal(
-        pear_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "high"}),
+        legacy_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "high"}),
         "gpt-5.5 / h",
     );
     assert.equal(
-        pear_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "xhigh"}),
+        legacy_panel.panel_runtime_label_for_testing({model: "gpt-5.5", reasoning_effort: "xhigh"}),
         "gpt-5.5 / xh",
     );
-    assert.equal(pear_panel.panel_runtime_label_for_testing({model: "codex-spark"}), "codex-spark");
+    assert.equal(
+        legacy_panel.panel_runtime_label_for_testing({model: "codex-spark"}),
+        "codex-spark",
+    );
 });
 
 run_test("template renders active status as visible text glyph phrase", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_panel_header: true,
         show_runtime_trigger: false,
@@ -256,21 +259,21 @@ run_test("template renders active status as visible text glyph phrase", () => {
         topic_context: undefined,
     });
 
-    assert.match(html, /pear-run-status-row pear-run-status-active pear-liveness-active/);
+    assert.match(html, /legacy-run-status-row legacy-run-status-active legacy-liveness-active/);
     // The decorative status glyph is not part of the accessible name; the
     // human label is announced, and the glyph is marked aria-hidden.
     assert.match(html, /aria-label="working"/);
-    assert.match(html, /<span class="pear-panel-status-label">working<\/span>/);
+    assert.match(html, /<span class="legacy-panel-status-label">working<\/span>/);
     assert.match(
         html,
-        /<span class="pear-ui-glyph pear-run-status-glyph pear-thinking-glyph" aria-hidden="true">·<\/span>/,
+        /<span class="legacy-ui-glyph legacy-run-status-glyph legacy-thinking-glyph" aria-hidden="true">·<\/span>/,
     );
     assert.doesNotMatch(html, /aria-hidden="true">✦<\/span>/);
-    assert.doesNotMatch(html, /pear-run-status-compact/);
+    assert.doesNotMatch(html, /legacy-run-status-compact/);
 });
 
 run_test("template does not duplicate idle topic chrome", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_panel_header: false,
         show_workbench: false,
@@ -280,15 +283,15 @@ run_test("template does not duplicate idle topic chrome", () => {
         active_run: undefined,
     });
 
-    assert.match(html, /pear-panel-inner/);
-    assert.doesNotMatch(html, /pear-topic-control/);
-    assert.doesNotMatch(html, /pear-runtime-menu-trigger/);
-    assert.doesNotMatch(html, /pear-run-actions/);
-    assert.doesNotMatch(html, /class="pear-workbench(?:\s|")/);
+    assert.match(html, /legacy-panel-inner/);
+    assert.doesNotMatch(html, /legacy-topic-control/);
+    assert.doesNotMatch(html, /legacy-runtime-menu-trigger/);
+    assert.doesNotMatch(html, /legacy-run-actions/);
+    assert.doesNotMatch(html, /class="legacy-workbench(?:\s|")/);
 });
 
 run_test("template renders workbench without active run", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_workbench: true,
         has_topic: true,
@@ -324,14 +327,14 @@ run_test("template renders workbench without active run", () => {
         },
     });
 
-    assert.match(html, /pear-workbench/);
-    assert.doesNotMatch(html, /pear-topic-control/);
-    assert.match(html, /pear-workbench-context-strip/);
-    assert.doesNotMatch(html, /pear-workbench-model-select/);
-    assert.doesNotMatch(html, /pear-workbench-effort-range/);
-    assert.doesNotMatch(html, /pear-topic-open-action/);
-    assert.match(html, /pear-workbench-title-row/);
-    assert.match(html, /pear-workbench-scope-note/);
+    assert.match(html, /legacy-workbench/);
+    assert.doesNotMatch(html, /legacy-topic-control/);
+    assert.match(html, /legacy-workbench-context-strip/);
+    assert.doesNotMatch(html, /legacy-workbench-model-select/);
+    assert.doesNotMatch(html, /legacy-workbench-effort-range/);
+    assert.doesNotMatch(html, /legacy-topic-open-action/);
+    assert.match(html, /legacy-workbench-title-row/);
+    assert.match(html, /legacy-workbench-scope-note/);
     assert.match(html, /Changes and commits are scoped to this topic worktree\./);
     assert.match(html, /routing-fix/);
     assert.match(html, /devel \/ routing-fix \/ a3f92c1/);
@@ -339,18 +342,18 @@ run_test("template renders workbench without active run", () => {
     assert.match(html, /Worktree/);
     assert.match(html, /2 files/);
     assert.match(html, /main \/ a3f92c1/);
-    assert.match(html, /pear-workbench-context-row/);
-    assert.match(html, /pear-workbench-tabs/);
-    assert.match(html, /pear-workbench-close/);
+    assert.match(html, /legacy-workbench-context-row/);
+    assert.match(html, /legacy-workbench-tabs/);
+    assert.match(html, /legacy-workbench-close/);
     assert.match(html, /diff/);
     assert.match(html, /history/);
-    assert.doesNotMatch(html, /pear-workbench-head-row/);
-    assert.doesNotMatch(html, /pear-workbench-diffstat/);
-    assert.doesNotMatch(html, /pear-workbench-context-meter/);
+    assert.doesNotMatch(html, /legacy-workbench-head-row/);
+    assert.doesNotMatch(html, /legacy-workbench-diffstat/);
+    assert.doesNotMatch(html, /legacy-workbench-context-meter/);
 });
 
 run_test("template keeps volatile run metadata out of workbench chrome", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_workbench: true,
         has_topic: true,
@@ -386,19 +389,19 @@ run_test("template keeps volatile run metadata out of workbench chrome", () => {
         },
     });
 
-    assert.match(html, /pear-workbench-tabs/);
-    assert.match(html, /pear-workbench-title-row/);
-    assert.match(html, /pear-workbench-context-strip/);
-    assert.doesNotMatch(html, /pear-workbench-model-select/);
-    assert.doesNotMatch(html, /pear-workbench-effort-range/);
-    assert.doesNotMatch(html, /pear-workbench-context-meter/);
-    assert.doesNotMatch(html, /pear-workbench-head-row/);
-    assert.doesNotMatch(html, /pear-thinking-glyph/);
+    assert.match(html, /legacy-workbench-tabs/);
+    assert.match(html, /legacy-workbench-title-row/);
+    assert.match(html, /legacy-workbench-context-strip/);
+    assert.doesNotMatch(html, /legacy-workbench-model-select/);
+    assert.doesNotMatch(html, /legacy-workbench-effort-range/);
+    assert.doesNotMatch(html, /legacy-workbench-context-meter/);
+    assert.doesNotMatch(html, /legacy-workbench-head-row/);
+    assert.doesNotMatch(html, /legacy-thinking-glyph/);
     assert.doesNotMatch(html, /cache_percent/);
 });
 
 run_test("template keeps runtime controls out of workbench chrome", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_workbench: true,
         has_topic: true,
@@ -432,17 +435,17 @@ run_test("template keeps runtime controls out of workbench chrome", () => {
         },
     });
 
-    assert.doesNotMatch(html, /pear-workbench-context-meter/);
+    assert.doesNotMatch(html, /legacy-workbench-context-meter/);
     assert.doesNotMatch(html, /cache_percent/);
-    assert.doesNotMatch(html, /pear-workbench-model-select/);
-    assert.doesNotMatch(html, /pear-workbench-effort-range/);
-    assert.match(html, /pear-workbench-context-strip/);
-    assert.doesNotMatch(html, /pear-workbench-runtime-trigger/);
+    assert.doesNotMatch(html, /legacy-workbench-model-select/);
+    assert.doesNotMatch(html, /legacy-workbench-effort-range/);
+    assert.match(html, /legacy-workbench-context-strip/);
+    assert.doesNotMatch(html, /legacy-workbench-runtime-trigger/);
     assert.doesNotMatch(html, /No committed work yet/);
 });
 
 run_test("template renders diff rows without duplicate summary chips", () => {
-    const html = render_pear_panel({
+    const html = render_legacy_panel({
         panel_open: true,
         show_workbench: true,
         has_topic: true,
@@ -486,20 +489,20 @@ run_test("template renders diff rows without duplicate summary chips", () => {
                     {
                         status: "A",
                         kind: "added",
-                        path: "zerver/tests/test_pear_gate.py",
+                        path: "zerver/tests/test_armada_gate.py",
                     },
                 ],
             },
         },
     });
 
-    assert.doesNotMatch(html, /pear-workbench-diffstat/);
-    assert.match(html, /pear-file-list/);
-    assert.match(html, /pear-file-row pear-file-modified/);
+    assert.doesNotMatch(html, /legacy-workbench-diffstat/);
+    assert.match(html, /legacy-file-list/);
+    assert.match(html, /legacy-file-row legacy-file-modified/);
     assert.match(html, /zerver\/lib\/armada_gate\.py/);
-    assert.match(html, /pear-file-row pear-file-added/);
-    assert.match(html, /zerver\/tests\/test_pear_gate\.py/);
-    assert.doesNotMatch(html, /pear-workbench-summary/);
+    assert.match(html, /legacy-file-row legacy-file-added/);
+    assert.match(html, /zerver\/tests\/test_armada_gate\.py/);
+    assert.doesNotMatch(html, /legacy-workbench-summary/);
 });
 
 run_test("should_refresh_context_for_testing", () => {
@@ -514,15 +517,15 @@ run_test("should_refresh_context_for_testing", () => {
         has_active_run: false,
     };
 
-    assert.equal(pear_panel.should_refresh_context_for_testing(base_options), false);
+    assert.equal(legacy_panel.should_refresh_context_for_testing(base_options), false);
     // While a run is live every request asks for the context, so that the
     // one which finds the run ended needs no second request.
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({...base_options, has_active_run: true}),
+        legacy_panel.should_refresh_context_for_testing({...base_options, has_active_run: true}),
         true,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({
+        legacy_panel.should_refresh_context_for_testing({
             ...base_options,
             live: true,
             has_active_run: true,
@@ -530,7 +533,7 @@ run_test("should_refresh_context_for_testing", () => {
         true,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({
+        legacy_panel.should_refresh_context_for_testing({
             ...base_options,
             context_key_value: "",
             has_active_run: true,
@@ -538,30 +541,30 @@ run_test("should_refresh_context_for_testing", () => {
         false,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({...base_options, live: true}),
+        legacy_panel.should_refresh_context_for_testing({...base_options, live: true}),
         false,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({...base_options, context_key_value: ""}),
+        legacy_panel.should_refresh_context_for_testing({...base_options, context_key_value: ""}),
         false,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({...base_options, force_context: true}),
+        legacy_panel.should_refresh_context_for_testing({...base_options, force_context: true}),
         true,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({...base_options, has_context: false}),
+        legacy_panel.should_refresh_context_for_testing({...base_options, has_context: false}),
         true,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({
+        legacy_panel.should_refresh_context_for_testing({
             ...base_options,
             last_refresh_key: "devel\u0000old topic",
         }),
         true,
     );
     assert.equal(
-        pear_panel.should_refresh_context_for_testing({
+        legacy_panel.should_refresh_context_for_testing({
             ...base_options,
             last_refresh_at: 39_999,
         }),
@@ -570,11 +573,11 @@ run_test("should_refresh_context_for_testing", () => {
 });
 
 run_test("topic_context_after_refresh_for_testing", () => {
-    const cached_context = {stream: "devel", topic: "pear", model: "gpt-5.5"};
-    const fresh_context = {stream: "devel", topic: "pear", model: "gpt-5.5-mini"};
+    const cached_context = {stream: "devel", topic: "armada", model: "gpt-5.5"};
+    const fresh_context = {stream: "devel", topic: "armada", model: "gpt-5.5-mini"};
 
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: false,
             live: false,
             response_topic_context: null,
@@ -583,7 +586,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
         cached_context,
     );
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: false,
             live: true,
             response_topic_context: undefined,
@@ -592,7 +595,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
         cached_context,
     );
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: true,
             live: false,
             response_topic_context: fresh_context,
@@ -601,7 +604,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
         fresh_context,
     );
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: true,
             live: false,
             response_topic_context: null,
@@ -610,7 +613,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
         cached_context,
     );
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: true,
             live: false,
             response_topic_context: null,
@@ -620,7 +623,7 @@ run_test("topic_context_after_refresh_for_testing", () => {
         cached_context,
     );
     assert.equal(
-        pear_panel.topic_context_after_refresh_for_testing({
+        legacy_panel.topic_context_after_refresh_for_testing({
             include_context: true,
             live: false,
             response_topic_context: null,
@@ -631,32 +634,32 @@ run_test("topic_context_after_refresh_for_testing", () => {
 });
 
 run_test("topic_context_for_display_for_testing", () => {
-    const current_context = {stream: "devel", topic: "pear", model: "gpt-5.5"};
-    const cached_context = {stream: "devel", topic: "pear", model: "gpt-5.5-mini"};
+    const current_context = {stream: "devel", topic: "armada", model: "gpt-5.5"};
+    const cached_context = {stream: "devel", topic: "armada", model: "gpt-5.5-mini"};
     const other_context = {stream: "devel", topic: "other", model: "gpt-5.5"};
 
     assert.equal(
-        pear_panel.topic_context_for_display_for_testing({
+        legacy_panel.topic_context_for_display_for_testing({
             stream: "devel",
-            topic: "pear",
+            topic: "armada",
             render_topic_context: current_context,
             cached_topic_context: cached_context,
         }),
         current_context,
     );
     assert.equal(
-        pear_panel.topic_context_for_display_for_testing({
+        legacy_panel.topic_context_for_display_for_testing({
             stream: "devel",
-            topic: "pear",
+            topic: "armada",
             render_topic_context: other_context,
             cached_topic_context: cached_context,
         }),
         cached_context,
     );
     assert.equal(
-        pear_panel.topic_context_for_display_for_testing({
+        legacy_panel.topic_context_for_display_for_testing({
             stream: "devel",
-            topic: "pear",
+            topic: "armada",
             render_topic_context: null,
             cached_topic_context: undefined,
         }),
@@ -667,7 +670,7 @@ run_test("topic_context_for_display_for_testing", () => {
 run_test("optimistic_topic_context_for_testing", () => {
     const topic_context = {
         stream: "devel",
-        topic: "pear",
+        topic: "armada",
         model: "gpt-5.5",
         reasoning_effort: "xhigh",
         model_catalog: [
@@ -690,7 +693,7 @@ run_test("optimistic_topic_context_for_testing", () => {
     };
 
     assert.deepEqual(
-        pear_panel.optimistic_topic_context_for_testing(topic_context, {
+        legacy_panel.optimistic_topic_context_for_testing(topic_context, {
             model: "gpt-5.3-codex-spark",
         }),
         {
@@ -700,7 +703,7 @@ run_test("optimistic_topic_context_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_panel.optimistic_topic_context_for_testing(topic_context, {
+        legacy_panel.optimistic_topic_context_for_testing(topic_context, {
             reasoning_effort: "low",
         }),
         {
@@ -711,13 +714,13 @@ run_test("optimistic_topic_context_for_testing", () => {
 });
 
 run_test("panel_header_state_for_testing", () => {
-    assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined), {
+    assert.deepEqual(legacy_panel.panel_header_state_for_testing(undefined), {
         show_panel_header: false,
         show_runtime_trigger: false,
         has_panel_menu: false,
     });
     assert.deepEqual(
-        pear_panel.panel_header_state_for_testing({
+        legacy_panel.panel_header_state_for_testing({
             show_status: false,
             has_actions: false,
         }),
@@ -727,13 +730,13 @@ run_test("panel_header_state_for_testing", () => {
             has_panel_menu: false,
         },
     );
-    assert.deepEqual(pear_panel.panel_header_state_for_testing(undefined, {has_topic: true}), {
+    assert.deepEqual(legacy_panel.panel_header_state_for_testing(undefined, {has_topic: true}), {
         show_panel_header: false,
         show_runtime_trigger: true,
         has_panel_menu: false,
     });
     assert.deepEqual(
-        pear_panel.panel_header_state_for_testing(undefined, {
+        legacy_panel.panel_header_state_for_testing(undefined, {
             has_topic: true,
             show_workbench: true,
         }),
@@ -744,7 +747,7 @@ run_test("panel_header_state_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_panel.panel_header_state_for_testing({
+        legacy_panel.panel_header_state_for_testing({
             show_status: true,
             has_actions: false,
         }),
@@ -755,7 +758,7 @@ run_test("panel_header_state_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_panel.panel_header_state_for_testing({
+        legacy_panel.panel_header_state_for_testing({
             show_status: true,
             has_actions: true,
         }),
@@ -769,7 +772,7 @@ run_test("panel_header_state_for_testing", () => {
 
 run_test("workbench_view_for_testing", () => {
     assert.equal(
-        pear_panel.workbench_view_for_testing({
+        legacy_panel.workbench_view_for_testing({
             requested: undefined,
             has_diff: true,
             has_history: true,
@@ -777,7 +780,7 @@ run_test("workbench_view_for_testing", () => {
         "diff",
     );
     assert.equal(
-        pear_panel.workbench_view_for_testing({
+        legacy_panel.workbench_view_for_testing({
             requested: "history",
             has_diff: true,
             has_history: true,
@@ -785,7 +788,7 @@ run_test("workbench_view_for_testing", () => {
         "history",
     );
     assert.equal(
-        pear_panel.workbench_view_for_testing({
+        legacy_panel.workbench_view_for_testing({
             requested: "history",
             has_diff: true,
             has_history: false,
@@ -793,7 +796,7 @@ run_test("workbench_view_for_testing", () => {
         "history",
     );
     assert.equal(
-        pear_panel.workbench_view_for_testing({
+        legacy_panel.workbench_view_for_testing({
             requested: "diff",
             has_diff: false,
             has_history: true,
@@ -801,7 +804,7 @@ run_test("workbench_view_for_testing", () => {
         "diff",
     );
     assert.equal(
-        pear_panel.workbench_view_for_testing({
+        legacy_panel.workbench_view_for_testing({
             requested: undefined,
             has_diff: false,
             has_history: false,
@@ -811,49 +814,49 @@ run_test("workbench_view_for_testing", () => {
 });
 
 run_test("workbench_view_for_artifact_label", () => {
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Diff"), "diff");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Doc"), undefined);
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Repository"), "history");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Branch"), "history");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Commit"), "history");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("SHA"), "history");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Codex session"), "history");
-    assert.equal(pear_panel.workbench_view_for_artifact_label("Verification"), undefined);
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Diff"), "diff");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Doc"), undefined);
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Repository"), "history");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Branch"), "history");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Commit"), "history");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("SHA"), "history");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Codex session"), "history");
+    assert.equal(legacy_panel.workbench_view_for_artifact_label("Verification"), undefined);
 });
 
 run_test("workbench_viewport_allows_popover_for_testing", () => {
-    assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(390), true);
-    assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(900), true);
-    assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(1199), true);
-    assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(1200), true);
-    assert.equal(pear_panel.workbench_viewport_allows_popover_for_testing(1440), true);
+    assert.equal(legacy_panel.workbench_viewport_allows_popover_for_testing(390), true);
+    assert.equal(legacy_panel.workbench_viewport_allows_popover_for_testing(900), true);
+    assert.equal(legacy_panel.workbench_viewport_allows_popover_for_testing(1199), true);
+    assert.equal(legacy_panel.workbench_viewport_allows_popover_for_testing(1200), true);
+    assert.equal(legacy_panel.workbench_viewport_allows_popover_for_testing(1440), true);
 });
 
 run_test("workbench_open_for_testing", () => {
     assert.equal(
-        pear_panel.workbench_open_for_testing({
+        legacy_panel.workbench_open_for_testing({
             context_key_value: "",
             manually_open: true,
         }),
         false,
     );
     assert.equal(
-        pear_panel.workbench_open_for_testing({
-            context_key_value: "devel\u0000pear",
+        legacy_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000armada",
             manually_open: false,
         }),
         false,
     );
     assert.equal(
-        pear_panel.workbench_open_for_testing({
-            context_key_value: "devel\u0000pear",
+        legacy_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000armada",
             manually_open: true,
         }),
         true,
     );
     assert.equal(
-        pear_panel.workbench_open_for_testing({
-            context_key_value: "devel\u0000pear",
+        legacy_panel.workbench_open_for_testing({
+            context_key_value: "devel\u0000armada",
             manually_open: false,
         }),
         false,
@@ -862,12 +865,18 @@ run_test("workbench_open_for_testing", () => {
 
 run_test("refresh_paused_for_testing", () => {
     // Hidden tabs skip event/reconnect reconciliation...
-    assert.equal(pear_panel.refresh_paused_for_testing({hidden: true, force_context: false}), true);
+    assert.equal(
+        legacy_panel.refresh_paused_for_testing({hidden: true, force_context: false}),
+        true,
+    );
     // ...but an explicit forced refresh still runs even while hidden.
-    assert.equal(pear_panel.refresh_paused_for_testing({hidden: true, force_context: true}), false);
+    assert.equal(
+        legacy_panel.refresh_paused_for_testing({hidden: true, force_context: true}),
+        false,
+    );
     // Visible tab never pauses.
     assert.equal(
-        pear_panel.refresh_paused_for_testing({hidden: false, force_context: false}),
+        legacy_panel.refresh_paused_for_testing({hidden: false, force_context: false}),
         false,
     );
 });
@@ -875,11 +884,11 @@ run_test("refresh_paused_for_testing", () => {
 run_test("workbench_popover_top_for_testing", () => {
     const base = {viewport_height: 900, margin: 12, min_body_height: 260};
     // Normal anchor: top is used as-is.
-    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 200}), 200);
+    assert.equal(legacy_panel.workbench_popover_top_for_testing({...base, desired_top: 200}), 200);
     // Anchor scrolled above the viewport: negative desired top is clamped to
     // the margin instead of sliding off the top edge.
-    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: -400}), 12);
+    assert.equal(legacy_panel.workbench_popover_top_for_testing({...base, desired_top: -400}), 12);
     // Anchor near the bottom: top is pushed up so the min body height still
     // fits above the bottom margin (900 - 260 - 12 = 628).
-    assert.equal(pear_panel.workbench_popover_top_for_testing({...base, desired_top: 880}), 628);
+    assert.equal(legacy_panel.workbench_popover_top_for_testing({...base, desired_top: 880}), 628);
 });

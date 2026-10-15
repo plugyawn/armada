@@ -782,7 +782,7 @@ def reload_clients_immediately_after_restart() -> bool:
     # are intentionally small pre-release instances, where leaving an open tab
     # on a superseded hashed bundle is both more disruptive and more confusing.
     # The existing immediate reload path preserves compose and scroll state.
-    return settings.DEVELOPMENT or settings.PEAR_WORKER_AGENT_RUNTIME != "disabled"
+    return settings.DEVELOPMENT or settings.ARMADA_WORKER_AGENT_RUNTIME != "disabled"
 
 
 async def setup_event_queue(

@@ -1,9 +1,9 @@
 import type {
-    PearWorkspaceApiError,
-    PearWorkspaceEntry,
-    pear_workspace_raw_url,
+    ArmadaWorkspaceApiError,
+    ArmadaWorkspaceEntry,
+    armada_workspace_raw_url,
 } from "./legacy_workspace_api.ts";
-import type {PearWorkspaceEditorSurface} from "./legacy_workspace_editor_contract.ts";
+import type {ArmadaWorkspaceEditorSurface} from "./legacy_workspace_editor_contract.ts";
 
 const raster_extensions = new Set(["avif", "gif", "jpeg", "jpg", "png", "webp"]);
 const binary_extensions = new Set([
@@ -32,16 +32,16 @@ function extension_for_path(path: string): string {
     return dot <= 0 ? "" : filename.slice(dot + 1).toLowerCase();
 }
 
-export function pear_workspace_api_error_message(error: PearWorkspaceApiError): string {
+export function armada_workspace_api_error_message(error: ArmadaWorkspaceApiError): string {
     return error.kind === "server" ? error.error.msg : error.message;
 }
 
-export function pear_workspace_initial_preview(
+export function armada_workspace_initial_preview(
     workspace_id: string,
-    entry: PearWorkspaceEntry,
+    entry: ArmadaWorkspaceEntry,
     limits: {rawBytes: number | null; textBytes: number},
-    raw_url: typeof pear_workspace_raw_url,
-): PearWorkspaceEditorSurface | undefined {
+    raw_url: typeof armada_workspace_raw_url,
+): ArmadaWorkspaceEditorSurface | undefined {
     const extension = extension_for_path(entry.path);
     const size = entry.size ?? 0;
     if (raster_extensions.has(extension)) {

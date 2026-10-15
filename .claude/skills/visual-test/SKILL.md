@@ -130,9 +130,12 @@ topics show every agent-run state without calling a model:
 `demo-paused-topic`, `demo-artifacts`, `demo-wall-monitors`,
 `demo-threads`, `demo-dirty-worktree`, `demo-long-topic`
 (`var/armada-overhaul/SEED.md`). Reload them with
-`limactl shell armada -- arm manage armada_demo_data` (about 40 s), never
-while another agent is taking screenshots. Do not send messages to the
-agent to make a screenshot: a real run spends the user's quota.
+`limactl shell armada -- arm sh "ARMADA_TOPIC_WORKDIR_ROOT=/srv/armada/workspaces ./manage.py armada_demo_data"`
+(about 40 s), never while another agent is taking screenshots. The
+variable is the server's worktree root: without it, the command puts the
+worktrees in the code's default root, which the server refuses. Do not
+send messages to the agent to make a screenshot: a real run spends the
+user's quota.
 
 ## Report
 

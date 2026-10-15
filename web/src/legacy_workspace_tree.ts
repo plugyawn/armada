@@ -1,11 +1,11 @@
 import type {
-    PearWorkspaceDescriptor,
-    PearWorkspaceEntry,
-    PearWorkspaceSearchResponse,
-    PearWorkspaceTreeResponse,
+    ArmadaWorkspaceDescriptor,
+    ArmadaWorkspaceEntry,
+    ArmadaWorkspaceSearchResponse,
+    ArmadaWorkspaceTreeResponse,
 } from "./legacy_workspace_api.ts";
 
-export type PearWorkspaceDirectoryState = {
+export type ArmadaWorkspaceDirectoryState = {
     childIds: string[];
     nextCursor: string | null;
     complete: boolean;
@@ -15,19 +15,19 @@ export type PearWorkspaceDirectoryState = {
     error: string | undefined;
 };
 
-export type PearWorkspaceTreeState = {
+export type ArmadaWorkspaceTreeState = {
     workspaceId: string;
     workspaceRevision: number;
     rootId: string;
-    entries: Map<string, PearWorkspaceEntry>;
-    directories: Map<string, PearWorkspaceDirectoryState>;
+    entries: Map<string, ArmadaWorkspaceEntry>;
+    directories: Map<string, ArmadaWorkspaceDirectoryState>;
     expandedPaths: Set<string>;
     selectedId: string | undefined;
     selectedPath: string | undefined;
     ignoredStaleResponses: number;
 };
 
-export type PearWorkspaceDirectoryRequest = {
+export type ArmadaWorkspaceDirectoryRequest = {
     workspaceId: string;
     workspaceRevision: number;
     directoryId: string;
@@ -35,20 +35,20 @@ export type PearWorkspaceDirectoryRequest = {
     requestGeneration: number;
 };
 
-export type PearWorkspaceTreeRow = {
-    entry: PearWorkspaceEntry;
+export type ArmadaWorkspaceTreeRow = {
+    entry: ArmadaWorkspaceEntry;
     depth: number;
     expanded: boolean;
     loading: boolean;
 };
 
-export type PearWorkspaceTreeWindow = {
-    rows: PearWorkspaceTreeRow[];
+export type ArmadaWorkspaceTreeWindow = {
+    rows: ArmadaWorkspaceTreeRow[];
     skipped: number;
     hasMore: boolean;
 };
 
-const empty_directory = (): PearWorkspaceDirectoryState => ({
+const empty_directory = (): ArmadaWorkspaceDirectoryState => ({
     childIds: [],
     nextCursor: null,
     complete: false,
@@ -59,16 +59,16 @@ const empty_directory = (): PearWorkspaceDirectoryState => ({
 });
 
 function with_directory(
-    state: PearWorkspaceTreeState,
+    state: ArmadaWorkspaceTreeState,
     directory_id: string,
-    directory: PearWorkspaceDirectoryState,
-): PearWorkspaceTreeState {
+    directory: ArmadaWorkspaceDirectoryState,
+): ArmadaWorkspaceTreeState {
     const directories = new Map(state.directories);
     directories.set(directory_id, directory);
     return {...state, directories};
 }
 
-function ignore_stale(state: PearWorkspaceTreeState): PearWorkspaceTreeState {
+function ignore_stale(state: ArmadaWorkspaceTreeState): ArmadaWorkspaceTreeState {
     return {...state, ignoredStaleResponses: state.ignoredStaleResponses + 1};
 }
 
@@ -82,9 +82,9 @@ function is_direct_child(parent_path: string, child_path: string): boolean {
     return !child_path.slice(parent_path.length + 1).includes("/");
 }
 
-export function create_pear_workspace_tree(
-    descriptor: PearWorkspaceDescriptor,
-): PearWorkspaceTreeState {
+export function create_armada_workspace_tree(
+    descriptor: ArmadaWorkspaceDescriptor,
+): ArmadaWorkspaceTreeState {
     return {
         workspaceId: descriptor.uuid,
         workspaceRevision: descriptor.workspace_revision,
@@ -98,12 +98,12 @@ export function create_pear_workspace_tree(
     };
 }
 
-export function replace_pear_workspace_tree_revision(
-    state: PearWorkspaceTreeState,
-    descriptor: PearWorkspaceDescriptor,
-): PearWorkspaceTreeState {
+export function replace_armada_workspace_tree_revision(
+    state: ArmadaWorkspaceTreeState,
+    descriptor: ArmadaWorkspaceDescriptor,
+): ArmadaWorkspaceTreeState {
     if (descriptor.uuid !== state.workspaceId) {
-        return create_pear_workspace_tree(descriptor);
+        return create_armada_workspace_tree(descriptor);
     }
     if (descriptor.workspace_revision < state.workspaceRevision) {
         return ignore_stale(state);
@@ -129,10 +129,10 @@ export function replace_pear_workspace_tree_revision(
     };
 }
 
-export function begin_pear_workspace_directory_request(
-    state: PearWorkspaceTreeState,
+export function begin_armada_workspace_directory_request(
+    state: ArmadaWorkspaceTreeState,
     directory_id: string,
-): {state: PearWorkspaceTreeState; request: PearWorkspaceDirectoryRequest | undefined} {
+): {state: ArmadaWorkspaceTreeState; request: ArmadaWorkspaceDirectoryRequest | undefined} {
     const entry = state.entries.get(directory_id);
     if (entry?.kind !== "directory") {
         return {state, request: undefined};
@@ -162,11 +162,11 @@ export function begin_pear_workspace_directory_request(
     };
 }
 
-export function receive_pear_workspace_directory_page(
-    state: PearWorkspaceTreeState,
-    request: PearWorkspaceDirectoryRequest,
-    response: PearWorkspaceTreeResponse["pear_workspace_tree"],
-): PearWorkspaceTreeState {
+export function receive_armada_workspace_directory_page(
+    state: ArmadaWorkspaceTreeState,
+    request: ArmadaWorkspaceDirectoryRequest,
+    response: ArmadaWorkspaceTreeResponse["armada_workspace_tree"],
+): ArmadaWorkspaceTreeState {
     const current = state.directories.get(request.directoryId);
     if (
         request.workspaceId !== state.workspaceId ||
@@ -221,11 +221,11 @@ export function receive_pear_workspace_directory_page(
     return {...state, entries, directories, selectedId: selected_id};
 }
 
-export function fail_pear_workspace_directory_request(
-    state: PearWorkspaceTreeState,
-    request: PearWorkspaceDirectoryRequest,
+export function fail_armada_workspace_directory_request(
+    state: ArmadaWorkspaceTreeState,
+    request: ArmadaWorkspaceDirectoryRequest,
     error: string,
-): PearWorkspaceTreeState {
+): ArmadaWorkspaceTreeState {
     const current = state.directories.get(request.directoryId);
     if (
         request.workspaceId !== state.workspaceId ||
@@ -243,11 +243,11 @@ export function fail_pear_workspace_directory_request(
     });
 }
 
-export function set_pear_workspace_directory_expanded(
-    state: PearWorkspaceTreeState,
+export function set_armada_workspace_directory_expanded(
+    state: ArmadaWorkspaceTreeState,
     directory_id: string,
     expanded: boolean,
-): PearWorkspaceTreeState {
+): ArmadaWorkspaceTreeState {
     const entry = state.entries.get(directory_id);
     if (entry?.kind !== "directory") {
         return state;
@@ -261,10 +261,10 @@ export function set_pear_workspace_directory_expanded(
     return {...state, expandedPaths: expanded_paths};
 }
 
-export function select_pear_workspace_entry(
-    state: PearWorkspaceTreeState,
+export function select_armada_workspace_entry(
+    state: ArmadaWorkspaceTreeState,
     entry_id: string,
-): PearWorkspaceTreeState {
+): ArmadaWorkspaceTreeState {
     const entry = state.entries.get(entry_id);
     if (entry === undefined) {
         return state;
@@ -272,11 +272,11 @@ export function select_pear_workspace_entry(
     return {...state, selectedId: entry_id, selectedPath: entry.path};
 }
 
-export function reveal_pear_workspace_search_result(
-    state: PearWorkspaceTreeState,
-    response: PearWorkspaceSearchResponse["pear_workspace_search"],
+export function reveal_armada_workspace_search_result(
+    state: ArmadaWorkspaceTreeState,
+    response: ArmadaWorkspaceSearchResponse["armada_workspace_search"],
     entry_id: string,
-): PearWorkspaceTreeState {
+): ArmadaWorkspaceTreeState {
     if (
         response.workspace_uuid !== state.workspaceId ||
         response.workspace_revision !== state.workspaceRevision
@@ -291,7 +291,7 @@ export function reveal_pear_workspace_search_result(
     const entries = new Map(state.entries);
     const directories = new Map(state.directories);
     const expanded_paths = new Set(state.expandedPaths);
-    const chain: PearWorkspaceEntry[] = [];
+    const chain: ArmadaWorkspaceEntry[] = [];
     const seen_ids = new Set<string>();
     for (const entry of [state.entries.get(state.rootId), ...result.ancestors, result]) {
         if (entry !== undefined && !seen_ids.has(entry.entry_id)) {
@@ -326,13 +326,13 @@ export function reveal_pear_workspace_search_result(
     };
 }
 
-export function pear_workspace_tree_window(
-    state: PearWorkspaceTreeState,
+export function armada_workspace_tree_window(
+    state: ArmadaWorkspaceTreeState,
     options: {offset: number; limit: number},
-): PearWorkspaceTreeWindow {
+): ArmadaWorkspaceTreeWindow {
     const offset = Math.max(0, Math.trunc(options.offset));
     const limit = Math.max(1, Math.trunc(options.limit));
-    const rows: PearWorkspaceTreeRow[] = [];
+    const rows: ArmadaWorkspaceTreeRow[] = [];
     let visible_index = 0;
     let has_more = false;
 

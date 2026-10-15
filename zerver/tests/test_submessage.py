@@ -7,8 +7,8 @@ from typing import Any
 from unittest import mock
 
 from zerver.actions.submessage import do_add_submessage
-from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE, attach_pear_artifact_to_message
-from zerver.lib.armada_generated_vector import sanitize_pear_generated_vector
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE, attach_armada_artifact_to_message
+from zerver.lib.armada_generated_vector import sanitize_armada_generated_vector
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Attachment, Message, SubMessage, UserProfile
@@ -94,7 +94,7 @@ class TestBasics(ZulipTestCase):
         result = self.client_post("/json/submessage", payload)
         self.assert_json_error(result, "Invalid json for submessage")
 
-        payload = dict(message_id=message_id, msg_type="pear_artifact", content="{}")
+        payload = dict(message_id=message_id, msg_type="artifact", content="{}")
         result = self.client_post("/json/submessage", payload)
         self.assert_json_error(result, "Pear artifacts can only be attached by the Pear runtime.")
 
@@ -111,29 +111,29 @@ class TestBasics(ZulipTestCase):
         result = self.client_post("/json/submessage", payload)
         self.assert_json_error(result, "Invalid message(s)")
 
-    def test_pear_runtime_artifact_is_durable_and_emits_event(self) -> None:
+    def test_armada_runtime_artifact_is_durable_and_emits_event(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        message_id = self.send_stream_message(pear_bot, "Denmark", content="Here is the diagram.")
+        message_id = self.send_stream_message(armada_bot, "Denmark", content="Here is the diagram.")
         document = '{"blocks":[{"body":"Force changes motion.","type":"copy"}],"version":1}'
 
         with self.capture_send_event_calls(expected_num_events=1) as events:
-            attached = attach_pear_artifact_to_message(
-                SimpleNamespace(user_profile=pear_bot),
+            attached = attach_armada_artifact_to_message(
+                SimpleNamespace(user_profile=armada_bot),
                 message_id=message_id,
                 tool_results=[{"label": "Artifact", "value": document}],
             )
         self.assertTrue(attached)
-        submessage = SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact")
+        submessage = SubMessage.objects.get(message_id=message_id, msg_type="artifact")
         self.assertEqual(submessage.content, document)
         self.assertEqual(events[0]["event"]["type"], "submessage")
-        self.assertEqual(events[0]["event"]["msg_type"], "pear_artifact")
+        self.assertEqual(events[0]["event"]["msg_type"], "artifact")
 
         self.login_user(owner)
         response = self.assert_json_success(self.client_get(f"/json/messages/{message_id}"))
@@ -141,26 +141,26 @@ class TestBasics(ZulipTestCase):
         self.assertEqual(reloaded["content"], document)
 
         # Worker retries are idempotent for byte-identical canonical documents.
-        attached = attach_pear_artifact_to_message(
-            SimpleNamespace(user_profile=pear_bot),
+        attached = attach_armada_artifact_to_message(
+            SimpleNamespace(user_profile=armada_bot),
             message_id=message_id,
             tool_results=[{"label": "Artifact", "value": document}],
         )
         self.assertTrue(attached)
         self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
 
-    def test_pear_runtime_materializes_and_claims_generated_media(self) -> None:
+    def test_armada_runtime_materializes_and_claims_generated_media(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear-media",
+        armada_bot = self.create_test_bot(
+            "armada-media",
             owner,
             full_name="Pear Media",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        message_id = self.send_stream_message(pear_bot, "Denmark", content="Wave motion.")
+        message_id = self.send_stream_message(armada_bot, "Denmark", content="Wave motion.")
         with tempfile.TemporaryDirectory() as workdir:
-            media_dir = Path(workdir) / ".pear" / "artifacts"
+            media_dir = Path(workdir) / ".armada" / "artifacts"
             media_dir.mkdir(parents=True)
             (media_dir / "wave.webm").write_bytes(b"\x1a\x45\xdf\xa3bounded-webm")
             (media_dir / "wave-dark.webm").write_bytes(b"\x1a\x45\xdf\xa3bounded-dark-webm")
@@ -173,51 +173,51 @@ class TestBasics(ZulipTestCase):
                         {
                             "type": "media",
                             "kind": "video",
-                            "source": ".pear/artifacts/wave.webm",
-                            "sourceDark": ".pear/artifacts/wave-dark.webm",
-                            "posterSource": ".pear/artifacts/wave.webp",
-                            "posterSourceDark": ".pear/artifacts/wave-dark.webp",
+                            "source": ".armada/artifacts/wave.webm",
+                            "sourceDark": ".armada/artifacts/wave-dark.webm",
+                            "posterSource": ".armada/artifacts/wave.webp",
+                            "posterSourceDark": ".armada/artifacts/wave-dark.webp",
                             "alt": "A wave moves from left to right.",
                             "motion": "manual",
                         }
                     ],
                 }
             )
-            attached = attach_pear_artifact_to_message(
-                SimpleNamespace(user_profile=pear_bot),
+            attached = attach_armada_artifact_to_message(
+                SimpleNamespace(user_profile=armada_bot),
                 message_id=message_id,
                 tool_results=[{"label": "Artifact", "value": document}],
                 workdir=workdir,
             )
             self.assertTrue(attached)
-            submessage = SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact")
+            submessage = SubMessage.objects.get(message_id=message_id, msg_type="artifact")
             media = json.loads(submessage.content)["blocks"][0]
             self.assertNotIn("source", media)
             self.assertRegex(media["src"], r"^/user_uploads/")
             attachment = Attachment.objects.get(path_id=media["src"].removeprefix("/user_uploads/"))
             self.assertEqual(list(attachment.messages.values_list("id", flat=True)), [message_id])
 
-            attach_pear_artifact_to_message(
-                SimpleNamespace(user_profile=pear_bot),
+            attach_armada_artifact_to_message(
+                SimpleNamespace(user_profile=armada_bot),
                 message_id=message_id,
                 tool_results=[{"label": "Artifact", "value": document}],
                 workdir=workdir,
             )
             self.assertEqual(SubMessage.objects.filter(message_id=message_id).count(), 1)
-            self.assertEqual(Attachment.objects.filter(owner=pear_bot).count(), 4)
+            self.assertEqual(Attachment.objects.filter(owner=armada_bot).count(), 4)
 
-    def test_pear_runtime_resolves_generated_media_as_the_topic_user(self) -> None:
+    def test_armada_runtime_resolves_generated_media_as_the_topic_user(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear-isolated-media",
+        armada_bot = self.create_test_bot(
+            "armada-isolated-media",
             owner,
             full_name="Pear Isolated Media",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        message_id = self.send_stream_message(pear_bot, "Denmark", content="Crystal lattice.")
+        message_id = self.send_stream_message(armada_bot, "Denmark", content="Crystal lattice.")
         with tempfile.TemporaryDirectory() as workdir:
-            media_path = Path(workdir) / ".pear" / "artifacts" / "lattice.png"
+            media_path = Path(workdir) / ".armada" / "artifacts" / "lattice.png"
             media_path.parent.mkdir(parents=True)
             media_bytes = b"\x89PNG\r\n\x1a\nbounded-png"
             media_path.write_bytes(media_bytes)
@@ -228,7 +228,7 @@ class TestBasics(ZulipTestCase):
                         {
                             "type": "media",
                             "kind": "image",
-                            "source": ".pear/artifacts/lattice.png",
+                            "source": ".armada/artifacts/lattice.png",
                             "alt": "A hexagonal crystal lattice.",
                         }
                     ],
@@ -236,49 +236,49 @@ class TestBasics(ZulipTestCase):
             )
             with (
                 mock.patch(
-                    "zerver.lib.armada_worker.pear_resolve_file_path",
+                    "zerver.lib.armada_worker.armada_resolve_file_path",
                     return_value=media_path.resolve(),
                 ) as resolve_path,
                 mock.patch(
-                    "zerver.lib.armada_worker.pear_read_bytes_path",
+                    "zerver.lib.armada_worker.armada_read_bytes_path",
                     return_value=media_bytes,
                 ) as read_path,
             ):
-                attached = attach_pear_artifact_to_message(
-                    SimpleNamespace(user_profile=pear_bot),
+                attached = attach_armada_artifact_to_message(
+                    SimpleNamespace(user_profile=armada_bot),
                     message_id=message_id,
                     tool_results=[{"label": "Artifact", "value": document}],
                     workdir=workdir,
-                    isolation_username="pear-topic-test",
+                    isolation_username="armada-topic-test",
                 )
         self.assertTrue(attached)
         resolve_path.assert_called_once_with(
             media_path,
-            isolation_username="pear-topic-test",
+            isolation_username="armada-topic-test",
         )
         read_path.assert_called_once_with(
             media_path.resolve(),
-            isolation_username="pear-topic-test",
+            isolation_username="armada-topic-test",
             max_bytes=4_000_000,
         )
         self.assertEqual(
-            SubMessage.objects.filter(message_id=message_id, msg_type="pear_artifact").count(),
+            SubMessage.objects.filter(message_id=message_id, msg_type="artifact").count(),
             1,
         )
 
-    def test_pear_runtime_rebuilds_generated_svg_before_upload(self) -> None:
+    def test_armada_runtime_rebuilds_generated_svg_before_upload(self) -> None:
         owner = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
-            "pear-vector-media",
+        armada_bot = self.create_test_bot(
+            "armada-vector-media",
             owner,
             full_name="Pear Vector Media",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
-        message_id = self.send_stream_message(pear_bot, "Denmark", content="Vector lattice.")
+        message_id = self.send_stream_message(armada_bot, "Denmark", content="Vector lattice.")
         with tempfile.TemporaryDirectory() as workdir:
-            media_path = Path(workdir) / ".pear" / "artifacts" / "lattice.svg"
-            dark_media_path = Path(workdir) / ".pear" / "artifacts" / "lattice-dark.svg"
+            media_path = Path(workdir) / ".armada" / "artifacts" / "lattice.svg"
+            dark_media_path = Path(workdir) / ".armada" / "artifacts" / "lattice-dark.svg"
             media_path.parent.mkdir(parents=True)
             svg = (
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" penrose="0">'
@@ -288,7 +288,7 @@ class TestBasics(ZulipTestCase):
             media_path.write_text(svg, encoding="utf-8")
             dark_media_path.write_text(svg.replace("#8080ff", "#b0b0ff"), encoding="utf-8")
             sanitized_digest = hashlib.sha256(
-                sanitize_pear_generated_vector(media_path.read_bytes())
+                sanitize_armada_generated_vector(media_path.read_bytes())
             ).hexdigest()
             document = json.dumps(
                 {
@@ -297,26 +297,26 @@ class TestBasics(ZulipTestCase):
                         {
                             "type": "media",
                             "kind": "image",
-                            "source": ".pear/artifacts/lattice.svg",
-                            "sourceDark": ".pear/artifacts/lattice-dark.svg",
+                            "source": ".armada/artifacts/lattice.svg",
+                            "sourceDark": ".armada/artifacts/lattice-dark.svg",
                             "alt": "A vector crystal lattice.",
                         }
                     ],
                 }
             )
-            attached = attach_pear_artifact_to_message(
-                SimpleNamespace(user_profile=pear_bot),
+            attached = attach_armada_artifact_to_message(
+                SimpleNamespace(user_profile=armada_bot),
                 message_id=message_id,
                 tool_results=[{"label": "Artifact", "value": document}],
                 workdir=workdir,
             )
         self.assertTrue(attached)
         media = json.loads(
-            SubMessage.objects.get(message_id=message_id, msg_type="pear_artifact").content
+            SubMessage.objects.get(message_id=message_id, msg_type="artifact").content
         )["blocks"][0]
         attachment = Attachment.objects.get(path_id=media["src"].removeprefix("/user_uploads/"))
         self.assertEqual(attachment.content_type, "image/svg+xml")
-        self.assertEqual(attachment.file_name, f"pear-artifact-{sanitized_digest}.svg")
+        self.assertEqual(attachment.file_name, f"armada-artifact-{sanitized_digest}.svg")
 
     def test_original_sender_enforced(self) -> None:
         cordelia = self.example_user("cordelia")

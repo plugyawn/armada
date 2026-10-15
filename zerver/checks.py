@@ -161,6 +161,47 @@ def check_auth_settings(
     return errors
 
 
+# The agent's settings and environment variables began with its old
+# code name, followed by an underscore, until the rename: each is now
+# the same name after ARMADA_.  An old name is no longer read, so an
+# install that still sets one would quietly run on the default (an
+# open trust gate, for ARMADA_WORKER_TRUSTED_USERS_ONLY).  The prefix
+# is written in two pieces so that this file does not hold the name.
+RENAMED_ARMADA_SETTING_PREFIX = "P" + "EAR_"
+
+
+def check_renamed_armada_settings(
+    app_configs: Sequence[AppConfig] | None,
+    databases: Sequence[str] | None,
+    **kwargs: Any,
+) -> Iterable[checks.CheckMessage]:
+    errors = []
+    for setting_name in sorted(dir(settings)):
+        if setting_name.startswith(RENAMED_ARMADA_SETTING_PREFIX):
+            new_name = "ARMADA_" + setting_name.removeprefix(RENAMED_ARMADA_SETTING_PREFIX)
+            errors.append(
+                checks.Error(
+                    f"{setting_name} is no longer read; it is now {new_name}",
+                    hint=f"Rename it to {new_name} in /etc/zulip/settings.py",
+                    obj=f"settings.{setting_name}",
+                    id="armada.E001",
+                )
+            )
+    for variable_name in sorted(os.environ):
+        if variable_name.startswith(RENAMED_ARMADA_SETTING_PREFIX):
+            new_name = "ARMADA_" + variable_name.removeprefix(RENAMED_ARMADA_SETTING_PREFIX)
+            errors.append(
+                checks.Error(
+                    f"The environment variable {variable_name} is no longer read; "
+                    f"it is now {new_name}",
+                    hint=f"Rename it to {new_name} where it is exported",
+                    obj=f"os.environ[{variable_name!r}]",
+                    id="armada.E001",
+                )
+            )
+    return errors
+
+
 def check_uploads_settings(
     app_configs: Sequence[AppConfig] | None,
     databases: Sequence[str] | None,

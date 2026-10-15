@@ -61,16 +61,16 @@ from zerver.models.bots import Workspace, WorkspaceEntryMutationReceipt
 
 logger = logging.getLogger(__name__)
 
-PEAR_WORKSPACE_TEXT_MAX_BYTES = 1_000_000
-PEAR_WORKSPACE_RAW_MAX_BYTES = 64 * 1024 * 1024
-PEAR_WORKSPACE_INDEX_CACHE_SECONDS = 60
-PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
-PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS = 10 * 60
-PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
+ARMADA_WORKSPACE_TEXT_MAX_BYTES = 1_000_000
+ARMADA_WORKSPACE_RAW_MAX_BYTES = 64 * 1024 * 1024
+ARMADA_WORKSPACE_INDEX_CACHE_SECONDS = 60
+ARMADA_WORKSPACE_GIT_TIMEOUT_SECONDS = 15
+ARMADA_WORKSPACE_MUTATION_RECEIPT_SECONDS = 10 * 60
+ARMADA_WORKSPACE_FILE_OBSERVATION_SECONDS = 60 * 60
 DEFAULT_WORKSPACE_HISTORY_LIMIT = 50
 MAX_WORKSPACE_HISTORY_LIMIT = 200
-PEAR_WORKSPACE_INSPECTION_BATCH_BYTES = 512 * 1024
-PEAR_WORKSPACE_CREATE_STAGING_PREFIX = ".pear-create-"
+ARMADA_WORKSPACE_INSPECTION_BATCH_BYTES = 512 * 1024
+ARMADA_WORKSPACE_CREATE_STAGING_PREFIX = ".armada-create-"
 
 
 class WorkspaceSnapshotError(Exception):
@@ -186,7 +186,7 @@ def _workspace_index_secret() -> bytes:
     if not secret_key:
         raise WorkspaceSnapshotError("Workspace index signing is unavailable.")
     return hashlib.sha256(
-        b"pear-workspace-index-v1\0" + secret_key.encode("utf-8", errors="strict")
+        b"armada-workspace-index-v1\0" + secret_key.encode("utf-8", errors="strict")
     ).digest()
 
 
@@ -218,13 +218,13 @@ def _local_cache_put(snapshot: WorkspaceSnapshot) -> None:
             _snapshot_cache_path_count -= previous.path_count
         _snapshot_cache[key] = _CachedSnapshot(
             snapshot=snapshot,
-            expires_at=time.monotonic() + PEAR_WORKSPACE_INDEX_CACHE_SECONDS,
+            expires_at=time.monotonic() + ARMADA_WORKSPACE_INDEX_CACHE_SECONDS,
             path_count=path_count,
         )
         _snapshot_cache_path_count += path_count
         _snapshot_cache.move_to_end(key)
-        max_entries = max(1, int(settings.PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES))
-        max_paths = max(1, int(settings.PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS))
+        max_entries = max(1, int(settings.ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES))
+        max_paths = max(1, int(settings.ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS))
         while len(_snapshot_cache) > max_entries or (
             len(_snapshot_cache) > 1 and _snapshot_cache_path_count > max_paths
         ):
@@ -267,7 +267,7 @@ def _finish_snapshot_build(
 
 
 def _latest_fingerprint_cache_key(workspace_uuid: str) -> str:
-    return f"pear:workspace-index-fingerprint:v1:{workspace_uuid}"
+    return f"armada:workspace-index-fingerprint:v1:{workspace_uuid}"
 
 
 def _file_observation_cache_key(
@@ -280,7 +280,7 @@ def _file_observation_cache_key(
         separators=(",", ":"),
     ).encode("utf-8")
     digest = hmac.new(_workspace_index_secret(), message, hashlib.sha256).hexdigest()
-    return f"pear:workspace-file-observation:v1:{digest}"
+    return f"armada:workspace-file-observation:v1:{digest}"
 
 
 def get_workspace_file_observation(
@@ -308,7 +308,7 @@ def record_workspace_file_observation(
         cache.set(
             _file_observation_cache_key(workspace_uuid, revision, entry_id),
             version,
-            timeout=PEAR_WORKSPACE_FILE_OBSERVATION_SECONDS,
+            timeout=ARMADA_WORKSPACE_FILE_OBSERVATION_SECONDS,
         )
     except Exception:
         logger.warning("Could not store Pear workspace file observation", exc_info=True)
@@ -340,7 +340,7 @@ def _mutation_receipt_cache_key(
         separators=(",", ":"),
     ).encode("utf-8")
     digest = hmac.new(_workspace_index_secret(), message, hashlib.sha256).hexdigest()
-    return f"pear:workspace-mutation-receipt:v1:{digest}"
+    return f"armada:workspace-mutation-receipt:v1:{digest}"
 
 
 def _store_workspace_mutation_receipt(
@@ -379,7 +379,7 @@ def _store_workspace_mutation_receipt(
                 "result_revision": receipt.result_revision,
                 "result_entry_id": receipt.result_entry_id,
             },
-            timeout=PEAR_WORKSPACE_MUTATION_RECEIPT_SECONDS,
+            timeout=ARMADA_WORKSPACE_MUTATION_RECEIPT_SECONDS,
         )
     except Exception:
         # Losing a receipt makes a later retry fail closed as stale; it never
@@ -568,15 +568,15 @@ def workspace_entry_mutation_lookup_payload(
 
 
 def workspace_entry_mutation_staging_path(lookup_payload: dict[str, object]) -> str:
-    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
-    return f"{PEAR_WORKSPACE_CREATE_STAGING_PREFIX}{lookup_digest}"
+    lookup_digest = _entry_mutation_digest(b"armada-entry-mutation-lookup-v1", lookup_payload)
+    return f"{ARMADA_WORKSPACE_CREATE_STAGING_PREFIX}{lookup_digest}"
 
 
 def get_workspace_entry_mutation_receipt(
     *,
     lookup_payload: dict[str, object],
 ) -> WorkspaceEntryMutationReceipt | None:
-    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
+    lookup_digest = _entry_mutation_digest(b"armada-entry-mutation-lookup-v1", lookup_payload)
     actor_id = lookup_payload.get("actor_id")
     workspace_uuid = lookup_payload.get("workspace_uuid")
     if (
@@ -624,8 +624,8 @@ def prepare_workspace_entry_mutation_receipt(
         ),
         "recovery": recovery or {},
     }
-    lookup_digest = _entry_mutation_digest(b"pear-entry-mutation-lookup-v1", lookup_payload)
-    request_digest = _entry_mutation_digest(b"pear-entry-mutation-request-v1", request_payload)
+    lookup_digest = _entry_mutation_digest(b"armada-entry-mutation-lookup-v1", lookup_payload)
+    request_digest = _entry_mutation_digest(b"armada-entry-mutation-request-v1", request_payload)
     operation_value = lookup_payload["operation"]
     if operation_value == "create":
         operation: Literal["create", "rename", "delete"] = "create"
@@ -870,7 +870,7 @@ def _run_git(
             command,
             check=False,
             capture_output=True,
-            timeout=PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS,
+            timeout=ARMADA_WORKSPACE_GIT_TIMEOUT_SECONDS,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as error:
         raise WorkspaceSnapshotError("Could not inspect workspace state.") from error
@@ -1031,7 +1031,7 @@ def _git_output_digest(node: Workspace, arguments: list[str]) -> bytes:
         raise WorkspaceSnapshotError("Could not inspect workspace content state.") from error
     assert process.stdout is not None
     digest = hashlib.sha256()
-    deadline = time.monotonic() + PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS
+    deadline = time.monotonic() + ARMADA_WORKSPACE_GIT_TIMEOUT_SECONDS
     selector = selectors.DefaultSelector()
     try:
         os.set_blocking(process.stdout.fileno(), False)
@@ -1039,10 +1039,10 @@ def _git_output_digest(node: Workspace, arguments: list[str]) -> bytes:
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise subprocess.TimeoutExpired(command, PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS)
+                raise subprocess.TimeoutExpired(command, ARMADA_WORKSPACE_GIT_TIMEOUT_SECONDS)
             events = selector.select(remaining)
             if not events:
-                raise subprocess.TimeoutExpired(command, PEAR_WORKSPACE_GIT_TIMEOUT_SECONDS)
+                raise subprocess.TimeoutExpired(command, ARMADA_WORKSPACE_GIT_TIMEOUT_SECONDS)
             for key, _mask in events:
                 try:
                     chunk = os.read(key.fd, 64 * 1024)
@@ -1076,7 +1076,7 @@ def _decode_git_path(raw_path: bytes) -> str:
 
 
 def _is_internal_staging_path(path: str) -> bool:
-    return any(component.startswith(".pear-") for component in path.split("/"))
+    return any(component.startswith(".armada-") for component in path.split("/"))
 
 
 def _status_kind(xy: bytes) -> str:
@@ -1164,7 +1164,7 @@ def inspect_workspace_node_entries(
     current_bytes = 0
     for path, kind in sorted(expectations.items()):
         entry_bytes = len(path.encode("utf-8")) + 64
-        if current_batch and current_bytes + entry_bytes > PEAR_WORKSPACE_INSPECTION_BATCH_BYTES:
+        if current_batch and current_bytes + entry_bytes > ARMADA_WORKSPACE_INSPECTION_BATCH_BYTES:
             batches.append(current_batch)
             current_batch = {}
             current_bytes = 0
@@ -1442,9 +1442,9 @@ def get_workspace_snapshot(
             and not isinstance(previous_revision, bool)
             and snapshot.revision > previous_revision
         ):
-            from zerver.actions.armada import send_pear_workspace_changed_event
+            from zerver.actions.armada import send_armada_workspace_changed_event
 
-            send_pear_workspace_changed_event(node, snapshot.revision)
+            send_armada_workspace_changed_event(node, snapshot.revision)
         _record_latest_snapshot(snapshot)
     except BaseException as error:
         _finish_snapshot_build(build_key, build, error=error)
@@ -1566,7 +1566,7 @@ def open_workspace_node_file_stream(
         )
     return stage_workspace_raw_stream(
         source,
-        max_bytes=PEAR_WORKSPACE_RAW_MAX_BYTES,
+        max_bytes=ARMADA_WORKSPACE_RAW_MAX_BYTES,
     )
 
 
@@ -1584,7 +1584,7 @@ def write_workspace_node_file(
             node.workdir.strip(),
             path,
             data,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=expected_version,
             expected_identity=expected_identity,
             create=False,
@@ -1594,7 +1594,7 @@ def write_workspace_node_file(
         node.workdir.strip(),
         path,
         data,
-        max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+        max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
         expected_version=expected_version,
         expected_identity=expected_identity,
         create=False,
@@ -1612,7 +1612,7 @@ def create_workspace_node_file(
             node.workdir.strip(),
             path,
             data,
-            max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+            max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
             expected_version=None,
             create=True,
             isolation_username=isolation_username,
@@ -1621,7 +1621,7 @@ def create_workspace_node_file(
         node.workdir.strip(),
         path,
         data,
-        max_bytes=PEAR_WORKSPACE_TEXT_MAX_BYTES,
+        max_bytes=ARMADA_WORKSPACE_TEXT_MAX_BYTES,
         expected_version=None,
         create=True,
     )

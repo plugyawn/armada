@@ -40,7 +40,7 @@ mock_esm("../src/popover_menus_data", {
             should_display_read_receipts_option: false,
             should_display_add_reaction_option: false,
             should_display_message_report_option: false,
-            not_for_pear_run_id: undefined,
+            not_for_agent_run_id: undefined,
         };
     },
 });

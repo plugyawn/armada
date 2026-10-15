@@ -93,21 +93,21 @@ type BotSettingsSection = {
     list_widget: ListWidgetType<number, BotInfo> | undefined;
 };
 
-type PearBotIdentity = {
+type ArmadaBotIdentity = {
     bot_user_id: number;
     bot_full_name: string;
     bot_email: string;
     selected: boolean;
 };
 
-type PearSetupStep = {
+type ArmadaSetupStep = {
     key: string;
     label: string;
     complete: boolean;
     detail: string;
 };
 
-type PearConfigPayload = {
+type ArmadaConfigPayload = {
     bot_short_name: string;
     embedded_bot_service: string;
     embedded_bots_enabled: boolean;
@@ -127,18 +127,18 @@ type PearConfigPayload = {
     selected_bot_user_id: number | null;
     selected_bot_full_name: string | null;
     selected_bot_email: string | null;
-    bot_identities: PearBotIdentity[];
-    setup_steps: PearSetupStep[];
+    bot_identities: ArmadaBotIdentity[];
+    setup_steps: ArmadaSetupStep[];
 };
 
-type PearConfigResponse = {
+type ArmadaConfigResponse = {
     result: "success";
     created?: boolean;
     selection_changed?: boolean;
-    pear_config: PearConfigPayload;
+    armada_config: ArmadaConfigPayload;
 };
 
-function is_pear_bot_identity(data: unknown): data is PearBotIdentity {
+function is_armada_bot_identity(data: unknown): data is ArmadaBotIdentity {
     return (
         typeof data === "object" &&
         data !== null &&
@@ -153,7 +153,7 @@ function is_pear_bot_identity(data: unknown): data is PearBotIdentity {
     );
 }
 
-function is_pear_setup_step(data: unknown): data is PearSetupStep {
+function is_armada_setup_step(data: unknown): data is ArmadaSetupStep {
     return (
         typeof data === "object" &&
         data !== null &&
@@ -176,7 +176,7 @@ function is_nullable_string(data: unknown): data is string | null {
     return typeof data === "string" || data === null;
 }
 
-function is_pear_config_payload(data: unknown): data is PearConfigPayload {
+function is_armada_config_payload(data: unknown): data is ArmadaConfigPayload {
     return (
         typeof data === "object" &&
         data !== null &&
@@ -220,10 +220,10 @@ function is_pear_config_payload(data: unknown): data is PearConfigPayload {
         is_nullable_string(data.selected_bot_email) &&
         "bot_identities" in data &&
         Array.isArray(data.bot_identities) &&
-        data.bot_identities.every(is_pear_bot_identity) &&
+        data.bot_identities.every(is_armada_bot_identity) &&
         "setup_steps" in data &&
         Array.isArray(data.setup_steps) &&
-        data.setup_steps.every(is_pear_setup_step)
+        data.setup_steps.every(is_armada_setup_step)
     );
 }
 
@@ -362,7 +362,7 @@ export function update_bot_permissions_ui(): void {
     update_bot_settings_tip($("#personal-bot-settings-tip"));
     update_add_bot_button();
     update_lock_icon_in_sidebar();
-    update_pear_config();
+    update_armada_config();
 }
 
 export function get_allowed_bot_types(): BotType[] {
@@ -745,21 +745,21 @@ function create_status_filter_dropdown(
     }).setup();
 }
 
-function pear_config_response(data: unknown): PearConfigResponse | undefined {
+function armada_config_response(data: unknown): ArmadaConfigResponse | undefined {
     if (
         typeof data !== "object" ||
         data === null ||
         !("result" in data) ||
         data.result !== "success" ||
-        !("pear_config" in data) ||
-        !is_pear_config_payload(data.pear_config)
+        !("armada_config" in data) ||
+        !is_armada_config_payload(data.armada_config)
     ) {
         return undefined;
     }
 
-    const response: PearConfigResponse = {
+    const response: ArmadaConfigResponse = {
         result: data.result,
-        pear_config: data.pear_config,
+        armada_config: data.armada_config,
     };
     if ("created" in data && typeof data.created === "boolean") {
         response.created = data.created;
@@ -770,23 +770,23 @@ function pear_config_response(data: unknown): PearConfigResponse | undefined {
     return response;
 }
 
-function pear_bot_label(bot: PearBotIdentity): string {
+function armada_bot_label(bot: ArmadaBotIdentity): string {
     return `${bot.bot_full_name} (${bot.bot_user_id}) <${bot.bot_email}>`;
 }
 
-function get_selected_pear_bot_user_id(): number | undefined {
-    const selected_value = $<HTMLSelectOneElement>("#select-pear-bot").val();
+function get_selected_armada_bot_user_id(): number | undefined {
+    const selected_value = $<HTMLSelectOneElement>("#select-legacy-bot").val();
     if (selected_value === undefined || selected_value === "") {
         return undefined;
     }
     return Number.parseInt(selected_value, 10);
 }
 
-function render_pear_bot_options(pear_config: PearConfigPayload): void {
-    const $select = $("#select-pear-bot");
+function render_armada_bot_options(armada_config: ArmadaConfigPayload): void {
+    const $select = $("#select-legacy-bot");
     $select.empty();
 
-    if (pear_config.bot_identities.length === 0) {
+    if (armada_config.bot_identities.length === 0) {
         $("<option>")
             .attr("value", "")
             .text($t({defaultMessage: "No Pear bot configured"}))
@@ -795,23 +795,23 @@ function render_pear_bot_options(pear_config: PearConfigPayload): void {
         return;
     }
 
-    for (const bot of pear_config.bot_identities) {
+    for (const bot of armada_config.bot_identities) {
         $("<option>")
             .attr("value", bot.bot_user_id.toString())
-            .text(pear_bot_label(bot))
+            .text(armada_bot_label(bot))
             .appendTo($select);
     }
 
-    if (pear_config.selected_bot_user_id !== null) {
-        $select.val(pear_config.selected_bot_user_id.toString());
+    if (armada_config.selected_bot_user_id !== null) {
+        $select.val(armada_config.selected_bot_user_id.toString());
     }
-    $select.prop("disabled", pear_config.bot_identities.length < 2);
+    $select.prop("disabled", armada_config.bot_identities.length < 2);
 }
 
-function render_pear_setup_steps(pear_config: PearConfigPayload): void {
-    const $steps = $("#pear-config-setup-steps");
+function render_armada_setup_steps(armada_config: ArmadaConfigPayload): void {
+    const $steps = $("#legacy-config-setup-steps");
     $steps.empty();
-    for (const step of pear_config.setup_steps) {
+    for (const step of armada_config.setup_steps) {
         $("<li>")
             .toggleClass("complete", step.complete)
             .text(`${step.complete ? "[x]" : "[ ]"} ${step.label}: ${step.detail}`)
@@ -819,15 +819,16 @@ function render_pear_setup_steps(pear_config: PearConfigPayload): void {
     }
 }
 
-function render_pear_runtime_login(pear_config: PearConfigPayload): void {
-    const login_method = pear_config.worker_runtime_login_method ?? $t({defaultMessage: "none"});
-    const login_target = pear_config.worker_runtime_login_target ?? $t({defaultMessage: "none"});
-    const login_command = pear_config.worker_runtime_login_command ?? $t({defaultMessage: "none"});
+function render_armada_runtime_login(armada_config: ArmadaConfigPayload): void {
+    const login_method = armada_config.worker_runtime_login_method ?? $t({defaultMessage: "none"});
+    const login_target = armada_config.worker_runtime_login_target ?? $t({defaultMessage: "none"});
+    const login_command =
+        armada_config.worker_runtime_login_command ?? $t({defaultMessage: "none"});
     const login_instructions =
-        pear_config.worker_runtime_login_instructions ??
+        armada_config.worker_runtime_login_instructions ??
         $t({defaultMessage: "Select a supported Pear worker runtime before logging in."});
 
-    $("#pear-config-runtime-login").text(
+    $("#legacy-config-runtime-login").text(
         $t(
             {
                 defaultMessage:
@@ -843,22 +844,22 @@ function render_pear_runtime_login(pear_config: PearConfigPayload): void {
     );
 }
 
-function render_pear_config(pear_config: PearConfigPayload): void {
+function render_armada_config(armada_config: ArmadaConfigPayload): void {
     let readiness: string;
-    if (pear_config.enabled && pear_config.worker_runtime_ready) {
+    if (armada_config.enabled && armada_config.worker_runtime_ready) {
         readiness = $t({defaultMessage: "Ready"});
-    } else if (pear_config.enabled) {
+    } else if (armada_config.enabled) {
         readiness = $t({defaultMessage: "Worker runtime not ready"});
-    } else if (pear_config.configured) {
+    } else if (armada_config.configured) {
         readiness = $t({defaultMessage: "Embedded bots are disabled"});
     } else {
         readiness = $t({defaultMessage: "Not configured"});
     }
     const selected_bot =
-        pear_config.selected_bot_full_name === null
+        armada_config.selected_bot_full_name === null
             ? $t({defaultMessage: "none"})
-            : `${pear_config.selected_bot_full_name} (${pear_config.selected_bot_user_id})`;
-    $("#pear-config-readiness").text(
+            : `${armada_config.selected_bot_full_name} (${armada_config.selected_bot_user_id})`;
+    $("#legacy-config-readiness").text(
         $t(
             {
                 defaultMessage:
@@ -867,64 +868,64 @@ function render_pear_config(pear_config: PearConfigPayload): void {
             {
                 readiness,
                 selected_bot,
-                worker_runtime: pear_config.worker_agent_runtime,
+                worker_runtime: armada_config.worker_agent_runtime,
             },
         ),
     );
-    render_pear_bot_options(pear_config);
-    render_pear_setup_steps(pear_config);
-    render_pear_runtime_login(pear_config);
-    $("#provision-pear-bot").prop(
+    render_armada_bot_options(armada_config);
+    render_armada_setup_steps(armada_config);
+    render_armada_runtime_login(armada_config);
+    $("#provision-legacy-bot").prop(
         "disabled",
-        pear_config.configured || !pear_config.embedded_bots_enabled,
+        armada_config.configured || !armada_config.embedded_bots_enabled,
     );
-    $("#save-pear-bot-selection").prop("disabled", pear_config.bot_identities.length < 2);
+    $("#save-legacy-bot-selection").prop("disabled", armada_config.bot_identities.length < 2);
 }
 
-function update_pear_config(): void {
-    if ($("#admin-pear-config").length === 0) {
+function update_armada_config(): void {
+    if ($("#admin-legacy-config").length === 0) {
         return;
     }
 
     void channel.get({
-        url: "/json/pear/config",
+        url: "/json/armada/config",
         success(data) {
-            const response = pear_config_response(data);
+            const response = armada_config_response(data);
             if (response === undefined) {
-                $("#pear-config-readiness").text($t({defaultMessage: "Unavailable"}));
+                $("#legacy-config-readiness").text($t({defaultMessage: "Unavailable"}));
                 return;
             }
-            render_pear_config(response.pear_config);
+            render_armada_config(response.armada_config);
         },
         error(xhr) {
-            ui_report.error($t_html({defaultMessage: "Failed"}), xhr, $("#pear-config-status"));
+            ui_report.error($t_html({defaultMessage: "Failed"}), xhr, $("#legacy-config-status"));
         },
     });
 }
 
-function post_pear_config(selected_bot_user_id?: number): void {
+function post_armada_config(selected_bot_user_id?: number): void {
     const data =
         selected_bot_user_id === undefined
             ? {}
             : {selected_bot_user_id: JSON.stringify(selected_bot_user_id)};
-    const $status = $("#pear-config-status");
+    const $status = $("#legacy-config-status");
     const $button =
         selected_bot_user_id === undefined
-            ? $("#provision-pear-bot")
-            : $("#save-pear-bot-selection");
+            ? $("#provision-legacy-bot")
+            : $("#save-legacy-bot-selection");
     buttons.show_button_loading_indicator($button);
     $button.prop("disabled", true);
 
     void channel.post({
-        url: "/json/pear/config",
+        url: "/json/armada/config",
         data,
         success(response_data) {
-            const response = pear_config_response(response_data);
+            const response = armada_config_response(response_data);
             if (response === undefined) {
-                $("#pear-config-readiness").text($t({defaultMessage: "Unavailable"}));
+                $("#legacy-config-readiness").text($t({defaultMessage: "Unavailable"}));
                 return;
             }
-            render_pear_config(response.pear_config);
+            render_armada_config(response.armada_config);
             redraw_all_bots_list();
             redraw_your_bots_list();
             ui_report.success($t_html({defaultMessage: "Saved"}), $status, 1500);
@@ -934,7 +935,7 @@ function post_pear_config(selected_bot_user_id?: number): void {
         },
         complete() {
             buttons.hide_button_loading_indicator($button);
-            update_pear_config();
+            update_armada_config();
         },
     });
 }
@@ -1139,18 +1140,18 @@ function set_up_bot_handlers($container: JQuery): void {
         })();
     });
 
-    $container.find("#provision-pear-bot").on("click", (e) => {
+    $container.find("#provision-legacy-bot").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        post_pear_config();
+        post_armada_config();
     });
 
-    $container.find("#save-pear-bot-selection").on("click", (e) => {
+    $container.find("#save-legacy-bot-selection").on("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const selected_bot_user_id = get_selected_pear_bot_user_id();
+        const selected_bot_user_id = get_selected_armada_bot_user_id();
         if (selected_bot_user_id !== undefined) {
-            post_pear_config(selected_bot_user_id);
+            post_armada_config(selected_bot_user_id);
         }
     });
 }
@@ -1171,7 +1172,7 @@ export function set_up_bots(): void {
     create_status_filter_dropdown($("#admin-your-bots-list"), org_your_bots_section);
 
     toggle_bot_config_download_container();
-    update_pear_config();
+    update_armada_config();
 }
 
 export function set_up_bots_for_personal_tab(): void {

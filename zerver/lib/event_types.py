@@ -168,7 +168,7 @@ class MessageFieldForDirectMessageEvent(BaseModel):
     content_type: Literal["text/html"]
     id: int
     is_me_message: bool
-    is_pear_message: bool
+    is_agent_message: bool
     reactions: list[dict[str, object]]
     recipient_id: int
     sender_realm_str: str
@@ -246,7 +246,7 @@ class MessageFieldForMessageEvent(BaseModel):
     content_type: Literal["text/html"]
     id: int
     is_me_message: bool
-    is_pear_message: bool
+    is_agent_message: bool
     reactions: list[dict[str, object]]
     recipient_id: int
     sender_realm_str: str
@@ -1305,12 +1305,12 @@ class WebReloadClientEvent(BaseEvent):
     immediate: bool
 
 
-class PearRunPlanStep(BaseModel):
+class ArmadaRunPlanStep(BaseModel):
     step: str
     status: str
 
 
-class PearRunUsage(BaseModel):
+class ArmadaRunUsage(BaseModel):
     input_tokens: int | None = None
     cached_input_tokens: int | None = None
     output_tokens: int | None = None
@@ -1319,7 +1319,7 @@ class PearRunUsage(BaseModel):
     cache_percent: float | None = None
 
 
-class PearRunAgent(BaseModel):
+class ArmadaRunAgent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     thread_id: str
@@ -1330,7 +1330,7 @@ class PearRunAgent(BaseModel):
     current_activity: str
 
 
-class PearRunAgentDelta(BaseModel):
+class ArmadaRunAgentDelta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     thread_id: str
@@ -1338,8 +1338,8 @@ class PearRunAgentDelta(BaseModel):
     current_activity: str | None = None
 
 
-class PearRunEvent(BaseEvent):
-    type: Literal["pear_run"]
+class ArmadaRunEvent(BaseEvent):
+    type: Literal["agent_run"]
     version: Literal[1]
     sequence: int
     run_id: int
@@ -1352,20 +1352,20 @@ class PearRunEvent(BaseEvent):
     summary: str
     current_activity: str
     tool_count: int
-    plan: list[PearRunPlanStep] | None
+    plan: list[ArmadaRunPlanStep] | None
     overview: str | None
     has_visible_assistant_text: bool | None
-    usage: PearRunUsage | None
+    usage: ArmadaRunUsage | None
     duration_seconds: float | None
     trace_available: bool
     run_date_created: float
     date_created: float
     agent_thread_id: str | None = None
-    agent: PearRunAgentDelta | None = None
-    agents: list[PearRunAgent] | None = None
+    agent: ArmadaRunAgentDelta | None = None
+    agents: list[ArmadaRunAgent] | None = None
 
 
-class PearWorkspaceChangedEvent(BaseEvent):
-    type: Literal["pear_workspace_changed"]
+class ArmadaWorkspaceChangedEvent(BaseEvent):
+    type: Literal["workspace_changed"]
     workspace_id: str
     revision: int

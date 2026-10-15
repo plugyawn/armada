@@ -1,79 +1,79 @@
 {{#if has_workspace}}
     <button
       type="button"
-      class="pear-workspace-rail-card pear-panel-open-action"
+      class="legacy-workspace-rail-card legacy-panel-open-action"
       >
-        <span class="pear-rail-line">
+        <span class="legacy-rail-line">
             <span
-              class="pear-rail-dot pear-rail-dot-{{status_class}}"
+              class="legacy-rail-dot legacy-rail-dot-{{status_class}}"
               aria-hidden="true"
               ></span>
             <span
-              class="pear-rail-repo"
+              class="legacy-rail-repo"
               title="{{repo_title}}"
               >{{repo_label}}</span>
             <span
-              class="pear-rail-status pear-rail-status-{{status_class}}"
+              class="legacy-rail-status legacy-rail-status-{{status_class}}"
               >{{status_label}}</span>
         </span>
-        <span class="pear-rail-line pear-rail-line-meta">
+        <span class="legacy-rail-line legacy-rail-line-meta">
             <i
-              class="zulip-icon zulip-icon-git-branch pear-rail-branch-icon"
+              class="zulip-icon zulip-icon-git-branch legacy-rail-branch-icon"
               aria-hidden="true"
               ></i>
             <span
-              class="pear-rail-branch"
+              class="legacy-rail-branch"
               title="{{branch_label}}"
               >{{branch_label}}</span>
             {{#if head_short}}
-                <span class="pear-rail-head">{{head_short}}</span>
+                <span class="legacy-rail-head">{{head_short}}</span>
             {{/if}}
         </span>
     </button>
 {{/if}}
 {{#if has_plan}}
-    <div class="pear-rail-plan">
-        <ul class="pear-rail-plan-steps">
+    <div class="legacy-rail-plan">
+        <ul class="legacy-rail-plan-steps">
             {{#each plan_steps}}
                 <li
-                  class="pear-rail-plan-step {{status_class}}"
+                  class="legacy-rail-plan-step {{status_class}}"
                   {{#if is_current}}aria-current="step"{{/if}}
                   >
                     <span
-                      class="pear-rail-plan-glyph {{glyph_class}}"
+                      class="legacy-rail-plan-glyph {{glyph_class}}"
                       aria-hidden="true"
                       >{{status_glyph}}</span>
-                    <span class="pear-rail-plan-text">{{step}}</span>
+                    <span class="legacy-rail-plan-text">{{step}}</span>
                 </li>
             {{/each}}
         </ul>
         {{#if has_plan_meta}}
-            <div class="pear-rail-plan-meta">{{plan_meta}}</div>
+            <div class="legacy-rail-plan-meta">{{plan_meta}}</div>
         {{/if}}
     </div>
 {{/if}}
 {{#if has_runs}}
-    <ul class="pear-rail-runs">
+    <ul class="legacy-rail-runs">
         {{#each runs}}
             <li>
                 <button
                   type="button"
-                  class="pear-rail-run {{#unless has_result_message_id}}pear-panel-open-action{{/unless}}"
+                  class="legacy-rail-run {{#unless has_result_message_id}}legacy-panel-open-action{{/unless}}"
                   {{#if has_result_message_id}}data-message-id="{{result_message_id}}"{{/if}}
                   >
                     <span
-                      class="pear-rail-run-glyph {{failed_class}}"
+                      class="legacy-rail-run-glyph {{failed_class}}"
                       aria-hidden="true"
                       >{{glyph}}</span>
-                    <span class="pear-rail-run-meta">{{label}}</span>
-                    <span class="pear-rail-run-when">{{when}}</span>
+                    <span class="legacy-rail-run-meta">{{label}}</span>
+                    <span class="legacy-rail-run-when">{{when}}</span>
                 </button>
             </li>
         {{/each}}
     </ul>
 {{/if}}
 {{#if show_workspace_line}}
-    <button type="button" class="pear-rail-workspace-line">
+    <button type="button" class="legacy-rail-workspace-line">
         <i class="zulip-icon zulip-icon-folder" aria-hidden="true"></i>
         <span>{{t "Workspace"}}</span>
     </button>

@@ -551,8 +551,8 @@
     /* This width is updated with an exact pixel
        width upon UI initialization. */
     --message-box-timestamp-column-width: 0;
-    --last-message-row-border-radius: 0 0 var(--pear-radius-card)
-        var(--pear-radius-card);
+    --last-message-row-border-radius: 0 0 var(--legacy-radius-card)
+        var(--legacy-radius-card);
 
     /* This length is the primary reference for height
        and image width on URL preview embeds. 112px
@@ -830,105 +830,105 @@
     );
     /* ============================================================
        Pear design language — "Terminal Romantic"
-       (pear/PEAR_DESIGN_LANGUAGE.md). Primitives → semantics; every
+       (armada/ARMADA_DESIGN_LANGUAGE.md). Primitives → semantics; every
        Pear surface and the legacy_theme.css host retheme consume ONLY
        these. Both themes derive from the same scales via light-dark().
        ============================================================ */
 
     /* Warm graphite neutrals. Green is semantic live/success state,
        not the ambient cast of every surface. */
-    --pear-surface-0: light-dark(hsl(40deg 12% 98%), hsl(240deg 5% 6%));
-    --pear-surface-1: light-dark(hsl(40deg 9% 95%), hsl(240deg 5% 8.5%));
-    --pear-surface-2: light-dark(hsl(40deg 7% 92%), hsl(240deg 4% 12%));
-    --pear-surface-3: light-dark(hsl(40deg 6% 88%), hsl(240deg 4% 16%));
-    --pear-ink-1: light-dark(hsl(240deg 7% 12%), hsl(40deg 8% 92%));
-    --pear-ink-2: light-dark(hsl(240deg 4% 34%), hsl(40deg 5% 68%));
-    --pear-ink-3: light-dark(hsl(240deg 3% 52%), hsl(40deg 4% 46%));
-    --pear-hairline: light-dark(
+    --legacy-surface-0: light-dark(hsl(40deg 12% 98%), hsl(240deg 5% 6%));
+    --legacy-surface-1: light-dark(hsl(40deg 9% 95%), hsl(240deg 5% 8.5%));
+    --legacy-surface-2: light-dark(hsl(40deg 7% 92%), hsl(240deg 4% 12%));
+    --legacy-surface-3: light-dark(hsl(40deg 6% 88%), hsl(240deg 4% 16%));
+    --legacy-ink-1: light-dark(hsl(240deg 7% 12%), hsl(40deg 8% 92%));
+    --legacy-ink-2: light-dark(hsl(240deg 4% 34%), hsl(40deg 5% 68%));
+    --legacy-ink-3: light-dark(hsl(240deg 3% 52%), hsl(40deg 4% 46%));
+    --legacy-hairline: light-dark(
         hsl(240deg 8% 12% / 9%),
         hsl(0deg 0% 100% / 9%)
     );
 
     /* Anjou accent scale — reserved for live/presence/success state
        and the Pear ✦ identity cycle. Ordinary interaction is violet. */
-    --pear-a300: hsl(140deg 42% 68%);
-    --pear-a400: hsl(140deg 44% 56%);
-    --pear-a500: hsl(141deg 48% 42%);
-    --pear-a600: hsl(142deg 52% 30%);
-    --pear-accent: var(--pear-a500);
-    --pear-accent-ink: light-dark(var(--pear-a600), var(--pear-a300));
-    --pear-accent-fill: hsl(141deg 48% 42% / 12%);
-    --pear-accent-fill-strong: hsl(141deg 48% 42% / 20%);
+    --legacy-a300: hsl(140deg 42% 68%);
+    --legacy-a400: hsl(140deg 44% 56%);
+    --legacy-a500: hsl(141deg 48% 42%);
+    --legacy-a600: hsl(142deg 52% 30%);
+    --legacy-accent: var(--legacy-a500);
+    --legacy-accent-ink: light-dark(var(--legacy-a600), var(--legacy-a300));
+    --legacy-accent-fill: hsl(141deg 48% 42% / 12%);
+    --legacy-accent-fill-strong: hsl(141deg 48% 42% / 20%);
 
     /* Generic interaction is violet. Pear green is presence/live/success
        only; using it for ordinary buttons and selection caused the old
-       Zulip/Pear green-purple collision. */
-    --pear-interaction: light-dark(hsl(252deg 52% 48%), hsl(252deg 72% 74%));
-    --pear-interaction-fill: light-dark(
+       Zulip/Armada green-purple collision. */
+    --legacy-interaction: light-dark(hsl(252deg 52% 48%), hsl(252deg 72% 74%));
+    --legacy-interaction-fill: light-dark(
         hsl(252deg 52% 48% / 10%),
         hsl(252deg 72% 74% / 12%)
     );
-    --pear-interaction-fill-strong: light-dark(
+    --legacy-interaction-fill-strong: light-dark(
         hsl(252deg 52% 48% / 17%),
         hsl(252deg 72% 74% / 20%)
     );
-    --pear-artifact-surface: light-dark(hsl(0deg 0% 99%), hsl(0deg 0% 8%));
-    --pear-artifact-raised: light-dark(hsl(0deg 0% 96.5%), hsl(0deg 0% 12%));
+    --legacy-artifact-surface: light-dark(hsl(0deg 0% 99%), hsl(0deg 0% 8%));
+    --legacy-artifact-raised: light-dark(hsl(0deg 0% 96.5%), hsl(0deg 0% 12%));
 
     /* Semantic states — muted; never compete with the accent. */
-    --pear-danger: light-dark(hsl(6deg 62% 38%), hsl(6deg 62% 68%));
-    --pear-danger-fill: light-dark(
+    --legacy-danger: light-dark(hsl(6deg 62% 38%), hsl(6deg 62% 68%));
+    --legacy-danger-fill: light-dark(
         hsl(6deg 62% 38% / 10%),
         hsl(6deg 62% 68% / 12%)
     );
-    --pear-warn: light-dark(hsl(36deg 74% 34%), hsl(38deg 66% 66%));
-    --pear-warn-fill: light-dark(
+    --legacy-warn: light-dark(hsl(36deg 74% 34%), hsl(38deg 66% 66%));
+    --legacy-warn-fill: light-dark(
         hsl(36deg 74% 34% / 10%),
         hsl(38deg 66% 66% / 12%)
     );
     /* Categorical drawing hues stay distinct from Pear's accent and
        semantic state colors in both themes. */
-    --pear-cat-1: light-dark(hsl(190deg 55% 32%), hsl(190deg 45% 62%));
-    --pear-cat-2: light-dark(hsl(225deg 50% 42%), hsl(225deg 55% 72%));
-    --pear-cat-3: light-dark(hsl(275deg 40% 44%), hsl(275deg 45% 74%));
-    --pear-cat-4: light-dark(hsl(330deg 50% 40%), hsl(330deg 50% 72%));
-    --pear-cat-5: light-dark(hsl(50deg 65% 32%), hsl(50deg 60% 62%));
-    --pear-cat-6: light-dark(hsl(100deg 40% 32%), hsl(100deg 35% 62%));
-    --pear-diff-add: var(--pear-a400);
-    --pear-diff-add-fill: color-mix(
+    --legacy-cat-1: light-dark(hsl(190deg 55% 32%), hsl(190deg 45% 62%));
+    --legacy-cat-2: light-dark(hsl(225deg 50% 42%), hsl(225deg 55% 72%));
+    --legacy-cat-3: light-dark(hsl(275deg 40% 44%), hsl(275deg 45% 74%));
+    --legacy-cat-4: light-dark(hsl(330deg 50% 40%), hsl(330deg 50% 72%));
+    --legacy-cat-5: light-dark(hsl(50deg 65% 32%), hsl(50deg 60% 62%));
+    --legacy-cat-6: light-dark(hsl(100deg 40% 32%), hsl(100deg 35% 62%));
+    --legacy-diff-add: var(--legacy-a400);
+    --legacy-diff-add-fill: color-mix(
         in srgb,
-        var(--pear-diff-add) 10%,
+        var(--legacy-diff-add) 10%,
         transparent
     );
-    --pear-diff-del: var(--pear-danger);
-    --pear-diff-del-fill: var(--pear-danger-fill);
+    --legacy-diff-del: var(--legacy-danger);
+    --legacy-diff-del-fill: var(--legacy-danger-fill);
 
     /* Type: the two faces of the design language
        (web/src/armada/tokens/tokens.css). People, the agent and chrome
        speak the human face; what a machine would accept is the code face.
        There is no agent face: the two names that used to hold one now hold
        the human face, until the old sheets that use them are deleted. */
-    --pear-font-ui: var(--f-human);
-    --pear-font-pixel: var(--f-human);
-    --pear-font-display: var(--f-human);
-    --pear-font-mono: var(--f-code);
+    --legacy-font-ui: var(--f-human);
+    --legacy-font-pixel: var(--f-human);
+    --legacy-font-display: var(--f-human);
+    --legacy-font-mono: var(--f-code);
 
     /* Spacing — 4px grid, the only spacing vocabulary on Pear surfaces. */
-    --pear-space-1: 4px;
-    --pear-space-2: 8px;
-    --pear-space-3: 12px;
-    --pear-space-4: 16px;
-    --pear-space-5: 24px;
-    --pear-space-6: 32px;
+    --legacy-space-1: 4px;
+    --legacy-space-2: 8px;
+    --legacy-space-3: 12px;
+    --legacy-space-4: 16px;
+    --legacy-space-5: 24px;
+    --legacy-space-6: 32px;
 
     /* Shape & elevation. Corners are soft and nest: a control sits
        inside a card sits inside a panel, each one step rounder. Floating
        surfaces carry a hairline ring plus a near and a far shadow, so
        they read as lifted in both themes without a visible border. */
-    --pear-radius-px: 5px;
-    --pear-radius-chip: 7px;
-    --pear-radius-card: 12px;
-    --pear-shadow-pop:
+    --legacy-radius-px: 5px;
+    --legacy-radius-chip: 7px;
+    --legacy-radius-card: 12px;
+    --legacy-shadow-pop:
         0 0 0 0.5px
             light-dark(hsl(240deg 8% 12% / 14%), hsl(0deg 0% 100% / 14%)),
         0 2px 6px light-dark(hsl(240deg 8% 12% / 7%), hsl(0deg 0% 0% / 28%)),
@@ -936,16 +936,16 @@
 
     /* Motion — macOS fluid, GPU-cheap. Feedback to a click or hover is
        near-instant; only things that travel take longer. */
-    --pear-ease: cubic-bezier(0.22, 1, 0.36, 1);
-    --pear-dur-1: 110ms;
-    --pear-dur-2: 180ms;
-    --pear-dur-3: 280ms;
+    --legacy-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --legacy-dur-1: 110ms;
+    --legacy-dur-2: 180ms;
+    --legacy-dur-3: 280ms;
 
     /* Pear message rows sit one tone below the page surface. */
-    --color-background-pear-message-content: var(--pear-surface-1);
+    --color-background-legacy-message-content: var(--legacy-surface-1);
     --color-selected-message-outline: color-mix(
         in srgb,
-        var(--pear-interaction) 60%,
+        var(--legacy-interaction) 60%,
         transparent
     );
     --color-selected-gif-in-grid-picker: light-dark(
@@ -956,7 +956,7 @@
         hsl(217deg 75% 59% / 50%),
         hsl(217deg 95% 59% / 60%)
     );
-    --color-message-list-border: var(--pear-hairline);
+    --color-message-list-border: var(--legacy-hairline);
     --color-message-header-contents-border: light-dark(
         hsl(0deg 0% 0% / 10%),
         hsl(0deg 0% 0% / 60%)
@@ -1039,7 +1039,7 @@
     --color-background-sidebar-action-heading-hover: var(
         --color-background-navigation-item-hover
     );
-    --color-navbar-bottom-border: var(--pear-hairline);
+    --color-navbar-bottom-border: var(--legacy-hairline);
     --color-left-sidebar-direct-messages-bottom-divider: light-dark(
         hsl(0deg 0% 0% / 15%),
         hsl(0deg 0% 100% / 15%)

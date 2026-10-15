@@ -7,10 +7,10 @@ import xml.etree.ElementTree as ET
 from defusedxml import ElementTree as DefusedET
 
 SVG_NAMESPACE = "http://www.w3.org/2000/svg"
-PEAR_SVG_SOURCE_LIMIT = 1_000_000
-PEAR_SVG_NODE_LIMIT = 5_000
-PEAR_SVG_TEXT_LIMIT = 100_000
-PEAR_SVG_DEPTH_LIMIT = 64
+ARMADA_SVG_SOURCE_LIMIT = 1_000_000
+ARMADA_SVG_NODE_LIMIT = 5_000
+ARMADA_SVG_TEXT_LIMIT = 100_000
+ARMADA_SVG_DEPTH_LIMIT = 64
 
 ALLOWED_ELEMENTS = frozenset(
     {
@@ -129,7 +129,7 @@ HOSTILE_VALUE = re.compile(r"(?:javascript|data|https?|file)\s*:", re.IGNORECASE
 URL_REFERENCE = re.compile(r"url\(\s*(['\"]?)#([^)'\"\s]+)\1\s*\)", re.IGNORECASE)
 
 
-class PearGeneratedVectorError(ValueError):
+class ArmadaGeneratedVectorError(ValueError):
     pass
 
 
@@ -162,57 +162,57 @@ def _safe_style(value: str) -> str | None:
     return "; ".join(kept) or None
 
 
-def sanitize_pear_generated_vector(data: bytes) -> bytes:
+def sanitize_armada_generated_vector(data: bytes) -> bytes:
     """Rebuild generated vector media without adopting authored XML nodes."""
-    if not data or len(data) > PEAR_SVG_SOURCE_LIMIT or b"\x00" in data:
-        raise PearGeneratedVectorError("SVG source exceeds its bounded input contract")
+    if not data or len(data) > ARMADA_SVG_SOURCE_LIMIT or b"\x00" in data:
+        raise ArmadaGeneratedVectorError("SVG source exceeds its bounded input contract")
     try:
         source = data.decode("utf-8")
     except UnicodeDecodeError as error:
-        raise PearGeneratedVectorError("SVG source must be UTF-8") from error
+        raise ArmadaGeneratedVectorError("SVG source must be UTF-8") from error
     if re.search(r"<!\s*(?:DOCTYPE|ENTITY)", source, re.IGNORECASE):
-        raise PearGeneratedVectorError("SVG document declarations are not allowed")
+        raise ArmadaGeneratedVectorError("SVG document declarations are not allowed")
     try:
         root = DefusedET.fromstring(source)
     except ET.ParseError as error:
-        raise PearGeneratedVectorError("SVG source is malformed") from error
+        raise ArmadaGeneratedVectorError("SVG source is malformed") from error
     if _local_name(root.tag) != "svg":
-        raise PearGeneratedVectorError("SVG source must have an svg root")
+        raise ArmadaGeneratedVectorError("SVG source must have an svg root")
 
     nodes = list(root.iter())
-    if len(nodes) > PEAR_SVG_NODE_LIMIT:
-        raise PearGeneratedVectorError("SVG node budget exceeded")
+    if len(nodes) > ARMADA_SVG_NODE_LIMIT:
+        raise ArmadaGeneratedVectorError("SVG node budget exceeded")
     stack = [(root, 1)]
     while stack:
         node, depth = stack.pop()
-        if depth > PEAR_SVG_DEPTH_LIMIT:
-            raise PearGeneratedVectorError("SVG depth budget exceeded")
+        if depth > ARMADA_SVG_DEPTH_LIMIT:
+            raise ArmadaGeneratedVectorError("SVG depth budget exceeded")
         stack.extend((child, depth + 1) for child in node)
     text_total = sum(len(node.text or "") + len(node.tail or "") for node in nodes)
-    if text_total > PEAR_SVG_TEXT_LIMIT:
-        raise PearGeneratedVectorError("SVG text budget exceeded")
+    if text_total > ARMADA_SVG_TEXT_LIMIT:
+        raise ArmadaGeneratedVectorError("SVG text budget exceeded")
 
     ids: list[str] = []
     for node in nodes:
         element_name = _local_name(node.tag)
         if element_name.lower() in HOSTILE_ELEMENTS:
-            raise PearGeneratedVectorError(f"hostile SVG element rejected: {element_name}")
+            raise ArmadaGeneratedVectorError(f"hostile SVG element rejected: {element_name}")
         for raw_name, value in node.attrib.items():
             name = _local_name(raw_name)
             if name.lower().startswith("on") or HOSTILE_VALUE.search(value):
-                raise PearGeneratedVectorError(f"hostile SVG attribute rejected: {name}")
+                raise ArmadaGeneratedVectorError(f"hostile SVG attribute rejected: {name}")
             compact = URL_REFERENCE.sub("", value)
             if "url(" in compact.lower():
-                raise PearGeneratedVectorError("external SVG resource rejected")
+                raise ArmadaGeneratedVectorError("external SVG resource rejected")
             if name == "href" and value and not value.startswith("#"):
-                raise PearGeneratedVectorError("external SVG link rejected")
+                raise ArmadaGeneratedVectorError("external SVG link rejected")
             if name == "id" and element_name in ALLOWED_ELEMENTS:
                 if value in ids:
-                    raise PearGeneratedVectorError("SVG contains a duplicate id")
+                    raise ArmadaGeneratedVectorError("SVG contains a duplicate id")
                 ids.append(value)
 
     digest = hashlib.sha256(data).hexdigest()[:12]
-    id_map = {value: f"pear-vector-{digest}-{index}" for index, value in enumerate(ids)}
+    id_map = {value: f"armada-vector-{digest}-{index}" for index, value in enumerate(ids)}
 
     def rewrite_value(value: str) -> str:
         unresolved = False
@@ -227,7 +227,7 @@ def sanitize_pear_generated_vector(data: bytes) -> bytes:
 
         rewritten = URL_REFERENCE.sub(replace_reference, value)
         if unresolved:
-            raise PearGeneratedVectorError("SVG contains an unresolved local reference")
+            raise ArmadaGeneratedVectorError("SVG contains an unresolved local reference")
         return rewritten
 
     def rebuild(source_node: ET.Element) -> ET.Element | None:
@@ -264,17 +264,17 @@ def sanitize_pear_generated_vector(data: bytes) -> bytes:
     try:
         sanitized = rebuild(root)
     except RecursionError as error:
-        raise PearGeneratedVectorError("SVG depth budget exceeded") from error
+        raise ArmadaGeneratedVectorError("SVG depth budget exceeded") from error
     if sanitized is None:
-        raise PearGeneratedVectorError("SVG root was rejected")
+        raise ArmadaGeneratedVectorError("SVG root was rejected")
     if "viewBox" not in sanitized.attrib and not {
         "width",
         "height",
     }.issubset(sanitized.attrib):
-        raise PearGeneratedVectorError("SVG requires a coordinate system")
+        raise ArmadaGeneratedVectorError("SVG requires a coordinate system")
     sanitized.set("role", sanitized.attrib.get("role", "img"))
     ET.register_namespace("", SVG_NAMESPACE)
     output = ET.tostring(sanitized, encoding="utf-8", short_empty_elements=True)
-    if len(output) > PEAR_SVG_SOURCE_LIMIT:
-        raise PearGeneratedVectorError("sanitized SVG exceeds its output budget")
+    if len(output) > ARMADA_SVG_SOURCE_LIMIT:
+        raise ArmadaGeneratedVectorError("sanitized SVG exceeds its output budget")
     return output

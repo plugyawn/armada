@@ -24,7 +24,7 @@ function descriptor(revision = 1) {
     return {
         uuid: "workspace-a",
         display_root: "Workspace A",
-        stream: "pear",
+        stream: "armada",
         topic: "work",
         branch: "work",
         head: "abc123",
@@ -48,10 +48,10 @@ function descriptor(revision = 1) {
 }
 
 function page(state, directory, entries, next_cursor = null) {
-    const started = tree.begin_pear_workspace_directory_request(state, directory.entry_id);
+    const started = tree.begin_armada_workspace_directory_request(state, directory.entry_id);
     assert.ok(started.request !== undefined);
     return {
-        state: tree.receive_pear_workspace_directory_page(started.state, started.request, {
+        state: tree.receive_armada_workspace_directory_page(started.state, started.request, {
             workspace_uuid: state.workspaceId,
             workspace_revision: state.workspaceRevision,
             directory,
@@ -63,13 +63,13 @@ function page(state, directory, entries, next_cursor = null) {
 }
 
 run_test("directory pages append once and preserve server order", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
+    let state = tree.create_armada_workspace_tree(descriptor());
     const root = state.entries.get(state.rootId);
     const first = page(state, root, [entry("docs", "directory"), entry("README.md")], "next");
     state = first.state;
     assert.deepEqual(
         tree
-            .pear_workspace_tree_window(state, {offset: 0, limit: 10})
+            .armada_workspace_tree_window(state, {offset: 0, limit: 10})
             .rows.map((row) => row.entry.path),
         ["docs", "README.md"],
     );
@@ -83,17 +83,17 @@ run_test("directory pages append once and preserve server order", () => {
     ]);
     assert.equal(state.directories.get(state.rootId).complete, true);
     assert.equal(
-        tree.begin_pear_workspace_directory_request(state, state.rootId).request,
+        tree.begin_armada_workspace_directory_request(state, state.rootId).request,
         undefined,
     );
 });
 
 run_test("stale pages and responses with non-child paths fail closed", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
+    let state = tree.create_armada_workspace_tree(descriptor());
     const root = state.entries.get(state.rootId);
-    const started = tree.begin_pear_workspace_directory_request(state, state.rootId);
+    const started = tree.begin_armada_workspace_directory_request(state, state.rootId);
     state = started.state;
-    const newer = tree.begin_pear_workspace_directory_request(state, state.rootId);
+    const newer = tree.begin_armada_workspace_directory_request(state, state.rootId);
     assert.equal(newer.request, undefined, "one directory request is single-flight");
 
     const stale_response = {
@@ -103,43 +103,43 @@ run_test("stale pages and responses with non-child paths fail closed", () => {
         entries: [entry("README.md")],
         next_cursor: null,
     };
-    state = tree.receive_pear_workspace_directory_page(state, started.request, stale_response);
+    state = tree.receive_armada_workspace_directory_page(state, started.request, stale_response);
     assert.equal(state.ignoredStaleResponses, 1);
     assert.equal(state.directories.get(state.rootId).loading, true);
 
     const invalid_response = {...stale_response, workspace_revision: 1, entries: [entry("a/b.md")]};
-    state = tree.receive_pear_workspace_directory_page(state, started.request, invalid_response);
+    state = tree.receive_armada_workspace_directory_page(state, started.request, invalid_response);
     assert.equal(state.directories.get(state.rootId).error, "invalid_tree_page");
     assert.equal(state.entries.has("id:a/b.md"), false);
 });
 
 run_test("revision replacement invalidates IDs while preserving path preferences", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
+    let state = tree.create_armada_workspace_tree(descriptor());
     const root = state.entries.get(state.rootId);
     state = page(state, root, [entry("docs", "directory"), entry("README.md")]).state;
-    state = tree.set_pear_workspace_directory_expanded(state, "id:docs", true);
-    state = tree.select_pear_workspace_entry(state, "id:README.md");
+    state = tree.set_armada_workspace_directory_expanded(state, "id:docs", true);
+    state = tree.select_armada_workspace_entry(state, "id:README.md");
 
     const next = descriptor(2);
     next.root = {...next.root, entry_id: "revision-2-root"};
-    state = tree.replace_pear_workspace_tree_revision(state, next);
+    state = tree.replace_armada_workspace_tree_revision(state, next);
     assert.equal(state.rootId, "revision-2-root");
     assert.equal(state.entries.has("id:README.md"), false);
     assert.equal(state.selectedId, undefined);
     assert.equal(state.selectedPath, "README.md");
     assert.equal(state.expandedPaths.has("docs"), true);
 
-    const stale = tree.replace_pear_workspace_tree_revision(state, descriptor(1));
+    const stale = tree.replace_armada_workspace_tree_revision(state, descriptor(1));
     assert.equal(stale.workspaceRevision, 2);
     assert.equal(stale.ignoredStaleResponses, 1);
 });
 
 run_test("search reveal adds only the ancestor chain and expands it", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
+    let state = tree.create_armada_workspace_tree(descriptor());
     const docs = entry("docs", "directory");
     const guide = entry("docs/guide", "directory");
     const target = entry("docs/guide/start.md");
-    state = tree.reveal_pear_workspace_search_result(
+    state = tree.reveal_armada_workspace_search_result(
         state,
         {
             workspace_uuid: "workspace-a",
@@ -154,7 +154,7 @@ run_test("search reveal adds only the ancestor chain and expands it", () => {
     assert.deepEqual([...state.expandedPaths], ["", "docs", "docs/guide"]);
     assert.deepEqual(
         tree
-            .pear_workspace_tree_window(state, {offset: 0, limit: 10})
+            .armada_workspace_tree_window(state, {offset: 0, limit: 10})
             .rows.map((row) => [row.entry.path, row.depth]),
         [
             ["docs", 0],
@@ -165,13 +165,13 @@ run_test("search reveal adds only the ancestor chain and expands it", () => {
 });
 
 run_test("windowing never materializes more rows than requested", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
+    let state = tree.create_armada_workspace_tree(descriptor());
     const root = state.entries.get(state.rootId);
     const entries = Array.from({length: 10_000}, (_value, index) =>
         entry(`file-${String(index).padStart(5, "0")}.txt`),
     );
     state = page(state, root, entries).state;
-    const window = tree.pear_workspace_tree_window(state, {offset: 9_000, limit: 200});
+    const window = tree.armada_workspace_tree_window(state, {offset: 9_000, limit: 200});
     assert.equal(window.rows.length, 200);
     assert.equal(window.rows[0].entry.path, "file-09000.txt");
     assert.equal(window.rows.at(-1).entry.path, "file-09199.txt");
@@ -179,15 +179,15 @@ run_test("windowing never materializes more rows than requested", () => {
 });
 
 run_test("failed requests remain retryable and stale failures are ignored", () => {
-    let state = tree.create_pear_workspace_tree(descriptor());
-    const started = tree.begin_pear_workspace_directory_request(state, state.rootId);
-    state = tree.fail_pear_workspace_directory_request(started.state, started.request, "offline");
+    let state = tree.create_armada_workspace_tree(descriptor());
+    const started = tree.begin_armada_workspace_directory_request(state, state.rootId);
+    state = tree.fail_armada_workspace_directory_request(started.state, started.request, "offline");
     assert.equal(state.directories.get(state.rootId).error, "offline");
     assert.equal(state.directories.get(state.rootId).loading, false);
 
-    const retry = tree.begin_pear_workspace_directory_request(state, state.rootId);
+    const retry = tree.begin_armada_workspace_directory_request(state, state.rootId);
     assert.equal(retry.request.requestGeneration, 2);
-    state = tree.fail_pear_workspace_directory_request(retry.state, started.request, "late");
+    state = tree.fail_armada_workspace_directory_request(retry.state, started.request, "late");
     assert.equal(state.ignoredStaleResponses, 1);
     assert.equal(state.directories.get(state.rootId).loading, true);
 });

@@ -14,7 +14,7 @@ from zerver.lib.armada_workspace_index import (
 from zerver.lib.armada_workspace_io import WorkspaceEntryIdentity
 
 
-class PearWorkspaceIndexTest(unittest.TestCase):
+class ArmadaWorkspaceIndexTest(unittest.TestCase):
     secret = b"test-workspace-index-secret-32bytes"
 
     def build(

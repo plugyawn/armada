@@ -749,11 +749,11 @@ def add_bot_backend(
             token=generate_api_key(),
         )
         if bot_type == UserProfile.EMBEDDED_BOT:
-            from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
-            from zerver.lib.armada_gate import invalidate_pear_selected_bot_cache
+            from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
+            from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 
-            if service_name == PEAR_EMBEDDED_BOT_SERVICE:
-                invalidate_pear_selected_bot_cache(user_profile.realm_id)
+            if service_name == ARMADA_EMBEDDED_BOT_SERVICE:
+                invalidate_armada_selected_bot_cache(user_profile.realm_id)
 
     if bot_type == UserProfile.INCOMING_WEBHOOK_BOT and service_name:
         set_bot_config(bot_profile, "integration_id", service_name)

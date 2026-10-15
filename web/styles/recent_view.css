@@ -593,7 +593,7 @@
         background-color: var(--color-background-recent-view-table-thead-th);
         overflow: hidden;
         color: var(--color-text-recent-view-table-thead-th);
-        font-family: var(--pear-font-pixel);
+        font-family: var(--legacy-font-pixel);
         font-size: 12px;
         text-transform: none;
         font-weight: 400;

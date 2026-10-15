@@ -1,8 +1,8 @@
 from typing import Any
 
 from zerver.lib.armada_agent_threads import (
-    pear_agent_delta_from_event,
-    serialize_pear_agent_threads,
+    armada_agent_delta_from_event,
+    serialize_armada_agent_threads,
 )
 from zerver.lib.message import event_recipient_ids_for_action_on_messages
 from zerver.lib.stream_subscription import get_user_ids_for_streams
@@ -11,7 +11,7 @@ from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
 from zerver.tornado.django_api import send_event_on_commit
 
 
-def _pear_run_plan(payload: dict[str, Any]) -> list[dict[str, str]] | None:
+def _armada_run_plan(payload: dict[str, Any]) -> list[dict[str, str]] | None:
     if payload.get("kind") != "plan":
         return None
     metadata = payload.get("metadata")
@@ -26,7 +26,7 @@ def _pear_run_plan(payload: dict[str, Any]) -> list[dict[str, str]] | None:
     return plan or None
 
 
-def _pear_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | None:
+def _armada_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | None:
     raw_usage = payload.get("usage")
     if not isinstance(raw_usage, dict):
         return None
@@ -47,7 +47,7 @@ def _pear_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | 
     return usage or None
 
 
-def _pear_agent_event_needs_snapshot(
+def _armada_agent_event_needs_snapshot(
     payload: dict[str, Any],
 ) -> bool:
     # Session/error events can establish or invalidate topology. Ordinary
@@ -56,7 +56,7 @@ def _pear_agent_event_needs_snapshot(
     return payload.get("kind") in {"error", "session"}
 
 
-def send_pear_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
+def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     """Push one reducer-friendly Pear run delta to users who can see its trigger."""
     try:
         trigger_message = Message.objects.only("id", "is_channel_message").get(
@@ -82,13 +82,13 @@ def send_pear_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     agent_thread_id = metadata.get("codex_thread_id") if run_event.event_type == "agent" else None
     agents = (
-        serialize_pear_agent_threads(run)
-        if run_event.event_type == "agent" and _pear_agent_event_needs_snapshot(payload)
+        serialize_armada_agent_threads(run)
+        if run_event.event_type == "agent" and _armada_agent_event_needs_snapshot(payload)
         else None
     )
-    agent = None if agents is not None else pear_agent_delta_from_event(run_event)
+    agent = None if agents is not None else armada_agent_delta_from_event(run_event)
     event: dict[str, Any] = {
-        "type": "pear_run",
+        "type": "agent_run",
         "version": 1,
         "sequence": run_event.id,
         "run_id": run.id,
@@ -101,12 +101,12 @@ def send_pear_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
         "summary": run_event.summary,
         "current_activity": run.current_activity,
         "tool_count": run.tool_count,
-        "plan": _pear_run_plan(payload),
+        "plan": _armada_run_plan(payload),
         "overview": overview if isinstance(overview, str) else None,
         "has_visible_assistant_text": (
             True if run_event.event_type == "assistant_visible" else None
         ),
-        "usage": _pear_run_usage(payload),
+        "usage": _armada_run_usage(payload),
         "duration_seconds": duration_seconds,
         "trace_available": run_event.event_type
         in {
@@ -132,7 +132,7 @@ def send_pear_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     send_event_on_commit(run.realm, event, list(recipient_ids))
 
 
-def send_pear_workspace_changed_event(node: Workspace, revision: int) -> None:
+def send_armada_workspace_changed_event(node: Workspace, revision: int) -> None:
     """Notify subscribers after a new authoritative Workspace revision exists."""
     stream = Stream.objects.filter(
         realm=node.realm,
@@ -145,7 +145,7 @@ def send_pear_workspace_changed_event(node: Workspace, revision: int) -> None:
     send_event_on_commit(
         node.realm,
         {
-            "type": "pear_workspace_changed",
+            "type": "workspace_changed",
             "workspace_id": str(node.uuid),
             "revision": revision,
         },

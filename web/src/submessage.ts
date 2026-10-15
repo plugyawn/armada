@@ -3,7 +3,7 @@ import * as z from "zod/mini";
 
 import * as blueslip from "./blueslip.ts";
 import * as channel from "./channel.ts";
-import {mount_pear_artifact_lifecycle} from "./legacy_artifact_lifecycle.ts";
+import {mount_armada_artifact_lifecycle} from "./legacy_artifact_lifecycle.ts";
 import type {MessageList} from "./message_list.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_store from "./message_store.ts";
@@ -14,7 +14,7 @@ import type {WidgetOutboundData} from "./widget_schema.ts";
 import * as widgetize from "./widgetize.ts";
 
 export type Submessage = z.infer<typeof message_store.submessage_schema>;
-const PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact";
+const ARMADA_ARTIFACT_SUBMESSAGE_TYPE = "artifact";
 
 function submessages_of_type(message: Message, msg_type: string): Submessage[] {
     return (message.submessages ?? []).filter((submessage) => submessage.msg_type === msg_type);
@@ -156,7 +156,7 @@ export function process_submessages(message: Message): void {
 }
 
 export function do_process_submessages(message: Message): void {
-    const artifacts = submessages_of_type(message, PEAR_ARTIFACT_SUBMESSAGE_TYPE);
+    const artifacts = submessages_of_type(message, ARMADA_ARTIFACT_SUBMESSAGE_TYPE);
     if (artifacts.some((artifact) => artifact.sender_id !== message.sender_id)) {
         blueslip.warn(`A user tried to attach a Pear artifact to message ${message.id}`);
     }
@@ -183,26 +183,26 @@ export function do_process_submessages(message: Message): void {
     });
 }
 
-async function load_and_render_pear_artifact(
+async function load_and_render_armada_artifact(
     message: Message,
     artifact: Submessage,
     $host: JQuery,
     artifact_id: string,
 ): Promise<void> {
     const is_current = (): boolean =>
-        $host.attr("data-pear-artifact-id") === artifact_id && $host[0]?.isConnected === true;
+        $host.attr("data-legacy-artifact-id") === artifact_id && $host[0]?.isConnected === true;
     const show_failure = (label: string): void => {
         if (!is_current()) {
             return;
         }
-        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        const existing = $host.children(".legacy-artifact:not(.legacy-artifact-lifecycle)")[0];
         if (existing !== undefined) {
             existing.dataset["lifecycle"] = "stale";
             existing.removeAttribute("aria-busy");
             existing.setAttribute("aria-label", `Showing the last valid artifact. ${label}`);
             return;
         }
-        mount_pear_artifact_lifecycle($host, "chat", "failed", label);
+        mount_armada_artifact_lifecycle($host, "chat", "failed", label);
     };
     let anchor_row = message_lists.current?.selected_row()[0];
     let anchor_top = anchor_row?.getBoundingClientRect().top;
@@ -236,18 +236,18 @@ async function load_and_render_pear_artifact(
         anchor_top = selected_row.getBoundingClientRect().top;
     };
     try {
-        const pear_artifact = await import("./legacy_artifact.ts");
+        const legacy_artifact = await import("./legacy_artifact.ts");
         if (!is_current()) {
             return;
         }
-        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        const existing = $host.children(".legacy-artifact:not(.legacy-artifact-lifecycle)")[0];
         if (existing !== undefined) {
             existing.dataset["lifecycle"] = "updating";
             existing.setAttribute("aria-busy", "true");
         } else {
-            mount_pear_artifact_lifecycle($host, "chat", "rendering", "rendering artifact…");
+            mount_armada_artifact_lifecycle($host, "chat", "rendering", "rendering artifact…");
         }
-        const document_value = pear_artifact.parse_pear_artifact(artifact.content);
+        const document_value = legacy_artifact.parse_armada_artifact(artifact.content);
         if (!is_current()) {
             return;
         }
@@ -256,7 +256,7 @@ async function load_and_render_pear_artifact(
             show_failure("artifact could not be rendered");
             return;
         }
-        const rendered_artifact = pear_artifact.mount_pear_artifact($host, document_value, {
+        const rendered_artifact = legacy_artifact.mount_armada_artifact($host, document_value, {
             density: "chat",
             onGeometryChange(artifact_element) {
                 preserve_message_anchor(artifact_element);
@@ -271,7 +271,7 @@ async function load_and_render_pear_artifact(
                 button.textContent = "asking…";
                 void (async () => {
                     try {
-                        const [pear_artifact_actions, stream_data] = await Promise.all([
+                        const [legacy_artifact_actions, stream_data] = await Promise.all([
                             import("./legacy_artifact_actions.ts"),
                             import("./stream_data.ts"),
                         ]);
@@ -279,7 +279,7 @@ async function load_and_render_pear_artifact(
                         if (subscription === undefined) {
                             throw new Error("stream subscription unavailable");
                         }
-                        pear_artifact_actions.send_pear_artifact_action(
+                        legacy_artifact_actions.send_armada_artifact_action(
                             {stream: subscription.name, topic: message.topic},
                             action.prompt,
                             {
@@ -318,7 +318,7 @@ async function load_and_render_pear_artifact(
                             throw new Error("stream subscription unavailable");
                         }
                         void channel.post({
-                            url: "/json/pear/monitors",
+                            url: "/json/armada/monitors",
                             data: {
                                 stream: subscription.name,
                                 topic: message.topic,
@@ -333,7 +333,7 @@ async function load_and_render_pear_artifact(
                             success() {
                                 button.removeAttribute("aria-busy");
                                 button.textContent = "pinned ✓";
-                                void refresh_pear_wall();
+                                void refresh_armada_wall();
                             },
                             error() {
                                 button.disabled = false;
@@ -357,10 +357,10 @@ async function load_and_render_pear_artifact(
     }
 }
 
-async function refresh_pear_wall(): Promise<void> {
+async function refresh_armada_wall(): Promise<void> {
     try {
-        const pear_wall = await import("./legacy_wall.ts");
-        pear_wall.refresh();
+        const legacy_wall = await import("./legacy_wall.ts");
+        legacy_wall.refresh();
     } catch (error) {
         blueslip.error("Could not refresh the Pear wall", undefined, error);
     }
@@ -375,36 +375,36 @@ export function render_submessage(in_opts: {$row: JQuery; message_id: number}): 
 
     const $row = in_opts.$row;
 
-    const artifacts = submessages_of_type(message, PEAR_ARTIFACT_SUBMESSAGE_TYPE)
+    const artifacts = submessages_of_type(message, ARMADA_ARTIFACT_SUBMESSAGE_TYPE)
         .filter((artifact) => artifact.sender_id === message.sender_id)
         .toSorted((m1, m2) => m1.id - m2.id);
     const latest_artifact = artifacts.at(-1);
     if (latest_artifact !== undefined) {
         const $messagebox = $row.find(".messagebox-content").first();
-        let $host = $messagebox.children(".pear-artifact-message-host");
+        let $host = $messagebox.children(".legacy-artifact-message-host");
         if ($host.length === 0) {
             const host = document.createElement("div");
-            host.className = "pear-artifact-message-host";
+            host.className = "legacy-artifact-message-host";
             const reactions = $messagebox.children(".message_reactions")[0];
             $messagebox[0]?.insertBefore(host, reactions ?? null);
             $host = $(host);
         }
         const artifact_id = String(latest_artifact.id);
         if (
-            $host.attr("data-pear-artifact-id") === artifact_id &&
-            $host.children('.pear-artifact[data-lifecycle="ready"]').length > 0
+            $host.attr("data-legacy-artifact-id") === artifact_id &&
+            $host.children('.legacy-artifact[data-lifecycle="ready"]').length > 0
         ) {
             return;
         }
-        $host.attr("data-pear-artifact-id", artifact_id);
-        const existing = $host.children(".pear-artifact:not(.pear-artifact-lifecycle)")[0];
+        $host.attr("data-legacy-artifact-id", artifact_id);
+        const existing = $host.children(".legacy-artifact:not(.legacy-artifact-lifecycle)")[0];
         if (existing !== undefined) {
             existing.dataset["lifecycle"] = "updating";
             existing.setAttribute("aria-busy", "true");
         } else {
-            mount_pear_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
+            mount_armada_artifact_lifecycle($host, "chat", "preparing", "preparing artifact…");
         }
-        void load_and_render_pear_artifact(message, latest_artifact, $host, artifact_id);
+        void load_and_render_armada_artifact(message, latest_artifact, $host, artifact_id);
         return;
     }
 
@@ -446,7 +446,7 @@ export function handle_event(submsg: Submessage): void {
 
     const msg_type = submsg.msg_type;
 
-    if (msg_type === PEAR_ARTIFACT_SUBMESSAGE_TYPE) {
+    if (msg_type === ARMADA_ARTIFACT_SUBMESSAGE_TYPE) {
         const $row = message_lists.current?.get_row(submsg.message_id);
         if ($row && $row.length > 0) {
             render_submessage({message_id: submsg.message_id, $row});

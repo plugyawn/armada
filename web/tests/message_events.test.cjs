@@ -157,7 +157,7 @@ run_test("update_messages", ({override, override_rewire}) => {
             display_recipient: denmark.name,
             historical: false,
             id: 111,
-            is_pear_message: false,
+            is_agent_message: false,
             is_stream: true,
             is_private: false,
             last_edit_timestamp: undefined,

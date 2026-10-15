@@ -510,7 +510,7 @@ run_test("print hotkey", ({override}) => {
     // Workspace quick-open reuses the registered print chord only while
     // its cancellable integration event has an active consumer.
     override(document, "dispatchEvent", (event) => {
-        assert.equal(event.type, "pear:workspace-quick-open");
+        assert.equal(event.type, "armada:workspace-quick-open");
         event.preventDefault();
         return false;
     });

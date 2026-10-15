@@ -1,33 +1,33 @@
 import $ from "jquery";
 
-import render_pear_workspace_pane from "../templates/legacy_workspace_pane.hbs";
+import render_legacy_workspace_pane from "../templates/legacy_workspace_pane.hbs";
 
 import * as armada_frame from "./armada/hooks/frame.ts"; // armada:
 import * as blueslip from "./blueslip.ts";
 import {
-    read_pear_workspace_location,
-    write_pear_workspace_location,
+    read_armada_workspace_location,
+    write_armada_workspace_location,
 } from "./legacy_workspace_location.ts";
 import {
-    begin_pear_workspace_metric,
-    finish_pear_workspace_metric,
+    begin_armada_workspace_metric,
+    finish_armada_workspace_metric,
 } from "./legacy_workspace_metrics.ts";
 
-export type PearWorkspaceTab = "chat" | "readme" | "files";
-type PearWorkspaceRoom = Exclude<PearWorkspaceTab, "chat">;
+export type ArmadaWorkspaceTab = "chat" | "readme" | "files";
+type ArmadaWorkspaceRoom = Exclude<ArmadaWorkspaceTab, "chat">;
 
 type WorkspaceShellController = {
     ready: Promise<void>;
     refresh: () => void;
     openQuickOpen: () => void;
     applyLocation: () => void;
-    setRoom: (room: PearWorkspaceRoom) => void;
+    setRoom: (room: ArmadaWorkspaceRoom) => void;
     destroy: () => Promise<void>;
 };
 
-const quick_open_event_name = "pear:workspace-quick-open";
+const quick_open_event_name = "armada:workspace-quick-open";
 
-let current_tab: PearWorkspaceTab = "chat";
+let current_tab: ArmadaWorkspaceTab = "chat";
 let current_context_key = "";
 let current_workspace_id: string | undefined;
 let pane_shell_key: string | undefined;
@@ -46,7 +46,7 @@ function has_workspace(): boolean {
 }
 
 function $pane(): JQuery {
-    return $("#pear-workspace-pane");
+    return $("#legacy-workspace-pane");
 }
 
 function ensure_pane(): JQuery {
@@ -60,7 +60,7 @@ function ensure_pane(): JQuery {
     }
     $feed.after(
         $("<div>")
-            .attr({id: "pear-workspace-pane", "data-armada": "workspace-scroller"})
+            .attr({id: "legacy-workspace-pane", "data-armada": "workspace-scroller"})
             .prop("hidden", true),
     );
     $existing = $pane();
@@ -89,15 +89,15 @@ function ensure_pane(): JQuery {
 }
 
 function update_tab_strips(): void {
-    $(".pear-workspace-mode-tab").each(function (this: HTMLElement) {
-        const selected = $(this).attr("data-pear-tab") === current_tab;
-        $(this).toggleClass("pear-workspace-tab-selected", selected);
+    $(".legacy-workspace-mode-tab").each(function (this: HTMLElement) {
+        const selected = $(this).attr("data-legacy-tab") === current_tab;
+        $(this).toggleClass("legacy-workspace-tab-selected", selected);
         $(this).attr("aria-selected", String(selected));
         this.tabIndex = selected ? 0 : -1;
     });
     // The views stand on every worktree from the frame of entry, before
     // the worktree's context has arrived (topic-entry-stability).
-    $(".pear-workspace-tabs").removeClass("pear-workspace-tabs-hidden");
+    $(".legacy-workspace-tabs").removeClass("legacy-workspace-tabs-hidden");
 }
 
 function ensure_pane_shell(): HTMLElement | undefined {
@@ -106,11 +106,11 @@ function ensure_pane_shell(): HTMLElement | undefined {
         return undefined;
     }
     if (pane_shell_key !== current_context_key || $container.children().length === 0) {
-        $container.html(render_pear_workspace_pane({}));
+        $container.html(render_legacy_workspace_pane({}));
         pane_shell_key = current_context_key;
-        document.dispatchEvent(new CustomEvent("pear:pane-shell-rendered"));
+        document.dispatchEvent(new CustomEvent("armada:pane-shell-rendered"));
     }
-    return $container.find(".pear-workspace-host")[0];
+    return $container.find(".legacy-workspace-host")[0];
 }
 
 // The shell, its editors and its stylesheet live in a lazy chunk. Fetch
@@ -191,14 +191,14 @@ async function mount_shell(): Promise<void> {
         ) {
             return;
         }
-        mounted = module.create_pear_workspace_shell({
+        mounted = module.create_armada_workspace_shell({
             root: host,
             workspaceId: workspace_id,
             initialRoom: current_tab,
         });
         shell = mounted;
         await mounted.ready;
-        finish_pear_workspace_metric("workspace_click_to_shell");
+        finish_armada_workspace_metric("workspace_click_to_shell");
         if (generation === shell_generation && shell === mounted) {
             host.removeAttribute("aria-busy");
         }
@@ -216,7 +216,7 @@ async function mount_shell(): Promise<void> {
         }
         host.removeAttribute("aria-busy");
         const failure = document.createElement("div");
-        failure.className = "pear-workspace-load-error";
+        failure.className = "legacy-workspace-load-error";
         failure.setAttribute("role", "alert");
         const message = document.createElement("span");
         message.textContent = "Workspace failed to load.";
@@ -247,7 +247,7 @@ function show_pane(): void {
         shell?.setRoom(current_tab);
     }
     if (shell !== undefined) {
-        finish_pear_workspace_metric("workspace_click_to_shell");
+        finish_armada_workspace_metric("workspace_click_to_shell");
     }
     update_tab_strips();
 }
@@ -263,9 +263,9 @@ function teardown_context(): void {
     $pane().empty();
 }
 
-function remembered_tab(key: string): PearWorkspaceTab {
+function remembered_tab(key: string): ArmadaWorkspaceTab {
     try {
-        const remembered = sessionStorage.getItem(`pear-tab:${key}`);
+        const remembered = sessionStorage.getItem(`legacy-tab:${key}`);
         if (remembered === "readme" || remembered === "files") {
             return remembered;
         }
@@ -275,9 +275,9 @@ function remembered_tab(key: string): PearWorkspaceTab {
     }
 }
 
-function remember_tab(tab: PearWorkspaceTab): void {
+function remember_tab(tab: ArmadaWorkspaceTab): void {
     try {
-        sessionStorage.setItem(`pear-tab:${current_context_key}`, tab);
+        sessionStorage.setItem(`legacy-tab:${current_context_key}`, tab);
     } catch {
         // Session storage can be unavailable; the current view still works.
     }
@@ -291,16 +291,16 @@ export function refresh_tab_strips(): void {
     update_tab_strips();
 }
 
-export function set_tab(tab: PearWorkspaceTab, update_history = true): void {
+export function set_tab(tab: ArmadaWorkspaceTab, update_history = true): void {
     if (tab === current_tab || (tab !== "chat" && !has_workspace())) {
         return;
     }
     current_tab = tab;
     if (tab !== "chat") {
-        begin_pear_workspace_metric("workspace_click_to_shell");
+        begin_armada_workspace_metric("workspace_click_to_shell");
     }
     if (update_history) {
-        write_pear_workspace_location(
+        write_armada_workspace_location(
             {view: tab, workspaceId: tab === "chat" ? null : (current_workspace_id ?? null)},
             "push",
         );
@@ -335,7 +335,7 @@ export function sync(options: {
             current_tab = "chat";
             hide_pane();
         }
-        const requested_location = read_pear_workspace_location();
+        const requested_location = read_armada_workspace_location();
         const restored =
             requested_location.view !== "chat" &&
             requested_location.workspaceId === next_workspace_id
@@ -359,7 +359,7 @@ export function sync(options: {
     }
     update_tab_strips();
     preload_shell_module();
-    write_pear_workspace_location(
+    write_armada_workspace_location(
         {
             view: current_tab,
             workspaceId: current_tab === "chat" ? null : (current_workspace_id ?? null),
@@ -378,7 +378,7 @@ export function refresh_if_open_on_settle(run_active: boolean): void {
 
 function on_workspace_tab_click(this: HTMLElement, event: JQuery.ClickEvent): void {
     event.preventDefault();
-    const tab = $(this).attr("data-pear-tab");
+    const tab = $(this).attr("data-legacy-tab");
     if (tab === "chat" || tab === "readme" || tab === "files") {
         set_tab(tab);
     }
@@ -386,12 +386,12 @@ function on_workspace_tab_click(this: HTMLElement, event: JQuery.ClickEvent): vo
 
 // The views of the place in front: the header's (legacy_header.ts).
 function active_workspace_tab_strip(): Element | undefined {
-    return document.querySelector("[data-armada=header] .pear-workspace-tabs") ?? undefined;
+    return document.querySelector("[data-armada=header] .legacy-workspace-tabs") ?? undefined;
 }
 
-function focus_workspace_tab(tab: PearWorkspaceTab, strip?: Element | null): void {
+function focus_workspace_tab(tab: ArmadaWorkspaceTab, strip?: Element | null): void {
     (strip ?? active_workspace_tab_strip())
-        ?.querySelector<HTMLButtonElement>(`.pear-workspace-mode-tab[data-pear-tab="${tab}"]`)
+        ?.querySelector<HTMLButtonElement>(`.legacy-workspace-mode-tab[data-legacy-tab="${tab}"]`)
         ?.focus();
 }
 
@@ -399,12 +399,12 @@ function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDown
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
         return;
     }
-    const strip = this.closest(".pear-workspace-tabs");
+    const strip = this.closest(".legacy-workspace-tabs");
     if (strip === null) {
         return;
     }
     const tabs = [
-        ...strip.querySelectorAll<HTMLButtonElement>(".pear-workspace-mode-tab[data-pear-tab]"),
+        ...strip.querySelectorAll<HTMLButtonElement>(".legacy-workspace-mode-tab[data-legacy-tab]"),
     ];
     const current_index = tabs.indexOf(this);
     if (current_index === -1 || tabs.length === 0) {
@@ -424,7 +424,7 @@ function on_workspace_tab_keydown(this: HTMLButtonElement, event: JQuery.KeyDown
         default:
             next_index = (current_index + 1) % tabs.length;
     }
-    const next_tab = tabs[next_index]?.dataset["pearTab"];
+    const next_tab = tabs[next_index]?.dataset["legacyTab"];
     if (next_tab !== "chat" && next_tab !== "readme" && next_tab !== "files") {
         return;
     }
@@ -458,7 +458,7 @@ function on_quick_open_event(event: Event): void {
 }
 
 function on_popstate(): void {
-    const location = read_pear_workspace_location();
+    const location = read_armada_workspace_location();
     set_tab(location.view, false);
     shell?.applyLocation();
 }
@@ -468,8 +468,8 @@ export function initialize(): void {
         return;
     }
     initialized = true;
-    $("body").on("click", ".pear-workspace-mode-tab", on_workspace_tab_click);
-    $("body").on("keydown", ".pear-workspace-mode-tab", on_workspace_tab_keydown);
+    $("body").on("click", ".legacy-workspace-mode-tab", on_workspace_tab_click);
+    $("body").on("keydown", ".legacy-workspace-mode-tab", on_workspace_tab_keydown);
     document.addEventListener(quick_open_event_name, on_quick_open_event);
     window.addEventListener("popstate", on_popstate);
 }

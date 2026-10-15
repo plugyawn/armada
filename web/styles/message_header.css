@@ -19,7 +19,7 @@
         height: 1.8666em; /* 28px at 15px em */
         border: 1px solid var(--color-message-header-contents-border);
         border-bottom-color: var(--color-message-header-contents-border-bottom);
-        border-radius: var(--pear-radius-card) var(--pear-radius-card) 0 0;
+        border-radius: var(--legacy-radius-card) var(--legacy-radius-card) 0 0;
     }
 
     &.message_header_stream {
@@ -287,18 +287,18 @@
     }
 }
 
-.pear-topic-header-status {
+.legacy-topic-header-status {
     /* The cluster's children participate directly in the recipient bar's
        flex: the runtime pill rides row 1 right-aligned; the commit line
        takes a full row of its own only when it has something to say. */
     display: contents;
 }
 
-.pear-topic-header-status::before {
+.legacy-topic-header-status::before {
     display: none;
 }
 
-.pear-topic-header-runtime-group {
+.legacy-topic-header-runtime-group {
     display: inline-flex;
     min-width: 0;
     flex: 0 1 auto;
@@ -307,15 +307,15 @@
     line-height: 1;
 }
 
-.pear-topic-header-commitline {
+.legacy-topic-header-commitline {
     display: inline-flex;
     overflow: hidden;
     min-width: 0;
     flex: 1 1 0;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--pear-space-2);
-    margin-inline: var(--pear-space-4) var(--pear-topic-bar-inset);
+    gap: var(--legacy-space-2);
+    margin-inline: var(--legacy-space-4) var(--legacy-topic-bar-inset);
     line-height: 1;
     /* Row two, after the room tabs; it gives way first when space is
        short. */
@@ -323,14 +323,14 @@
 }
 
 /* With no worktree there are no tabs, and the commit line leads the row. */
-.pear-topic-header-status:has(.pear-workspace-tabs-hidden)
-    .pear-topic-header-commitline {
+.legacy-topic-header-status:has(.legacy-workspace-tabs-hidden)
+    .legacy-topic-header-commitline {
     justify-content: flex-start;
-    margin-inline-start: var(--pear-topic-bar-inset);
+    margin-inline-start: var(--legacy-topic-bar-inset);
     padding-block: 3px 5px;
 }
 
-.pear-topic-header-control {
+.legacy-topic-header-control {
     appearance: none;
     display: inline-flex;
     justify-self: start;
@@ -342,7 +342,7 @@
     margin: 0;
     padding: 0.15em 0.25em;
     border: 0;
-    border-radius: var(--pear-radius-chip);
+    border-radius: var(--legacy-radius-chip);
     background: transparent;
     color: color-mix(
         in srgb,
@@ -355,9 +355,9 @@
     line-height: 1;
     white-space: nowrap;
     transition:
-        background-color var(--pear-dur-1) var(--pear-ease),
-        border-color var(--pear-dur-1) var(--pear-ease),
-        color var(--pear-dur-1) var(--pear-ease);
+        background-color var(--legacy-dur-1) var(--legacy-ease),
+        border-color var(--legacy-dur-1) var(--legacy-ease),
+        color var(--legacy-dur-1) var(--legacy-ease);
 
     &:hover,
     &:focus-visible {
@@ -371,11 +371,11 @@
         color: var(--color-text-message-header);
     }
 
-    .pear-runtime-menu-label,
-    .pear-runtime-menu-model-label,
-    .pear-runtime-menu-effort-label,
-    .pear-topic-header-branch-label,
-    .pear-topic-header-work-label {
+    .legacy-runtime-menu-label,
+    .legacy-runtime-menu-model-label,
+    .legacy-runtime-menu-effort-label,
+    .legacy-topic-header-branch-label,
+    .legacy-topic-header-work-label {
         display: block;
         min-width: 0;
         overflow: hidden;
@@ -386,22 +386,22 @@
     }
 }
 
-.pear-topic-header-runtime-control {
+.legacy-topic-header-runtime-control {
     flex: 0 1 auto;
     width: auto;
     min-width: 0;
     justify-content: flex-start;
-    gap: var(--pear-space-1);
+    gap: var(--legacy-space-1);
     /* No box: the runtime phrase sits in the bar in the pixel voice;
        the chevron plus a whisper of shading are the whole affordance.
        The pixel face runs optically large (tall x-height, square
        glyphs), so it sits a step below the title's size while still
        tracking the bar. */
-    padding: var(--pear-space-1) var(--pear-space-2);
-    border-radius: var(--pear-radius-chip);
+    padding: var(--legacy-space-1) var(--legacy-space-2);
+    border-radius: var(--legacy-radius-chip);
     background: color-mix(in srgb, currentcolor 6%, transparent);
-    color: var(--pear-ink-2);
-    font-family: var(--pear-font-pixel);
+    color: var(--legacy-ink-2);
+    font-family: var(--legacy-font-pixel);
     font-size: 0.75em;
     font-weight: 400;
 
@@ -409,15 +409,15 @@
     &:focus-visible,
     &.active-right-sidebar-menu {
         background: color-mix(in srgb, currentcolor 12%, transparent);
-        color: var(--pear-ink-1);
+        color: var(--legacy-ink-1);
     }
 }
 
-.pear-topic-header-running .pear-topic-header-runtime-control {
-    background: var(--pear-accent-fill);
+.legacy-topic-header-running .legacy-topic-header-runtime-control {
+    background: var(--legacy-accent-fill);
 }
 
-.pear-topic-header-runtime-control .pear-runtime-menu-glyph {
+.legacy-topic-header-runtime-control .legacy-runtime-menu-glyph {
     /* Always occupies its slot — the resting "·" swaps to the animated ✦
        while a run is live, so nothing in the header shifts. */
     flex: 0 0 auto;
@@ -425,53 +425,53 @@
     text-align: center;
 }
 
-.pear-topic-header-runtime-separator {
+.legacy-topic-header-runtime-separator {
     flex: 0 0 auto;
     opacity: 0.55;
 
     /* No effort label yet (context still loading) — don't strand the
        separator against the chevron. */
-    &:has(+ .pear-runtime-menu-effort-label:empty) {
+    &:has(+ .legacy-runtime-menu-effort-label:empty) {
         display: none;
     }
 }
 
-.pear-topic-header-control-chevron {
+.legacy-topic-header-control-chevron {
     flex: 0 0 auto;
     width: 0.75em;
     height: 0.75em;
     opacity: 0.8;
 }
 
-.pear-runtime-menu-model-label,
-.pear-runtime-menu-effort-label {
+.legacy-runtime-menu-model-label,
+.legacy-runtime-menu-effort-label {
     font-weight: inherit;
 }
 
-.pear-runtime-menu-model-label {
+.legacy-runtime-menu-model-label {
     max-width: 11em;
 }
 
-.pear-runtime-menu-effort-label {
+.legacy-runtime-menu-effort-label {
     max-width: 5em;
 }
 
-.pear-topic-header-git-icon {
+.legacy-topic-header-git-icon {
     flex: 0 0 auto;
     font-size: 0.95em;
     opacity: 0.7;
 }
 
-.pear-topic-header-branch-control {
+.legacy-topic-header-branch-control {
     flex: 0 1 auto;
     width: auto;
     justify-content: flex-start;
-    gap: var(--pear-space-1);
-    padding: 2px var(--pear-space-1);
-    border-radius: var(--pear-radius-px);
-    background: var(--pear-surface-2);
-    color: var(--pear-ink-2);
-    font-family: var(--pear-font-pixel);
+    gap: var(--legacy-space-1);
+    padding: 2px var(--legacy-space-1);
+    border-radius: var(--legacy-radius-px);
+    background: var(--legacy-surface-2);
+    color: var(--legacy-ink-2);
+    font-family: var(--legacy-font-pixel);
     /* Pinned px by design; see the pixel-type rule in the design spec. */
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
@@ -480,46 +480,46 @@
 
 /* The commit sentence: sha and meta in the pixel voice, the subject in
    the room's voice — one line that says what GitHub's header says. */
-.pear-topic-header-git-control {
+.legacy-topic-header-git-control {
     flex: 0 1 auto;
     width: auto;
     min-width: 0;
     justify-content: flex-start;
-    gap: var(--pear-space-1);
-    padding: 2px var(--pear-space-1);
-    border-radius: var(--pear-radius-px);
+    gap: var(--legacy-space-1);
+    padding: 2px var(--legacy-space-1);
+    border-radius: var(--legacy-radius-px);
     background: transparent;
-    font-family: var(--pear-font-pixel);
+    font-family: var(--legacy-font-pixel);
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 11px;
 }
 
-.pear-commitline-sha {
+.legacy-commitline-sha {
     flex: 0 0 auto;
-    color: var(--pear-ink-2);
+    color: var(--legacy-ink-2);
 }
 
-.pear-commitline-subject {
+.legacy-commitline-subject {
     min-width: 0;
     overflow: hidden;
-    color: var(--pear-ink-2);
-    font-family: var(--pear-font-ui);
+    color: var(--legacy-ink-2);
+    font-family: var(--legacy-font-ui);
     /* stylelint-disable-next-line declaration-property-unit-disallowed-list */
     font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.pear-commitline-meta {
+.legacy-commitline-meta {
     flex: 0 0 auto;
     overflow: hidden;
-    color: var(--pear-ink-3);
+    color: var(--legacy-ink-3);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.pear-topic-header-branch-control:hover,
-.pear-topic-header-branch-control:focus-visible {
+.legacy-topic-header-branch-control:hover,
+.legacy-topic-header-branch-control:focus-visible {
     background: transparent;
     color: color-mix(
         in srgb,
@@ -528,17 +528,17 @@
     );
 }
 
-.pear-topic-header-control-hidden {
-    /* Applied by pear_panel's header updater when a control has no
+.legacy-topic-header-control-hidden {
+    /* Applied by armada_panel's header updater when a control has no
        label yet (fresh topic, no repo); an empty pill and a dangling
        separator otherwise render as chrome debris. */
     display: none;
 }
 
-.pear-topic-header-work-dirty .pear-commitline-sha::after {
+.legacy-topic-header-work-dirty .legacy-commitline-sha::after {
     /* A dirty worktree earns one honest character. */
     content: "*";
-    color: var(--pear-warn);
+    color: var(--legacy-warn);
 }
 
 .on_hover_topic_read {

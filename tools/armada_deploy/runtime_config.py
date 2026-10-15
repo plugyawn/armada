@@ -40,12 +40,12 @@ RUNTIME_FILES = {
     ),
 }
 CADDY_SOURCE_PATH = Path("tools/armada_deploy/runtime/Caddyfile")
-CADDY_FQDN_TOKEN = b"{$PEAR_CADDY_FQDN}"
+CADDY_FQDN_TOKEN = b"{$ARMADA_CADDY_FQDN}"
 LEGACY_RUNTIME_FILES = (
-    Path("/etc/pear/caddy-basic-auth.env"),
-    Path("/etc/systemd/system/caddy.service.d/pear-basic-auth.conf"),
+    Path("/etc/armada/caddy-basic-auth.env"),
+    Path("/etc/systemd/system/caddy.service.d/armada-basic-auth.conf"),
 )
-PEAR_ENV_PATH = Path("/home/zulipdev/pear.env")
+ARMADA_ENV_PATH = Path("/home/zulipdev/armada.env")
 PRODUCTION_ASSET_ENV = "ZULIP_DEV_PRODUCTION_ASSETS"
 MAX_RUNTIME_FILE_BYTES = 1024 * 1024
 
@@ -230,7 +230,7 @@ def atomic_write(
             os.close(directory_fd)
 
 
-def upsert_pear_env(path: Path) -> None:
+def upsert_armada_env(path: Path) -> None:
     try:
         payload, old_stat = _read_regular_file_nofollow(path, required_mode=0o600)
         lines = payload.decode("utf-8").splitlines()
@@ -314,7 +314,7 @@ def verify_runtime_files(repo_root: Path, root_prefix: Path, fqdn: str) -> None:
             raise RuntimeConfigError(f"runtime file does not match source: {destination}")
 
 
-def verify_pear_env(path: Path) -> None:
+def verify_armada_env(path: Path) -> None:
     payload, path_stat = _read_regular_file_nofollow(path, required_mode=0o600)
     if os.geteuid() == 0:
         try:
@@ -356,8 +356,8 @@ def install(args: argparse.Namespace) -> None:
     validate_legacy_runtime_files(root_prefix)
     copy_runtime_files(repo_root, root_prefix, args.fqdn)
     remove_legacy_runtime_files(root_prefix)
-    pear_env_path = rooted(root_prefix, PEAR_ENV_PATH)
-    upsert_pear_env(pear_env_path)
+    armada_env_path = rooted(root_prefix, ARMADA_ENV_PATH)
+    upsert_armada_env(armada_env_path)
     verify(args)
 
 
@@ -366,7 +366,7 @@ def verify(args: argparse.Namespace) -> None:
     root_prefix = args.root_prefix.resolve()
     verify_runtime_files(repo_root, root_prefix, args.fqdn)
     verify_legacy_runtime_files_absent(root_prefix)
-    verify_pear_env(rooted(root_prefix, PEAR_ENV_PATH))
+    verify_armada_env(rooted(root_prefix, ARMADA_ENV_PATH))
     if not args.skip_caddy_validate:
         validate_caddy(rooted(root_prefix, Path("/etc/caddy/Caddyfile")), args.fqdn)
 

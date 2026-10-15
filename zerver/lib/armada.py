@@ -12,96 +12,103 @@ from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict
 from django.core.cache import cache
 from django.utils.translation import gettext as _
 
-from zerver.lib.armada_constants import PEAR_SERVER_CONTRACT_VERSION
+from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
 from zerver.lib.exceptions import JsonableError
 
-PEAR_AGENT_NAME: Final = "Pear"
-PEAR_BOT_SHORT_NAME: Final = "pear"
-PEAR_EMBEDDED_BOT_SERVICE: Final = "pear"
-PEAR_EXPLICIT_MENTION_MESSAGE_KEY: Final = "pear_explicit_mention"
-PEAR_TRIGGER_MESSAGE_KEY: Final = "pear_trigger"
-PEAR_FOLLOWUP_TRIGGER: Final = "pear_followup"
-PEAR_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS: Final = 5 * 60
-PEAR_AGENT_MENTION: Final = "@**Pear**"
-PEAR_PLAIN_AGENT_MENTION_RE: Final = compile(r"(?<![\w@])@Pear(?![\w-])", IGNORECASE)
-PEAR_DEFAULT_STREAM: Final = "pair-programming"
-PEAR_TOPIC_PREFIX: Final = "pear/"
-PEAR_DEFAULT_TOPIC: Final = "pear/session"
-PEAR_SESSION_ENDPOINT: Final = "/pear/session"
-PEAR_ACTIVE_SESSION_ENDPOINT: Final = "/pear/session/active"
-PEAR_CONFIG_ENDPOINT: Final = "/pear/config"
-PEAR_FIRST_RUN_ENDPOINT: Final = "/pear/first-run"
-PEAR_TOPIC_CONTEXT_ENDPOINT: Final = "/pear/topic-context"
-PEAR_RUNS_ENDPOINT: Final = "/pear/runs"
-PEAR_FIRST_RUN_STREAM: Final = "pear-sandbox"
-PEAR_FIRST_RUN_TOPIC: Final = "first run"
-PEAR_FIRST_RUN_STARTER_MESSAGE: Final = (
-    f"{PEAR_AGENT_MENTION} Start the sandbox session by saying what you can see "
+ARMADA_AGENT_NAME: Final = "Pear"
+ARMADA_BOT_SHORT_NAME: Final = "pear"
+ARMADA_EMBEDDED_BOT_SERVICE: Final = "armada"
+ARMADA_EXPLICIT_MENTION_MESSAGE_KEY: Final = "agent_explicit_mention"
+ARMADA_TRIGGER_MESSAGE_KEY: Final = "agent_trigger"
+ARMADA_FOLLOWUP_TRIGGER: Final = "agent_followup"
+ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS: Final = 5 * 60
+ARMADA_AGENT_MENTION: Final = "@**Pear**"
+ARMADA_PLAIN_AGENT_MENTION_RE: Final = compile(r"(?<![\w@])@Pear(?![\w-])", IGNORECASE)
+ARMADA_DEFAULT_STREAM: Final = "pair-programming"
+ARMADA_TOPIC_PREFIX: Final = "armada/"
+ARMADA_DEFAULT_TOPIC: Final = "armada/session"
+ARMADA_SESSION_ENDPOINT: Final = "/armada/session"
+ARMADA_ACTIVE_SESSION_ENDPOINT: Final = "/armada/session/active"
+ARMADA_CONFIG_ENDPOINT: Final = "/armada/config"
+ARMADA_FIRST_RUN_ENDPOINT: Final = "/armada/first-run"
+ARMADA_TOPIC_CONTEXT_ENDPOINT: Final = "/armada/topic-context"
+ARMADA_RUNS_ENDPOINT: Final = "/armada/runs"
+ARMADA_FIRST_RUN_STREAM: Final = "armada-sandbox"
+ARMADA_FIRST_RUN_TOPIC: Final = "first run"
+ARMADA_FIRST_RUN_STARTER_MESSAGE: Final = (
+    f"{ARMADA_AGENT_MENTION} Start the sandbox session by saying what you can see "
     "from this topic and the current workspace."
 )
-PEAR_OFFICIAL_AGENT_RUNTIME: Final = "codex-app-server"
-PEAR_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"
-PEAR_AGENT_RUNTIME_PACKAGES: Final = ("openai-agents", "openai-codex")
-PEAR_OFFICIAL_CODEX_SDK_PACKAGES: Final = ("@openai/codex-sdk", "openai-codex")
-PEAR_CODEX_MCP_TOOLS: Final = ("codex", "codex-reply")
-PEAR_REASONING_EFFORTS: Final[tuple[str, ...]] = ("low", "medium", "high", "xhigh", "max", "ultra")
-PEAR_URL_RE: Final = r"https?://[^\s<>]+"
-PEAR_FIX_BUG_PROMPT: Final = "Fix bug:"
-PEAR_STATUS_CHECK_PROMPT: Final = "Status check:"
-PEAR_HANDOFF_PROMPT: Final = "Handoff summary:"
-PEAR_CATCH_UP_PROMPT: Final = "Catch up:"
-PEAR_TRIAGE_PROMPT: Final = "Triage request:"
-PEAR_FIND_ANSWER_PROMPT: Final = "Find answer:"
-PEAR_REVIEW_PROMPT: Final = "Review changes:"
-PEAR_PLAN_PROMPT: Final = "Implementation plan:"
-PEAR_CHECKPOINT_PROMPT: Final = "Checkpoint:"
-PEAR_APPLY_PLAN_PROMPT: Final = "Apply plan:"
-PEAR_SAVE_WORK_PROMPT: Final = "Save work:"
-PEAR_VERIFY_CHANGES_PROMPT: Final = "Verify changes:"
-PEAR_DRAFT_ARTIFACT_PROMPT: Final = "Draft artifact:"
-PEAR_SELECTED_BOT_CONFIG_KEY: Final = "pear_selected"
-PEAR_SELECTED_BOT_CONFIG_VALUE: Final = "true"
-PEAR_QUESTION_TIMEOUT_SECONDS: Final = 600
-PEAR_QUESTION_POLL_SECONDS: Final = 2.0
+ARMADA_OFFICIAL_AGENT_RUNTIME: Final = "codex-app-server"
+ARMADA_OFFICIAL_AGENT_RUNTIME_LABEL: Final = "Codex app-server"
+ARMADA_AGENT_RUNTIME_PACKAGES: Final = ("openai-agents", "openai-codex")
+ARMADA_OFFICIAL_CODEX_SDK_PACKAGES: Final = ("@openai/codex-sdk", "openai-codex")
+ARMADA_CODEX_MCP_TOOLS: Final = ("codex", "codex-reply")
+ARMADA_REASONING_EFFORTS: Final[tuple[str, ...]] = (
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra",
+)
+ARMADA_URL_RE: Final = r"https?://[^\s<>]+"
+ARMADA_FIX_BUG_PROMPT: Final = "Fix bug:"
+ARMADA_STATUS_CHECK_PROMPT: Final = "Status check:"
+ARMADA_HANDOFF_PROMPT: Final = "Handoff summary:"
+ARMADA_CATCH_UP_PROMPT: Final = "Catch up:"
+ARMADA_TRIAGE_PROMPT: Final = "Triage request:"
+ARMADA_FIND_ANSWER_PROMPT: Final = "Find answer:"
+ARMADA_REVIEW_PROMPT: Final = "Review changes:"
+ARMADA_PLAN_PROMPT: Final = "Implementation plan:"
+ARMADA_CHECKPOINT_PROMPT: Final = "Checkpoint:"
+ARMADA_APPLY_PLAN_PROMPT: Final = "Apply plan:"
+ARMADA_SAVE_WORK_PROMPT: Final = "Save work:"
+ARMADA_VERIFY_CHANGES_PROMPT: Final = "Verify changes:"
+ARMADA_DRAFT_ARTIFACT_PROMPT: Final = "Draft artifact:"
+ARMADA_SELECTED_BOT_CONFIG_KEY: Final = "armada_selected"
+ARMADA_SELECTED_BOT_CONFIG_VALUE: Final = "true"
+ARMADA_QUESTION_TIMEOUT_SECONDS: Final = 600
+ARMADA_QUESTION_POLL_SECONDS: Final = 2.0
 
-PEAR_MAX_STEERING_SEGMENTS: Final = 4
+ARMADA_MAX_STEERING_SEGMENTS: Final = 4
 # This is visible only during the short message-event/run-event handoff before
 # the client mounts the animated live-progress chrome. Keep it visually
 # identical to that chrome instead of flashing a second placeholder design.
-PEAR_WORKING_MESSAGE: Final = "· Working"
-PEAR_NO_VISIBLE_RESPONSE_MESSAGE: Final = "Pear worker completed without a visible response."
-PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
-PEAR_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
-PEAR_LIVE_RUN_CACHE_KEY_PREFIX: Final = "pear:live-run:"
-PEAR_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
-PEAR_MARKDOWN_IMAGE_PATTERN: Final = r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
-PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset({"command", "file_change", "tool"})
-PearActiveSessionSource = Literal["server", "cache"]
-PearActiveSessionState = Literal["not_started", "requested", "active", "paused"]
-PearResponsePolicy = Literal["ambient", "mentions_only"]
-PEAR_DEFAULT_RESPONSE_POLICY: Final[PearResponsePolicy] = "ambient"
+ARMADA_WORKING_MESSAGE: Final = "· Working"
+ARMADA_NO_VISIBLE_RESPONSE_MESSAGE: Final = "Pear worker completed without a visible response."
+ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
+ARMADA_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
+ARMADA_LIVE_RUN_CACHE_KEY_PREFIX: Final = "armada:live-run:"
+ARMADA_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
+ARMADA_MARKDOWN_IMAGE_PATTERN: Final = r"!\[([^\]\n]*)\]\((\S+?)(?:\s+\"[^\"]*\")?\)"
+ARMADA_TRANSCRIPT_TOOL_DETAIL_KINDS: Final = frozenset({"command", "file_change", "tool"})
+ArmadaActiveSessionSource = Literal["server", "cache"]
+ArmadaActiveSessionState = Literal["not_started", "requested", "active", "paused"]
+ArmadaResponsePolicy = Literal["ambient", "mentions_only"]
+ARMADA_DEFAULT_RESPONSE_POLICY: Final[ArmadaResponsePolicy] = "ambient"
 logger = logging.getLogger(__name__)
-PearWorkerState = Literal[
+ArmadaWorkerState = Literal[
     "ready", "blocked_missing_stream", "blocked_paused", "waiting_for_request"
 ]
-PearWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
+ArmadaWorkerRunStatus = Literal["queued", "running", "done", "failed", "cancelled"]
 
 
-class PearRunCancelledError(Exception):
+class ArmadaRunCancelledError(Exception):
     pass
 
 
-class PearWorkerLeaseLostError(Exception):
+class ArmadaWorkerLeaseLostError(Exception):
     """The durable run was reclaimed by another worker attempt."""
 
 
-def pear_topic_scope(stream: str, topic: str) -> tuple[str, str]:
+def armada_topic_scope(stream: str, topic: str) -> tuple[str, str]:
     """Return Zulip's case-insensitive logical channel/topic identity."""
     return (stream.lower(), topic.lower())
 
 
 @dataclass(frozen=True)
-class PearSessionDefaults:
+class ArmadaSessionDefaults:
     agent_name: str
     agent_mention: str
     stream: str
@@ -109,7 +116,7 @@ class PearSessionDefaults:
     topic_prefix: str
 
 
-class PearSessionPayload(TypedDict):
+class ArmadaSessionPayload(TypedDict):
     agent_name: str
     agent_mention: str
     stream: str
@@ -137,62 +144,62 @@ class PearSessionPayload(TypedDict):
     server_contract_version: int
 
 
-class PearSteeringEvent(TypedDict):
+class ArmadaSteeringEvent(TypedDict):
     instruction: str
     message_id: int
     explicitly_addressed: bool
 
 
-class PearPendingSteeringEvent(TypedDict):
+class ArmadaPendingSteeringEvent(TypedDict):
     event_id: int
     message_id: int
     instruction: str
-    referenced_threads: NotRequired[list["PearReferencedThread"]]
+    referenced_threads: NotRequired[list["ArmadaReferencedThread"]]
 
 
-class PearLiveRunOperation(TypedDict):
+class ArmadaLiveRunOperation(TypedDict):
     kind: str
     label: str
 
 
-class PearLiveRunState(TypedDict):
+class ArmadaLiveRunState(TypedDict):
     status: str
     updated_at: float
-    operation: NotRequired[PearLiveRunOperation | None]
+    operation: NotRequired[ArmadaLiveRunOperation | None]
     has_visible_assistant_text: NotRequired[bool]
 
 
-class PearRecentMessage(TypedDict):
+class ArmadaRecentMessage(TypedDict):
     message_id: int
     sender: str
     sender_is_bot: bool | None
     content: str
 
 
-class PearReferencedMessage(PearRecentMessage):
+class ArmadaReferencedMessage(ArmadaRecentMessage):
     topic: str
 
 
-class PearReferencedThread(TypedDict):
+class ArmadaReferencedThread(TypedDict):
     stream: str
     topic: str | None
     accessible: bool
     truncated: bool
-    messages: list[PearReferencedMessage]
+    messages: list[ArmadaReferencedMessage]
 
 
-PearAmbientAddressee = Literal["pear", "other", "general", "uncertain"]
-PearAmbientAction = Literal["ignore", "steer", "run"]
-PearResponsePresentation = Literal["compact", "prose", "status", "explainer", "diff"]
+ArmadaAmbientAddressee = Literal["agent", "other", "general", "uncertain"]
+ArmadaAmbientAction = Literal["ignore", "steer", "run"]
+ArmadaResponsePresentation = Literal["compact", "prose", "status", "explainer", "diff"]
 
 
-class PearAmbientDecision(TypedDict):
-    addressee: PearAmbientAddressee
-    action: PearAmbientAction
-    presentation: PearResponsePresentation
+class ArmadaAmbientDecision(TypedDict):
+    addressee: ArmadaAmbientAddressee
+    action: ArmadaAmbientAction
+    presentation: ArmadaResponsePresentation
 
 
-class PearWorkspaceContext(TypedDict, total=False):
+class ArmadaWorkspaceContext(TypedDict, total=False):
     repository: str
     remote_url: str
     worktree: str
@@ -201,11 +208,11 @@ class PearWorkspaceContext(TypedDict, total=False):
     head: str
 
 
-class PearActiveSessionSummary(TypedDict):
-    state: PearActiveSessionState
+class ArmadaActiveSessionSummary(TypedDict):
+    state: ArmadaActiveSessionState
     stream: str
     topic: str
-    source: PearActiveSessionSource
+    source: ArmadaActiveSessionSource
     stream_exists: bool
     topic_message_count: int
     request_count: int
@@ -214,32 +221,32 @@ class PearActiveSessionSummary(TypedDict):
     latest_codex_thread_id: str | None
     latest_codex_trigger_message_id: int | None
     current_trigger_message_id: int | None
-    response_policy: PearResponsePolicy
+    response_policy: ArmadaResponsePolicy
     is_paused: bool
-    worker_state: PearWorkerState
+    worker_state: ArmadaWorkerState
     worker_can_run: bool
     worker_blocked_reason: str | None
-    recent_messages: list[PearRecentMessage]
-    routing_messages: list[PearRecentMessage]
-    referenced_threads: list[PearReferencedThread]
-    workspace_context: PearWorkspaceContext
+    recent_messages: list[ArmadaRecentMessage]
+    routing_messages: list[ArmadaRecentMessage]
+    referenced_threads: list[ArmadaReferencedThread]
+    workspace_context: ArmadaWorkspaceContext
 
 
-class PearBotIdentity(TypedDict):
+class ArmadaBotIdentity(TypedDict):
     bot_user_id: int
     bot_full_name: str
     bot_email: str
     selected: bool
 
 
-class PearSetupStep(TypedDict):
+class ArmadaSetupStep(TypedDict):
     key: str
     label: str
     complete: bool
     detail: str
 
 
-class PearConfigPayload(TypedDict):
+class ArmadaConfigPayload(TypedDict):
     bot_short_name: str
     embedded_bot_service: str
     embedded_bots_enabled: bool
@@ -261,16 +268,16 @@ class PearConfigPayload(TypedDict):
     selected_bot_user_id: int | None
     selected_bot_full_name: str | None
     selected_bot_email: str | None
-    bot_identities: list[PearBotIdentity]
-    setup_steps: list[PearSetupStep]
+    bot_identities: list[ArmadaBotIdentity]
+    setup_steps: list[ArmadaSetupStep]
 
 
-class PearWorkerToolResult(TypedDict):
+class ArmadaWorkerToolResult(TypedDict):
     label: str
     value: str
 
 
-class PearTokenUsage(TypedDict, total=False):
+class ArmadaTokenUsage(TypedDict, total=False):
     input_tokens: int
     cached_input_tokens: int
     output_tokens: int
@@ -279,7 +286,7 @@ class PearTokenUsage(TypedDict, total=False):
     cache_percent: float
 
 
-class PearWorkerTranscriptEvent(TypedDict, total=False):
+class ArmadaWorkerTranscriptEvent(TypedDict, total=False):
     kind: str
     status: str
     title: str
@@ -288,46 +295,46 @@ class PearWorkerTranscriptEvent(TypedDict, total=False):
     metadata: dict[str, Any]
 
 
-PearWorkerTranscriptCallback = Callable[[PearWorkerTranscriptEvent], None]
-PearWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], PearActiveSessionSummary]
+ArmadaWorkerTranscriptCallback = Callable[[ArmadaWorkerTranscriptEvent], None]
+ArmadaWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], ArmadaActiveSessionSummary]
 
 
 # The engine's request_user_input questions, normalized: the provider
 # returns per-question answer lists, or None to decline/timeout.
-PearUserInputProvider = Callable[[list[dict[str, Any]]], dict[str, list[str]] | None]
+ArmadaUserInputProvider = Callable[[list[dict[str, Any]]], dict[str, list[str]] | None]
 
 
-class PearWorkerToolRunner(Protocol):
+class ArmadaWorkerToolRunner(Protocol):
     def __call__(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str,
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> Sequence[PearWorkerToolResult]: ...
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> Sequence[ArmadaWorkerToolResult]: ...
 
 
-class PearWorkerRunResult(TypedDict):
+class ArmadaWorkerRunResult(TypedDict):
     should_post: bool
     worker_can_run: bool
     content: str | None
     codex_thread_id: str
     tool_count: int
-    tool_results: list[PearWorkerToolResult]
+    tool_results: list[ArmadaWorkerToolResult]
 
 
-PEAR_PERSISTENT_MESSAGE_LIMIT: Final = 5000
+ARMADA_PERSISTENT_MESSAGE_LIMIT: Final = 5000
 
 
-def trim_pear_text(value: str, *, limit: int) -> str:
+def trim_armada_text(value: str, *, limit: int) -> str:
     value = value.strip()
     if len(value) <= limit:
         return value
     return f"{value[: max(limit - 15, 0)].rstrip()}... [truncated]"
 
 
-def pear_token_usage_int(value: object) -> int | None:
+def armada_token_usage_int(value: object) -> int | None:
     if isinstance(value, int):
         return value
     if isinstance(value, float) and value.is_integer():
@@ -335,7 +342,7 @@ def pear_token_usage_int(value: object) -> int | None:
     return None
 
 
-def pear_normalize_token_usage(value: object) -> PearTokenUsage | None:
+def armada_normalize_token_usage(value: object) -> ArmadaTokenUsage | None:
     if not isinstance(value, dict):
         return None
     raw_usage: object = value
@@ -359,10 +366,10 @@ def pear_normalize_token_usage(value: object) -> PearTokenUsage | None:
         ),
         "total_tokens": ("total_tokens", "totalTokens"),
     }
-    usage: PearTokenUsage = {}
+    usage: ArmadaTokenUsage = {}
     for normalized_key, source_keys in field_names.items():
         for source_key in source_keys:
-            token_value = pear_token_usage_int(raw_usage.get(source_key))
+            token_value = armada_token_usage_int(raw_usage.get(source_key))
             if token_value is not None:
                 usage[normalized_key] = token_value
                 break
@@ -375,7 +382,7 @@ def pear_normalize_token_usage(value: object) -> PearTokenUsage | None:
     return usage
 
 
-def pear_token_usage_summary(usage: PearTokenUsage) -> str:
+def armada_token_usage_summary(usage: ArmadaTokenUsage) -> str:
     input_tokens = usage.get("input_tokens", 0)
     cached_input_tokens = usage.get("cached_input_tokens", 0)
     output_tokens = usage.get("output_tokens", 0)
@@ -394,7 +401,7 @@ def pear_token_usage_summary(usage: PearTokenUsage) -> str:
     )
 
 
-class PearWorkerRunStore(Protocol):
+class ArmadaWorkerRunStore(Protocol):
     def start(
         self,
         bot_handler: Any,
@@ -409,7 +416,7 @@ class PearWorkerRunStore(Protocol):
         self,
         bot_handler: Any,
         message_id: int,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
         *,
         stream: str,
         topic: str,
@@ -418,15 +425,15 @@ class PearWorkerRunStore(Protocol):
     ) -> None: ...
 
 
-class PearWorkerDispatcher(Protocol):
+class ArmadaWorkerDispatcher(Protocol):
     def dispatch(
         self,
-        pear_handler: Any,
+        armada_handler: Any,
         bot_handler: Any,
         message: dict[str, Any],
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         message_id: int,
         stream: str,
         topic: str,
@@ -439,40 +446,40 @@ class PearWorkerDispatcher(Protocol):
     ) -> None: ...
 
 
-class PearAddressingIntentClassifier(Protocol):
+class ArmadaAddressingIntentClassifier(Protocol):
     def __call__(
         self,
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> PearAmbientDecision: ...
+    ) -> ArmadaAmbientDecision: ...
 
 
-def get_pear_session_defaults() -> PearSessionDefaults:
-    return PearSessionDefaults(
-        agent_name=PEAR_AGENT_NAME,
-        agent_mention=PEAR_AGENT_MENTION,
-        stream=PEAR_DEFAULT_STREAM,
-        topic=PEAR_DEFAULT_TOPIC,
-        topic_prefix=PEAR_TOPIC_PREFIX,
+def get_armada_session_defaults() -> ArmadaSessionDefaults:
+    return ArmadaSessionDefaults(
+        agent_name=ARMADA_AGENT_NAME,
+        agent_mention=ARMADA_AGENT_MENTION,
+        stream=ARMADA_DEFAULT_STREAM,
+        topic=ARMADA_DEFAULT_TOPIC,
+        topic_prefix=ARMADA_TOPIC_PREFIX,
     )
 
 
-def build_pear_seed_message(task: str = "") -> str:
+def build_armada_seed_message(task: str = "") -> str:
     task = task.strip()
     task_line = task if task else "Start the topic Codex thread:"
-    return f"{PEAR_AGENT_MENTION} {task_line}"
+    return f"{ARMADA_AGENT_MENTION} {task_line}"
 
 
-def build_pear_fix_bug_message(summary: str = "") -> str:
+def build_armada_fix_bug_message(summary: str = "") -> str:
     summary = summary.strip()
     bug_line = f"Bug: {summary}" if summary else "Bug: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_FIX_BUG_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_FIX_BUG_PROMPT}",
             "",
             bug_line,
             "Observed behavior: ",
@@ -484,12 +491,12 @@ def build_pear_fix_bug_message(summary: str = "") -> str:
     )
 
 
-def build_pear_status_check_message(focus: str = "") -> str:
+def build_armada_status_check_message(focus: str = "") -> str:
     focus = focus.strip()
     focus_line = f"Focus: {focus}" if focus else "Focus: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_STATUS_CHECK_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_STATUS_CHECK_PROMPT}",
             "",
             focus_line,
             "Completed since last update: ",
@@ -501,12 +508,12 @@ def build_pear_status_check_message(focus: str = "") -> str:
     )
 
 
-def build_pear_handoff_message(audience: str = "") -> str:
+def build_armada_handoff_message(audience: str = "") -> str:
     audience = audience.strip()
     audience_line = f"Audience: {audience}" if audience else "Audience: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_HANDOFF_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_HANDOFF_PROMPT}",
             "",
             audience_line,
             "Goal and scope: ",
@@ -519,12 +526,12 @@ def build_pear_handoff_message(audience: str = "") -> str:
     )
 
 
-def build_pear_catch_up_message(since: str = "") -> str:
+def build_armada_catch_up_message(since: str = "") -> str:
     since = since.strip()
     since_line = f"Since: {since}" if since else "Since: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_CATCH_UP_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_CATCH_UP_PROMPT}",
             "",
             since_line,
             "Summarize changes: ",
@@ -537,12 +544,12 @@ def build_pear_catch_up_message(since: str = "") -> str:
     )
 
 
-def build_pear_triage_message(request: str = "") -> str:
+def build_armada_triage_message(request: str = "") -> str:
     request = request.strip()
     request_line = f"Request: {request}" if request else "Request: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_TRIAGE_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_TRIAGE_PROMPT}",
             "",
             request_line,
             "Possible duplicate or related work: check this topic, documents, linked PRs, and linked issues.",
@@ -556,12 +563,12 @@ def build_pear_triage_message(request: str = "") -> str:
     )
 
 
-def build_pear_find_answer_message(question: str = "") -> str:
+def build_armada_find_answer_message(question: str = "") -> str:
     question = question.strip()
     question_line = f"Question: {question}" if question else "Question: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_FIND_ANSWER_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_FIND_ANSWER_PROMPT}",
             "",
             question_line,
             "Search scope: use this topic first, then linked docs, tickets, PRs, and repo files when workspace context is available.",
@@ -572,12 +579,12 @@ def build_pear_find_answer_message(question: str = "") -> str:
     )
 
 
-def build_pear_review_message(scope: str = "") -> str:
+def build_armada_review_message(scope: str = "") -> str:
     scope = scope.strip()
     scope_line = f"Scope: {scope}" if scope else "Scope: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_REVIEW_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_REVIEW_PROMPT}",
             "",
             scope_line,
             "Review focus: correctness, regressions, test coverage, and integration risk.",
@@ -589,12 +596,12 @@ def build_pear_review_message(scope: str = "") -> str:
     )
 
 
-def build_pear_plan_message(goal: str = "") -> str:
+def build_armada_plan_message(goal: str = "") -> str:
     goal = goal.strip()
     goal_line = f"Goal: {goal}" if goal else "Goal: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_PLAN_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_PLAN_PROMPT}",
             "",
             goal_line,
             "Constraints: ",
@@ -607,12 +614,12 @@ def build_pear_plan_message(goal: str = "") -> str:
     )
 
 
-def build_pear_checkpoint_message(focus: str = "") -> str:
+def build_armada_checkpoint_message(focus: str = "") -> str:
     focus = focus.strip()
     focus_line = f"Focus: {focus}" if focus else "Focus: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_CHECKPOINT_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_CHECKPOINT_PROMPT}",
             "",
             focus_line,
             "Post: current branch, diff summary, changed files, verification run, blockers, and next step.",
@@ -622,12 +629,12 @@ def build_pear_checkpoint_message(focus: str = "") -> str:
     )
 
 
-def build_pear_apply_plan_message(scope: str = "") -> str:
+def build_armada_apply_plan_message(scope: str = "") -> str:
     scope = scope.strip()
     scope_line = f"Scope: {scope}" if scope else "Scope: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_APPLY_PLAN_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_APPLY_PLAN_PROMPT}",
             "",
             scope_line,
             "Plan source: use the latest Implementation plan in this topic unless a different plan is pasted here.",
@@ -638,12 +645,12 @@ def build_pear_apply_plan_message(scope: str = "") -> str:
     )
 
 
-def build_pear_save_work_message(scope: str = "") -> str:
+def build_armada_save_work_message(scope: str = "") -> str:
     scope = scope.strip()
     scope_line = f"Scope: {scope}" if scope else "Scope: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_SAVE_WORK_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_SAVE_WORK_PROMPT}",
             "",
             scope_line,
             "Persist: preserve the current work as a branch, draft PR, patch, or explicit diff summary that this Zulip topic can recover from.",
@@ -654,12 +661,12 @@ def build_pear_save_work_message(scope: str = "") -> str:
     )
 
 
-def build_pear_verify_changes_message(target: str = "") -> str:
+def build_armada_verify_changes_message(target: str = "") -> str:
     target = target.strip()
     target_line = f"Target: {target}" if target else "Target: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_VERIFY_CHANGES_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_VERIFY_CHANGES_PROMPT}",
             "",
             target_line,
             "Checks to run: use the planned verification or the most relevant local test, lint, typecheck, or smoke command.",
@@ -669,12 +676,12 @@ def build_pear_verify_changes_message(target: str = "") -> str:
     )
 
 
-def build_pear_draft_artifact_message(artifact: str = "") -> str:
+def build_armada_draft_artifact_message(artifact: str = "") -> str:
     artifact = artifact.strip()
     artifact_line = f"Artifact: {artifact}" if artifact else "Artifact: "
     return "\n".join(
         [
-            f"{PEAR_AGENT_MENTION} {PEAR_DRAFT_ARTIFACT_PROMPT}",
+            f"{ARMADA_AGENT_MENTION} {ARMADA_DRAFT_ARTIFACT_PROMPT}",
             "",
             artifact_line,
             "Source context: use this Zulip topic and the typed workspace context.",
@@ -686,12 +693,12 @@ def build_pear_draft_artifact_message(artifact: str = "") -> str:
     )
 
 
-def pear_worker_task_line(task: str = "") -> str:
-    task = clean_pear_task_text(task)
+def armada_worker_task_line(task: str = "") -> str:
+    task = clean_armada_task_text(task)
     return task if task else "Continue the topic Codex thread."
 
 
-def pear_transcript_status_label(status: str) -> str:
+def armada_transcript_status_label(status: str) -> str:
     if status == "queued":
         return "queued"
     if status == "running":
@@ -705,8 +712,8 @@ def pear_transcript_status_label(status: str) -> str:
     return status or "working..."
 
 
-def pear_transcript_event_key(
-    event: PearWorkerTranscriptEvent,
+def armada_transcript_event_key(
+    event: ArmadaWorkerTranscriptEvent,
     *,
     anonymous_index: int,
 ) -> str:
@@ -716,21 +723,21 @@ def pear_transcript_event_key(
     return f"event:{anonymous_index}"
 
 
-def pear_transcript_event_is_tool_detail(event: PearWorkerTranscriptEvent) -> bool:
-    return event.get("kind", "") in PEAR_TRANSCRIPT_TOOL_DETAIL_KINDS
+def armada_transcript_event_is_tool_detail(event: ArmadaWorkerTranscriptEvent) -> bool:
+    return event.get("kind", "") in ARMADA_TRANSCRIPT_TOOL_DETAIL_KINDS
 
 
-def pear_distinct_transcript_tool_events(
-    events: Sequence[PearWorkerTranscriptEvent],
-) -> list[PearWorkerTranscriptEvent]:
+def armada_distinct_transcript_tool_events(
+    events: Sequence[ArmadaWorkerTranscriptEvent],
+) -> list[ArmadaWorkerTranscriptEvent]:
     """Return the latest event for each user-visible tool action."""
-    event_by_key: dict[str, PearWorkerTranscriptEvent] = {}
+    event_by_key: dict[str, ArmadaWorkerTranscriptEvent] = {}
     event_keys: list[str] = []
     anonymous_index = 0
     for event in events:
-        if not pear_transcript_event_is_tool_detail(event):
+        if not armada_transcript_event_is_tool_detail(event):
             continue
-        key = pear_transcript_event_key(event, anonymous_index=anonymous_index)
+        key = armada_transcript_event_key(event, anonymous_index=anonymous_index)
         if key.startswith("event:"):
             anonymous_index += 1
         if key not in event_by_key:
@@ -739,7 +746,7 @@ def pear_distinct_transcript_tool_events(
             continue
 
         previous = event_by_key[key]
-        merged: PearWorkerTranscriptEvent = event.copy()
+        merged: ArmadaWorkerTranscriptEvent = event.copy()
         previous_metadata = previous.get("metadata")
         event_metadata = event.get("metadata")
         previous_is_human_result = isinstance(previous_metadata, dict) and bool(
@@ -765,51 +772,51 @@ def pear_distinct_transcript_tool_events(
     return [event_by_key[key] for key in event_keys]
 
 
-def normalize_pear_visible_markdown(text: str) -> str:
+def normalize_armada_visible_markdown(text: str) -> str:
     def replacement(match: Any) -> str:
         label = str(match.group(1)).strip() or "image"
         url = str(match.group(2)).strip()
         return f"[{label}]({url})"
 
-    return sub(PEAR_MARKDOWN_IMAGE_PATTERN, replacement, text)
+    return sub(ARMADA_MARKDOWN_IMAGE_PATTERN, replacement, text)
 
 
-def pear_visible_assistant_text(
+def armada_visible_assistant_text(
     text: str,
     *,
-    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
+    limit: int | None = ARMADA_PERSISTENT_MESSAGE_LIMIT,
 ) -> str:
-    visible_text = normalize_pear_visible_markdown(text.strip())
+    visible_text = normalize_armada_visible_markdown(text.strip())
     if limit is not None:
-        visible_text = trim_pear_text(visible_text, limit=limit)
+        visible_text = trim_armada_text(visible_text, limit=limit)
     return visible_text
 
 
-PEAR_IMAGE_EMBED_LIMIT: Final = 3
-PEAR_IMAGE_EMBED_MAX_BYTES: Final = 4_000_000
-PEAR_IMAGE_EMBED_PATTERN: Final = compile(
+ARMADA_IMAGE_EMBED_LIMIT: Final = 3
+ARMADA_IMAGE_EMBED_MAX_BYTES: Final = 4_000_000
+ARMADA_IMAGE_EMBED_PATTERN: Final = compile(
     r"`([A-Za-z0-9_\-./]+\.(?:png|jpe?g|gif|webp))`", IGNORECASE
 )
-PEAR_IMAGE_CONTENT_TYPES: Final = {
+ARMADA_IMAGE_CONTENT_TYPES: Final = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".gif": "image/gif",
     ".webp": "image/webp",
 }
-PEAR_ARTIFACT_MEDIA_MAX_BYTES: Final = {
+ARMADA_ARTIFACT_MEDIA_MAX_BYTES: Final = {
     ".png": 4_000_000,
     ".svg": 1_000_000,
     ".webp": 4_000_000,
     ".webm": 12_000_000,
 }
-PEAR_ARTIFACT_MEDIA_CONTENT_TYPES: Final = {
+ARMADA_ARTIFACT_MEDIA_CONTENT_TYPES: Final = {
     ".png": "image/png",
     ".svg": "image/svg+xml",
     ".webp": "image/webp",
     ".webm": "video/webm",
 }
-PEAR_ARTIFACT_MEDIA_FIELDS: Final = {
+ARMADA_ARTIFACT_MEDIA_FIELDS: Final = {
     "source": "src",
     "sourceDark": "srcDark",
     "posterSource": "poster",
@@ -817,7 +824,7 @@ PEAR_ARTIFACT_MEDIA_FIELDS: Final = {
 }
 
 
-def _pear_artifact_media_signature_is_valid(extension: str, data: bytes) -> bool:
+def _armada_artifact_media_signature_is_valid(extension: str, data: bytes) -> bool:
     if extension == ".png":
         return data.startswith(b"\x89PNG\r\n\x1a\n")
     if extension == ".webp":
@@ -827,7 +834,7 @@ def _pear_artifact_media_signature_is_valid(extension: str, data: bytes) -> bool
     return False
 
 
-def pear_materialize_artifact_media(
+def armada_materialize_artifact_media(
     document: dict[str, Any],
     *,
     workdir: str,
@@ -837,11 +844,11 @@ def pear_materialize_artifact_media(
     """Replace bounded workspace media sources with durable upload URLs."""
     from pathlib import Path
 
-    from zerver.lib.armada_artifact import PearArtifactError, canonicalize_pear_artifact
+    from zerver.lib.armada_artifact import ArmadaArtifactError, canonicalize_armada_artifact
     from zerver.lib.armada_worker import (
-        pear_read_bytes_path,
-        pear_resolve_file_path,
-        pear_workspace_relative_path,
+        armada_read_bytes_path,
+        armada_resolve_file_path,
+        armada_workspace_relative_path,
     )
     from zerver.lib.upload import upload_message_attachment
     from zerver.models import Attachment, UserProfile
@@ -849,21 +856,21 @@ def pear_materialize_artifact_media(
     assert isinstance(bot_profile, UserProfile)
     resolved_document = json.loads(json.dumps(document))
     if not any(block.get("type") == "media" for block in resolved_document["blocks"]):
-        canonical, _encoded = canonicalize_pear_artifact(resolved_document)
+        canonical, _encoded = canonicalize_armada_artifact(resolved_document)
         return canonical, []
     if not workdir.startswith("/"):
-        raise PearArtifactError("generated media requires an active workspace")
+        raise ArmadaArtifactError("generated media requires an active workspace")
     try:
         workspace_root = Path(workdir).resolve(strict=True)
     except OSError as error:
-        raise PearArtifactError("generated media workspace is unavailable") from error
+        raise ArmadaArtifactError("generated media workspace is unavailable") from error
 
     uploaded_by_source: dict[str, tuple[str, str]] = {}
     claimed_path_ids: list[str] = []
     for block in resolved_document["blocks"]:
         if block.get("type") != "media":
             continue
-        for source_field, url_field in PEAR_ARTIFACT_MEDIA_FIELDS.items():
+        for source_field, url_field in ARMADA_ARTIFACT_MEDIA_FIELDS.items():
             source = block.pop(source_field, None)
             if source is None:
                 continue
@@ -873,50 +880,50 @@ def pear_materialize_artifact_media(
                 block[url_field], path_id = cached
                 claimed_path_ids.append(path_id)
                 continue
-            path = pear_workspace_relative_path(workdir, source)
+            path = armada_workspace_relative_path(workdir, source)
             if path is None:
-                raise PearArtifactError(f"generated media path is unsafe: {source}")
+                raise ArmadaArtifactError(f"generated media path is unsafe: {source}")
             try:
-                resolved_path = pear_resolve_file_path(
+                resolved_path = armada_resolve_file_path(
                     path,
                     isolation_username=isolation_username,
                 )
             except OSError as error:
-                raise PearArtifactError(f"generated media is unavailable: {source}") from error
+                raise ArmadaArtifactError(f"generated media is unavailable: {source}") from error
             if resolved_path is None:
-                raise PearArtifactError(f"generated media is missing: {source}")
+                raise ArmadaArtifactError(f"generated media is missing: {source}")
             if not resolved_path.is_relative_to(workspace_root):
-                raise PearArtifactError(f"generated media path escapes the workspace: {source}")
+                raise ArmadaArtifactError(f"generated media path escapes the workspace: {source}")
             extension = resolved_path.suffix.lower()
-            max_bytes = PEAR_ARTIFACT_MEDIA_MAX_BYTES.get(extension)
-            content_type = PEAR_ARTIFACT_MEDIA_CONTENT_TYPES.get(extension)
+            max_bytes = ARMADA_ARTIFACT_MEDIA_MAX_BYTES.get(extension)
+            content_type = ARMADA_ARTIFACT_MEDIA_CONTENT_TYPES.get(extension)
             if max_bytes is None or content_type is None:
-                raise PearArtifactError(f"unsupported generated media type: {extension}")
-            data = pear_read_bytes_path(
+                raise ArmadaArtifactError(f"unsupported generated media type: {extension}")
+            data = armada_read_bytes_path(
                 resolved_path,
                 isolation_username=isolation_username,
                 max_bytes=max_bytes,
             )
             if not data:
-                raise PearArtifactError(f"generated media is empty: {source}")
+                raise ArmadaArtifactError(f"generated media is empty: {source}")
             if len(data) > max_bytes:
-                raise PearArtifactError(f"generated media exceeds {max_bytes} bytes: {source}")
+                raise ArmadaArtifactError(f"generated media exceeds {max_bytes} bytes: {source}")
             if extension == ".svg":
                 from zerver.lib.armada_generated_vector import (
-                    PearGeneratedVectorError,
-                    sanitize_pear_generated_vector,
+                    ArmadaGeneratedVectorError,
+                    sanitize_armada_generated_vector,
                 )
 
                 try:
-                    data = sanitize_pear_generated_vector(data)
-                except PearGeneratedVectorError as error:
-                    raise PearArtifactError(f"generated SVG is unsafe: {source}") from error
-            elif not _pear_artifact_media_signature_is_valid(extension, data):
-                raise PearArtifactError(
+                    data = sanitize_armada_generated_vector(data)
+                except ArmadaGeneratedVectorError as error:
+                    raise ArmadaArtifactError(f"generated SVG is unsafe: {source}") from error
+            elif not _armada_artifact_media_signature_is_valid(extension, data):
+                raise ArmadaArtifactError(
                     f"generated media content does not match {extension}: {source}"
                 )
             digest = hashlib.sha256(data).hexdigest()
-            file_name = f"pear-artifact-{digest}{extension}"
+            file_name = f"armada-artifact-{digest}{extension}"
             attachment = Attachment.objects.filter(
                 owner=bot_profile,
                 file_name=file_name,
@@ -937,11 +944,11 @@ def pear_materialize_artifact_media(
             block[url_field] = url
             uploaded_by_source[source] = (url, path_id)
             claimed_path_ids.append(path_id)
-    canonical, _encoded = canonicalize_pear_artifact(resolved_document)
+    canonical, _encoded = canonicalize_armada_artifact(resolved_document)
     return canonical, list(dict.fromkeys(claimed_path_ids))
 
 
-def pear_embed_workspace_images(
+def armada_embed_workspace_images(
     content: str,
     *,
     workdir: str,
@@ -953,36 +960,36 @@ def pear_embed_workspace_images(
     unreachable filesystem paths. Bounded and best-effort."""
     if not workdir or "`" not in content:
         return content
-    # Lazy imports: pear_worker imports this module at load time.
+    # Lazy imports: armada_worker imports this module at load time.
     from pathlib import Path
 
-    from zerver.lib.armada_worker import pear_read_bytes_path, pear_workspace_relative_path
+    from zerver.lib.armada_worker import armada_read_bytes_path, armada_workspace_relative_path
     from zerver.lib.upload import upload_message_attachment
 
     seen: set[str] = set()
     links: list[str] = []
-    for match in PEAR_IMAGE_EMBED_PATTERN.finditer(content):
+    for match in ARMADA_IMAGE_EMBED_PATTERN.finditer(content):
         relative_path = match.group(1)
         if relative_path in seen:
             continue
         seen.add(relative_path)
-        if len(links) >= PEAR_IMAGE_EMBED_LIMIT:
+        if len(links) >= ARMADA_IMAGE_EMBED_LIMIT:
             break
-        resolved = pear_workspace_relative_path(workdir, relative_path)
+        resolved = armada_workspace_relative_path(workdir, relative_path)
         if resolved is None:
             continue
         try:
-            data = pear_read_bytes_path(
+            data = armada_read_bytes_path(
                 resolved,
                 isolation_username=isolation_username,
-                max_bytes=PEAR_IMAGE_EMBED_MAX_BYTES,
+                max_bytes=ARMADA_IMAGE_EMBED_MAX_BYTES,
             )
         except OSError:
             continue
-        if not data or len(data) > PEAR_IMAGE_EMBED_MAX_BYTES:
+        if not data or len(data) > ARMADA_IMAGE_EMBED_MAX_BYTES:
             continue
         file_name = Path(relative_path).name
-        content_type = PEAR_IMAGE_CONTENT_TYPES.get(Path(file_name).suffix.lower())
+        content_type = ARMADA_IMAGE_CONTENT_TYPES.get(Path(file_name).suffix.lower())
         if content_type is None:
             continue
         try:
@@ -998,31 +1005,31 @@ def pear_embed_workspace_images(
     return content
 
 
-def pear_result_tool_text(
-    tool_results: Sequence[PearWorkerToolResult],
+def armada_result_tool_text(
+    tool_results: Sequence[ArmadaWorkerToolResult],
     *,
-    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
+    limit: int | None = ARMADA_PERSISTENT_MESSAGE_LIMIT,
 ) -> str:
     for result in tool_results:
         if result["label"].strip().lower() == "result":
-            value = normalize_pear_visible_markdown(result["value"].strip())
+            value = normalize_armada_visible_markdown(result["value"].strip())
             if limit is None:
                 return value
-            return trim_pear_text(value, limit=limit)
+            return trim_armada_text(value, limit=limit)
     return ""
 
 
-def pear_diagnostic_tool_text(tool_results: Sequence[PearWorkerToolResult]) -> str:
+def armada_diagnostic_tool_text(tool_results: Sequence[ArmadaWorkerToolResult]) -> str:
     for result in tool_results:
         if result["label"].strip().lower() not in {"error", "diagnostic"}:
             continue
-        value = trim_pear_text(result["value"].strip(), limit=5000)
+        value = trim_armada_text(result["value"].strip(), limit=5000)
         if value:
             return value
     for result in tool_results:
         if result["label"].strip().lower() != "verification":
             continue
-        value = trim_pear_text(result["value"].strip(), limit=5000)
+        value = trim_armada_text(result["value"].strip(), limit=5000)
         normalized = value.lower()
         if (
             "runtime is disabled" in normalized
@@ -1033,11 +1040,11 @@ def pear_diagnostic_tool_text(tool_results: Sequence[PearWorkerToolResult]) -> s
     return ""
 
 
-def attach_pear_artifact_to_message(
+def attach_armada_artifact_to_message(
     bot_handler: Any,
     *,
     message_id: int | None,
-    tool_results: Sequence[PearWorkerToolResult],
+    tool_results: Sequence[ArmadaWorkerToolResult],
     workdir: str = "",
     isolation_username: str | None = None,
 ) -> bool:
@@ -1045,7 +1052,7 @@ def attach_pear_artifact_to_message(
 
     Submessages are append-only. A retried or steered turn may therefore add a
     newer artifact to the same progress/result message; clients render the last
-    valid pear_artifact entry and older clients safely ignore the unknown type.
+    valid armada_artifact entry and older clients safely ignore the unknown type.
     """
     if message_id is None:
         return False
@@ -1054,9 +1061,9 @@ def attach_pear_artifact_to_message(
     from zerver.actions.submessage import do_add_submessage
     from zerver.actions.uploads import do_claim_attachments
     from zerver.lib.armada_artifact import (
-        PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+        ARMADA_ARTIFACT_SUBMESSAGE_TYPE,
         artifacts_from_tool_results,
-        canonicalize_pear_artifact,
+        canonicalize_armada_artifact,
     )
     from zerver.models import Message, SubMessage, UserProfile
 
@@ -1065,20 +1072,20 @@ def attach_pear_artifact_to_message(
         return False
     user_profile = bot_handler.user_profile
     assert isinstance(user_profile, UserProfile)
-    document, path_ids = pear_materialize_artifact_media(
+    document, path_ids = armada_materialize_artifact_media(
         json.loads(artifacts[-1]),
         workdir=workdir,
         isolation_username=isolation_username,
         bot_profile=user_profile,
     )
-    _document, content = canonicalize_pear_artifact(document)
+    _document, content = canonicalize_armada_artifact(document)
     with transaction.atomic(savepoint=False):
         message = Message.objects.select_for_update().get(id=message_id)
         if message.sender_id != user_profile.id:
             raise JsonableError(_("Pear cannot attach an artifact to another sender's message."))
         if SubMessage.objects.filter(
             message=message,
-            msg_type=PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+            msg_type=ARMADA_ARTIFACT_SUBMESSAGE_TYPE,
             content=content,
         ).exists():
             return True
@@ -1086,7 +1093,7 @@ def attach_pear_artifact_to_message(
             realm=user_profile.realm,
             sender_id=user_profile.id,
             message_id=message.id,
-            msg_type=PEAR_ARTIFACT_SUBMESSAGE_TYPE,
+            msg_type=ARMADA_ARTIFACT_SUBMESSAGE_TYPE,
             content=content,
         )
         if path_ids and not do_claim_attachments(message, path_ids):
@@ -1094,10 +1101,10 @@ def attach_pear_artifact_to_message(
     return True
 
 
-def pear_visible_assistant_texts(
-    transcript_events: Sequence[PearWorkerTranscriptEvent],
+def armada_visible_assistant_texts(
+    transcript_events: Sequence[ArmadaWorkerTranscriptEvent],
     *,
-    limit: int | None = PEAR_PERSISTENT_MESSAGE_LIMIT,
+    limit: int | None = ARMADA_PERSISTENT_MESSAGE_LIMIT,
 ) -> list[str]:
     visible_text_by_key: dict[str, str] = {}
     visible_text_keys: list[str] = []
@@ -1108,7 +1115,7 @@ def pear_visible_assistant_texts(
         body = event.get("body", "")
         if not body.strip():
             continue
-        visible_text = pear_visible_assistant_text(body, limit=limit)
+        visible_text = armada_visible_assistant_text(body, limit=limit)
         if not visible_text:
             continue
         item_id = event.get("item_id")
@@ -1127,21 +1134,21 @@ def pear_visible_assistant_texts(
     return [visible_text_by_key[key] for key in visible_text_keys]
 
 
-def pear_visible_response_text(
+def armada_visible_response_text(
     *,
-    status: PearWorkerRunStatus,
+    status: ArmadaWorkerRunStatus,
     assistant_texts: Sequence[str],
-    tool_results: Sequence[PearWorkerToolResult],
+    tool_results: Sequence[ArmadaWorkerToolResult],
 ) -> str:
     assistant_text = (
-        trim_pear_text(assistant_texts[-1].strip(), limit=5000) if assistant_texts else ""
+        trim_armada_text(assistant_texts[-1].strip(), limit=5000) if assistant_texts else ""
     )
     if assistant_text:
         return assistant_text
-    result_text = pear_result_tool_text(tool_results)
+    result_text = armada_result_tool_text(tool_results)
     if result_text:
         return result_text
-    diagnostic_text = pear_diagnostic_tool_text(tool_results)
+    diagnostic_text = armada_diagnostic_tool_text(tool_results)
     if diagnostic_text:
         return diagnostic_text
     if status == "failed":
@@ -1149,62 +1156,62 @@ def pear_visible_response_text(
     if status == "cancelled":
         return "Pear worker cancelled."
     if status == "done":
-        return PEAR_NO_VISIBLE_RESPONSE_MESSAGE
+        return ARMADA_NO_VISIBLE_RESPONSE_MESSAGE
     return ""
 
 
-def build_pear_live_transcript_message(
+def build_armada_live_transcript_message(
     *,
     task: str,
-    status: PearWorkerRunStatus,
-    transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
-    tool_results: Sequence[PearWorkerToolResult] = (),
+    status: ArmadaWorkerRunStatus,
+    transcript_events: Sequence[ArmadaWorkerTranscriptEvent] = (),
+    tool_results: Sequence[ArmadaWorkerToolResult] = (),
 ) -> str:
     if status == "failed":
         for event in reversed(transcript_events):
             if event.get("kind") != "error":
                 continue
-            error = trim_pear_text(event.get("body", "").strip(), limit=4500)
+            error = trim_armada_text(event.get("body", "").strip(), limit=4500)
             if error:
                 return f"Pear worker failed.\n\nError: {error}"
-    assistant_texts = pear_visible_assistant_texts(transcript_events)
-    visible_response = pear_visible_response_text(
+    assistant_texts = armada_visible_assistant_texts(transcript_events)
+    visible_response = armada_visible_response_text(
         status=status,
         assistant_texts=assistant_texts,
         tool_results=tool_results,
     )
     if status in {"queued", "running"}:
-        return visible_response or PEAR_WORKING_MESSAGE
+        return visible_response or ARMADA_WORKING_MESSAGE
     lines = [visible_response]
     return "\n".join(line for line in lines if line)
 
 
-def pear_live_run_cache_key(trigger_message_id: int) -> str:
-    return f"{PEAR_LIVE_RUN_CACHE_KEY_PREFIX}{trigger_message_id}"
+def armada_live_run_cache_key(trigger_message_id: int) -> str:
+    return f"{ARMADA_LIVE_RUN_CACHE_KEY_PREFIX}{trigger_message_id}"
 
 
-def write_pear_live_run_state(
+def write_armada_live_run_state(
     trigger_message_id: int,
     *,
-    status: PearWorkerRunStatus,
-    operation: PearLiveRunOperation | None = None,
+    status: ArmadaWorkerRunStatus,
+    operation: ArmadaLiveRunOperation | None = None,
     has_visible_assistant_text: bool = False,
 ) -> None:
-    state: PearLiveRunState = {
+    state: ArmadaLiveRunState = {
         "status": status,
         "updated_at": time.time(),
         "operation": operation,
         "has_visible_assistant_text": has_visible_assistant_text,
     }
     cache.set(
-        pear_live_run_cache_key(trigger_message_id),
+        armada_live_run_cache_key(trigger_message_id),
         state,
-        timeout=PEAR_LIVE_RUN_CACHE_TTL_SECONDS,
+        timeout=ARMADA_LIVE_RUN_CACHE_TTL_SECONDS,
     )
 
 
-def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
-    state = cache.get(pear_live_run_cache_key(trigger_message_id))
+def get_armada_live_run_state(trigger_message_id: int) -> ArmadaLiveRunState | None:
+    state = cache.get(armada_live_run_cache_key(trigger_message_id))
     if not isinstance(state, dict):
         return None
     status = state.get("status")
@@ -1214,7 +1221,7 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
     if not isinstance(updated_at, int | float):
         return None
     raw_operation = state.get("operation")
-    operation: PearLiveRunOperation | None = None
+    operation: ArmadaLiveRunOperation | None = None
     if isinstance(raw_operation, dict):
         kind = raw_operation.get("kind")
         label = raw_operation.get("label")
@@ -1228,10 +1235,10 @@ def get_pear_live_run_state(trigger_message_id: int) -> PearLiveRunState | None:
     }
 
 
-def build_pear_ack_message(task: str = "") -> str:
+def build_armada_ack_message(task: str = "") -> str:
     return "\n".join(
         [
-            build_pear_live_transcript_message(
+            build_armada_live_transcript_message(
                 task=task,
                 status="queued",
             )
@@ -1239,8 +1246,8 @@ def build_pear_ack_message(task: str = "") -> str:
     )
 
 
-def build_pear_steering_task(
-    steering_events: Sequence[PearPendingSteeringEvent],
+def build_armada_steering_task(
+    steering_events: Sequence[ArmadaPendingSteeringEvent],
 ) -> str:
     instructions = [
         event["instruction"].strip() for event in steering_events if event["instruction"].strip()
@@ -1254,13 +1261,13 @@ def build_pear_steering_task(
         [
             "Steering update:",
             *[f"- {instruction}" for instruction in instructions],
-            *format_pear_referenced_threads(referenced_threads),
+            *format_armada_referenced_threads(referenced_threads),
         ]
     )
 
 
-def format_pear_referenced_threads(
-    referenced_threads: Sequence[PearReferencedThread],
+def format_armada_referenced_threads(
+    referenced_threads: Sequence[ArmadaReferencedThread],
 ) -> list[str]:
     if not referenced_threads:
         return []
@@ -1302,9 +1309,9 @@ def format_pear_referenced_threads(
     return lines
 
 
-def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
+def normalize_armada_response_policy(value: str | None) -> ArmadaResponsePolicy:
     if value is None:
-        return PEAR_DEFAULT_RESPONSE_POLICY
+        return ARMADA_DEFAULT_RESPONSE_POLICY
     if value == "ambient":
         return "ambient"
     if value == "mentions_only":
@@ -1312,59 +1319,59 @@ def normalize_pear_response_policy(value: str | None) -> PearResponsePolicy:
     raise ValueError(f"Invalid Pear response policy: {value!r}")
 
 
-def clean_pear_task_text(content: str = "") -> str:
+def clean_armada_task_text(content: str = "") -> str:
     task = content.strip()
-    task = task.replace(PEAR_AGENT_MENTION, " ")
-    task = PEAR_PLAIN_AGENT_MENTION_RE.sub(" ", task)
+    task = task.replace(ARMADA_AGENT_MENTION, " ")
+    task = ARMADA_PLAIN_AGENT_MENTION_RE.sub(" ", task)
     return " ".join(task.split())
 
 
-def normalize_pear_explicit_request_content(
+def normalize_armada_explicit_request_content(
     content: str = "",
     *,
     explicitly_addressed: bool = False,
 ) -> str:
     content = content.strip()
-    if explicitly_addressed and not is_pear_request_message(content):
+    if explicitly_addressed and not is_armada_request_message(content):
         return f"@Pear {content}".strip()
     return content
 
 
-def is_pear_thread_request_message(content: str) -> bool:
-    return is_pear_request_message(content)
+def is_armada_thread_request_message(content: str) -> bool:
+    return is_armada_request_message(content)
 
 
-def is_pear_task_request_message(content: str) -> bool:
-    return is_pear_thread_request_message(content)
+def is_armada_task_request_message(content: str) -> bool:
+    return is_armada_thread_request_message(content)
 
 
-def pear_worker_task_for_message(
+def armada_worker_task_for_message(
     content: str,
-    active_session: PearActiveSessionSummary | None = None,
+    active_session: ArmadaActiveSessionSummary | None = None,
 ) -> str:
     del active_session
-    return clean_pear_task_text(content)
+    return clean_armada_task_text(content)
 
 
-def pear_worker_should_start(
+def armada_worker_should_start(
     content: str,
-    active_session: PearActiveSessionSummary | None = None,
+    active_session: ArmadaActiveSessionSummary | None = None,
     *,
     explicitly_addressed: bool = False,
     response_policy: str | None = None,
 ) -> bool:
     del active_session
-    content = normalize_pear_explicit_request_content(
+    content = normalize_armada_explicit_request_content(
         content,
         explicitly_addressed=explicitly_addressed,
     )
-    if is_pear_request_message(content):
+    if is_armada_request_message(content):
         return True
     del response_policy
     return False
 
 
-def build_pear_worker_blocked_message(active_session: PearActiveSessionSummary) -> str:
+def build_armada_worker_blocked_message(active_session: ArmadaActiveSessionSummary) -> str:
     reason = active_session["worker_blocked_reason"] or "Pear worker is not ready."
     return "\n".join(
         [
@@ -1375,7 +1382,7 @@ def build_pear_worker_blocked_message(active_session: PearActiveSessionSummary) 
     )
 
 
-def build_pear_worker_start_blocked_message(reason: str) -> str:
+def build_armada_worker_start_blocked_message(reason: str) -> str:
     return "\n".join(
         [
             "Pear worker is not starting.",
@@ -1385,7 +1392,7 @@ def build_pear_worker_start_blocked_message(reason: str) -> str:
     )
 
 
-def build_pear_worker_failed_message(error: str) -> str:
+def build_armada_worker_failed_message(error: str) -> str:
     return "\n".join(
         [
             "Pear worker failed before posting progress.",
@@ -1395,7 +1402,7 @@ def build_pear_worker_failed_message(error: str) -> str:
     )
 
 
-def build_pear_worker_failed_after_progress_message(error: str) -> str:
+def build_armada_worker_failed_after_progress_message(error: str) -> str:
     return "\n".join(
         [
             "Pear worker failed after posting progress.",
@@ -1405,13 +1412,13 @@ def build_pear_worker_failed_after_progress_message(error: str) -> str:
     )
 
 
-def build_pear_worker_progress_message(
+def build_armada_worker_progress_message(
     *,
     task: str,
-    tool_results: Sequence[PearWorkerToolResult],
-    transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
+    tool_results: Sequence[ArmadaWorkerToolResult],
+    transcript_events: Sequence[ArmadaWorkerTranscriptEvent] = (),
 ) -> str:
-    return build_pear_live_transcript_message(
+    return build_armada_live_transcript_message(
         task=task,
         status="running",
         transcript_events=transcript_events,
@@ -1419,13 +1426,13 @@ def build_pear_worker_progress_message(
     )
 
 
-def build_pear_worker_completed_message(
+def build_armada_worker_completed_message(
     *,
     task: str,
-    tool_results: Sequence[PearWorkerToolResult],
-    transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
+    tool_results: Sequence[ArmadaWorkerToolResult],
+    transcript_events: Sequence[ArmadaWorkerTranscriptEvent] = (),
 ) -> str:
-    return build_pear_live_transcript_message(
+    return build_armada_live_transcript_message(
         task=task,
         status="done",
         transcript_events=transcript_events,
@@ -1433,10 +1440,10 @@ def build_pear_worker_completed_message(
     )
 
 
-def split_pear_persistent_message(
+def split_armada_persistent_message(
     content: str,
     *,
-    limit: int = PEAR_PERSISTENT_MESSAGE_LIMIT,
+    limit: int = ARMADA_PERSISTENT_MESSAGE_LIMIT,
 ) -> list[str]:
     clean_content = content.strip()
     if not clean_content:
@@ -1493,39 +1500,39 @@ def split_pear_persistent_message(
     return chunks
 
 
-def build_pear_worker_completed_message_chunks(
+def build_armada_worker_completed_message_chunks(
     *,
     task: str,
-    tool_results: Sequence[PearWorkerToolResult],
-    transcript_events: Sequence[PearWorkerTranscriptEvent] = (),
+    tool_results: Sequence[ArmadaWorkerToolResult],
+    transcript_events: Sequence[ArmadaWorkerTranscriptEvent] = (),
 ) -> list[str]:
-    result_text = pear_result_tool_text(tool_results, limit=None)
+    result_text = armada_result_tool_text(tool_results, limit=None)
     if result_text:
-        return split_pear_persistent_message(result_text)
-    assistant_texts = pear_visible_assistant_texts(transcript_events, limit=None)
+        return split_armada_persistent_message(result_text)
+    assistant_texts = armada_visible_assistant_texts(transcript_events, limit=None)
     if assistant_texts:
-        return split_pear_persistent_message(assistant_texts[-1])
-    completed_message = build_pear_worker_completed_message(
+        return split_armada_persistent_message(assistant_texts[-1])
+    completed_message = build_armada_worker_completed_message(
         task=task,
         tool_results=tool_results,
         transcript_events=transcript_events,
     )
-    return split_pear_persistent_message(completed_message)
+    return split_armada_persistent_message(completed_message)
 
 
-PEAR_MATH_CODE_SEGMENT_PATTERN = re.compile(
+ARMADA_MATH_CODE_SEGMENT_PATTERN = re.compile(
     r"(```.*?(?:```|\Z)|~~~.*?(?:~~~|\Z)|`[^`\n]*`)", re.DOTALL
 )
-PEAR_MATH_DISPLAY_PATTERN = re.compile(r"\\\[\s*(.*?)\s*\\\]", re.DOTALL)
-PEAR_MATH_INLINE_PATTERN = re.compile(r"\\\((.*?)\\\)", re.DOTALL)
+ARMADA_MATH_DISPLAY_PATTERN = re.compile(r"\\\[\s*(.*?)\s*\\\]", re.DOTALL)
+ARMADA_MATH_INLINE_PATTERN = re.compile(r"\\\((.*?)\\\)", re.DOTALL)
 
 
-PEAR_TASK_MARKER_PATTERN = re.compile(
+ARMADA_TASK_MARKER_PATTERN = re.compile(
     r"^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]\s?", flags=re.MULTILINE
 )
 
 
-def normalize_pear_task_markers(content: str) -> str:
+def normalize_armada_task_markers(content: str) -> str:
     """Rewrite markdown task-list markers into glyphs Zulip renders.
 
     Zulip has no task-list markdown (its checklists are the /todo
@@ -1534,7 +1541,7 @@ def normalize_pear_task_markers(content: str) -> str:
     """
     if "[ ]" not in content and "[x]" not in content and "[X]" not in content:
         return content
-    parts = PEAR_MATH_CODE_SEGMENT_PATTERN.split(content)
+    parts = ARMADA_MATH_CODE_SEGMENT_PATTERN.split(content)
     for index, part in enumerate(parts):
         if index % 2 == 1:
             continue
@@ -1543,11 +1550,11 @@ def normalize_pear_task_markers(content: str) -> str:
             glyph = "\u2610" if match.group(2) == " " else "\u2611"
             return f"{match.group(1)}{glyph} "
 
-        parts[index] = PEAR_TASK_MARKER_PATTERN.sub(replace_marker, part)
+        parts[index] = ARMADA_TASK_MARKER_PATTERN.sub(replace_marker, part)
     return "".join(parts)
 
 
-def normalize_pear_math_delimiters(content: str) -> str:
+def normalize_armada_math_delimiters(content: str) -> str:
     """Rewrite LaTeX \\[ \\] / \\( \\) math into Zulip's dialect.
 
     Models habitually emit LaTeX's native delimiters, which Zulip's
@@ -1558,7 +1565,7 @@ def normalize_pear_math_delimiters(content: str) -> str:
     """
     if "\\[" not in content and "\\(" not in content:
         return content
-    parts = PEAR_MATH_CODE_SEGMENT_PATTERN.split(content)
+    parts = ARMADA_MATH_CODE_SEGMENT_PATTERN.split(content)
     for index, part in enumerate(parts):
         if index % 2 == 1:
             continue
@@ -1571,15 +1578,15 @@ def normalize_pear_math_delimiters(content: str) -> str:
                 return "$$" + body + "$$"
             return "\n```math\n" + body + "\n```\n"
 
-        part = PEAR_MATH_DISPLAY_PATTERN.sub(replace_display, part)
-        part = PEAR_MATH_INLINE_PATTERN.sub(
+        part = ARMADA_MATH_DISPLAY_PATTERN.sub(replace_display, part)
+        part = ARMADA_MATH_INLINE_PATTERN.sub(
             lambda match: "$$" + match.group(1).strip() + "$$", part
         )
         parts[index] = part
     return "".join(parts)
 
 
-def update_pear_worker_status_message(
+def update_armada_worker_status_message(
     bot_handler: Any,
     *,
     progress_message_id: int | None,
@@ -1594,7 +1601,7 @@ def update_pear_worker_status_message(
     try:
         update_payload: dict[str, object] = {
             "message_id": progress_message_id,
-            "content": normalize_pear_task_markers(normalize_pear_math_delimiters(content)),
+            "content": normalize_armada_task_markers(normalize_armada_math_delimiters(content)),
         }
         if rendering_only:
             update_payload["rendering_only"] = True
@@ -1615,7 +1622,7 @@ def update_pear_worker_status_message(
     return True
 
 
-def send_pear_worker_typing_notification(
+def send_armada_worker_typing_notification(
     bot_handler: Any,
     *,
     stream: str,
@@ -1645,8 +1652,8 @@ def send_pear_worker_typing_notification(
         return False
 
 
-def pear_worker_summary_from_tool_results(
-    tool_results: Sequence[PearWorkerToolResult],
+def armada_worker_summary_from_tool_results(
+    tool_results: Sequence[ArmadaWorkerToolResult],
 ) -> str:
     for preferred_label in ("Result", "Error", "Verification"):
         for result in tool_results:
@@ -1660,9 +1667,9 @@ def pear_worker_summary_from_tool_results(
     return ""
 
 
-def pear_worker_event_tool_results(
-    tool_results: Sequence[PearWorkerToolResult],
-) -> list[PearWorkerToolResult]:
+def armada_worker_event_tool_results(
+    tool_results: Sequence[ArmadaWorkerToolResult],
+) -> list[ArmadaWorkerToolResult]:
     """Keep structured artifact content out of run telemetry and diagnostics."""
     return [
         {
@@ -1677,9 +1684,9 @@ def pear_worker_event_tool_results(
     ]
 
 
-def pear_sanitized_child_agent_event(
-    event: PearWorkerTranscriptEvent,
-) -> PearWorkerTranscriptEvent | None:
+def armada_sanitized_child_agent_event(
+    event: ArmadaWorkerTranscriptEvent,
+) -> ArmadaWorkerTranscriptEvent | None:
     """Persist only the display contract for a native child thread.
 
     The Codex protocol can carry private reasoning and raw command output.
@@ -1699,21 +1706,21 @@ def pear_sanitized_child_agent_event(
         "tool",
     }:
         return None
-    sanitized: PearWorkerTranscriptEvent = {"kind": kind}
+    sanitized: ArmadaWorkerTranscriptEvent = {"kind": kind}
     status = event.get("status")
     if isinstance(status, str):
-        sanitized["status"] = trim_pear_text(status, limit=40)
+        sanitized["status"] = trim_armada_text(status, limit=40)
     title = event.get("title")
     if isinstance(title, str) and title.strip():
-        sanitized["title"] = trim_pear_text(title, limit=500)
+        sanitized["title"] = trim_armada_text(title, limit=500)
     item_id = event.get("item_id")
     if isinstance(item_id, str) and item_id:
-        sanitized["item_id"] = trim_pear_text(item_id, limit=500)
+        sanitized["item_id"] = trim_armada_text(item_id, limit=500)
     body = event.get("body")
     if kind in {"assistant", "error"} and isinstance(body, str) and body.strip():
-        sanitized["body"] = trim_pear_text(
+        sanitized["body"] = trim_armada_text(
             body,
-            limit=PEAR_PERSISTENT_MESSAGE_LIMIT if kind == "assistant" else 1000,
+            limit=ARMADA_PERSISTENT_MESSAGE_LIMIT if kind == "assistant" else 1000,
         )
 
     raw_metadata = event.get("metadata")
@@ -1734,13 +1741,13 @@ def pear_sanitized_child_agent_event(
         if value is None and key == "parent_thread_id":
             metadata[key] = None
         elif isinstance(value, str):
-            metadata[key] = trim_pear_text(value, limit=500)
+            metadata[key] = trim_armada_text(value, limit=500)
     raw_steps = raw_metadata.get("steps")
     if kind == "plan" and isinstance(raw_steps, list):
         metadata["steps"] = [
             {
-                "step": trim_pear_text(str(step["step"]), limit=500),
-                "status": trim_pear_text(str(step.get("status") or "pending"), limit=40),
+                "step": trim_armada_text(str(step["step"]), limit=500),
+                "status": trim_armada_text(str(step.get("status") or "pending"), limit=40),
             }
             for step in raw_steps[:64]
             if isinstance(step, dict) and isinstance(step.get("step"), str)
@@ -1759,7 +1766,7 @@ def pear_sanitized_child_agent_event(
             if value is None and key == "parent_thread_id":
                 thread[key] = None
             elif isinstance(value, str):
-                thread[key] = trim_pear_text(value, limit=500)
+                thread[key] = trim_armada_text(value, limit=500)
         for key in ("created_at", "updated_at"):
             value = raw_thread.get(key)
             if isinstance(value, int | float) and not isinstance(value, bool):
@@ -1767,7 +1774,7 @@ def pear_sanitized_child_agent_event(
         thread_status = raw_thread.get("status")
         if isinstance(thread_status, dict) and isinstance(thread_status.get("type"), str):
             thread["status"] = {
-                "type": trim_pear_text(thread_status["type"], limit=40),
+                "type": trim_armada_text(thread_status["type"], limit=40),
             }
         metadata["thread"] = thread
     if metadata:
@@ -1775,23 +1782,23 @@ def pear_sanitized_child_agent_event(
     return sanitized
 
 
-class PearWorkerRuntime:
-    def __init__(self, tool_runner: PearWorkerToolRunner | None = None) -> None:
+class ArmadaWorkerRuntime:
+    def __init__(self, tool_runner: ArmadaWorkerToolRunner | None = None) -> None:
         self.tool_runner = tool_runner
 
     def run(
         self,
         *,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str = "",
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> PearWorkerRunResult:
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> ArmadaWorkerRunResult:
         if not active_session["worker_can_run"]:
             return {
                 "should_post": True,
                 "worker_can_run": False,
-                "content": build_pear_worker_blocked_message(active_session),
+                "content": build_armada_worker_blocked_message(active_session),
                 "codex_thread_id": self.codex_thread_id(),
                 "tool_count": 0,
                 "tool_results": [],
@@ -1808,8 +1815,8 @@ class PearWorkerRuntime:
         return {
             "should_post": True,
             "worker_can_run": True,
-            "content": pear_result_tool_text(tool_results, limit=None)
-            or build_pear_worker_completed_message(task=task, tool_results=tool_results),
+            "content": armada_result_tool_text(tool_results, limit=None)
+            or build_armada_worker_completed_message(task=task, tool_results=tool_results),
             "codex_thread_id": self.codex_thread_id(),
             "tool_count": len(tool_results),
             "tool_results": tool_results,
@@ -1818,23 +1825,23 @@ class PearWorkerRuntime:
     def run_side(
         self,
         *,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str = "",
         conversation_key: str | None = None,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> PearWorkerRunResult:
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> ArmadaWorkerRunResult:
         if not active_session["worker_can_run"]:
             return {
                 "should_post": True,
                 "worker_can_run": False,
-                "content": build_pear_worker_blocked_message(active_session),
+                "content": build_armada_worker_blocked_message(active_session),
                 "codex_thread_id": self.codex_thread_id(),
                 "tool_count": 0,
                 "tool_results": [],
             }
         if self.tool_runner is None:
-            tool_results: list[PearWorkerToolResult] = [
+            tool_results: list[ArmadaWorkerToolResult] = [
                 {
                     "label": "Error",
                     "value": "Pear cannot start a side conversation without Codex app-server.",
@@ -1860,8 +1867,8 @@ class PearWorkerRuntime:
         return {
             "should_post": True,
             "worker_can_run": True,
-            "content": pear_result_tool_text(tool_results, limit=None)
-            or build_pear_worker_completed_message(task=task, tool_results=tool_results),
+            "content": armada_result_tool_text(tool_results, limit=None)
+            or build_armada_worker_completed_message(task=task, tool_results=tool_results),
             # A /btw fork is ephemeral. The durable identity remains its
             # parent Codex thread; Pear never advertises a discarded fork as a
             # resumable conversation.
@@ -1872,12 +1879,12 @@ class PearWorkerRuntime:
 
     def run_tools(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str,
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> Sequence[PearWorkerToolResult]:
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> Sequence[ArmadaWorkerToolResult]:
         if self.tool_runner is not None:
             if user_input_provider is None:
                 return self.tool_runner(
@@ -1937,7 +1944,7 @@ class PearWorkerRuntime:
         if callable(configure_turn):
             configure_turn(model=model, reasoning_effort=reasoning_effort)
 
-    def warm(self, active_session: PearActiveSessionSummary) -> None:
+    def warm(self, active_session: ArmadaActiveSessionSummary) -> None:
         if self.tool_runner is None:
             return
         warm = getattr(self.tool_runner, "warm", None)
@@ -1962,53 +1969,53 @@ class PearWorkerRuntime:
         return value.strip() if isinstance(value, str) else ""
 
 
-def pear_message_topic(message: dict[str, Any]) -> str:
+def armada_message_topic(message: dict[str, Any]) -> str:
     topic = message.get("topic", message.get("subject", ""))
     return str(topic)
 
 
-def pear_message_stream(message: dict[str, Any]) -> str:
+def armada_message_stream(message: dict[str, Any]) -> str:
     display_recipient = message.get("display_recipient", "")
     if isinstance(display_recipient, str):
         return display_recipient
     return ""
 
 
-def pear_message_id(message: dict[str, Any]) -> int:
+def armada_message_id(message: dict[str, Any]) -> int:
     message_id_value = message.get("id", 0)
     return message_id_value if isinstance(message_id_value, int) else 0
 
 
-def build_trigger_pear_active_session(
+def build_trigger_armada_active_session(
     message: dict[str, Any],
     content: str,
-) -> PearActiveSessionSummary:
-    return build_pear_active_session_summary_from_messages(
-        pear_session=get_pear_session_payload(
-            stream=pear_message_stream(message),
-            topic=pear_message_topic(message),
+) -> ArmadaActiveSessionSummary:
+    return build_armada_active_session_summary_from_messages(
+        armada_session=get_armada_session_payload(
+            stream=armada_message_stream(message),
+            topic=armada_message_topic(message),
         ),
         source="server",
         stream_exists=True,
-        messages=[(pear_message_id(message), content, False)],
+        messages=[(armada_message_id(message), content, False)],
         topic_message_count=1,
     )
 
 
-def build_pear_explicit_steering_event(
+def build_armada_explicit_steering_event(
     content: str,
     message_id: int,
     *,
     sender_is_bot: bool | None = None,
     session_started: bool = False,
-) -> PearSteeringEvent | None:
+) -> ArmadaSteeringEvent | None:
     if sender_is_bot is True:
         return None
 
-    explicitly_addressed = is_pear_request_message(content)
+    explicitly_addressed = is_armada_request_message(content)
     if not session_started or not explicitly_addressed:
         return None
-    instruction = clean_pear_task_text(content)
+    instruction = clean_armada_task_text(content)
     if not instruction:
         return None
 
@@ -2019,20 +2026,20 @@ def build_pear_explicit_steering_event(
     }
 
 
-def is_pear_request_message(content: str) -> bool:
-    return PEAR_AGENT_MENTION in content or is_pear_plain_mention_alias_message(content)
+def is_armada_request_message(content: str) -> bool:
+    return ARMADA_AGENT_MENTION in content or is_armada_plain_mention_alias_message(content)
 
 
-def is_pear_plain_mention_alias_message(content: str) -> bool:
-    return PEAR_PLAIN_AGENT_MENTION_RE.search(content) is not None
+def is_armada_plain_mention_alias_message(content: str) -> bool:
+    return ARMADA_PLAIN_AGENT_MENTION_RE.search(content) is not None
 
 
-PearMessage = (
+ArmadaMessage = (
     tuple[int, str] | tuple[int, str, bool | None] | tuple[int, str, bool | None, str | None]
 )
 
 
-def normalize_pear_message(message: PearMessage) -> tuple[int, str, bool | None, str | None]:
+def normalize_armada_message(message: ArmadaMessage) -> tuple[int, str, bool | None, str | None]:
     if len(message) == 2:
         message_id, content = message
         return message_id, content, None, None
@@ -2043,15 +2050,15 @@ def normalize_pear_message(message: PearMessage) -> tuple[int, str, bool | None,
     return message_id, content, sender_is_bot, sender_name
 
 
-def build_pear_recent_messages(
+def build_armada_recent_messages(
     messages: Sequence[tuple[int, str, bool | None, str | None]],
     *,
     limit: int = 30,
-) -> list[PearRecentMessage]:
+) -> list[ArmadaRecentMessage]:
     newest_messages = sorted(messages, key=lambda message: message[0], reverse=True)[:limit]
-    recent_messages: list[PearRecentMessage] = []
+    recent_messages: list[ArmadaRecentMessage] = []
     for message_id, content, sender_is_bot, sender_name in reversed(newest_messages):
-        clean_content = trim_pear_text(content, limit=1200)
+        clean_content = trim_armada_text(content, limit=1200)
         if not clean_content:
             continue
         clean_sender = (sender_name or "").strip()
@@ -2060,7 +2067,7 @@ def build_pear_recent_messages(
         recent_messages.append(
             {
                 "message_id": message_id,
-                "sender": trim_pear_text(clean_sender, limit=120),
+                "sender": trim_armada_text(clean_sender, limit=120),
                 "sender_is_bot": sender_is_bot,
                 "content": clean_content,
             }
@@ -2068,10 +2075,10 @@ def build_pear_recent_messages(
     return recent_messages
 
 
-def build_pear_active_session_summary(
+def build_armada_active_session_summary(
     *,
-    pear_session: PearSessionPayload,
-    source: PearActiveSessionSource,
+    armada_session: ArmadaSessionPayload,
+    source: ArmadaActiveSessionSource,
     stream_exists: bool,
     topic_message_count: int,
     latest_message_id: int | None,
@@ -2080,17 +2087,17 @@ def build_pear_active_session_summary(
     latest_codex_thread_id: str | None = None,
     latest_codex_trigger_message_id: int | None = None,
     current_trigger_message_id: int | None = None,
-    recent_messages: list[PearRecentMessage] | None = None,
-    routing_messages: list[PearRecentMessage] | None = None,
-    referenced_threads: list[PearReferencedThread] | None = None,
-    workspace_context: PearWorkspaceContext | None = None,
+    recent_messages: list[ArmadaRecentMessage] | None = None,
+    routing_messages: list[ArmadaRecentMessage] | None = None,
+    referenced_threads: list[ArmadaReferencedThread] | None = None,
+    workspace_context: ArmadaWorkspaceContext | None = None,
     is_paused: bool = False,
     response_policy: str | None = None,
-) -> PearActiveSessionSummary:
-    normalized_response_policy = normalize_pear_response_policy(response_policy)
+) -> ArmadaActiveSessionSummary:
+    normalized_response_policy = normalize_armada_response_policy(response_policy)
 
     if is_paused:
-        state: PearActiveSessionState = "paused"
+        state: ArmadaActiveSessionState = "paused"
     elif latest_message_id is not None:
         state = "active"
     elif latest_request_message_id is not None:
@@ -2099,7 +2106,7 @@ def build_pear_active_session_summary(
         state = "not_started"
 
     if not stream_exists:
-        worker_state: PearWorkerState = "blocked_missing_stream"
+        worker_state: ArmadaWorkerState = "blocked_missing_stream"
         worker_blocked_reason = "Pear stream is not accessible."
     elif state == "paused":
         worker_state = "blocked_paused"
@@ -2117,8 +2124,8 @@ def build_pear_active_session_summary(
 
     return {
         "state": state,
-        "stream": pear_session["stream"],
-        "topic": pear_session["topic"],
+        "stream": armada_session["stream"],
+        "topic": armada_session["topic"],
         "source": source,
         "stream_exists": stream_exists,
         "topic_message_count": topic_message_count,
@@ -2140,30 +2147,30 @@ def build_pear_active_session_summary(
     }
 
 
-def build_pear_active_session_summary_from_messages(
+def build_armada_active_session_summary_from_messages(
     *,
-    pear_session: PearSessionPayload,
-    source: PearActiveSessionSource,
+    armada_session: ArmadaSessionPayload,
+    source: ArmadaActiveSessionSource,
     stream_exists: bool,
-    messages: Sequence[PearMessage],
-    prompt_messages: Sequence[PearMessage] | None = None,
-    referenced_threads: list[PearReferencedThread] | None = None,
+    messages: Sequence[ArmadaMessage],
+    prompt_messages: Sequence[ArmadaMessage] | None = None,
+    referenced_threads: list[ArmadaReferencedThread] | None = None,
     topic_message_count: int | None = None,
     latest_codex_thread_id: str | None = None,
     latest_codex_trigger_message_id: int | None = None,
     current_trigger_message_id: int | None = None,
-    workspace_context: PearWorkspaceContext | None = None,
+    workspace_context: ArmadaWorkspaceContext | None = None,
     is_paused: bool = False,
     response_policy: str | None = None,
-) -> PearActiveSessionSummary:
+) -> ArmadaActiveSessionSummary:
     latest_message_id: int | None = None
     latest_bot_reply_message_id: int | None = None
     latest_request_message_id: int | None = None
     request_count = 0
-    normalized_messages = [normalize_pear_message(message) for message in messages]
+    normalized_messages = [normalize_armada_message(message) for message in messages]
     sorted_messages = sorted(normalized_messages, key=lambda message: message[0], reverse=True)
     for message_id, content, _sender_is_bot, _sender_name in sorted_messages:
-        if is_pear_task_request_message(content):
+        if is_armada_task_request_message(content):
             request_count += 1
             if latest_request_message_id is None:
                 latest_request_message_id = message_id
@@ -2176,8 +2183,8 @@ def build_pear_active_session_summary_from_messages(
     ):
         latest_message_id = latest_bot_reply_message_id
 
-    return build_pear_active_session_summary(
-        pear_session=pear_session,
+    return build_armada_active_session_summary(
+        armada_session=armada_session,
         source=source,
         stream_exists=stream_exists,
         topic_message_count=topic_message_count
@@ -2193,10 +2200,10 @@ def build_pear_active_session_summary_from_messages(
             if current_trigger_message_id is not None
             else latest_request_message_id
         ),
-        recent_messages=build_pear_recent_messages(
+        recent_messages=build_armada_recent_messages(
             sorted_messages if prompt_messages is None else list(prompt_messages)
         ),
-        routing_messages=build_pear_recent_messages(sorted_messages),
+        routing_messages=build_armada_recent_messages(sorted_messages),
         referenced_threads=referenced_threads,
         workspace_context=workspace_context,
         is_paused=is_paused,
@@ -2204,7 +2211,7 @@ def build_pear_active_session_summary_from_messages(
     )
 
 
-def build_pear_config_payload(
+def build_armada_config_payload(
     *,
     embedded_bots_enabled: bool,
     bot_count: int,
@@ -2214,7 +2221,7 @@ def build_pear_config_payload(
     selected_bot_user_id: int | None = None,
     selected_bot_full_name: str | None = None,
     selected_bot_email: str | None = None,
-    bot_identities: list[PearBotIdentity] | None = None,
+    bot_identities: list[ArmadaBotIdentity] | None = None,
     worker_agent_runtime: str = "disabled",
     worker_runtime_available: bool | None = None,
     worker_runtime_detail: str | None = None,
@@ -2226,7 +2233,7 @@ def build_pear_config_payload(
     worker_runtime_login_instructions: str | None = None,
     worker_service_tier: str | None = None,
     worker_fast_mode: bool = False,
-) -> PearConfigPayload:
+) -> ArmadaConfigPayload:
     if selected_bot_user_id is None:
         selected_bot_user_id = bot_user_id
         selected_bot_full_name = bot_full_name
@@ -2240,7 +2247,7 @@ def build_pear_config_payload(
         worker_runtime_detail = (
             worker_agent_runtime
             if supported_worker_runtime
-            else "Set PEAR_WORKER_AGENT_RUNTIME to codex-app-server."
+            else "Set ARMADA_WORKER_AGENT_RUNTIME to codex-app-server."
         )
     if worker_runtime_auth_available is None:
         worker_runtime_auth_available = supported_worker_runtime
@@ -2268,7 +2275,7 @@ def build_pear_config_payload(
         and worker_runtime_auth_available
         and bot_selected
     )
-    setup_steps: list[PearSetupStep] = [
+    setup_steps: list[ArmadaSetupStep] = [
         {
             "key": "embedded_bots",
             "label": "Embedded bots enabled",
@@ -2278,7 +2285,7 @@ def build_pear_config_payload(
             else "Enable EMBEDDED_BOTS_ENABLED before Pear can receive topic events.",
         },
         {
-            "key": "pear_bot",
+            "key": "armada_bot",
             "label": "Pear bot selected",
             "complete": bot_selected,
             "detail": f"{selected_bot_full_name} ({selected_bot_user_id})"
@@ -2299,8 +2306,8 @@ def build_pear_config_payload(
         },
     ]
     return {
-        "bot_short_name": PEAR_BOT_SHORT_NAME,
-        "embedded_bot_service": PEAR_EMBEDDED_BOT_SERVICE,
+        "bot_short_name": ARMADA_BOT_SHORT_NAME,
+        "embedded_bot_service": ARMADA_EMBEDDED_BOT_SERVICE,
         "embedded_bots_enabled": embedded_bots_enabled,
         "configured": configured,
         "enabled": embedded_bots_enabled and configured,
@@ -2325,17 +2332,17 @@ def build_pear_config_payload(
     }
 
 
-class PearEmbeddedBotHandler:
+class ArmadaEmbeddedBotHandler:
     def __init__(
         self,
         *,
-        worker_run_store: PearWorkerRunStore,
-        worker_runtime: PearWorkerRuntime | None = None,
-        active_session_loader: PearWorkerActiveSessionLoader | None = None,
-        worker_dispatcher: PearWorkerDispatcher | None = None,
-        addressing_intent_classifier: PearAddressingIntentClassifier | None = None,
+        worker_run_store: ArmadaWorkerRunStore,
+        worker_runtime: ArmadaWorkerRuntime | None = None,
+        active_session_loader: ArmadaWorkerActiveSessionLoader | None = None,
+        worker_dispatcher: ArmadaWorkerDispatcher | None = None,
+        addressing_intent_classifier: ArmadaAddressingIntentClassifier | None = None,
     ) -> None:
-        self.worker_runtime = worker_runtime or PearWorkerRuntime()
+        self.worker_runtime = worker_runtime or ArmadaWorkerRuntime()
         self.active_session_loader = active_session_loader
         self.worker_run_store = worker_run_store
         self.worker_dispatcher = worker_dispatcher
@@ -2347,14 +2354,14 @@ class PearEmbeddedBotHandler:
         message: dict[str, Any],
         bot_handler: Any,
         content: str,
-    ) -> PearActiveSessionSummary | None:
+    ) -> ArmadaActiveSessionSummary | None:
         if message.get("type") != "stream":
             return None
         try:
             return (
                 self.active_session_loader(message, bot_handler)
                 if self.active_session_loader is not None
-                else build_trigger_pear_active_session(message, content)
+                else build_trigger_armada_active_session(message, content)
             )
         except Exception:
             return None
@@ -2364,10 +2371,10 @@ class PearEmbeddedBotHandler:
         bot_handler: Any,
         requesting_user_id: int | None,
     ) -> bool:
-        from zerver.lib.armada_worker import pear_runs_restricted, pear_user_is_trusted
+        from zerver.lib.armada_worker import armada_runs_restricted, armada_user_is_trusted
         from zerver.models import UserProfile
 
-        if not pear_runs_restricted():
+        if not armada_runs_restricted():
             return True
         if requesting_user_id is None:
             return False
@@ -2375,7 +2382,7 @@ class PearEmbeddedBotHandler:
             id=requesting_user_id,
             realm_id=bot_handler.user_profile.realm_id,
         ).first()
-        return requesting_user is not None and pear_user_is_trusted(requesting_user)
+        return requesting_user is not None and armada_user_is_trusted(requesting_user)
 
     def worker_start_blocked_reason(
         self,
@@ -2451,12 +2458,12 @@ class PearEmbeddedBotHandler:
         self,
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> PearAmbientDecision:
-        ignored: PearAmbientDecision = {
+    ) -> ArmadaAmbientDecision:
+        ignored: ArmadaAmbientDecision = {
             "addressee": "uncertain",
             "action": "ignore",
             "presentation": "compact",
@@ -2474,9 +2481,9 @@ class PearEmbeddedBotHandler:
         except Exception:
             logger.warning("Pear addressing router failed.", exc_info=True)
             user_profile_id = getattr(getattr(bot_handler, "user_profile", None), "id", 0)
-            failure_stream, failure_topic = pear_topic_scope(
-                pear_message_stream(message),
-                pear_message_topic(message),
+            failure_stream, failure_topic = armada_topic_scope(
+                armada_message_stream(message),
+                armada_message_topic(message),
             )
             failure_key = (
                 user_profile_id if isinstance(user_profile_id, int) else 0,
@@ -2487,7 +2494,8 @@ class PearEmbeddedBotHandler:
             previous_notice = self.addressing_failure_notices.get(failure_key)
             if (
                 previous_notice is None
-                or current_time - previous_notice >= PEAR_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS
+                or current_time - previous_notice
+                >= ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS
             ):
                 self.addressing_failure_notices[failure_key] = current_time
                 try:
@@ -2563,7 +2571,7 @@ class PearEmbeddedBotHandler:
             stream=stream,
             topic=topic,
         )
-        return normalize_pear_response_policy(response_policy)
+        return normalize_armada_response_policy(response_policy)
 
     def set_topic_response_policy(
         self,
@@ -2661,7 +2669,7 @@ class PearEmbeddedBotHandler:
         bot_handler: Any,
         message: dict[str, Any],
         *,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         stream: str,
         topic: str,
     ) -> None:
@@ -2689,16 +2697,16 @@ class PearEmbeddedBotHandler:
             else None
         )
         explicitly_addressed = bool(
-            message.get(PEAR_EXPLICIT_MENTION_MESSAGE_KEY)
-        ) or is_pear_request_message(raw_content)
-        content = normalize_pear_explicit_request_content(
+            message.get(ARMADA_EXPLICIT_MENTION_MESSAGE_KEY)
+        ) or is_armada_request_message(raw_content)
+        content = normalize_armada_explicit_request_content(
             raw_content,
             explicitly_addressed=explicitly_addressed,
         )
         active_session = self.load_active_session(message, bot_handler, content)
-        message_id = pear_message_id(message)
-        stream = pear_message_stream(message)
-        topic = pear_message_topic(message)
+        message_id = armada_message_id(message)
+        stream = armada_message_stream(message)
+        topic = armada_message_topic(message)
         db_response_policy = (
             self.topic_response_policy(
                 bot_handler,
@@ -2731,7 +2739,7 @@ class PearEmbeddedBotHandler:
             else None
         )
         response_policy_allows_ambient = (
-            normalize_pear_response_policy(effective_response_policy) == "ambient"
+            normalize_armada_response_policy(effective_response_policy) == "ambient"
         )
         should_route_untagged_message = (
             message.get("type") == "stream"
@@ -2739,7 +2747,7 @@ class PearEmbeddedBotHandler:
             and self.addressing_intent_classifier is not None
             and response_policy_allows_ambient
         )
-        ambient_decision: PearAmbientDecision | None = None
+        ambient_decision: ArmadaAmbientDecision | None = None
         if (
             message.get("type") == "stream"
             and not explicitly_addressed
@@ -2755,7 +2763,7 @@ class PearEmbeddedBotHandler:
                 bot_handler=bot_handler,
             )
             requested_action = ambient_decision["action"]
-            if ambient_decision["addressee"] == "pear" and requested_action != "ignore":
+            if ambient_decision["addressee"] == "agent" and requested_action != "ignore":
                 ambient_decision["action"] = "steer" if active_run_message_id is not None else "run"
             logger.info(
                 "Pear ambient router decision: message_id=%s stream=%r topic=%r "
@@ -2768,13 +2776,13 @@ class PearEmbeddedBotHandler:
                 ambient_decision["action"],
             )
             explicitly_addressed = (
-                ambient_decision["addressee"] == "pear" and ambient_decision["action"] != "ignore"
+                ambient_decision["addressee"] == "agent" and ambient_decision["action"] != "ignore"
             )
             if explicitly_addressed and active_run_message_id is None:
                 explicitly_addressed = ambient_decision["action"] == "run"
             elif explicitly_addressed:
                 explicitly_addressed = ambient_decision["action"] == "steer"
-            content = normalize_pear_explicit_request_content(
+            content = normalize_armada_explicit_request_content(
                 raw_content,
                 explicitly_addressed=explicitly_addressed,
             )
@@ -2787,14 +2795,14 @@ class PearEmbeddedBotHandler:
                     topic=topic,
                 )
                 return
-        steering_event = build_pear_explicit_steering_event(
+        steering_event = build_armada_explicit_steering_event(
             content,
             message_id=message_id,
             sender_is_bot=False,
             session_started=active_run_message_id is not None
             or (active_session is not None and active_session["state"] in {"requested", "active"}),
         )
-        should_start_worker = message.get("type") == "stream" and pear_worker_should_start(
+        should_start_worker = message.get("type") == "stream" and armada_worker_should_start(
             raw_content,
             active_session,
             explicitly_addressed=explicitly_addressed,
@@ -2826,10 +2834,10 @@ class PearEmbeddedBotHandler:
         if should_steer_active_run:
             response = ""
         elif explicitly_addressed and not should_start_worker:
-            response = build_pear_ack_message(content)
+            response = build_armada_ack_message(content)
             should_start_worker = True
         else:
-            response = build_pear_ack_message(content)
+            response = build_armada_ack_message(content)
 
         if should_start_worker:
             blocked_reason = (
@@ -2850,7 +2858,7 @@ class PearEmbeddedBotHandler:
                 )
             )
             if blocked_reason is not None:
-                response = build_pear_worker_start_blocked_message(blocked_reason)
+                response = build_armada_worker_start_blocked_message(blocked_reason)
                 should_start_worker = False
 
         if should_steer_active_run and not self.requesting_user_may_drive_runs(
@@ -2859,7 +2867,7 @@ class PearEmbeddedBotHandler:
             # Steering, and answering a run's question, is driving the
             # agent as much as starting a run is.
             should_steer_active_run = False
-            response = build_pear_worker_start_blocked_message(
+            response = build_armada_worker_start_blocked_message(
                 "This user is not allowed to steer Pear worker runs."
             )
 
@@ -2877,7 +2885,7 @@ class PearEmbeddedBotHandler:
                 bot_handler,
                 active_run_message_id,
                 "steering",
-                summary=trim_pear_text(steering_event["instruction"], limit=500),
+                summary=trim_armada_text(steering_event["instruction"], limit=500),
                 payload=steering_payload,
             )
             return
@@ -2914,12 +2922,14 @@ class PearEmbeddedBotHandler:
                         topic=topic,
                     )
             if not started:
-                stale_ack_message = build_pear_worker_start_blocked_message(
+                stale_ack_message = build_armada_worker_start_blocked_message(
                     "This request was already handled or is no longer claimable."
                 )
                 bot_handler.send_reply(
                     message,
-                    normalize_pear_task_markers(normalize_pear_math_delimiters(stale_ack_message)),
+                    normalize_armada_task_markers(
+                        normalize_armada_math_delimiters(stale_ack_message)
+                    ),
                 )
                 return
             if ambient_decision is not None:
@@ -2941,7 +2951,7 @@ class PearEmbeddedBotHandler:
                 message_id=message_id,
                 stream=stream,
                 topic=topic,
-                content=normalize_pear_task_markers(normalize_pear_math_delimiters(response)),
+                content=normalize_armada_task_markers(normalize_armada_math_delimiters(response)),
             )
             self.worker_dispatcher.dispatch(
                 self,
@@ -2962,7 +2972,7 @@ class PearEmbeddedBotHandler:
             return
 
         bot_handler.send_reply(
-            message, normalize_pear_task_markers(normalize_pear_math_delimiters(response))
+            message, normalize_armada_task_markers(normalize_armada_math_delimiters(response))
         )
 
     def run_worker_turn(
@@ -2971,7 +2981,7 @@ class PearEmbeddedBotHandler:
         bot_handler: Any,
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         message_id: int,
         stream: str,
         topic: str,
@@ -2983,7 +2993,7 @@ class PearEmbeddedBotHandler:
         source_message_id: int | None = None,
         progress_message_id: int | None = None,
     ) -> None:
-        PearWorkerTurn(
+        ArmadaWorkerTurn(
             self,
             message,
             bot_handler,
@@ -3002,7 +3012,7 @@ class PearEmbeddedBotHandler:
         ).run()
 
 
-class PearWorkerTurn:
+class ArmadaWorkerTurn:
     """A single Pear worker run: transcript streaming, same-turn steering
     segments, and settlement for one request.
 
@@ -3019,7 +3029,7 @@ class PearWorkerTurn:
         bot_handler: Any,
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         message_id: int,
         stream: str,
         topic: str,
@@ -3049,11 +3059,11 @@ class PearWorkerTurn:
 
         self.started_progress_posted = False
         self.result_message_id = progress_message_id
-        self.transcript_events: list[PearWorkerTranscriptEvent] = []
+        self.transcript_events: list[ArmadaWorkerTranscriptEvent] = []
         self.current_assistant_item_id: str | None = None
         self.current_assistant_text = ""
-        self.live_operation: PearLiveRunOperation | None = None
-        self.task = pear_worker_task_line(content)
+        self.live_operation: ArmadaLiveRunOperation | None = None
+        self.task = armada_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
         self.last_persisted_transcript_source: str | None = None
         self.assistant_persistent_flush_seen = False
@@ -3062,7 +3072,7 @@ class PearWorkerTurn:
         self.last_steering_event_id = 0
         self.steering_segment_count = 0
         self.worker_result: dict[str, Any] = {}
-        self.artifact_tool_results: list[PearWorkerToolResult] = []
+        self.artifact_tool_results: list[ArmadaWorkerToolResult] = []
         self.codex_thread_id: str | None = None
         self.result_summary = ""
         self.typing_started = False
@@ -3076,9 +3086,9 @@ class PearWorkerTurn:
             return
         if operator == "start" and not force:
             current_time = time.monotonic()
-            if current_time - self.last_typing_signal_at < PEAR_TYPING_REFRESH_INTERVAL_SECONDS:
+            if current_time - self.last_typing_signal_at < ARMADA_TYPING_REFRESH_INTERVAL_SECONDS:
                 return
-        sent = send_pear_worker_typing_notification(
+        sent = send_armada_worker_typing_notification(
             self.bot_handler,
             stream=self.stream,
             topic=self.topic,
@@ -3094,15 +3104,15 @@ class PearWorkerTurn:
         if not self.handler.worker_run_cancel_requested(self.bot_handler, self.message_id):
             return
         self.handler.worker_runtime.interrupt()
-        raise PearRunCancelledError("Cancelled by user.")
+        raise ArmadaRunCancelledError("Cancelled by user.")
 
     def update_live_transcript(
         self,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
         *,
-        tool_results: Sequence[PearWorkerToolResult] = (),
+        tool_results: Sequence[ArmadaWorkerToolResult] = (),
         force: bool = False,
-        flush_interval: float = PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
+        flush_interval: float = ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
     ) -> bool:
         target_message_id = self.result_message_id or self.progress_message_id
         if target_message_id is None:
@@ -3111,11 +3121,11 @@ class PearWorkerTurn:
         if not force and current_time - self.last_transcript_flush_at < flush_interval:
             return False
         if status in {"queued", "running"}:
-            content_to_update = pear_visible_assistant_text(self.current_assistant_text)
+            content_to_update = armada_visible_assistant_text(self.current_assistant_text)
             if not content_to_update:
-                content_to_update = PEAR_WORKING_MESSAGE
+                content_to_update = ARMADA_WORKING_MESSAGE
         else:
-            content_to_update = build_pear_live_transcript_message(
+            content_to_update = build_armada_live_transcript_message(
                 task=self.task,
                 status=status,
                 transcript_events=self.transcript_events,
@@ -3125,7 +3135,7 @@ class PearWorkerTurn:
             self.last_transcript_flush_at = current_time
             self.update_volatile_run_state(status)
             return True
-        updated = update_pear_worker_status_message(
+        updated = update_armada_worker_status_message(
             self.bot_handler,
             progress_message_id=target_message_id,
             content=content_to_update,
@@ -3140,9 +3150,9 @@ class PearWorkerTurn:
 
     def update_volatile_run_state(
         self,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
     ) -> None:
-        write_pear_live_run_state(
+        write_armada_live_run_state(
             self.message_id,
             status=status,
             operation=self.live_operation,
@@ -3173,7 +3183,7 @@ class PearWorkerTurn:
         question_lines.append("")
         question_lines.append(
             "_Reply in this thread to answer; the run resumes with your reply "
-            f"(waiting up to {PEAR_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
+            f"(waiting up to {ARMADA_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
         )
         self.bot_handler.send_reply(self.message, "\n".join(question_lines))
         self.live_operation = {"kind": "question", "label": "waiting on you"}
@@ -3182,12 +3192,12 @@ class PearWorkerTurn:
                 "kind": "status",
                 "status": "running",
                 "title": "Waiting for an answer.",
-                "body": trim_pear_text(str(questions[0].get("question") or ""), limit=300),
+                "body": trim_armada_text(str(questions[0].get("question") or ""), limit=300),
             }
         )
         self.update_volatile_run_state("running")
 
-        deadline = time.monotonic() + PEAR_QUESTION_TIMEOUT_SECONDS
+        deadline = time.monotonic() + ARMADA_QUESTION_TIMEOUT_SECONDS
         last_heartbeat = time.monotonic()
         answer_text: str | None = None
         try:
@@ -3211,7 +3221,7 @@ class PearWorkerTurn:
                         summary="Waiting for a human answer.",
                     )
                     last_heartbeat = time.monotonic()
-                time.sleep(PEAR_QUESTION_POLL_SECONDS)
+                time.sleep(ARMADA_QUESTION_POLL_SECONDS)
         finally:
             self.live_operation = None
         if answer_text is None:
@@ -3229,7 +3239,7 @@ class PearWorkerTurn:
                 "kind": "status",
                 "status": "done",
                 "title": "Answer received.",
-                "body": trim_pear_text(answer_text, limit=300),
+                "body": trim_armada_text(answer_text, limit=300),
             }
         )
         self.update_volatile_run_state("running")
@@ -3242,7 +3252,7 @@ class PearWorkerTurn:
         if (
             self.active_session is None
             or not callable(self.steering_events_after)
-            or self.steering_segment_count >= PEAR_MAX_STEERING_SEGMENTS
+            or self.steering_segment_count >= ARMADA_MAX_STEERING_SEGMENTS
         ):
             return
         pending_steering_events = self.steering_events_after(
@@ -3253,7 +3263,7 @@ class PearWorkerTurn:
         if not pending_steering_events:
             return
         latest_steering = "; ".join(event["instruction"] for event in pending_steering_events)
-        steering_task = build_pear_steering_task(pending_steering_events)
+        steering_task = build_armada_steering_task(pending_steering_events)
         if not self.handler.worker_runtime.steer(steering_task):
             return
         self.last_steering_event_id = pending_steering_events[-1]["event_id"]
@@ -3262,7 +3272,7 @@ class PearWorkerTurn:
             self.bot_handler,
             self.message_id,
             "steering_applied",
-            summary=trim_pear_text(latest_steering, limit=500),
+            summary=trim_armada_text(latest_steering, limit=500),
             payload={
                 "segment_index": self.steering_segment_count,
                 "steering_events": pending_steering_events,
@@ -3280,7 +3290,7 @@ class PearWorkerTurn:
         self.update_volatile_run_state("running")
         self.update_live_transcript("running", force=True)
 
-    def handle_transcript_event(self, event: PearWorkerTranscriptEvent) -> None:
+    def handle_transcript_event(self, event: ArmadaWorkerTranscriptEvent) -> None:
         self.raise_if_cancel_requested()
         self.signal_typing("start", force=False)
         title = event.get("title", "").strip()
@@ -3326,7 +3336,7 @@ class PearWorkerTurn:
                 and metadata.get("streaming") is True
             )
             if not streaming_child_delta:
-                child_event = pear_sanitized_child_agent_event(event)
+                child_event = armada_sanitized_child_agent_event(event)
                 if child_event is not None:
                     summary = (
                         child_event.get("title") or child_event.get("body") or "Agent activity."
@@ -3335,7 +3345,7 @@ class PearWorkerTurn:
                         self.bot_handler,
                         self.message_id,
                         "agent",
-                        summary=trim_pear_text(str(summary), limit=500),
+                        summary=trim_armada_text(str(summary), limit=500),
                         payload=dict(child_event),
                     )
             self.maybe_apply_same_turn_steering()
@@ -3378,11 +3388,11 @@ class PearWorkerTurn:
                 self.bot_handler,
                 self.message_id,
                 "transcript",
-                summary=trim_pear_text(summary, limit=500),
+                summary=trim_armada_text(summary, limit=500),
                 payload=dict(event),
             )
         usage = (
-            pear_normalize_token_usage(metadata.get("usage"))
+            armada_normalize_token_usage(metadata.get("usage"))
             if isinstance(metadata, dict)
             else None
         )
@@ -3391,14 +3401,14 @@ class PearWorkerTurn:
                 self.bot_handler,
                 self.message_id,
                 "usage",
-                summary=pear_token_usage_summary(usage),
+                summary=armada_token_usage_summary(usage),
                 payload={"usage": usage},
             )
         if summary and event_kind != "usage" and not streaming_assistant:
             self.handler.update_worker_metadata(
                 self.bot_handler,
                 self.message_id,
-                current_activity=trim_pear_text(summary, limit=500),
+                current_activity=trim_armada_text(summary, limit=500),
             )
         sparse_event = event_kind in {
             "agent",
@@ -3412,7 +3422,7 @@ class PearWorkerTurn:
         }
         if event_kind == "assistant":
             has_visible_assistant_text = bool(
-                pear_visible_assistant_text(self.current_assistant_text).strip()
+                armada_visible_assistant_text(self.current_assistant_text).strip()
             )
             force_flush = not self.assistant_persistent_flush_seen or (
                 has_visible_assistant_text and not self.assistant_visible_event_seen
@@ -3420,7 +3430,7 @@ class PearWorkerTurn:
             if self.update_live_transcript(
                 "running",
                 force=force_flush,
-                flush_interval=PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
+                flush_interval=ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
             ):
                 self.assistant_persistent_flush_seen = True
                 if has_visible_assistant_text and not self.assistant_visible_event_seen:
@@ -3466,9 +3476,9 @@ class PearWorkerTurn:
             result for result in segment_result["tool_results"] if result["label"] == "Artifact"
         )
         segment_result["tool_count"] = len(
-            pear_distinct_transcript_tool_events(self.transcript_events[segment_event_start:])
+            armada_distinct_transcript_tool_events(self.transcript_events[segment_event_start:])
         )
-        segment_summary = pear_worker_summary_from_tool_results(segment_result["tool_results"])
+        segment_summary = armada_worker_summary_from_tool_results(segment_result["tool_results"])
         self.handler.record_worker_event(
             self.bot_handler,
             self.message_id,
@@ -3477,7 +3487,7 @@ class PearWorkerTurn:
             payload={
                 "segment_index": segment_index,
                 "tool_count": segment_result["tool_count"],
-                "tool_results": pear_worker_event_tool_results(segment_result["tool_results"]),
+                "tool_results": armada_worker_event_tool_results(segment_result["tool_results"]),
                 "worker_can_run": segment_result["worker_can_run"],
             },
         )
@@ -3489,16 +3499,16 @@ class PearWorkerTurn:
         if not workdir.startswith("/"):
             return "", None
         from zerver.lib.armada_worker import (
-            pear_topic_isolation_user_exists,
-            pear_topic_isolation_username,
+            armada_topic_isolation_user_exists,
+            armada_topic_isolation_username,
         )
 
-        isolation_username: str | None = pear_topic_isolation_username(
+        isolation_username: str | None = armada_topic_isolation_username(
             self.bot_handler.user_profile,
             stream=self.stream,
             topic=self.topic,
         )
-        if isolation_username is not None and not pear_topic_isolation_user_exists(
+        if isolation_username is not None and not armada_topic_isolation_user_exists(
             isolation_username
         ):
             isolation_username = None
@@ -3508,7 +3518,7 @@ class PearWorkerTurn:
         workdir, isolation_username = self.artifact_workspace_context()
         if not workdir:
             return content
-        return pear_embed_workspace_images(
+        return armada_embed_workspace_images(
             content,
             workdir=workdir,
             isolation_username=isolation_username,
@@ -3518,8 +3528,8 @@ class PearWorkerTurn:
     def run(self) -> None:
         try:
             if self.active_session is None and self.session_kind == "side":
-                self.active_session = build_pear_active_session_summary(
-                    pear_session=get_pear_session_payload(
+                self.active_session = build_armada_active_session_summary(
+                    armada_session=get_armada_session_payload(
                         stream=self.source_stream or self.stream,
                         topic=self.source_topic or self.topic,
                     ),
@@ -3543,12 +3553,12 @@ class PearWorkerTurn:
                 self.active_session = (
                     loaded_active_session
                     or self.active_session
-                    or build_trigger_pear_active_session(
+                    or build_trigger_armada_active_session(
                         self.message,
                         self.content,
                     )
                 )
-            self.task = pear_worker_task_for_message(self.content, self.active_session)
+            self.task = armada_worker_task_for_message(self.content, self.active_session)
             runtime_label = self.handler.worker_runtime.runtime_value()
             if not callable(getattr(self.handler.worker_run_store, "claim_for_run", None)):
                 self.handler.worker_run_store.record(
@@ -3585,8 +3595,8 @@ class PearWorkerTurn:
             )
             self.signal_typing("start")
             if self.active_session["worker_can_run"]:
-                initial_tool_results: list[PearWorkerToolResult] = []
-                progress_content = build_pear_worker_progress_message(
+                initial_tool_results: list[ArmadaWorkerToolResult] = []
+                progress_content = build_armada_worker_progress_message(
                     task=self.task,
                     tool_results=initial_tool_results,
                     transcript_events=self.transcript_events,
@@ -3637,7 +3647,7 @@ class PearWorkerTurn:
                 self.worker_result["worker_can_run"]
                 and self.session_kind == "shared"
                 and callable(self.steering_events_after)
-                and self.steering_segment_count < PEAR_MAX_STEERING_SEGMENTS
+                and self.steering_segment_count < ARMADA_MAX_STEERING_SEGMENTS
             ):
                 pending_steering_events = self.steering_events_after(
                     self.bot_handler,
@@ -3648,7 +3658,7 @@ class PearWorkerTurn:
                     break
                 self.last_steering_event_id = pending_steering_events[-1]["event_id"]
                 self.steering_segment_count += 1
-                steering_task = build_pear_steering_task(pending_steering_events)
+                steering_task = build_armada_steering_task(pending_steering_events)
                 latest_steering = "; ".join(
                     event["instruction"] for event in pending_steering_events
                 )
@@ -3657,7 +3667,7 @@ class PearWorkerTurn:
                 self.handler.update_worker_metadata(
                     self.bot_handler,
                     self.message_id,
-                    current_activity=trim_pear_text(
+                    current_activity=trim_armada_text(
                         f"Applying steering: {latest_steering}",
                         limit=500,
                     ),
@@ -3666,7 +3676,7 @@ class PearWorkerTurn:
                     self.bot_handler,
                     self.message_id,
                     "steering_applied",
-                    summary=trim_pear_text(latest_steering, limit=500),
+                    summary=trim_armada_text(latest_steering, limit=500),
                     payload={
                         "segment_index": self.steering_segment_count,
                         "steering_events": pending_steering_events,
@@ -3688,17 +3698,17 @@ class PearWorkerTurn:
                 )
                 self.codex_thread_id = self.worker_result["codex_thread_id"] or self.codex_thread_id
 
-            self.result_summary = pear_worker_summary_from_tool_results(
+            self.result_summary = armada_worker_summary_from_tool_results(
                 self.worker_result["tool_results"]
             )
             with self.handler.worker_completion(self.bot_handler, self.message_id):
                 if self.worker_result["should_post"] and self.worker_result["content"] is not None:
                     content_chunks = [
                         self.embed_result_images(chunk)
-                        for chunk in split_pear_persistent_message(self.worker_result["content"])
+                        for chunk in split_armada_persistent_message(self.worker_result["content"])
                     ]
                     content_to_post = content_chunks[0]
-                    result_updated = update_pear_worker_status_message(
+                    result_updated = update_armada_worker_status_message(
                         self.bot_handler,
                         progress_message_id=self.result_message_id or self.progress_message_id,
                         content=content_to_post,
@@ -3708,15 +3718,15 @@ class PearWorkerTurn:
                     if not result_updated:
                         result = self.bot_handler.send_reply(
                             self.message,
-                            normalize_pear_task_markers(
-                                normalize_pear_math_delimiters(content_to_post)
+                            normalize_armada_task_markers(
+                                normalize_armada_math_delimiters(content_to_post)
                             ),
                         )
                     for continuation_content in content_chunks[1:]:
                         self.bot_handler.send_reply(
                             self.message,
-                            normalize_pear_task_markers(
-                                normalize_pear_math_delimiters(continuation_content)
+                            normalize_armada_task_markers(
+                                normalize_armada_math_delimiters(continuation_content)
                             ),
                         )
                     if isinstance(result, dict) and isinstance(result.get("id"), int):
@@ -3734,7 +3744,7 @@ class PearWorkerTurn:
                             payload={"result_message_id": self.result_message_id},
                         )
                 elif self.result_message_id is not None or self.progress_message_id is not None:
-                    content_chunks = build_pear_worker_completed_message_chunks(
+                    content_chunks = build_armada_worker_completed_message_chunks(
                         task=self.task,
                         tool_results=self.worker_result["tool_results"],
                         transcript_events=self.transcript_events,
@@ -3742,7 +3752,7 @@ class PearWorkerTurn:
                     content_to_post = content_chunks[0] if content_chunks else ""
                     content_to_post = self.embed_result_images(content_to_post)
                     target_message_id = self.result_message_id or self.progress_message_id
-                    result_updated = update_pear_worker_status_message(
+                    result_updated = update_armada_worker_status_message(
                         self.bot_handler,
                         progress_message_id=target_message_id,
                         content=content_to_post,
@@ -3752,8 +3762,8 @@ class PearWorkerTurn:
                         for continuation_content in content_chunks[1:]:
                             self.bot_handler.send_reply(
                                 self.message,
-                                normalize_pear_task_markers(
-                                    normalize_pear_math_delimiters(continuation_content)
+                                normalize_armada_task_markers(
+                                    normalize_armada_math_delimiters(continuation_content)
                                 ),
                             )
                         self.result_message_id = target_message_id
@@ -3766,7 +3776,7 @@ class PearWorkerTurn:
                         )
                 has_artifact = bool(self.artifact_tool_results)
                 artifact_workdir, artifact_isolation_username = self.artifact_workspace_context()
-                artifact_attached = attach_pear_artifact_to_message(
+                artifact_attached = attach_armada_artifact_to_message(
                     self.bot_handler,
                     message_id=self.result_message_id,
                     tool_results=self.artifact_tool_results,
@@ -3793,11 +3803,11 @@ class PearWorkerTurn:
                     topic=self.topic,
                     result_message_id=self.result_message_id,
                 )
-            write_pear_live_run_state(
+            write_armada_live_run_state(
                 self.message_id,
                 status="done",
             )
-        except PearWorkerLeaseLostError:
+        except ArmadaWorkerLeaseLostError:
             # A newer fenced attempt owns both the durable run and its result
             # message. A shared turn owns the app-server generation, but a
             # native /btw is only one forked turn inside it; losing the side
@@ -3805,7 +3815,7 @@ class PearWorkerTurn:
             if self.session_kind != "side":
                 self.handler.worker_runtime.close()
             return
-        except PearRunCancelledError as error:
+        except ArmadaRunCancelledError as error:
             self.transcript_events.append(
                 {
                     "kind": "status",
@@ -3814,16 +3824,16 @@ class PearWorkerTurn:
                     "body": str(error),
                 }
             )
-            cancelled_message = build_pear_live_transcript_message(
+            cancelled_message = build_armada_live_transcript_message(
                 task=self.task,
                 status="cancelled",
                 transcript_events=self.transcript_events,
             )
-            write_pear_live_run_state(
+            write_armada_live_run_state(
                 self.message_id,
                 status="cancelled",
             )
-            update_pear_worker_status_message(
+            update_armada_worker_status_message(
                 self.bot_handler,
                 progress_message_id=self.result_message_id or self.progress_message_id,
                 content=cancelled_message,
@@ -3849,7 +3859,7 @@ class PearWorkerTurn:
                     topic=self.topic,
                     result_message_id=self.result_message_id or self.progress_message_id,
                 )
-            except PearWorkerLeaseLostError:
+            except ArmadaWorkerLeaseLostError:
                 pass
         except Exception as error:
             logger.exception("Pear worker failed for request message %s.", self.message_id)
@@ -3861,14 +3871,14 @@ class PearWorkerTurn:
                     "body": str(error),
                 }
             )
-            failure_message = build_pear_live_transcript_message(
+            failure_message = build_armada_live_transcript_message(
                 task=self.task,
                 status="failed",
                 transcript_events=self.transcript_events,
             )
             try:
                 with self.handler.worker_completion(self.bot_handler, self.message_id):
-                    if not update_pear_worker_status_message(
+                    if not update_armada_worker_status_message(
                         self.bot_handler,
                         progress_message_id=self.result_message_id or self.progress_message_id,
                         content=failure_message,
@@ -3892,11 +3902,11 @@ class PearWorkerTurn:
                         result_message_id=self.result_message_id,
                         error=str(error),
                     )
-            except PearWorkerLeaseLostError:
+            except ArmadaWorkerLeaseLostError:
                 if self.session_kind != "side":
                     self.handler.worker_runtime.close()
                 return
-            write_pear_live_run_state(
+            write_armada_live_run_state(
                 self.message_id,
                 status="failed",
             )
@@ -3904,7 +3914,7 @@ class PearWorkerTurn:
             self.signal_typing("stop")
 
 
-def clean_pear_session_target(
+def clean_armada_session_target(
     value: str | None,
     default: str,
     *,
@@ -3918,38 +3928,38 @@ def clean_pear_session_target(
     return value if value else default
 
 
-def get_pear_session_payload(
+def get_armada_session_payload(
     *,
     stream: str | None = None,
     topic: str | None = None,
-) -> PearSessionPayload:
-    defaults = get_pear_session_defaults()
-    stream_name = clean_pear_session_target(stream, defaults.stream)
-    topic_name = clean_pear_session_target(topic, defaults.topic, allow_empty=True)
+) -> ArmadaSessionPayload:
+    defaults = get_armada_session_defaults()
+    stream_name = clean_armada_session_target(stream, defaults.stream)
+    topic_name = clean_armada_session_target(topic, defaults.topic, allow_empty=True)
     return {
         "agent_name": defaults.agent_name,
         "agent_mention": defaults.agent_mention,
         "stream": stream_name,
         "topic": topic_name,
         "topic_prefix": defaults.topic_prefix,
-        "seed_message": build_pear_seed_message(),
-        "fix_bug_message": build_pear_fix_bug_message(),
-        "status_check_message": build_pear_status_check_message(),
-        "handoff_message": build_pear_handoff_message(),
-        "catch_up_message": build_pear_catch_up_message(),
-        "triage_message": build_pear_triage_message(),
-        "find_answer_message": build_pear_find_answer_message(),
-        "review_message": build_pear_review_message(),
-        "plan_message": build_pear_plan_message(),
-        "checkpoint_message": build_pear_checkpoint_message(),
-        "apply_plan_message": build_pear_apply_plan_message(),
-        "save_work_message": build_pear_save_work_message(),
-        "verify_changes_message": build_pear_verify_changes_message(),
-        "draft_artifact_message": build_pear_draft_artifact_message(),
-        "official_agent_runtime": PEAR_OFFICIAL_AGENT_RUNTIME,
-        "official_agent_runtime_label": PEAR_OFFICIAL_AGENT_RUNTIME_LABEL,
-        "agent_runtime_packages": list(PEAR_AGENT_RUNTIME_PACKAGES),
-        "official_codex_sdk_packages": list(PEAR_OFFICIAL_CODEX_SDK_PACKAGES),
-        "codex_mcp_tools": list(PEAR_CODEX_MCP_TOOLS),
-        "server_contract_version": PEAR_SERVER_CONTRACT_VERSION,
+        "seed_message": build_armada_seed_message(),
+        "fix_bug_message": build_armada_fix_bug_message(),
+        "status_check_message": build_armada_status_check_message(),
+        "handoff_message": build_armada_handoff_message(),
+        "catch_up_message": build_armada_catch_up_message(),
+        "triage_message": build_armada_triage_message(),
+        "find_answer_message": build_armada_find_answer_message(),
+        "review_message": build_armada_review_message(),
+        "plan_message": build_armada_plan_message(),
+        "checkpoint_message": build_armada_checkpoint_message(),
+        "apply_plan_message": build_armada_apply_plan_message(),
+        "save_work_message": build_armada_save_work_message(),
+        "verify_changes_message": build_armada_verify_changes_message(),
+        "draft_artifact_message": build_armada_draft_artifact_message(),
+        "official_agent_runtime": ARMADA_OFFICIAL_AGENT_RUNTIME,
+        "official_agent_runtime_label": ARMADA_OFFICIAL_AGENT_RUNTIME_LABEL,
+        "agent_runtime_packages": list(ARMADA_AGENT_RUNTIME_PACKAGES),
+        "official_codex_sdk_packages": list(ARMADA_OFFICIAL_CODEX_SDK_PACKAGES),
+        "codex_mcp_tools": list(ARMADA_CODEX_MCP_TOOLS),
+        "server_contract_version": ARMADA_SERVER_CONTRACT_VERSION,
     }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PEAR_DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
+ARMADA_DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     '.playwright-cli/'
     '.venv/'
     '.vagrant/'
@@ -27,40 +27,40 @@ PEAR_DEPLOY_UNTRACKED_ALLOW_PREFIXES=(
     'zproject/dev-secrets.conf'
 )
 
-PEAR_DEPLOY_RSYNC_EXCLUDES=()
-for pear_deploy_allowed_prefix in "${PEAR_DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
-    PEAR_DEPLOY_RSYNC_EXCLUDES+=(--exclude "/$pear_deploy_allowed_prefix")
+ARMADA_DEPLOY_RSYNC_EXCLUDES=()
+for armada_deploy_allowed_prefix in "${ARMADA_DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
+    ARMADA_DEPLOY_RSYNC_EXCLUDES+=(--exclude "/$armada_deploy_allowed_prefix")
 done
-unset pear_deploy_allowed_prefix
+unset armada_deploy_allowed_prefix
 
 # These are build products, not source. They are generated on the target from
 # the just-synced source and snapshotted/restored as a separate rollback
 # domain. In particular, never let an ignored local stats/manifest file leak
 # into the source rsync.
-PEAR_DEPLOY_RSYNC_EXCLUDES+=(
+ARMADA_DEPLOY_RSYNC_EXCLUDES+=(
     --exclude 'node_modules/'
     --exclude '/locale/*/mobile.json'
     --exclude '*.mo'
 )
 
-PEAR_DEPLOY_RUNTIME_CONFIG_PATHS=(
+ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS=(
     /etc/caddy/Caddyfile
-    /etc/pear/caddy-basic-auth.env
-    /etc/systemd/system/caddy.service.d/pear-basic-auth.conf
-    /etc/sysctl.d/90-pear-codex-userns.conf
+    /etc/armada/caddy-basic-auth.env
+    /etc/systemd/system/caddy.service.d/armada-basic-auth.conf
+    /etc/sysctl.d/90-armada-codex-userns.conf
     /usr/local/bin/armada-run-zulip-dev
-    /usr/local/lib/pear-workspace-io
+    /usr/local/lib/armada-workspace-io
     /etc/systemd/system/armada-zulip-dev.service
     /etc/systemd/system/armada-addressing.service
     /etc/systemd/system/armada-presentation.service
     /etc/systemd/system/armada-worker.service
     /etc/systemd/system/armada-worker-1.service
-    /home/zulipdev/pear.env
-    /home/zulipdev/pear-deployed-sha
-    /var/lib/pear
+    /home/zulipdev/armada.env
+    /home/zulipdev/armada-deployed-sha
+    /var/lib/armada
 )
 
-PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
+ARMADA_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     tools/armada_deploy/codex_sandbox_runtime.sh
     tools/armada_deploy/deployment_record.py
     tools/armada_deploy/freeze_asset_build.py
@@ -78,36 +78,36 @@ PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS=(
     zerver/lib/armada_workspace_io.py
 )
 
-PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE="zerver/lib/armada_workspace_io.py"
-PEAR_WORKSPACE_HELPER_PATH="/usr/local/lib/pear-workspace-io"
+ARMADA_WORKSPACE_HELPER_SOURCE_RELATIVE="zerver/lib/armada_workspace_io.py"
+ARMADA_WORKSPACE_HELPER_PATH="/usr/local/lib/armada-workspace-io"
 
-PEAR_DEPLOY_SERVICES=(
-    pear-worker
-    pear-worker-1
-    pear-monitor-worker
-    pear-addressing
-    pear-presentation
-    pear-embedded-bots
-    pear-thumbnail
-    pear-zulip-dev
+ARMADA_DEPLOY_SERVICES=(
+    armada-worker
+    armada-worker-1
+    armada-monitor-worker
+    armada-addressing
+    armada-presentation
+    armada-embedded-bots
+    armada-thumbnail
+    armada-zulip-dev
 )
 
-PEAR_DEPLOY_WORKER_SERVICES=(
-    pear-worker
-    pear-worker-1
-    pear-monitor-worker
-    pear-addressing
-    pear-presentation
-    pear-embedded-bots
-    pear-thumbnail
+ARMADA_DEPLOY_WORKER_SERVICES=(
+    armada-worker
+    armada-worker-1
+    armada-monitor-worker
+    armada-addressing
+    armada-presentation
+    armada-embedded-bots
+    armada-thumbnail
 )
 
-PEAR_DEPLOY_QUEUES=(
-    pear_worker
-    pear_worker_1
-    pear_monitor_worker
-    pear_addressing
-    pear_presentation
+ARMADA_DEPLOY_QUEUES=(
+    armada_worker
+    armada_worker_1
+    armada_monitor_worker
+    armada_addressing
+    armada_presentation
     embedded_bots
     thumbnail
 )
@@ -117,10 +117,10 @@ PEAR_DEPLOY_QUEUES=(
 # otherwise redeliver a healthy, active long turn.  This policy is deliberately
 # broker-owned additive state: code rollback leaves it in place, where it is
 # also safe for the former single-worker topology.
-PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME="pear-worker-consumer-timeout"
-PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN='^pear_worker(_1)?$'
-PEAR_WORKER_CONSUMER_TIMEOUT_MS=21600000
-PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND=(
+ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_NAME="armada-worker-consumer-timeout"
+ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN='^armada_worker(_1)?$'
+ARMADA_WORKER_CONSUMER_TIMEOUT_MS=21600000
+ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND=(
     rabbitmqctl
     set_policy
     -p
@@ -129,9 +129,9 @@ PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND=(
     10
     --apply-to
     queues
-    "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME"
-    "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN"
-    "{\"consumer-timeout\":$PEAR_WORKER_CONSUMER_TIMEOUT_MS}"
+    "$ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_NAME"
+    "$ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN"
+    "{\"consumer-timeout\":$ARMADA_WORKER_CONSUMER_TIMEOUT_MS}"
 )
 
 filter_deploy_untracked_source_files() {
@@ -143,7 +143,7 @@ filter_deploy_untracked_source_files() {
             continue
         fi
         allowed=false
-        for allowed_prefix in "${PEAR_DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
+        for allowed_prefix in "${ARMADA_DEPLOY_UNTRACKED_ALLOW_PREFIXES[@]}"; do
             if [[
                 ( "$allowed_prefix" == */ && "$file" == "$allowed_prefix"* ) ||
                 ( "$allowed_prefix" != */ && "$file" == "$allowed_prefix" )
@@ -158,10 +158,10 @@ filter_deploy_untracked_source_files() {
     done
 }
 
-_validate_pear_deploy_queue_snapshot() {
+_validate_armada_deploy_queue_snapshot() {
     local require_consumers="$1"
     local require_quiescence="$2"
-    local expected_queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local expected_queues="${3:-${ARMADA_DEPLOY_QUEUES[*]}}"
     awk -v expected_queues="$expected_queues" -v require_consumers="$require_consumers" -v require_quiescence="$require_quiescence" '
 BEGIN {
     expected_count = split(expected_queues, expected, " ")
@@ -198,21 +198,21 @@ END {
 '
 }
 
-validate_pear_deploy_queue_snapshot() {
-    _validate_pear_deploy_queue_snapshot true true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+validate_armada_deploy_queue_snapshot() {
+    _validate_armada_deploy_queue_snapshot true true "${1:-${ARMADA_DEPLOY_QUEUES[*]}}"
 }
 
-validate_pear_deploy_queue_empty_snapshot() {
-    _validate_pear_deploy_queue_snapshot false true "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+validate_armada_deploy_queue_empty_snapshot() {
+    _validate_armada_deploy_queue_snapshot false true "${1:-${ARMADA_DEPLOY_QUEUES[*]}}"
 }
 
-validate_pear_deploy_queue_ready_snapshot() {
-    _validate_pear_deploy_queue_snapshot true false "${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+validate_armada_deploy_queue_ready_snapshot() {
+    _validate_armada_deploy_queue_snapshot true false "${1:-${ARMADA_DEPLOY_QUEUES[*]}}"
 }
 
-validate_pear_worker_pool_snapshot() {
+validate_armada_worker_pool_snapshot() {
     awk '
-$1 == "pear_worker" || $1 == "pear_worker_1" {
+$1 == "armada_worker" || $1 == "armada_worker_1" {
     seen[$1] += 1
     if ($2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/) {
         print "invalid queue health row for " $1 > "/dev/stderr"
@@ -226,7 +226,7 @@ $1 == "pear_worker" || $1 == "pear_worker_1" {
 }
 END {
     for (i = 1; i <= 2; i += 1) {
-        queue = i == 1 ? "pear_worker" : "pear_worker_1"
+        queue = i == 1 ? "armada_worker" : "armada_worker_1"
         if (seen[queue] != 1) {
             print "expected exactly one queue health row for " queue > "/dev/stderr"
             bad = 1
@@ -237,12 +237,12 @@ END {
 '
 }
 
-validate_pear_worker_pool_topology_snapshot() {
+validate_armada_worker_pool_topology_snapshot() {
     python3 -c '
 import json
 import sys
 
-separator = "\n-- pear-worker-channels --\n"
+separator = "\n-- armada-worker-channels --\n"
 payload = sys.stdin.read()
 if payload.count(separator) != 1:
     raise SystemExit("invalid Pear worker topology snapshot envelope")
@@ -255,7 +255,7 @@ except (json.JSONDecodeError, UnicodeDecodeError) as error:
 if not isinstance(consumers, list) or not isinstance(channels, list):
     raise SystemExit("Pear worker topology snapshots must be lists")
 
-expected_queues = {"pear_worker", "pear_worker_1"}
+expected_queues = {"armada_worker", "armada_worker_1"}
 worker_consumers = [
     row
     for row in consumers
@@ -303,19 +303,19 @@ for row in worker_consumers:
         priority = 0
     if priority not in (0, 10):
         raise SystemExit(f"{queue} consumer has invalid priority {priority!r}")
-    row["_pear_priority"] = priority
+    row["_armada_priority"] = priority
     by_queue[queue].append(row)
     by_channel.setdefault(channel_pid, []).append(row)
 
 for queue, rows in by_queue.items():
-    if len(rows) != 2 or any(row["_pear_priority"] not in (0, 10) for row in rows):
+    if len(rows) != 2 or any(row["_armada_priority"] not in (0, 10) for row in rows):
         raise SystemExit(f"{queue} does not have two valid pool consumers")
 if len(by_channel) != 2:
     raise SystemExit(f"expected two Pear worker channels, found {len(by_channel)}")
 for channel_pid, rows in by_channel.items():
     if {row["queue_name"] for row in rows} != expected_queues:
         raise SystemExit(f"Pear worker channel {channel_pid} is not subscribed to both queues")
-    if any(row["_pear_priority"] not in (0, 10) for row in rows):
+    if any(row["_armada_priority"] not in (0, 10) for row in rows):
         raise SystemExit(f"Pear worker channel {channel_pid} has invalid affinity priorities")
 
 channel_rows: dict[str, dict[str, object]] = {}
@@ -340,7 +340,7 @@ for pid, row in channel_rows.items():
 '
 }
 
-validate_pear_worker_consumer_timeout_policy_snapshot() {
+validate_armada_worker_consumer_timeout_policy_snapshot() {
     python3 -c '
 import json
 import sys
@@ -375,19 +375,19 @@ if policy.get("priority") != 10:
     raise SystemExit(f"{name} policy has the wrong priority")
 if not isinstance(definition, dict) or definition.get("consumer-timeout") != timeout:
     raise SystemExit(f"{name} policy has the wrong consumer timeout")
-' "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" \
-        "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN" \
-        "$PEAR_WORKER_CONSUMER_TIMEOUT_MS"
+' "$ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" \
+        "$ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_PATTERN" \
+        "$ARMADA_WORKER_CONSUMER_TIMEOUT_MS"
 }
 
-validate_pear_worker_consumer_timeout_queue_snapshot() {
+validate_armada_worker_consumer_timeout_queue_snapshot() {
     python3 -c '
 import json
 import sys
 
 policy_name, timeout_text = sys.argv[1:]
 timeout = int(timeout_text)
-expected = {"pear_worker", "pear_worker_1"}
+expected = {"armada_worker", "armada_worker_1"}
 try:
     rows = json.load(sys.stdin)
 except (json.JSONDecodeError, UnicodeDecodeError) as error:
@@ -420,22 +420,22 @@ for row in matched:
         raise SystemExit(f"{name} does not have policy {policy_name}")
     if not isinstance(definition, dict) or definition.get("consumer-timeout") != timeout:
         raise SystemExit(f"{name} does not have the effective consumer timeout")
-' "$PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" "$PEAR_WORKER_CONSUMER_TIMEOUT_MS"
+' "$ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_NAME" "$ARMADA_WORKER_CONSUMER_TIMEOUT_MS"
 }
 
-install_remote_pear_worker_consumer_timeout_policy() {
+install_remote_armada_worker_consumer_timeout_policy() {
     local remote_command
 
     echo "Installing the Pear worker delivery timeout policy..."
-    printf -v remote_command '%q ' "${PEAR_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND[@]}"
+    printf -v remote_command '%q ' "${ARMADA_WORKER_CONSUMER_TIMEOUT_POLICY_COMMAND[@]}"
     ssh_root "$remote_command"
     if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
-        validate_pear_worker_consumer_timeout_policy_snapshot; then
+        validate_armada_worker_consumer_timeout_policy_snapshot; then
         fail "Pear worker delivery timeout policy verification failed"
     fi
 }
 
-wait_for_remote_pear_worker_consumer_timeout_queues() {
+wait_for_remote_armada_worker_consumer_timeout_queues() {
     local attempt
     local snapshot=""
 
@@ -445,27 +445,27 @@ wait_for_remote_pear_worker_consumer_timeout_queues() {
             ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" 2>/dev/null || true
         )"
         if printf '%s\n' "$snapshot" |
-            validate_pear_worker_consumer_timeout_queue_snapshot >/dev/null 2>&1; then
+            validate_armada_worker_consumer_timeout_queue_snapshot >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
     done
-    printf '%s\n' "$snapshot" | validate_pear_worker_consumer_timeout_queue_snapshot || true
+    printf '%s\n' "$snapshot" | validate_armada_worker_consumer_timeout_queue_snapshot || true
     fail "Pear worker queues did not acquire the required delivery timeout policy"
 }
 
-verify_remote_pear_worker_consumer_timeout_policy() {
+verify_remote_armada_worker_consumer_timeout_policy() {
     if ! ssh_root "rabbitmqctl list_policies -p / --formatter json" |
-        validate_pear_worker_consumer_timeout_policy_snapshot; then
+        validate_armada_worker_consumer_timeout_policy_snapshot; then
         fail "Pear worker delivery timeout policy verification failed"
     fi
     if ! ssh_root "rabbitmqctl list_queues -p / name type durable policy effective_policy_definition arguments --formatter json" |
-        validate_pear_worker_consumer_timeout_queue_snapshot; then
+        validate_armada_worker_consumer_timeout_queue_snapshot; then
         fail "Pear worker queues do not have the required delivery timeout policy"
     fi
 }
 
-remote_pear_worker_pool_topology_snapshot() {
+remote_armada_worker_pool_topology_snapshot() {
     local consumer_snapshot
     local channel_snapshot
 
@@ -475,38 +475,38 @@ remote_pear_worker_pool_topology_snapshot() {
     channel_snapshot="$(
         ssh_root "rabbitmqctl list_channels pid vhost consumer_count prefetch_count global_prefetch_count --formatter json"
     )"
-    printf '%s\n-- pear-worker-channels --\n%s\n' "$consumer_snapshot" "$channel_snapshot"
+    printf '%s\n-- armada-worker-channels --\n%s\n' "$consumer_snapshot" "$channel_snapshot"
 }
 
-wait_for_remote_pear_worker_pool_topology() {
+wait_for_remote_armada_worker_pool_topology() {
     local attempt
     local snapshot=""
 
     echo "Verifying both consumers and channels in the Pear worker pool..."
     for attempt in $(seq 1 30); do
-        snapshot="$(remote_pear_worker_pool_topology_snapshot 2>/dev/null || true)"
+        snapshot="$(remote_armada_worker_pool_topology_snapshot 2>/dev/null || true)"
         if printf '%s' "$snapshot" |
-            validate_pear_worker_pool_topology_snapshot >/dev/null 2>&1; then
+            validate_armada_worker_pool_topology_snapshot >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
     done
-    printf '%s' "$snapshot" | validate_pear_worker_pool_topology_snapshot || true
+    printf '%s' "$snapshot" | validate_armada_worker_pool_topology_snapshot || true
     fail "Pear worker pool did not reach the required two-slot topology"
 }
 
-stage_remote_pear_deploy_bundle() {
+stage_remote_armada_deploy_bundle() {
     local repo_root="$1"
     local revision="$2"
     local stage
 
     stage="$(
         git -C "$repo_root" archive --format=tar "$revision" -- \
-            "${PEAR_DEPLOY_TRUSTED_BUNDLE_PATHS[@]}" |
-            ssh -F "$SSH_CONFIG" pear-staging-root '
+            "${ARMADA_DEPLOY_TRUSTED_BUNDLE_PATHS[@]}" |
+            ssh -F "$SSH_CONFIG" armada-staging-root '
                 set -euo pipefail
                 umask 077
-                stage="$(mktemp -d /root/pear-deploy-runtime.XXXXXXXX)"
+                stage="$(mktemp -d /root/armada-deploy-runtime.XXXXXXXX)"
                 complete=false
                 cleanup() {
                     if [[ "$complete" != true ]]; then
@@ -525,20 +525,20 @@ stage_remote_pear_deploy_bundle() {
                 printf "%s\n" "$stage"
             '
     )"
-    if [[ ! "$stage" =~ ^/root/pear-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
+    if [[ ! "$stage" =~ ^/root/armada-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
         echo "remote trusted deployment bundle returned an invalid path" >&2
         return 1
     fi
     printf '%s\n' "$stage"
 }
 
-remove_remote_pear_deploy_bundle() {
+remove_remote_armada_deploy_bundle() {
     local stage="$1"
-    if [[ ! "$stage" =~ ^/root/pear-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
+    if [[ ! "$stage" =~ ^/root/armada-deploy-runtime\.[A-Za-z0-9]{8}$ ]]; then
         echo "refusing to remove an invalid trusted deployment bundle path" >&2
         return 1
     fi
-    ssh -F "$SSH_CONFIG" pear-staging-root "rm -rf -- $stage"
+    ssh -F "$SSH_CONFIG" armada-staging-root "rm -rf -- $stage"
 }
 
 verify_caddy_https_runtime() (

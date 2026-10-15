@@ -16,7 +16,7 @@
 .right-sidebar-title {
     color: var(--color-text-sidebar-heading);
     opacity: var(--opacity-sidebar-heading);
-    font-family: var(--pear-font-pixel);
+    font-family: var(--legacy-font-pixel);
     font-size: 12px;
     font-weight: 400;
     letter-spacing: normal;
@@ -310,7 +310,7 @@
     margin: 0;
     padding: 5px 5px 5px 0;
     color: var(--color-text-sidebar-heading);
-    font-family: var(--pear-font-pixel);
+    font-family: var(--legacy-font-pixel);
     font-size: 12px;
     font-weight: 400;
     letter-spacing: normal;

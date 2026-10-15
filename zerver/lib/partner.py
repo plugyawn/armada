@@ -35,7 +35,7 @@ from django.db import transaction
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
-from zerver.lib.armada_gate import get_selected_pear_bot_user_id_for_realm
+from zerver.lib.armada_gate import get_selected_armada_bot_user_id_for_realm
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.users import (
     check_can_access_user,
@@ -160,7 +160,7 @@ def stages_for_level(level: int) -> int:
 
 
 def get_agent_bot(realm_id: int) -> UserProfile | None:
-    bot_id = get_selected_pear_bot_user_id_for_realm(realm_id)
+    bot_id = get_selected_armada_bot_user_id_for_realm(realm_id)
     return None if bot_id is None else UserProfile.objects.get(id=bot_id)
 
 

@@ -5,25 +5,25 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from zerver.lib.armada_artifact_contract import PEAR_ARTIFACT_SCHEMA
+from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_SCHEMA
 
-PEAR_ARTIFACT_SUBMESSAGE_TYPE = "pear_artifact"
-PEAR_ARTIFACT_TOOL_RESULT_LABEL = "Artifact"
-PEAR_ARTIFACT_SERIALIZED_LIMIT = 64_000
-PEAR_ARTIFACT_NODE_LIMIT = 128
-PEAR_ARTIFACT_DEPTH_LIMIT = 8
-PEAR_ARTIFACT_TOTAL_TEXT_LIMIT = 12_000
-PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT = 2
+ARMADA_ARTIFACT_SUBMESSAGE_TYPE = "artifact"
+ARMADA_ARTIFACT_TOOL_RESULT_LABEL = "Artifact"
+ARMADA_ARTIFACT_SERIALIZED_LIMIT = 64_000
+ARMADA_ARTIFACT_NODE_LIMIT = 128
+ARMADA_ARTIFACT_DEPTH_LIMIT = 8
+ARMADA_ARTIFACT_TOTAL_TEXT_LIMIT = 12_000
+ARMADA_ARTIFACT_MEDIA_BLOCK_LIMIT = 2
 
 
-class PearArtifactError(ValueError):
+class ArmadaArtifactError(ValueError):
     pass
 
 
 def _schema_reference(reference: str) -> dict[str, Any] | None:
     if not reference.startswith("#/"):
         return None
-    current: object = PEAR_ARTIFACT_SCHEMA
+    current: object = ARMADA_ARTIFACT_SCHEMA
     for encoded in reference[2:].split("/"):
         part = encoded.replace("~1", "/").replace("~0", "~")
         if not isinstance(current, dict) or part not in current:
@@ -213,10 +213,10 @@ def _iter_nodes(node: dict[str, Any], *, depth: int = 1) -> Iterable[tuple[dict[
 
 def _validate_scene(root: dict[str, Any]) -> int:
     nodes = list(_iter_nodes(root))
-    if len(nodes) > PEAR_ARTIFACT_NODE_LIMIT:
-        raise PearArtifactError(f"scene exceeds {PEAR_ARTIFACT_NODE_LIMIT} nodes")
-    if max((depth for _node, depth in nodes), default=0) > PEAR_ARTIFACT_DEPTH_LIMIT:
-        raise PearArtifactError(f"scene exceeds depth {PEAR_ARTIFACT_DEPTH_LIMIT}")
+    if len(nodes) > ARMADA_ARTIFACT_NODE_LIMIT:
+        raise ArmadaArtifactError(f"scene exceeds {ARMADA_ARTIFACT_NODE_LIMIT} nodes")
+    if max((depth for _node, depth in nodes), default=0) > ARMADA_ARTIFACT_DEPTH_LIMIT:
+        raise ArmadaArtifactError(f"scene exceeds depth {ARMADA_ARTIFACT_DEPTH_LIMIT}")
 
     def expanded_node_count(node: dict[str, Any]) -> int:
         children = node.get("children")
@@ -229,14 +229,14 @@ def _validate_scene(root: dict[str, Any]) -> int:
         multiplier = repeat.get("limit", 16) if isinstance(repeat, dict) else 1
         return subtree * multiplier
 
-    if expanded_node_count(root) > PEAR_ARTIFACT_NODE_LIMIT:
-        raise PearArtifactError(f"expanded scene exceeds {PEAR_ARTIFACT_NODE_LIMIT} nodes")
+    if expanded_node_count(root) > ARMADA_ARTIFACT_NODE_LIMIT:
+        raise ArmadaArtifactError(f"expanded scene exceeds {ARMADA_ARTIFACT_NODE_LIMIT} nodes")
 
     ids: set[str] = set()
     connector_refs: list[tuple[str, str]] = []
     total_text = 0
-    node_schema = PEAR_ARTIFACT_SCHEMA["$defs"]["node"]
-    allowed_properties_by_type = node_schema["x-pear-type-properties"]
+    node_schema = ARMADA_ARTIFACT_SCHEMA["$defs"]["node"]
+    allowed_properties_by_type = node_schema["x-armada-type-properties"]
     for node, _depth in nodes:
         if "repeat" in node:
             repeated_nodes = list(_iter_nodes(node))
@@ -244,11 +244,13 @@ def _validate_scene(root: dict[str, Any]) -> int:
                 repeated.get("type") == "connector" or isinstance(repeated.get("id"), str)
                 for repeated, _repeated_depth in repeated_nodes
             ):
-                raise PearArtifactError("repeated scene subtrees cannot contain ids or connectors")
+                raise ArmadaArtifactError(
+                    "repeated scene subtrees cannot contain ids or connectors"
+                )
         node_id = node.get("id")
         if isinstance(node_id, str):
             if node_id in ids:
-                raise PearArtifactError(f"duplicate scene node id: {node_id}")
+                raise ArmadaArtifactError(f"duplicate scene node id: {node_id}")
             ids.add(node_id)
         for key in ("text", "label", "ariaLabel"):
             value = node.get(key)
@@ -257,50 +259,50 @@ def _validate_scene(root: dict[str, Any]) -> int:
         node_type = node.get("type")
         allowed_properties = allowed_properties_by_type.get(node_type)
         if not isinstance(allowed_properties, list):
-            raise PearArtifactError(f"unsupported scene node type: {node_type}")
+            raise ArmadaArtifactError(f"unsupported scene node type: {node_type}")
         ignored_properties = set(node) - set(allowed_properties)
         if ignored_properties:
             names = ", ".join(sorted(ignored_properties))
-            raise PearArtifactError(f"{node_type} node has unsupported properties: {names}")
+            raise ArmadaArtifactError(f"{node_type} node has unsupported properties: {names}")
         if node_type == "group":
             if node.get("layout") not in {"row", "column", "grid", "graph", "overlay"}:
-                raise PearArtifactError("group nodes require a layout")
+                raise ArmadaArtifactError("group nodes require a layout")
             if not node.get("children"):
-                raise PearArtifactError("group nodes require children")
+                raise ArmadaArtifactError("group nodes require children")
         elif node_type == "text":
             if (
                 not isinstance(node.get("text"), str)
                 and not isinstance(node.get("bind"), str)
                 and not isinstance(node.get("derive"), dict)
             ):
-                raise PearArtifactError("text nodes require text, bind, or derive")
+                raise ArmadaArtifactError("text nodes require text, bind, or derive")
         elif node_type == "shape":
             if not isinstance(node.get("shape"), str):
-                raise PearArtifactError("shape nodes require shape")
+                raise ArmadaArtifactError("shape nodes require shape")
             if node.get("shape") == "circle" and "\n" in str(node.get("label", "")):
-                raise PearArtifactError(
+                raise ArmadaArtifactError(
                     "circle labels must be compact and single-line; use a pill for explanatory text"
                 )
         elif node_type == "connector":
             start, end = node.get("from"), node.get("to")
             if not isinstance(start, str) or not isinstance(end, str):
-                raise PearArtifactError("connector nodes require from and to ids")
+                raise ArmadaArtifactError("connector nodes require from and to ids")
             connector_refs.append((start, end))
         elif node_type == "path":
             points = node.get("points")
             if not isinstance(points, list) or len(points) < 2:
-                raise PearArtifactError("path nodes require at least two points")
+                raise ArmadaArtifactError("path nodes require at least two points")
         elif node_type == "symbol":
             if not isinstance(node.get("symbol"), str):
-                raise PearArtifactError("symbol nodes require symbol")
+                raise ArmadaArtifactError("symbol nodes require symbol")
         elif node_type == "mark":
             if not isinstance(node.get("mark"), str) or not (
                 isinstance(node.get("values"), list) or isinstance(node.get("bind"), str)
             ):
-                raise PearArtifactError("mark nodes require mark plus values or bind")
+                raise ArmadaArtifactError("mark nodes require mark plus values or bind")
         elif node_type == "control":
             if not isinstance(node.get("control"), str) or not isinstance(node.get("label"), str):
-                raise PearArtifactError("control nodes require control and label")
+                raise ArmadaArtifactError("control nodes require control and label")
             minimum, maximum = node.get("min"), node.get("max")
             if (
                 node.get("control") in {"range", "stepper"}
@@ -308,12 +310,12 @@ def _validate_scene(root: dict[str, Any]) -> int:
                 and isinstance(maximum, int | float)
                 and minimum > maximum
             ):
-                raise PearArtifactError("control min cannot exceed max")
-    if total_text > PEAR_ARTIFACT_TOTAL_TEXT_LIMIT:
-        raise PearArtifactError("scene text budget exceeded")
+                raise ArmadaArtifactError("control min cannot exceed max")
+    if total_text > ARMADA_ARTIFACT_TOTAL_TEXT_LIMIT:
+        raise ArmadaArtifactError("scene text budget exceeded")
     for start, end in connector_refs:
         if start not in ids or end not in ids:
-            raise PearArtifactError(f"connector references missing node: {start} -> {end}")
+            raise ArmadaArtifactError(f"connector references missing node: {start} -> {end}")
     return total_text
 
 
@@ -343,26 +345,26 @@ def _validate_scene_steps(block: dict[str, Any], scene_text: int) -> None:
             assert isinstance(target, str)
             target_type = target_types.get(target)
             if target_type is None:
-                raise PearArtifactError(f"scene step references missing target: {target}")
+                raise ArmadaArtifactError(f"scene step references missing target: {target}")
             if target in seen_targets:
-                raise PearArtifactError(
+                raise ArmadaArtifactError(
                     f"scene step {step_index + 1} changes target {target} more than once"
                 )
             seen_targets.add(target)
             if "state" in change and target_type not in {"shape", "connector"}:
-                raise PearArtifactError(
+                raise ArmadaArtifactError(
                     "scene step state changes require a shape or connector target"
                 )
             if "label" in change and target_type != "shape":
-                raise PearArtifactError("scene step label changes require a shape target")
+                raise ArmadaArtifactError("scene step label changes require a shape target")
             if "text" in change and target_type != "text":
-                raise PearArtifactError("scene step text changes require a text target")
+                raise ArmadaArtifactError("scene step text changes require a text target")
             for key in ("label", "text"):
                 value = change.get(key)
                 if isinstance(value, str):
                     total_text += len(value)
-    if total_text > PEAR_ARTIFACT_TOTAL_TEXT_LIMIT:
-        raise PearArtifactError("scene step text budget exceeded")
+    if total_text > ARMADA_ARTIFACT_TOTAL_TEXT_LIMIT:
+        raise ArmadaArtifactError("scene step text budget exceeded")
 
 
 def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> None:
@@ -372,9 +374,11 @@ def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> N
     present_resolved_keys = resolved_keys & block.keys()
     if allow_unresolved_media:
         if "source" not in block or present_resolved_keys:
-            raise PearArtifactError("authored media requires source and cannot provide upload URLs")
+            raise ArmadaArtifactError(
+                "authored media requires source and cannot provide upload URLs"
+            )
     elif "src" not in block or present_source_keys:
-        raise PearArtifactError("persisted media requires src and cannot contain workspace paths")
+        raise ArmadaArtifactError("persisted media requires src and cannot contain workspace paths")
 
     primary = block.get("source") if allow_unresolved_media else block.get("src")
     dark = block.get("sourceDark") if allow_unresolved_media else block.get("srcDark")
@@ -386,33 +390,33 @@ def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> N
     kind = block.get("kind")
     primary_extension = primary.rsplit(".", 1)[-1].lower()
     if kind == "image" and primary_extension not in {"png", "svg", "webp"}:
-        raise PearArtifactError("image media requires a PNG, SVG, or WebP source")
+        raise ArmadaArtifactError("image media requires a PNG, SVG, or WebP source")
     if kind == "image" and primary_extension == "svg" and dark is None:
-        raise PearArtifactError("SVG image media requires light and dark sources")
+        raise ArmadaArtifactError("SVG image media requires light and dark sources")
     if kind == "video" and primary_extension != "webm":
-        raise PearArtifactError("video media requires a WebM source")
+        raise ArmadaArtifactError("video media requires a WebM source")
     if kind == "video" and (dark is None or poster is None or poster_dark is None):
-        raise PearArtifactError(
+        raise ArmadaArtifactError(
             "video media requires light and dark WebM sources with matching posters"
         )
     if kind == "image" and (poster is not None or poster_dark is not None):
-        raise PearArtifactError("image media cannot provide a video poster")
+        raise ArmadaArtifactError("image media cannot provide a video poster")
     if kind == "video" and poster_dark is not None and poster is None:
-        raise PearArtifactError("a dark video poster requires a default poster")
+        raise ArmadaArtifactError("a dark video poster requires a default poster")
     for poster_value in (poster, poster_dark):
         if isinstance(poster_value, str) and poster_value.rsplit(".", 1)[-1].lower() not in {
             "png",
             "webp",
         }:
-            raise PearArtifactError("video posters require PNG or WebP sources")
+            raise ArmadaArtifactError("video posters require PNG or WebP sources")
     if dark is not None:
         assert isinstance(dark, str)
         dark_extension = dark.rsplit(".", 1)[-1].lower()
         if dark_extension != primary_extension:
-            raise PearArtifactError("light and dark media sources require the same file type")
+            raise ArmadaArtifactError("light and dark media sources require the same file type")
 
 
-def canonicalize_pear_artifact(
+def canonicalize_armada_artifact(
     value: object, *, allow_unresolved_media: bool = False
 ) -> tuple[dict[str, Any], str]:
     try:
@@ -424,17 +428,19 @@ def canonicalize_pear_artifact(
             sort_keys=True,
         )
     except (TypeError, ValueError) as error:
-        raise PearArtifactError(f"artifact is not finite JSON: {error}") from error
-    if len(encoded.encode()) > PEAR_ARTIFACT_SERIALIZED_LIMIT:
-        raise PearArtifactError(f"artifact exceeds {PEAR_ARTIFACT_SERIALIZED_LIMIT} bytes")
+        raise ArmadaArtifactError(f"artifact is not finite JSON: {error}") from error
+    if len(encoded.encode()) > ARMADA_ARTIFACT_SERIALIZED_LIMIT:
+        raise ArmadaArtifactError(f"artifact exceeds {ARMADA_ARTIFACT_SERIALIZED_LIMIT} bytes")
     decoded: object = json.loads(encoded)
-    schema_error = _validation_error(PEAR_ARTIFACT_SCHEMA, decoded)
+    schema_error = _validation_error(ARMADA_ARTIFACT_SCHEMA, decoded)
     if schema_error is not None:
-        raise PearArtifactError(schema_error)
+        raise ArmadaArtifactError(schema_error)
     assert isinstance(decoded, dict)
     media_blocks = [block for block in decoded["blocks"] if block["type"] == "media"]
-    if len(media_blocks) > PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT:
-        raise PearArtifactError(f"artifact exceeds {PEAR_ARTIFACT_MEDIA_BLOCK_LIMIT} media blocks")
+    if len(media_blocks) > ARMADA_ARTIFACT_MEDIA_BLOCK_LIMIT:
+        raise ArmadaArtifactError(
+            f"artifact exceeds {ARMADA_ARTIFACT_MEDIA_BLOCK_LIMIT} media blocks"
+        )
     for block in decoded["blocks"]:
         if block["type"] == "scene":
             scene_text = _validate_scene(block["root"])
@@ -444,7 +450,7 @@ def canonicalize_pear_artifact(
     return decoded, encoded
 
 
-def pear_artifact_node_count(document: dict[str, Any]) -> int:
+def armada_artifact_node_count(document: dict[str, Any]) -> int:
     return sum(
         sum(1 for _node, _depth in _iter_nodes(block["root"]))
         for block in document.get("blocks", [])
@@ -453,7 +459,7 @@ def pear_artifact_node_count(document: dict[str, Any]) -> int:
 
 
 def artifact_tool_result(encoded: str) -> dict[str, str]:
-    return {"label": PEAR_ARTIFACT_TOOL_RESULT_LABEL, "value": encoded}
+    return {"label": ARMADA_ARTIFACT_TOOL_RESULT_LABEL, "value": encoded}
 
 
 def artifacts_from_tool_results(
@@ -461,14 +467,14 @@ def artifacts_from_tool_results(
 ) -> list[str]:
     artifacts: list[str] = []
     for result in tool_results:
-        if result.get("label") != PEAR_ARTIFACT_TOOL_RESULT_LABEL:
+        if result.get("label") != ARMADA_ARTIFACT_TOOL_RESULT_LABEL:
             continue
         try:
-            _document, encoded = canonicalize_pear_artifact(
+            _document, encoded = canonicalize_armada_artifact(
                 json.loads(result.get("value", "")),
                 allow_unresolved_media=allow_unresolved_media,
             )
-        except (json.JSONDecodeError, PearArtifactError):
+        except (json.JSONDecodeError, ArmadaArtifactError):
             continue
         artifacts.append(encoded)
     return artifacts

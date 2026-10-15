@@ -11,36 +11,36 @@ from dataclasses import dataclass, field
 from typing import Any, Final, Literal, cast
 
 from zerver.lib.armada import (
-    PearActiveSessionSummary,
-    PearAmbientAction,
-    PearAmbientAddressee,
-    PearAmbientDecision,
-    PearResponsePresentation,
-    PearUserInputProvider,
-    PearWorkerToolResult,
-    PearWorkerTranscriptCallback,
-    PearWorkerTranscriptEvent,
-    format_pear_referenced_threads,
-    pear_normalize_token_usage,
+    ArmadaActiveSessionSummary,
+    ArmadaAmbientAction,
+    ArmadaAmbientAddressee,
+    ArmadaAmbientDecision,
+    ArmadaResponsePresentation,
+    ArmadaUserInputProvider,
+    ArmadaWorkerToolResult,
+    ArmadaWorkerTranscriptCallback,
+    ArmadaWorkerTranscriptEvent,
+    armada_normalize_token_usage,
+    format_armada_referenced_threads,
 )
 from zerver.lib.armada_artifact import (
-    PearArtifactError,
+    ArmadaArtifactError,
+    armada_artifact_node_count,
     artifact_tool_result,
-    canonicalize_pear_artifact,
-    pear_artifact_node_count,
+    canonicalize_armada_artifact,
 )
-from zerver.lib.armada_artifact_contract import PEAR_ARTIFACT_TOOL_SPEC
+from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_TOOL_SPEC
 
 logger = logging.getLogger(__name__)
 
-PearAgentRuntime = Literal["disabled", "codex-app-server"]
-PearSubprocessPopen = Callable[..., subprocess.Popen[str]]
-PearUrlOpen = Callable[..., Any]
-PEAR_GEMINI_INTERACTIONS_API_REVISION = "2026-05-20"
+ArmadaAgentRuntime = Literal["disabled", "codex-app-server"]
+ArmadaSubprocessPopen = Callable[..., subprocess.Popen[str]]
+ArmadaUrlOpen = Callable[..., Any]
+ARMADA_GEMINI_INTERACTIONS_API_REVISION = "2026-05-20"
 
 
 @dataclass(frozen=True)
-class PearProcessIsolation:
+class ArmadaProcessIsolation:
     username: str
     home: str
     codex_home: str
@@ -64,16 +64,16 @@ class PearProcessIsolation:
         return f"os-user:{self.username}"
 
 
-class PearAgentRuntimeError(RuntimeError):
+class ArmadaAgentRuntimeError(RuntimeError):
     pass
 
 
-def pear_capture_protocol_message(direction: str, message: dict[str, Any]) -> None:
+def armada_capture_protocol_message(direction: str, message: dict[str, Any]) -> None:
     """Append one wire message to the capture file when
-    PEAR_CODEX_PROTOCOL_CAPTURE names a path. Diagnostic-only: the
+    ARMADA_CODEX_PROTOCOL_CAPTURE names a path. Diagnostic-only: the
     surface-diff workflow uses it to see exactly what an app-server
     version emits and asks; never allowed to break a turn."""
-    capture_path = os.environ.get("PEAR_CODEX_PROTOCOL_CAPTURE")
+    capture_path = os.environ.get("ARMADA_CODEX_PROTOCOL_CAPTURE")
     if not capture_path:
         return
     try:
@@ -83,35 +83,35 @@ def pear_capture_protocol_message(direction: str, message: dict[str, Any]) -> No
         pass
 
 
-def pear_isolated_command(
+def armada_isolated_command(
     command: Sequence[str],
-    process_isolation: PearProcessIsolation | None,
+    process_isolation: ArmadaProcessIsolation | None,
 ) -> list[str]:
     if process_isolation is None:
         return list(command)
     return [*process_isolation.command_prefix(), *command]
 
 
-def pear_subprocess_cwd(
+def armada_subprocess_cwd(
     workdir: str | None,
-    process_isolation: PearProcessIsolation | None,
+    process_isolation: ArmadaProcessIsolation | None,
 ) -> str | None:
     if process_isolation is None:
         return workdir
     return "/"
 
 
-def trim_pear_agent_text(value: str, *, limit: int) -> str:
+def trim_armada_agent_text(value: str, *, limit: int) -> str:
     value = value.strip()
     if len(value) <= limit:
         return value
     return f"{value[: max(limit - 15, 0)].rstrip()}... [truncated]"
 
 
-def build_pear_addressing_router_prompt(
+def build_armada_addressing_router_prompt(
     *,
     content: str,
-    active_session: PearActiveSessionSummary | None,
+    active_session: ArmadaActiveSessionSummary | None,
     active_run: bool = False,
     stream: str = "",
     topic: str = "",
@@ -146,7 +146,7 @@ def build_pear_addressing_router_prompt(
     )
     recent_lines = [
         f"- {message['sender']}{' [bot]' if message['sender_is_bot'] else ''}: "
-        f"{trim_pear_agent_text(message['content'], limit=240)}"
+        f"{trim_armada_agent_text(message['content'], limit=240)}"
         for message in recent_messages
     ]
     if not recent_lines:
@@ -159,7 +159,7 @@ def build_pear_addressing_router_prompt(
             "Do not answer the user. Do not run commands or use tools.",
             "Return only the JSON object required by the response schema.",
             "",
-            "addressee: pear only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
+            "addressee: agent only when the request is for Pear, Codex, the agent, or the assistant; other for a named/recent human; general for team chatter; uncertain otherwise.",
             "action: ignore for chatter, ambiguity, acknowledgements, and messages for humans; when active_run=yes, steer if this changes or continues Pear's current work; when active_run=no, run for a concrete request or a correction/follow-up to Pear's latest reply.",
             "presentation: choose the likely final UI shape: compact, prose, status, explainer, or diff.",
             "Treat a repeated concrete request as intentional. Exact transport duplicates are handled outside this model.",
@@ -174,13 +174,13 @@ def build_pear_addressing_router_prompt(
             *recent_lines,
             "",
             "New message:",
-            trim_pear_agent_text(content, limit=1000),
+            trim_armada_agent_text(content, limit=1000),
         ]
     )
 
 
-def parse_pear_addressing_json_output(output: str) -> PearAmbientDecision:
-    ignored: PearAmbientDecision = {
+def parse_armada_addressing_json_output(output: str) -> ArmadaAmbientDecision:
+    ignored: ArmadaAmbientDecision = {
         "addressee": "uncertain",
         "action": "ignore",
         "presentation": "compact",
@@ -201,19 +201,19 @@ def parse_pear_addressing_json_output(output: str) -> PearAmbientDecision:
     action = parsed.get("action")
     presentation = parsed.get("presentation")
     if (
-        addressee not in {"pear", "other", "general", "uncertain"}
+        addressee not in {"agent", "other", "general", "uncertain"}
         or action not in {"ignore", "steer", "run"}
         or presentation not in {"compact", "prose", "status", "explainer", "diff"}
     ):
         return ignored
     return {
-        "addressee": cast(PearAmbientAddressee, addressee),
-        "action": cast(PearAmbientAction, action),
-        "presentation": cast(PearResponsePresentation, presentation),
+        "addressee": cast(ArmadaAmbientAddressee, addressee),
+        "action": cast(ArmadaAmbientAction, action),
+        "presentation": cast(ArmadaResponsePresentation, presentation),
     }
 
 
-def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
+def armada_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
     text_parts: list[str] = []
     steps = payload.get("steps")
     if not isinstance(steps, list):
@@ -232,7 +232,7 @@ def pear_gemini_interaction_output_text(payload: dict[str, Any]) -> str:
     return "".join(text_parts)
 
 
-class PearGeminiInteractionsClient:
+class ArmadaGeminiInteractionsClient:
     def __init__(
         self,
         *,
@@ -240,7 +240,7 @@ class PearGeminiInteractionsClient:
         timeout_seconds: int,
         output_limit: int,
         url: str,
-        urlopen: PearUrlOpen | None = None,
+        urlopen: ArmadaUrlOpen | None = None,
     ) -> None:
         self.api_key = (api_key or "").strip()
         self.timeout_seconds = timeout_seconds
@@ -258,7 +258,7 @@ class PearGeminiInteractionsClient:
         thinking_level: str | None,
     ) -> str:
         if not self.api_key:
-            raise PearAgentRuntimeError("Gemini Interactions API key is not configured.")
+            raise ArmadaAgentRuntimeError("Gemini Interactions API key is not configured.")
         payload: dict[str, Any] = {
             "model": model,
             "store": False,
@@ -283,7 +283,7 @@ class PearGeminiInteractionsClient:
             headers={
                 "x-goog-api-key": self.api_key,
                 "Content-Type": "application/json",
-                "Api-Revision": PEAR_GEMINI_INTERACTIONS_API_REVISION,
+                "Api-Revision": ARMADA_GEMINI_INTERACTIONS_API_REVISION,
             },
             method="POST",
         )
@@ -293,28 +293,30 @@ class PearGeminiInteractionsClient:
                 status = getattr(response, "status", 200)
         except urllib.error.HTTPError as error:
             raw_error = error.read().decode(errors="replace")
-            raise PearAgentRuntimeError(
+            raise ArmadaAgentRuntimeError(
                 "Gemini Interactions API failed with HTTP "
-                f"{error.code}: {trim_pear_agent_text(raw_error, limit=self.output_limit)}"
+                f"{error.code}: {trim_armada_agent_text(raw_error, limit=self.output_limit)}"
             ) from error
         except (TimeoutError, urllib.error.URLError) as error:
-            raise PearAgentRuntimeError(f"Gemini Interactions API failed: {error}") from error
+            raise ArmadaAgentRuntimeError(f"Gemini Interactions API failed: {error}") from error
 
         if status != 200:
-            raise PearAgentRuntimeError(
+            raise ArmadaAgentRuntimeError(
                 "Gemini Interactions API failed with HTTP "
-                f"{status}: {trim_pear_agent_text(raw_response, limit=self.output_limit)}"
+                f"{status}: {trim_armada_agent_text(raw_response, limit=self.output_limit)}"
             )
         try:
             parsed = json.loads(raw_response)
         except json.JSONDecodeError as error:
-            raise PearAgentRuntimeError("Gemini Interactions API returned invalid JSON.") from error
+            raise ArmadaAgentRuntimeError(
+                "Gemini Interactions API returned invalid JSON."
+            ) from error
         if not isinstance(parsed, dict):
             return ""
-        return pear_gemini_interaction_output_text(parsed)
+        return armada_gemini_interaction_output_text(parsed)
 
 
-class PearGeminiInteractionsAddressingIntentClassifier:
+class ArmadaGeminiInteractionsAddressingIntentClassifier:
     def __init__(
         self,
         *,
@@ -324,11 +326,11 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         output_limit: int,
         url: str,
         thinking_level: str | None = "minimal",
-        urlopen: PearUrlOpen | None = None,
+        urlopen: ArmadaUrlOpen | None = None,
     ) -> None:
         self.model = model
         self.thinking_level = thinking_level
-        self.client = PearGeminiInteractionsClient(
+        self.client = ArmadaGeminiInteractionsClient(
             api_key=api_key,
             timeout_seconds=timeout_seconds,
             output_limit=output_limit,
@@ -340,14 +342,14 @@ class PearGeminiInteractionsAddressingIntentClassifier:
         self,
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         active_run: bool,
         message: dict[str, Any],
         bot_handler: Any,
-    ) -> PearAmbientDecision:
+    ) -> ArmadaAmbientDecision:
         stream = str(message.get("display_recipient") or "")
         topic = str(message.get("topic") or message.get("subject") or "")
-        prompt = build_pear_addressing_router_prompt(
+        prompt = build_armada_addressing_router_prompt(
             content=content,
             active_session=active_session,
             active_run=active_run,
@@ -364,7 +366,7 @@ class PearGeminiInteractionsAddressingIntentClassifier:
                 "properties": {
                     "addressee": {
                         "type": "string",
-                        "enum": ["pear", "other", "general", "uncertain"],
+                        "enum": ["agent", "other", "general", "uncertain"],
                     },
                     "action": {"type": "string", "enum": ["ignore", "steer", "run"]},
                     "presentation": {
@@ -377,14 +379,14 @@ class PearGeminiInteractionsAddressingIntentClassifier:
             },
             thinking_level=self.thinking_level,
         )
-        return parse_pear_addressing_json_output(output)
+        return parse_armada_addressing_json_output(output)
 
 
-def build_pear_codex_developer_instructions() -> str:
+def build_armada_codex_developer_instructions() -> str:
     return "You are Pear, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Pear/Zulip server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Pear state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nTrack multi-step work with your plan tool and update step statuses as you go — the plan renders live for the people in the topic.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Pear never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
 
 
-def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task: str) -> str:
+def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, task: str) -> str:
     task_text = task.strip() or "Continue the topic Codex thread."
     recent_messages = active_session.get("recent_messages", [])
     recent_transcript_lines = [
@@ -394,7 +396,7 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
         )
         for message in recent_messages[-30:]
     ]
-    referenced_context_lines = format_pear_referenced_threads(
+    referenced_context_lines = format_armada_referenced_threads(
         active_session.get("referenced_threads", [])
     )
     if active_session.get("latest_codex_thread_id"):
@@ -456,11 +458,11 @@ def build_pear_codex_turn_prompt(active_session: PearActiveSessionSummary, task:
     )
 
 
-def pear_worker_results_from_final_text(
+def armada_worker_results_from_final_text(
     text: str,
     *,
     output_limit: int,
-) -> list[PearWorkerToolResult]:
+) -> list[ArmadaWorkerToolResult]:
     if not text.strip():
         return [
             {
@@ -471,13 +473,13 @@ def pear_worker_results_from_final_text(
     return [
         {
             "label": "Result",
-            "value": trim_pear_agent_text(text, limit=output_limit),
+            "value": trim_armada_agent_text(text, limit=output_limit),
         }
     ]
 
 
-def build_pear_runtime_value(
-    runtime: PearAgentRuntime,
+def build_armada_runtime_value(
+    runtime: ArmadaAgentRuntime,
     *,
     workdir: str | None = None,
     sandbox: str | None = None,
@@ -485,7 +487,7 @@ def build_pear_runtime_value(
     model: str | None = None,
     service_tier: str | None = None,
     reasoning_effort: str | None = None,
-    process_isolation: PearProcessIsolation | None = None,
+    process_isolation: ArmadaProcessIsolation | None = None,
 ) -> str:
     parts: list[str] = [runtime]
     if workdir is not None:
@@ -505,7 +507,7 @@ def build_pear_runtime_value(
     return " ".join(parts)
 
 
-def pear_codex_item_text(item: dict[str, Any]) -> str:
+def armada_codex_item_text(item: dict[str, Any]) -> str:
     for key in ("text", "message", "summary", "output", "content"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
@@ -513,15 +515,15 @@ def pear_codex_item_text(item: dict[str, Any]) -> str:
     return ""
 
 
-def pear_codex_item_title(item: dict[str, Any]) -> str:
+def armada_codex_item_title(item: dict[str, Any]) -> str:
     for key in ("command", "name", "tool_name", "path", "title"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-    return pear_codex_item_text(item)
+    return armada_codex_item_text(item)
 
 
-def pear_codex_plan_steps(item: dict[str, Any]) -> list[dict[str, str]]:
+def armada_codex_plan_steps(item: dict[str, Any]) -> list[dict[str, str]]:
     raw_steps = item.get("plan") or item.get("steps")
     if not isinstance(raw_steps, list):
         return []
@@ -537,12 +539,12 @@ def pear_codex_plan_steps(item: dict[str, Any]) -> list[dict[str, str]]:
     return steps
 
 
-def pear_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
+def armada_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
     for key in ("id", "type", "status", "command", "name", "tool_name", "path"):
         value = item.get(key)
         if isinstance(value, str) and value.strip():
-            metadata[key] = trim_pear_agent_text(value, limit=500)
+            metadata[key] = trim_armada_agent_text(value, limit=500)
     if item.get("type") == "collab_agent_tool_call":
         for source_key, target_key in (
             ("senderThreadId", "sender_thread_id"),
@@ -552,7 +554,7 @@ def pear_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
         ):
             value = item.get(source_key)
             if isinstance(value, str) and value.strip():
-                metadata[target_key] = trim_pear_agent_text(value, limit=1000)
+                metadata[target_key] = trim_armada_agent_text(value, limit=1000)
         receiver_thread_ids = item.get("receiverThreadIds")
         if isinstance(receiver_thread_ids, list):
             metadata["receiver_thread_ids"] = [
@@ -565,7 +567,7 @@ def pear_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
             metadata["agent_states"] = {
                 str(thread_id): {
                     "status": str(state.get("status") or "unknown"),
-                    "message": trim_pear_agent_text(str(state.get("message") or ""), limit=500),
+                    "message": trim_armada_agent_text(str(state.get("message") or ""), limit=500),
                 }
                 for thread_id, state in list(agent_states.items())[:16]
                 if isinstance(thread_id, str) and isinstance(state, dict)
@@ -578,17 +580,17 @@ def pear_codex_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
         ):
             value = item.get(source_key)
             if isinstance(value, str) and value.strip():
-                metadata[target_key] = trim_pear_agent_text(value, limit=500)
+                metadata[target_key] = trim_armada_agent_text(value, limit=500)
     return metadata
 
 
-def pear_codex_event_delta_text(event: dict[str, Any]) -> str:
+def armada_codex_event_delta_text(event: dict[str, Any]) -> str:
     for key in ("delta", "text_delta", "content_delta"):
         value = event.get(key)
         if isinstance(value, str):
             return value
         if isinstance(value, dict):
-            text = pear_codex_item_text(value)
+            text = armada_codex_item_text(value)
             if text:
                 return text
 
@@ -599,17 +601,17 @@ def pear_codex_event_delta_text(event: dict[str, Any]) -> str:
             if isinstance(value, str):
                 return value
             if isinstance(value, dict):
-                text = pear_codex_item_text(value)
+                text = armada_codex_item_text(value)
                 if text:
                     return text
 
     data = event.get("data")
     if isinstance(data, dict):
-        return pear_codex_event_delta_text(data)
+        return armada_codex_event_delta_text(data)
     return ""
 
 
-def pear_codex_event_item_id(event: dict[str, Any]) -> str:
+def armada_codex_event_item_id(event: dict[str, Any]) -> str:
     for key in ("item_id", "id", "output_index", "message_id"):
         value = event.get(key)
         if isinstance(value, str) and value.strip():
@@ -624,9 +626,9 @@ def pear_codex_event_item_id(event: dict[str, Any]) -> str:
     return "assistant"
 
 
-def pear_transcript_events_from_codex_json_event(
+def armada_transcript_events_from_codex_json_event(
     event: dict[str, Any],
-) -> list[PearWorkerTranscriptEvent]:
+) -> list[ArmadaWorkerTranscriptEvent]:
     event_type = event.get("type")
     if event_type == "thread.started" and isinstance(event.get("thread_id"), str):
         thread_id = event["thread_id"]
@@ -693,18 +695,18 @@ def pear_transcript_events_from_codex_json_event(
             status = "done"
         elif raw_status in {"in_progress", "running"}:
             status = "running"
-    title = trim_pear_agent_text(pear_codex_item_title(item), limit=1000)
-    raw_body = pear_codex_item_text(item)
+    title = trim_armada_agent_text(armada_codex_item_title(item), limit=1000)
+    raw_body = armada_codex_item_text(item)
     body = (
         raw_body
         if item_type == "agent_message" and status == "done"
-        else trim_pear_agent_text(raw_body, limit=4000)
+        else trim_armada_agent_text(raw_body, limit=4000)
     )
-    base_event: PearWorkerTranscriptEvent = {
+    base_event: ArmadaWorkerTranscriptEvent = {
         "status": status,
         "title": title,
         "body": body,
-        "metadata": pear_codex_item_metadata(item),
+        "metadata": armada_codex_item_metadata(item),
     }
     if isinstance(item_id, str):
         base_event["item_id"] = item_id
@@ -725,13 +727,13 @@ def pear_transcript_events_from_codex_json_event(
     if item_type == "file_change":
         return [{**base_event, "kind": "file_change", "title": title or "file change"}]
     if item_type == "plan_update":
-        steps = pear_codex_plan_steps(item)
+        steps = armada_codex_plan_steps(item)
         return [
             {
                 **base_event,
                 "kind": "plan",
                 "title": "Plan",
-                "metadata": {**pear_codex_item_metadata(item), "steps": steps},
+                "metadata": {**armada_codex_item_metadata(item), "steps": steps},
             }
         ]
     if item_type == "context_compaction":
@@ -744,7 +746,7 @@ def pear_transcript_events_from_codex_json_event(
                 "kind": "status",
                 "title": ("Context compacted." if phase == "completed" else "Compacting context…"),
                 "metadata": {
-                    **pear_codex_item_metadata(item),
+                    **armada_codex_item_metadata(item),
                     "operation": "compaction",
                     "phase": phase,
                 },
@@ -779,14 +781,14 @@ def pear_transcript_events_from_codex_json_event(
     return []
 
 
-class PearCodexJsonTranscriptTranslator:
-    def events_from_json_event(self, event: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
+class ArmadaCodexJsonTranscriptTranslator:
+    def events_from_json_event(self, event: dict[str, Any]) -> list[ArmadaWorkerTranscriptEvent]:
         event_type = event.get("type")
         if isinstance(event_type, str) and "delta" in event_type:
-            delta_text = pear_codex_event_delta_text(event)
+            delta_text = armada_codex_event_delta_text(event)
             if not delta_text:
                 return []
-            item_id = pear_codex_event_item_id(event)
+            item_id = armada_codex_event_item_id(event)
             return [
                 {
                     "kind": "assistant",
@@ -798,10 +800,10 @@ class PearCodexJsonTranscriptTranslator:
                 }
             ]
 
-        return pear_transcript_events_from_codex_json_event(event)
+        return armada_transcript_events_from_codex_json_event(event)
 
 
-PEAR_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
+ARMADA_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
     "agentMessage": "agent_message",
     "commandExecution": "command_execution",
     "fileChange": "file_change",
@@ -817,7 +819,7 @@ PEAR_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
 
 # Engine chatter that never belongs in a run transcript. turn/diff joins
 # the translated set with the live-diff surface.
-PEAR_APP_SERVER_IGNORED_METHODS = frozenset(
+ARMADA_APP_SERVER_IGNORED_METHODS = frozenset(
     {
         "mcpServer/startupStatus/updated",
         "remoteControl/status/changed",
@@ -828,7 +830,7 @@ PEAR_APP_SERVER_IGNORED_METHODS = frozenset(
 )
 
 
-def pear_app_server_thread_id_from_result(result: object) -> str | None:
+def armada_app_server_thread_id_from_result(result: object) -> str | None:
     if not isinstance(result, dict):
         return None
     thread = result.get("thread")
@@ -840,7 +842,7 @@ def pear_app_server_thread_id_from_result(result: object) -> str | None:
     return None
 
 
-def pear_app_server_turn_id_from_result(result: object) -> str | None:
+def armada_app_server_turn_id_from_result(result: object) -> str | None:
     if not isinstance(result, dict):
         return None
     turn = result.get("turn")
@@ -852,11 +854,11 @@ def pear_app_server_turn_id_from_result(result: object) -> str | None:
     return None
 
 
-def pear_app_server_normalized_item(item: dict[str, Any]) -> dict[str, Any]:
+def armada_app_server_normalized_item(item: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(item)
     item_type = normalized.get("type")
     if isinstance(item_type, str):
-        normalized["type"] = PEAR_APP_SERVER_ITEM_TYPE_MAP.get(item_type, item_type)
+        normalized["type"] = ARMADA_APP_SERVER_ITEM_TYPE_MAP.get(item_type, item_type)
     tool = normalized.get("tool")
     if isinstance(tool, str):
         normalized.setdefault("tool_name", tool)
@@ -864,7 +866,7 @@ def pear_app_server_normalized_item(item: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] | None:
+def armada_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] | None:
     thread_id = thread.get("id")
     if not isinstance(thread_id, str) or not thread_id.strip():
         return None
@@ -877,7 +879,7 @@ def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] 
     ):
         value = thread.get(source_key)
         if isinstance(value, str):
-            descriptor[target_key] = trim_pear_agent_text(value, limit=1000)
+            descriptor[target_key] = trim_armada_agent_text(value, limit=1000)
         elif value is None and source_key in {
             "parentThreadId",
             "agentNickname",
@@ -896,7 +898,7 @@ def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] 
     sub_agent = source.get("subAgent") if isinstance(source, dict) else None
     thread_source = thread.get("threadSource")
     if isinstance(thread_source, str):
-        descriptor["thread_source"] = trim_pear_agent_text(thread_source, limit=100)
+        descriptor["thread_source"] = trim_armada_agent_text(thread_source, limit=100)
     elif isinstance(sub_agent, dict):
         descriptor["thread_source"] = "subagent"
     thread_spawn = sub_agent.get("thread_spawn") if isinstance(sub_agent, dict) else None
@@ -907,13 +909,13 @@ def pear_app_server_thread_descriptor(thread: dict[str, Any]) -> dict[str, Any] 
         ):
             value = thread_spawn.get(source_key)
             if descriptor.get(target_key) is None and isinstance(value, str):
-                descriptor[target_key] = trim_pear_agent_text(value, limit=500)
+                descriptor[target_key] = trim_armada_agent_text(value, limit=500)
     return descriptor
 
 
-def pear_thread_session_event(
+def armada_thread_session_event(
     descriptor: dict[str, Any], *, codex_method: str = "thread/started"
-) -> PearWorkerTranscriptEvent:
+) -> ArmadaWorkerTranscriptEvent:
     thread_id = str(descriptor["id"])
     return {
         "kind": "session",
@@ -931,8 +933,8 @@ def pear_thread_session_event(
     }
 
 
-def pear_app_server_usage_event(params: dict[str, Any]) -> PearWorkerTranscriptEvent | None:
-    usage = pear_normalize_token_usage(params)
+def armada_app_server_usage_event(params: dict[str, Any]) -> ArmadaWorkerTranscriptEvent | None:
+    usage = armada_normalize_token_usage(params)
     if usage is None:
         return None
     return {
@@ -943,9 +945,9 @@ def pear_app_server_usage_event(params: dict[str, Any]) -> PearWorkerTranscriptE
     }
 
 
-class PearCodexAppServerTranscriptTranslator:
+class ArmadaCodexAppServerTranscriptTranslator:
     def __init__(self) -> None:
-        self.json_translator = PearCodexJsonTranscriptTranslator()
+        self.json_translator = ArmadaCodexJsonTranscriptTranslator()
         self.last_rate_limit_key: tuple[object, ...] | None = None
         self.reported_unknown_methods: set[str] = set()
         self.thread_descriptors: dict[str, dict[str, Any]] = {}
@@ -953,7 +955,7 @@ class PearCodexAppServerTranscriptTranslator:
 
     def collaboration_thread_events(
         self, method: str, params: dict[str, Any], item: dict[str, Any]
-    ) -> list[PearWorkerTranscriptEvent]:
+    ) -> list[ArmadaWorkerTranscriptEvent]:
         """Project native collaboration receiver identities as child sessions.
 
         Some app-server builds announce a spawned child only through the
@@ -975,7 +977,7 @@ class PearCodexAppServerTranscriptTranslator:
         if not isinstance(receiver_thread_ids, list) or not isinstance(agent_states, dict):
             return []
 
-        events: list[PearWorkerTranscriptEvent] = []
+        events: list[ArmadaWorkerTranscriptEvent] = []
         for raw_thread_id in receiver_thread_ids[:16]:
             if not isinstance(raw_thread_id, str) or not raw_thread_id.strip():
                 continue
@@ -1020,10 +1022,10 @@ class PearCodexAppServerTranscriptTranslator:
             descriptor["status"] = next_status
             self.thread_descriptors[thread_id] = descriptor
             if status_changed:
-                events.append(pear_thread_session_event(descriptor, codex_method=method))
+                events.append(armada_thread_session_event(descriptor, codex_method=method))
             message = raw_state.get("message")
             if isinstance(message, str) and message.strip():
-                normalized_message = trim_pear_agent_text(message, limit=4000)
+                normalized_message = trim_armada_agent_text(message, limit=4000)
                 if self.latest_direct_assistant_body.get(thread_id) == normalized_message:
                     continue
                 events.append(
@@ -1044,11 +1046,11 @@ class PearCodexAppServerTranscriptTranslator:
 
     def contextualize_events(
         self,
-        events: list[PearWorkerTranscriptEvent],
+        events: list[ArmadaWorkerTranscriptEvent],
         *,
         method: str,
         params: dict[str, Any],
-    ) -> list[PearWorkerTranscriptEvent]:
+    ) -> list[ArmadaWorkerTranscriptEvent]:
         thread_id = params.get("threadId")
         turn_id = params.get("turnId")
         turn = params.get("turn")
@@ -1072,7 +1074,7 @@ class PearCodexAppServerTranscriptTranslator:
             event["metadata"] = event_metadata
         return events
 
-    def rate_limit_events(self, params: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
+    def rate_limit_events(self, params: dict[str, Any]) -> list[ArmadaWorkerTranscriptEvent]:
         limits = params.get("rateLimits")
         if not isinstance(limits, dict):
             return []
@@ -1107,7 +1109,7 @@ class PearCodexAppServerTranscriptTranslator:
 
     def unknown_method_events(
         self, method: str, params: dict[str, Any]
-    ) -> list[PearWorkerTranscriptEvent]:
+    ) -> list[ArmadaWorkerTranscriptEvent]:
         """Tolerant reader: an untranslated engine signal surfaces once per
         runtime instead of vanishing — the codexification surface-diff
         feeds on these logs after every Codex upgrade."""
@@ -1124,7 +1126,7 @@ class PearCodexAppServerTranscriptTranslator:
             }
         ]
 
-    def events_from_message(self, message: dict[str, Any]) -> list[PearWorkerTranscriptEvent]:
+    def events_from_message(self, message: dict[str, Any]) -> list[ArmadaWorkerTranscriptEvent]:
         method = message.get("method")
         params = message.get("params")
         if not isinstance(method, str) or not isinstance(params, dict):
@@ -1133,14 +1135,14 @@ class PearCodexAppServerTranscriptTranslator:
         if method == "thread/started":
             thread = params.get("thread")
             descriptor = (
-                pear_app_server_thread_descriptor(thread) if isinstance(thread, dict) else None
+                armada_app_server_thread_descriptor(thread) if isinstance(thread, dict) else None
             )
             if descriptor is None:
                 return []
             thread_id = descriptor["id"]
             assert isinstance(thread_id, str)
             self.thread_descriptors[thread_id] = descriptor
-            return [pear_thread_session_event(descriptor)]
+            return [armada_thread_session_event(descriptor)]
         if method == "thread/status/changed":
             thread_id = params.get("threadId")
             raw_status = params.get("status")
@@ -1241,7 +1243,7 @@ class PearCodexAppServerTranscriptTranslator:
                 params=params,
             )
         if method == "thread/tokenUsage/updated":
-            usage_event = pear_app_server_usage_event(params)
+            usage_event = armada_app_server_usage_event(params)
             return (
                 self.contextualize_events([usage_event], method=method, params=params)
                 if usage_event is not None
@@ -1254,7 +1256,7 @@ class PearCodexAppServerTranscriptTranslator:
                         "kind": "error",
                         "status": "failed",
                         "title": "Codex runtime error.",
-                        "body": trim_pear_agent_text(
+                        "body": trim_armada_agent_text(
                             str(params.get("message", "") or params.get("error", "")),
                             limit=1000,
                         ),
@@ -1287,13 +1289,13 @@ class PearCodexAppServerTranscriptTranslator:
                         "kind": "status",
                         "status": "done",
                         "title": "Codex warning.",
-                        "body": trim_pear_agent_text(body, limit=600),
+                        "body": trim_armada_agent_text(body, limit=600),
                     }
                 ],
                 method=method,
                 params=params,
             )
-        if method in PEAR_APP_SERVER_IGNORED_METHODS:
+        if method in ARMADA_APP_SERVER_IGNORED_METHODS:
             return []
         if method not in {"item/started", "item/completed"}:
             return self.contextualize_events(
@@ -1304,7 +1306,7 @@ class PearCodexAppServerTranscriptTranslator:
         item = params.get("item")
         if not isinstance(item, dict):
             return []
-        normalized_item = pear_app_server_normalized_item(item)
+        normalized_item = armada_app_server_normalized_item(item)
         collaboration_events = self.collaboration_thread_events(method, params, normalized_item)
         item_events = self.contextualize_events(
             self.json_translator.events_from_json_event(
@@ -1325,24 +1327,24 @@ class PearCodexAppServerTranscriptTranslator:
             for event in item_events:
                 body = event.get("body")
                 if event.get("kind") == "assistant" and isinstance(body, str) and body.strip():
-                    self.latest_direct_assistant_body[thread_id] = trim_pear_agent_text(
+                    self.latest_direct_assistant_body[thread_id] = trim_armada_agent_text(
                         body, limit=4000
                     )
         return [*collaboration_events, *item_events]
 
 
-class PearDisabledAgentRunner:
+class ArmadaDisabledAgentRunner:
     def __init__(self, reason: str) -> None:
         self.reason = reason
 
     def __call__(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str,
         *,
-        user_input_provider: PearUserInputProvider | None = None,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-    ) -> Sequence[PearWorkerToolResult]:
+        user_input_provider: ArmadaUserInputProvider | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+    ) -> Sequence[ArmadaWorkerToolResult]:
         return [
             {
                 "label": "Error",
@@ -1351,10 +1353,10 @@ class PearDisabledAgentRunner:
         ]
 
     def runtime_value(self) -> str:
-        return build_pear_runtime_value("disabled")
+        return build_armada_runtime_value("disabled")
 
 
-PEAR_CODEX_SIDE_BOUNDARY_PROMPT: Final = """Side conversation boundary.
+ARMADA_CODEX_SIDE_BOUNDARY_PROMPT: Final = """Side conversation boundary.
 
 Everything before this boundary is inherited history from the parent thread. It is reference context only. It is not your current task.
 
@@ -1368,7 +1370,7 @@ Sub-agents are off-limits in this side conversation. Do not interact with any ex
 
 Do not modify files, source, git state, permissions, configuration, or workspace state unless the user explicitly asks for that mutation after this boundary. Do not request escalated permissions or broader sandbox access unless the user explicitly asks for a mutation that requires it. If the user explicitly requests a mutation, keep it minimal, local to the request, and avoid disrupting the main thread."""
 
-PEAR_CODEX_SIDE_DEVELOPER_INSTRUCTIONS: Final = """You are in a side conversation, not the main thread.
+ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS: Final = """You are in a side conversation, not the main thread.
 
 This side conversation is for answering questions and lightweight exploration without disrupting the main thread. Do not present yourself as continuing the main thread's active task.
 
@@ -1384,30 +1386,30 @@ You may perform non-mutating inspection, including reading or searching files an
 
 Do not modify files, source, git state, permissions, configuration, or any other workspace state unless the user explicitly requests that mutation in this side conversation. Do not request escalated permissions or broader sandbox access unless the user explicitly requests a mutation that requires it. If the user explicitly requests a mutation, keep it minimal, local to the request, and avoid disrupting the main thread."""
 
-PEAR_CODEX_WARM_SIDE_CONVERSATION_LIMIT: Final = 8
+ARMADA_CODEX_WARM_SIDE_CONVERSATION_LIMIT: Final = 8
 
 
 @dataclass(frozen=True)
-class PearAppServerNotification:
+class ArmadaAppServerNotification:
     message: dict[str, Any]
-    events: list[PearWorkerTranscriptEvent]
+    events: list[ArmadaWorkerTranscriptEvent]
 
 
 @dataclass
-class PearAppServerTurnContext:
+class ArmadaAppServerTurnContext:
     thread_id: str
-    event_callback: PearWorkerTranscriptCallback | None
-    user_input_provider: PearUserInputProvider | None
+    event_callback: ArmadaWorkerTranscriptCallback | None
+    user_input_provider: ArmadaUserInputProvider | None
     is_main: bool
     turn_id: str | None = None
     messages: queue.Queue[object] = field(default_factory=queue.Queue)
     pending_artifacts: list[str] = field(default_factory=list)
 
 
-PEAR_APP_SERVER_ACTIVITY: Final = object()
+ARMADA_APP_SERVER_ACTIVITY: Final = object()
 
 
-class PearCodexAppServerToolRunner:
+class ArmadaCodexAppServerToolRunner:
     def __init__(
         self,
         *,
@@ -1423,8 +1425,8 @@ class PearCodexAppServerToolRunner:
         memories_enabled: bool = False,
         reasoning_effort: str | None = None,
         ephemeral: bool = False,
-        process_isolation: PearProcessIsolation | None = None,
-        popen_command: PearSubprocessPopen = subprocess.Popen,
+        process_isolation: ArmadaProcessIsolation | None = None,
+        popen_command: ArmadaSubprocessPopen = subprocess.Popen,
     ) -> None:
         self.codex_bin = codex_bin
         self.workdir = workdir
@@ -1452,9 +1454,9 @@ class PearCodexAppServerToolRunner:
         self.send_lock = threading.Lock()
         self.pending_responses: dict[int, queue.Queue[object]] = {}
         self.early_responses: dict[int, dict[str, Any]] = {}
-        self.turn_contexts_by_thread_id: dict[str, PearAppServerTurnContext] = {}
-        self.turn_contexts_by_turn_id: dict[str, PearAppServerTurnContext] = {}
-        self.unrouted_notifications: dict[str, list[PearAppServerNotification]] = {}
+        self.turn_contexts_by_thread_id: dict[str, ArmadaAppServerTurnContext] = {}
+        self.turn_contexts_by_turn_id: dict[str, ArmadaAppServerTurnContext] = {}
+        self.unrouted_notifications: dict[str, list[ArmadaAppServerNotification]] = {}
         self.side_thread_ids: set[str] = set()
         # Native /btw conversations are ephemeral, but not one-shot.  Keep
         # their app-server identity for as long as this warm worktree runtime
@@ -1469,16 +1471,16 @@ class PearCodexAppServerToolRunner:
         self.active_thread_id: str | None = None
         self.active_turn_id: str | None = None
         self.background_request_ids: set[int] = set()
-        self.current_user_input_provider: PearUserInputProvider | None = None
+        self.current_user_input_provider: ArmadaUserInputProvider | None = None
         self.pending_artifacts: list[str] = []
-        self.translator = PearCodexAppServerTranscriptTranslator()
+        self.translator = ArmadaCodexAppServerTranscriptTranslator()
 
     def configure_turn(self, *, model: str, reasoning_effort: str) -> None:
         """Keep one app-server per worktree; model and effort belong to the turn."""
         self.model = model
         self.reasoning_effort = reasoning_effort
 
-    def warm(self, active_session: PearActiveSessionSummary) -> None:
+    def warm(self, active_session: ArmadaActiveSessionSummary) -> None:
         latest_thread_id = active_session.get("latest_codex_thread_id")
         if not isinstance(latest_thread_id, str) or not latest_thread_id.strip():
             return
@@ -1507,7 +1509,7 @@ class PearCodexAppServerToolRunner:
             "--stdio",
             *self.config_args(),
         ]
-        return pear_isolated_command(command, self.process_isolation)
+        return armada_isolated_command(command, self.process_isolation)
 
     def ensure_started(self) -> None:
         if (
@@ -1526,7 +1528,7 @@ class PearCodexAppServerToolRunner:
         try:
             process = self.popen_command(
                 self.build_command(),
-                cwd=pear_subprocess_cwd(self.workdir, self.process_isolation),
+                cwd=armada_subprocess_cwd(self.workdir, self.process_isolation),
                 text=True,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -1534,7 +1536,9 @@ class PearCodexAppServerToolRunner:
                 bufsize=1,
             )
         except FileNotFoundError as error:
-            raise PearAgentRuntimeError(f"Codex executable not found: {self.codex_bin}") from error
+            raise ArmadaAgentRuntimeError(
+                f"Codex executable not found: {self.codex_bin}"
+            ) from error
 
         messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
         self.process = process
@@ -1542,7 +1546,7 @@ class PearCodexAppServerToolRunner:
         reader_thread = threading.Thread(
             target=self.read_messages,
             args=(process, messages),
-            name="pear-codex-app-server-reader",
+            name="armada-codex-app-server-reader",
             daemon=True,
         )
         self.reader_thread = reader_thread
@@ -1551,7 +1555,7 @@ class PearCodexAppServerToolRunner:
             "initialize",
             {
                 "clientInfo": {
-                    "name": "pear",
+                    "name": "armada",
                     "title": "Pear",
                     "version": "0.1.0",
                 },
@@ -1581,7 +1585,7 @@ class PearCodexAppServerToolRunner:
                 except json.JSONDecodeError:
                     continue
                 if isinstance(message, dict):
-                    pear_capture_protocol_message("recv", message)
+                    armada_capture_protocol_message("recv", message)
                     if messages is self.messages:
                         self.dispatch_message(message)
                     else:
@@ -1607,7 +1611,7 @@ class PearCodexAppServerToolRunner:
     def broadcast_protocol_activity(self, *, except_request_id: int | None = None) -> None:
         for request_id, waiter in self.pending_responses.items():
             if request_id != except_request_id:
-                waiter.put(PEAR_APP_SERVER_ACTIVITY)
+                waiter.put(ARMADA_APP_SERVER_ACTIVITY)
 
     def thread_id_from_message(self, message: dict[str, Any]) -> str | None:
         params = message.get("params")
@@ -1623,7 +1627,7 @@ class PearCodexAppServerToolRunner:
                 return thread_id
         return None
 
-    def context_for_thread_locked(self, thread_id: str) -> PearAppServerTurnContext | None:
+    def context_for_thread_locked(self, thread_id: str) -> ArmadaAppServerTurnContext | None:
         exact = self.turn_contexts_by_thread_id.get(thread_id)
         if exact is not None:
             return exact
@@ -1643,7 +1647,9 @@ class PearCodexAppServerToolRunner:
             current_thread_id = parent_thread_id
         return None
 
-    def context_for_params_locked(self, params: dict[str, Any]) -> PearAppServerTurnContext | None:
+    def context_for_params_locked(
+        self, params: dict[str, Any]
+    ) -> ArmadaAppServerTurnContext | None:
         turn_id = params.get("turnId")
         turn_context = None
         if isinstance(turn_id, str):
@@ -1680,7 +1686,7 @@ class PearCodexAppServerToolRunner:
 
     def dispatch_message(self, message: dict[str, Any]) -> None:
         server_request = self.is_server_request(message)
-        server_request_context: PearAppServerTurnContext | None = None
+        server_request_context: ArmadaAppServerTurnContext | None = None
         if server_request:
             raw_params = message.get("params")
             params = raw_params if isinstance(raw_params, dict) else {}
@@ -1688,12 +1694,12 @@ class PearCodexAppServerToolRunner:
                 self.broadcast_protocol_activity()
                 server_request_context = self.context_for_params_locked(params)
                 if server_request_context is not None:
-                    server_request_context.messages.put(PEAR_APP_SERVER_ACTIVITY)
+                    server_request_context.messages.put(ARMADA_APP_SERVER_ACTIVITY)
             threading.Thread(
                 target=self.handle_server_request,
                 args=(message,),
                 kwargs={"turn_context": server_request_context},
-                name="pear-codex-app-server-request",
+                name="armada-codex-app-server-request",
                 daemon=True,
             ).start()
             return
@@ -1728,7 +1734,7 @@ class PearCodexAppServerToolRunner:
         with self.state_lock:
             self.broadcast_protocol_activity()
             events = self.handle_notification(message, event_callback=None)
-            notification = PearAppServerNotification(message=message, events=events)
+            notification = ArmadaAppServerNotification(message=message, events=events)
             thread_id = self.thread_id_from_message(message)
             context = self.context_for_thread_locked(thread_id) if thread_id is not None else None
             if context is None and thread_id is None:
@@ -1786,7 +1792,7 @@ class PearCodexAppServerToolRunner:
             self.side_thread_ids_by_conversation_key.clear()
         self.current_user_input_provider = None
         self.pending_artifacts = []
-        self.translator = PearCodexAppServerTranscriptTranslator()
+        self.translator = ArmadaCodexAppServerTranscriptTranslator()
         for response_waiter in response_waiters:
             response_waiter.put(None)
         for turn_context in turn_contexts:
@@ -1816,8 +1822,8 @@ class PearCodexAppServerToolRunner:
     def send_message(self, message: dict[str, Any]) -> None:
         process = self.process
         if process is None or process.stdin is None or process.poll() is not None:
-            raise PearAgentRuntimeError("Codex app-server is not running.")
-        pear_capture_protocol_message("send", message)
+            raise ArmadaAgentRuntimeError("Codex app-server is not running.")
+        armada_capture_protocol_message("send", message)
         with self.send_lock:
             process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
             process.stdin.flush()
@@ -1830,7 +1836,7 @@ class PearCodexAppServerToolRunner:
         method: str,
         params: dict[str, Any],
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
         timeout_seconds: int | None = None,
     ) -> Any:
         request_id = self.next_id()
@@ -1865,7 +1871,7 @@ class PearCodexAppServerToolRunner:
         self,
         request_id: int,
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
         timeout_seconds: int | None = None,
         response_queue: queue.Queue[object] | None = None,
     ) -> Any:
@@ -1877,28 +1883,28 @@ class PearCodexAppServerToolRunner:
                 except queue.Empty as error:
                     with self.state_lock:
                         self.pending_responses.pop(request_id, None)
-                    raise PearAgentRuntimeError(
+                    raise ArmadaAgentRuntimeError(
                         "Codex app-server produced no activity for "
                         f"{idle_timeout_seconds:g} seconds."
                     ) from error
                 abort_error = self.transport_abort_error
                 if abort_error is not None:
                     raise abort_error
-                if queued is PEAR_APP_SERVER_ACTIVITY:
+                if queued is ARMADA_APP_SERVER_ACTIVITY:
                     continue
                 if queued is None:
-                    raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
+                    raise ArmadaAgentRuntimeError("Codex app-server stopped unexpectedly.")
                 assert isinstance(queued, dict)
                 if "error" in queued:
-                    raise PearAgentRuntimeError(
+                    raise ArmadaAgentRuntimeError(
                         "Codex app-server failed: "
-                        f"{trim_pear_agent_text(str(queued['error']), limit=self.output_limit)}"
+                        f"{trim_armada_agent_text(str(queued['error']), limit=self.output_limit)}"
                     )
                 return queued.get("result")
         while True:
             message = self.next_message(idle_timeout_seconds)
             if message is None:
-                raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
+                raise ArmadaAgentRuntimeError("Codex app-server stopped unexpectedly.")
             if self.handle_server_request(message, event_callback=event_callback):
                 continue
             if "method" in message:
@@ -1909,9 +1915,9 @@ class PearCodexAppServerToolRunner:
             if message.get("id") != request_id:
                 continue
             if "error" in message:
-                raise PearAgentRuntimeError(
+                raise ArmadaAgentRuntimeError(
                     "Codex app-server failed: "
-                    f"{trim_pear_agent_text(str(message['error']), limit=self.output_limit)}"
+                    f"{trim_armada_agent_text(str(message['error']), limit=self.output_limit)}"
                 )
             return message.get("result")
 
@@ -1919,7 +1925,7 @@ class PearCodexAppServerToolRunner:
         try:
             message = self.messages.get(timeout=timeout)
         except queue.Empty as error:
-            raise PearAgentRuntimeError(
+            raise ArmadaAgentRuntimeError(
                 f"Codex app-server produced no activity for {timeout:g} seconds."
             ) from error
         abort_error = self.transport_abort_error
@@ -1931,8 +1937,8 @@ class PearCodexAppServerToolRunner:
         self,
         message: dict[str, Any],
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        turn_context: PearAppServerTurnContext | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        turn_context: ArmadaAppServerTurnContext | None = None,
     ) -> bool:
         if "id" not in message or "method" not in message:
             return False
@@ -1945,7 +1951,7 @@ class PearCodexAppServerToolRunner:
         result, error, event = self.answer_for_server_request(
             method, params, turn_context=turn_context
         )
-        contextualized_event: PearWorkerTranscriptEvent | None = None
+        contextualized_event: ArmadaWorkerTranscriptEvent | None = None
         if event is not None:
             with self.state_lock:
                 [contextualized_event] = self.translator.contextualize_events(
@@ -1959,9 +1965,9 @@ class PearCodexAppServerToolRunner:
                 # turn. Put its visible event back onto the owning turn queue
                 # before replying; app-server cannot emit turn/completed until
                 # it receives this response, so callback order stays exact and
-                # PearWorkerTurn sees all events on one thread.
+                # ArmadaWorkerTurn sees all events on one thread.
                 turn_context.messages.put(
-                    PearAppServerNotification(
+                    ArmadaAppServerNotification(
                         message=message,
                         events=[contextualized_event],
                     )
@@ -1982,8 +1988,8 @@ class PearCodexAppServerToolRunner:
         method: str,
         params: dict[str, Any],
         *,
-        turn_context: PearAppServerTurnContext | None = None,
-    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, PearWorkerTranscriptEvent | None]:
+        turn_context: ArmadaAppServerTurnContext | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, ArmadaWorkerTranscriptEvent | None]:
         """Answer a server-initiated request → (result, error, event).
 
         Escalation approvals are granted when OS-user isolation is the
@@ -1997,7 +2003,7 @@ class PearCodexAppServerToolRunner:
         }:
             decision = "acceptForSession" if isolated else "decline"
             request_detail = params.get("command") or params.get("reason") or method
-            event: PearWorkerTranscriptEvent = {
+            event: ArmadaWorkerTranscriptEvent = {
                 "kind": "status",
                 "status": "done",
                 "title": (
@@ -2005,7 +2011,7 @@ class PearCodexAppServerToolRunner:
                     if isolated
                     else "Declined an escalation request."
                 ),
-                "body": trim_pear_agent_text(str(request_detail), limit=300),
+                "body": trim_armada_agent_text(str(request_detail), limit=300),
                 "metadata": {"method": method, "decision": decision},
             }
             return {"decision": decision}, None, event
@@ -2045,7 +2051,7 @@ class PearCodexAppServerToolRunner:
                 "kind": "status",
                 "status": "done",
                 "title": "Codex asked a question and no answer arrived.",
-                "body": trim_pear_agent_text(str(question_text), limit=300),
+                "body": trim_armada_agent_text(str(question_text), limit=300),
                 "metadata": {"method": method},
             }
             return (
@@ -2056,7 +2062,7 @@ class PearCodexAppServerToolRunner:
         if method == "item/tool/call":
             tool_name = params.get("tool")
             call_id = params.get("callId")
-            if tool_name != "pear_artifact" or params.get("namespace") not in {None, ""}:
+            if tool_name != "armada_artifact" or params.get("namespace") not in {None, ""}:
                 return (
                     {"success": False, "contentItems": []},
                     None,
@@ -2073,11 +2079,11 @@ class PearCodexAppServerToolRunner:
                 except json.JSONDecodeError as error:
                     arguments = {"invalid_json": str(error)}
             try:
-                document, encoded = canonicalize_pear_artifact(
+                document, encoded = canonicalize_armada_artifact(
                     arguments, allow_unresolved_media=True
                 )
-            except PearArtifactError as error:
-                detail = trim_pear_agent_text(str(error), limit=500)
+            except ArmadaArtifactError as error:
+                detail = trim_armada_agent_text(str(error), limit=500)
                 return (
                     {
                         "success": False,
@@ -2096,7 +2102,7 @@ class PearCodexAppServerToolRunner:
                         "body": detail,
                         **({"item_id": call_id} if isinstance(call_id, str) else {}),
                         "metadata": {
-                            "tool_name": "pear_artifact",
+                            "tool_name": "armada_artifact",
                             "human_tool_result": True,
                         },
                     },
@@ -2124,12 +2130,12 @@ class PearCodexAppServerToolRunner:
                     "title": "Artifact ready.",
                     **({"item_id": call_id} if isinstance(call_id, str) else {}),
                     "metadata": {
-                        "tool_name": "pear_artifact",
+                        "tool_name": "armada_artifact",
                         "human_tool_result": True,
                         "artifact_version": document["version"],
                         "artifact_bytes": len(encoded.encode()),
                         "artifact_blocks": len(document["blocks"]),
-                        "artifact_nodes": pear_artifact_node_count(document),
+                        "artifact_nodes": armada_artifact_node_count(document),
                     },
                 },
             )
@@ -2152,8 +2158,8 @@ class PearCodexAppServerToolRunner:
         self,
         message: dict[str, Any],
         *,
-        event_callback: PearWorkerTranscriptCallback | None,
-    ) -> list[PearWorkerTranscriptEvent]:
+        event_callback: ArmadaWorkerTranscriptCallback | None,
+    ) -> list[ArmadaWorkerTranscriptEvent]:
         method = message.get("method")
         params = message.get("params")
         if method == "turn/started" and isinstance(params, dict):
@@ -2176,10 +2182,10 @@ class PearCodexAppServerToolRunner:
                 event_callback(event)
         return events
 
-    def register_turn_context(self, context: PearAppServerTurnContext) -> None:
+    def register_turn_context(self, context: ArmadaAppServerTurnContext) -> None:
         with self.state_lock:
             if context.thread_id in self.turn_contexts_by_thread_id:
-                raise PearAgentRuntimeError(
+                raise ArmadaAgentRuntimeError(
                     f"Codex thread {context.thread_id} already has an active Pear turn."
                 )
             self.turn_contexts_by_thread_id[context.thread_id] = context
@@ -2188,7 +2194,7 @@ class PearCodexAppServerToolRunner:
             for notification in self.unrouted_notifications.pop(context.thread_id, []):
                 context.messages.put(notification)
 
-    def bind_turn_context(self, context: PearAppServerTurnContext, turn_id: str | None) -> None:
+    def bind_turn_context(self, context: ArmadaAppServerTurnContext, turn_id: str | None) -> None:
         if turn_id is None:
             return
         with self.state_lock:
@@ -2197,7 +2203,7 @@ class PearCodexAppServerToolRunner:
             if context.is_main and context.thread_id == self.active_thread_id:
                 self.active_turn_id = turn_id
 
-    def unregister_turn_context(self, context: PearAppServerTurnContext) -> None:
+    def unregister_turn_context(self, context: ArmadaAppServerTurnContext) -> None:
         with self.state_lock:
             if self.turn_contexts_by_thread_id.get(context.thread_id) is context:
                 self.turn_contexts_by_thread_id.pop(context.thread_id, None)
@@ -2224,14 +2230,14 @@ class PearCodexAppServerToolRunner:
             "model": self.model,
             "sandbox": self.sandbox,
             "personality": "pragmatic",
-            "dynamicTools": [PEAR_ARTIFACT_TOOL_SPEC],
+            "dynamicTools": [ARMADA_ARTIFACT_TOOL_SPEC],
         }
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id
             params.pop("ephemeral", None)
             params.pop("dynamicTools", None)
         else:
-            params["developerInstructions"] = build_pear_codex_developer_instructions()
+            params["developerInstructions"] = build_armada_codex_developer_instructions()
         return {key: value for key, value in params.items() if value is not None}
 
     def turn_params(self, thread_id: str, prompt: str) -> dict[str, Any]:
@@ -2249,8 +2255,8 @@ class PearCodexAppServerToolRunner:
 
     def side_fork_params(self, parent_thread_id: str) -> dict[str, Any]:
         developer_instructions = (
-            f"{build_pear_codex_developer_instructions()}\n\n"
-            f"{PEAR_CODEX_SIDE_DEVELOPER_INSTRUCTIONS}"
+            f"{build_armada_codex_developer_instructions()}\n\n"
+            f"{ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS}"
         )
         params: dict[str, Any] = {
             "threadId": parent_thread_id,
@@ -2305,17 +2311,17 @@ class PearCodexAppServerToolRunner:
                     cleanup_error,
                 )
             return
-        raise PearAgentRuntimeError("Pear has too many active native side conversations.")
+        raise ArmadaAgentRuntimeError("Pear has too many active native side conversations.")
 
     def run_side(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str,
         *,
         conversation_key: str | None = None,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> Sequence[PearWorkerToolResult]:
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> Sequence[ArmadaWorkerToolResult]:
         """Run one turn in a native Codex ``/btw`` conversation.
 
         A stable key reuses the same ephemeral side thread across turns; no
@@ -2324,7 +2330,7 @@ class PearCodexAppServerToolRunner:
         native thread/turn IDs isolate responses, transcript, tools, and
         artifacts while the parent remains live and steerable.
         """
-        side_context: PearAppServerTurnContext | None = None
+        side_context: ArmadaAppServerTurnContext | None = None
         side_thread_id: str | None = None
         retain_side_thread = conversation_key is not None
         side_turn_completed = False
@@ -2375,7 +2381,7 @@ class PearCodexAppServerToolRunner:
                     side_conversation_limit_reached = (
                         conversation_key is not None
                         and len(self.side_thread_ids_by_conversation_key)
-                        >= PEAR_CODEX_WARM_SIDE_CONVERSATION_LIMIT
+                        >= ARMADA_CODEX_WARM_SIDE_CONVERSATION_LIMIT
                     )
                 if side_conversation_limit_reached:
                     self.evict_lru_side_conversation()
@@ -2384,16 +2390,16 @@ class PearCodexAppServerToolRunner:
                     self.side_fork_params(parent_thread_id),
                     event_callback=None,
                 )
-                side_thread_id = pear_app_server_thread_id_from_result(fork_result)
+                side_thread_id = armada_app_server_thread_id_from_result(fork_result)
                 if side_thread_id is None:
-                    raise PearAgentRuntimeError(
+                    raise ArmadaAgentRuntimeError(
                         "Codex app-server did not return an ephemeral side thread id."
                     )
                 created_side_thread = True
                 if conversation_key is not None:
                     with self.state_lock:
                         self.side_thread_ids_by_conversation_key[conversation_key] = side_thread_id
-            side_context = PearAppServerTurnContext(
+            side_context = ArmadaAppServerTurnContext(
                 thread_id=side_thread_id,
                 event_callback=event_callback,
                 user_input_provider=user_input_provider,
@@ -2414,7 +2420,7 @@ class PearCodexAppServerToolRunner:
                                 "content": [
                                     {
                                         "type": "input_text",
-                                        "text": PEAR_CODEX_SIDE_BOUNDARY_PROMPT,
+                                        "text": ARMADA_CODEX_SIDE_BOUNDARY_PROMPT,
                                     }
                                 ],
                             }
@@ -2427,7 +2433,7 @@ class PearCodexAppServerToolRunner:
                 self.turn_params(side_thread_id, task),
                 event_callback=event_callback,
             )
-            turn_id = pear_app_server_turn_id_from_result(result)
+            turn_id = armada_app_server_turn_id_from_result(result)
             self.bind_turn_context(side_context, turn_id)
             final_text, _command_count, _file_change_count, _tool_call_count = self.wait_for_turn(
                 thread_id=side_thread_id,
@@ -2435,7 +2441,7 @@ class PearCodexAppServerToolRunner:
                 event_callback=event_callback,
                 turn_context=side_context,
             )
-            results = pear_worker_results_from_final_text(
+            results = armada_worker_results_from_final_text(
                 final_text, output_limit=self.output_limit
             )
             results.extend(
@@ -2466,7 +2472,7 @@ class PearCodexAppServerToolRunner:
                             "kind": "status",
                             "status": "done",
                             "title": "Side conversation cleanup needs attention.",
-                            "body": trim_pear_agent_text(str(cleanup_error), limit=300),
+                            "body": trim_armada_agent_text(str(cleanup_error), limit=300),
                             "metadata": {
                                 "codex_thread_id": side_thread_id,
                                 "method": "thread/unsubscribe",
@@ -2476,9 +2482,9 @@ class PearCodexAppServerToolRunner:
 
     def ensure_thread(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         *,
-        event_callback: PearWorkerTranscriptCallback | None,
+        event_callback: ArmadaWorkerTranscriptCallback | None,
     ) -> str:
         latest_thread_id = active_session.get("latest_codex_thread_id")
         existing_thread_id = (
@@ -2510,7 +2516,7 @@ class PearCodexAppServerToolRunner:
                 self.thread_params(existing_thread_id=thread_id),
                 event_callback=event_callback,
             )
-            resumed_thread_id = pear_app_server_thread_id_from_result(result) or thread_id
+            resumed_thread_id = armada_app_server_thread_id_from_result(result) or thread_id
             self.loaded_thread_id = resumed_thread_id
             self.loaded_through_trigger_message_id = predecessor_trigger_id
             self.reconcile_descendant_threads(resumed_thread_id)
@@ -2520,14 +2526,14 @@ class PearCodexAppServerToolRunner:
             self.thread_params(),
             event_callback=event_callback,
         )
-        started_thread_id = pear_app_server_thread_id_from_result(result)
+        started_thread_id = armada_app_server_thread_id_from_result(result)
         if started_thread_id is None:
-            raise PearAgentRuntimeError("Codex app-server did not return a thread id.")
+            raise ArmadaAgentRuntimeError("Codex app-server did not return a thread id.")
         self.loaded_thread_id = started_thread_id
         self.loaded_through_trigger_message_id = None
         if event_callback is not None and self.thread_descriptor(started_thread_id) is None:
             event_callback(
-                pear_thread_session_event(
+                armada_thread_session_event(
                     {
                         "id": started_thread_id,
                         "parent_thread_id": None,
@@ -2544,7 +2550,7 @@ class PearCodexAppServerToolRunner:
         root_thread_id: str,
         *,
         thread_ids: set[str] | None = None,
-        event_callback: PearWorkerTranscriptCallback | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
     ) -> None:
         """Restore native child identities after an app-server restart.
 
@@ -2658,8 +2664,8 @@ class PearCodexAppServerToolRunner:
         *,
         thread_id: str,
         turn_id: str | None,
-        event_callback: PearWorkerTranscriptCallback | None,
-        turn_context: PearAppServerTurnContext | None = None,
+        event_callback: ArmadaWorkerTranscriptCallback | None,
+        turn_context: ArmadaAppServerTurnContext | None = None,
     ) -> tuple[str, int, int, int]:
         final_text = ""
         command_count = 0
@@ -2671,18 +2677,18 @@ class PearCodexAppServerToolRunner:
                 try:
                     queued = turn_context.messages.get(timeout=self.timeout_seconds)
                 except queue.Empty as error:
-                    raise PearAgentRuntimeError(
+                    raise ArmadaAgentRuntimeError(
                         "Codex app-server produced no activity for "
                         f"{self.timeout_seconds:g} seconds."
                     ) from error
                 abort_error = self.transport_abort_error
                 if abort_error is not None:
                     raise abort_error
-                if queued is PEAR_APP_SERVER_ACTIVITY:
+                if queued is ARMADA_APP_SERVER_ACTIVITY:
                     continue
                 if queued is None:
-                    raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
-                assert isinstance(queued, PearAppServerNotification)
+                    raise ArmadaAgentRuntimeError("Codex app-server stopped unexpectedly.")
+                assert isinstance(queued, ArmadaAppServerNotification)
                 message = queued.message
                 events = queued.events
                 if event_callback is not None:
@@ -2699,16 +2705,16 @@ class PearCodexAppServerToolRunner:
             else:
                 message = self.next_message(self.timeout_seconds)
                 if message is None:
-                    raise PearAgentRuntimeError("Codex app-server stopped unexpectedly.")
+                    raise ArmadaAgentRuntimeError("Codex app-server stopped unexpectedly.")
                 if self.handle_server_request(message, event_callback=event_callback):
                     continue
                 if "method" not in message:
                     if self.consume_background_response(message):
                         continue
                     if "error" in message:
-                        raise PearAgentRuntimeError(
+                        raise ArmadaAgentRuntimeError(
                             "Codex app-server failed: "
-                            f"{trim_pear_agent_text(str(message['error']), limit=self.output_limit)}"
+                            f"{trim_armada_agent_text(str(message['error']), limit=self.output_limit)}"
                         )
                     continue
                 events = self.handle_notification(message, event_callback=event_callback)
@@ -2755,16 +2761,16 @@ class PearCodexAppServerToolRunner:
 
     def __call__(
         self,
-        active_session: PearActiveSessionSummary,
+        active_session: ArmadaActiveSessionSummary,
         task: str,
         *,
-        event_callback: PearWorkerTranscriptCallback | None = None,
-        user_input_provider: PearUserInputProvider | None = None,
-    ) -> Sequence[PearWorkerToolResult]:
+        event_callback: ArmadaWorkerTranscriptCallback | None = None,
+        user_input_provider: ArmadaUserInputProvider | None = None,
+    ) -> Sequence[ArmadaWorkerToolResult]:
         with self.main_turn_lock:
             with self.lock:
                 self.ensure_started()
-                bootstrap_events: list[PearWorkerTranscriptEvent] = []
+                bootstrap_events: list[ArmadaWorkerTranscriptEvent] = []
                 thread_id = self.ensure_thread(
                     active_session,
                     event_callback=bootstrap_events.append,
@@ -2774,7 +2780,7 @@ class PearCodexAppServerToolRunner:
             persisted_child_thread_ids: set[str] = set()
             native_agent_thread_ids: set[str] = set()
 
-            def run_event_callback(event: PearWorkerTranscriptEvent) -> None:
+            def run_event_callback(event: ArmadaWorkerTranscriptEvent) -> None:
                 metadata = event.get("metadata")
                 event_thread_id = (
                     metadata.get("codex_thread_id") if isinstance(metadata, dict) else None
@@ -2812,11 +2818,11 @@ class PearCodexAppServerToolRunner:
                         event.get("kind") == "session" and descriptor_thread_id == event_thread_id
                     )
                     if not is_current_session_event:
-                        event_callback(pear_thread_session_event(descriptor))
+                        event_callback(armada_thread_session_event(descriptor))
                     persisted_child_thread_ids.add(descriptor_thread_id)
                 event_callback(event)
 
-            turn_context = PearAppServerTurnContext(
+            turn_context = ArmadaAppServerTurnContext(
                 thread_id=thread_id,
                 event_callback=run_event_callback,
                 user_input_provider=user_input_provider,
@@ -2831,13 +2837,13 @@ class PearCodexAppServerToolRunner:
                 for bootstrap_event in bootstrap_events:
                     run_event_callback(bootstrap_event)
 
-                prompt = build_pear_codex_turn_prompt(active_session, task)
+                prompt = build_armada_codex_turn_prompt(active_session, task)
                 result = self.request(
                     "turn/start",
                     self.turn_params(thread_id, prompt),
                     event_callback=run_event_callback,
                 )
-                turn_id = pear_app_server_turn_id_from_result(result)
+                turn_id = armada_app_server_turn_id_from_result(result)
                 self.bind_turn_context(turn_context, turn_id)
                 final_text, _command_count, _file_change_count, _tool_call_count = (
                     self.wait_for_turn(
@@ -2855,7 +2861,7 @@ class PearCodexAppServerToolRunner:
                     )
             finally:
                 self.unregister_turn_context(turn_context)
-            results = pear_worker_results_from_final_text(
+            results = armada_worker_results_from_final_text(
                 final_text, output_limit=self.output_limit
             )
             results.extend(
@@ -2878,7 +2884,7 @@ class PearCodexAppServerToolRunner:
             logger.info(
                 "Pear background app-server request %s failed: %s",
                 message_id,
-                trim_pear_agent_text(str(message["error"]), limit=300),
+                trim_armada_agent_text(str(message["error"]), limit=300),
             )
         return True
 
@@ -2943,7 +2949,7 @@ class PearCodexAppServerToolRunner:
         return self.loaded_thread_id or ""
 
     def runtime_value(self) -> str:
-        return build_pear_runtime_value(
+        return build_armada_runtime_value(
             "codex-app-server",
             workdir=self.workdir,
             sandbox=self.sandbox,

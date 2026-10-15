@@ -646,7 +646,7 @@ export const split_state_data_schema = z.object({
     realm_billing: z.object({realm_billing: realm_billing_schema}),
     bot: z.object({
         realm_bots: z.array(server_add_bot_schema),
-        pear_bot_user_ids: z.optional(z.array(z.number())),
+        agent_user_ids: z.optional(z.array(z.number())),
     }),
     people: z.object({
         realm_users: z.array(user_schema),
@@ -673,7 +673,7 @@ export const split_state_data_schema = z.object({
         unsubscribed: z.array(api_stream_subscription_schema),
         never_subscribed: z.array(never_subscribed_stream_schema),
         realm_default_streams: z.array(z.number()),
-        pear_project_stream_ids: z.optional(z.array(z.number())),
+        repository_stream_ids: z.optional(z.array(z.number())),
     }),
     user_groups: z.object({realm_user_groups: z.array(raw_user_group_schema)}),
     channel_folders: z.object({channel_folders: z.array(channel_folder_schema)}),
@@ -732,7 +732,7 @@ export type RealmBilling = StateData["realm_billing"]["realm_billing"];
 export let current_user: CurrentUser;
 export let realm: Realm;
 export let realm_billing: RealmBilling;
-export let pear_bot_user_ids: number[] = [];
+export let agent_user_ids: number[] = [];
 
 export function set_current_user(initial_current_user: CurrentUser): void {
     current_user = initial_current_user;
@@ -746,44 +746,44 @@ export function set_realm_billing(params: StateData["realm_billing"]): void {
     realm_billing = params.realm_billing;
 }
 
-export function set_pear_bot_user_ids(user_ids: number[]): void {
-    pear_bot_user_ids = [...new Set(user_ids)].toSorted((a, b) => a - b);
+export function set_armada_bot_user_ids(user_ids: number[]): void {
+    agent_user_ids = [...new Set(user_ids)].toSorted((a, b) => a - b);
 }
 
-export function add_pear_bot_user_id(user_id: number): void {
-    if (!pear_bot_user_ids.includes(user_id)) {
-        set_pear_bot_user_ids([...pear_bot_user_ids, user_id]);
+export function add_armada_bot_user_id(user_id: number): void {
+    if (!agent_user_ids.includes(user_id)) {
+        set_armada_bot_user_ids([...agent_user_ids, user_id]);
     }
 }
 
-export function remove_pear_bot_user_id(user_id: number): void {
-    if (pear_bot_user_ids.includes(user_id)) {
-        set_pear_bot_user_ids(pear_bot_user_ids.filter((id) => id !== user_id));
+export function remove_armada_bot_user_id(user_id: number): void {
+    if (agent_user_ids.includes(user_id)) {
+        set_armada_bot_user_ids(agent_user_ids.filter((id) => id !== user_id));
     }
 }
 
-export function is_pear_bot_user_id(user_id: number): boolean {
-    return pear_bot_user_ids.includes(user_id);
+export function is_armada_bot_user_id(user_id: number): boolean {
+    return agent_user_ids.includes(user_id);
 }
 
 // Channels bound to a Pear repository, for the sidebar's workspace
 // marks. Register-supplied; the client adds entries locally when its
 // own topic context reports a pinned repo (there is no server event
 // stream for project bindings yet).
-export let pear_project_stream_ids = new Set<number>();
+export let repository_stream_ids = new Set<number>();
 
-export function set_pear_project_stream_ids(stream_ids: number[]): void {
-    pear_project_stream_ids = new Set(stream_ids);
+export function set_armada_project_stream_ids(stream_ids: number[]): void {
+    repository_stream_ids = new Set(stream_ids);
 }
 
-export function add_pear_project_stream_id(stream_id: number): boolean {
-    if (pear_project_stream_ids.has(stream_id)) {
+export function add_armada_project_stream_id(stream_id: number): boolean {
+    if (repository_stream_ids.has(stream_id)) {
         return false;
     }
-    pear_project_stream_ids.add(stream_id);
+    repository_stream_ids.add(stream_id);
     return true;
 }
 
-export function stream_has_pear_project(stream_id: number): boolean {
-    return pear_project_stream_ids.has(stream_id);
+export function stream_has_armada_project(stream_id: number): boolean {
+    return repository_stream_ids.has(stream_id);
 }

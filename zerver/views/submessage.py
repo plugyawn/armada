@@ -6,7 +6,7 @@ from django.utils.translation import gettext as _
 from pydantic import Json
 
 from zerver.actions.submessage import do_add_submessage, verify_submessage_sender
-from zerver.lib.armada_artifact import PEAR_ARTIFACT_SUBMESSAGE_TYPE
+from zerver.lib.armada_artifact import ARMADA_ARTIFACT_SUBMESSAGE_TYPE
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import access_message
 from zerver.lib.response import json_success
@@ -27,7 +27,7 @@ def process_submessage(
     message_id: Json[int],
     msg_type: str,
 ) -> HttpResponse:
-    if msg_type == PEAR_ARTIFACT_SUBMESSAGE_TYPE:
+    if msg_type == ARMADA_ARTIFACT_SUBMESSAGE_TYPE:
         raise JsonableError(_("Pear artifacts can only be attached by the Pear runtime."))
     message = access_message(user_profile, message_id, lock_message=True, is_modifying_message=True)
 

@@ -10,7 +10,7 @@ import render_topic_list_new_topic from "../templates/topic_list_new_topic.hbs";
 import * as blueslip from "./blueslip.ts";
 import {Typeahead} from "./bootstrap_typeahead.ts";
 import type {TypeaheadInputElement} from "./bootstrap_typeahead.ts";
-import * as pear_workspace_marks from "./legacy_workspace_marks.ts";
+import * as legacy_workspace_marks from "./legacy_workspace_marks.ts";
 import {ListCursor} from "./list_cursor.ts";
 import * as mouse_drag from "./mouse_drag.ts";
 import * as popover_menus from "./popover_menus.ts";
@@ -533,7 +533,7 @@ export function rebuild_left_sidebar(
     // the list.
     const sub = sub_store.get(stream_id);
     if (sub !== undefined) {
-        pear_workspace_marks.ensure_workspace_topics(stream_id, sub.name);
+        legacy_workspace_marks.ensure_workspace_topics(stream_id, sub.name);
     }
     if (zoomed) {
         if (zoomed_in_widget?.my_stream_id !== stream_id) {

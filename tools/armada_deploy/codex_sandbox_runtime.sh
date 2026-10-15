@@ -3,8 +3,8 @@
 set -euo pipefail
 
 MODE="${1:---check}"
-CONFIG_PATH="${PEAR_CODEX_SANDBOX_SYSCTL_PATH:-/etc/sysctl.d/90-pear-codex-userns.conf}"
-TEST_USER="${PEAR_CODEX_SANDBOX_TEST_USER:-zulipdev}"
+CONFIG_PATH="${ARMADA_CODEX_SANDBOX_SYSCTL_PATH:-/etc/sysctl.d/90-armada-codex-userns.conf}"
+TEST_USER="${ARMADA_CODEX_SANDBOX_TEST_USER:-zulipdev}"
 
 fail() {
     echo "ERROR: $*" >&2

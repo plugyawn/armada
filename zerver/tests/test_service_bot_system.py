@@ -12,7 +12,7 @@ from typing_extensions import ParamSpec, override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.message_send import get_service_bot_events
-from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE, PEAR_FOLLOWUP_TRIGGER
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE, ARMADA_FOLLOWUP_TRIGGER
 from zerver.lib.bot_config import (
     ConfigError,
     get_bot_configs,
@@ -185,17 +185,17 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
-    def test_service_events_for_pear_followup_router(self) -> None:
+    def test_service_events_for_armada_followup_router(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
         Workspace.objects.create(
@@ -222,8 +222,8 @@ class TestServiceBotBasics(ZulipTestCase):
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -245,8 +245,8 @@ class TestServiceBotBasics(ZulipTestCase):
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -254,17 +254,17 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="disabled",
     )
-    def test_service_events_for_plain_pear_alias_routes_without_markdown_mention(self) -> None:
+    def test_service_events_for_plain_armada_alias_routes_without_markdown_mention(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
 
@@ -284,8 +284,8 @@ class TestServiceBotBasics(ZulipTestCase):
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -295,7 +295,7 @@ class TestServiceBotBasics(ZulipTestCase):
             sender=sender,
             service_bot_tuples=[],
             active_user_ids=set(),
-            mentioned_user_ids={pear_bot.id},
+            mentioned_user_ids={armada_bot.id},
             recipient_type=Recipient.STREAM,
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
@@ -306,17 +306,17 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="disabled",
     )
-    def test_service_events_for_explicit_pear_followup_flag(self) -> None:
+    def test_service_events_for_explicit_armada_followup_flag(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
 
@@ -328,17 +328,17 @@ class TestServiceBotBasics(ZulipTestCase):
             recipient_type=Recipient.STREAM,
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
-            topic_name="compose pear",
+            topic_name="compose armada",
             content="can you check the current UI state?",
-            pear_followup=True,
+            agent_followup=True,
         )
         self.assertEqual(
             event_dict,
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -346,31 +346,31 @@ class TestServiceBotBasics(ZulipTestCase):
 
         event_dict = get_service_bot_events(
             sender=sender,
-            service_bot_tuples=[(pear_bot.id, UserProfile.EMBEDDED_BOT)],
+            service_bot_tuples=[(armada_bot.id, UserProfile.EMBEDDED_BOT)],
             active_user_ids=set(),
-            mentioned_user_ids={pear_bot.id},
+            mentioned_user_ids={armada_bot.id},
             recipient_type=Recipient.STREAM,
             recipient_id=stream.recipient_id,
             stream_name=stream.name,
-            topic_name="compose pear",
+            topic_name="compose armada",
             content="@**Pear** can you check the current UI state?",
-            pear_followup=True,
+            agent_followup=True,
         )
         self.assertEqual(
             event_dict["embedded_bots"],
             [
                 {
                     "trigger": "mention",
-                    "user_profile_id": pear_bot.id,
+                    "user_profile_id": armada_bot.id,
                 },
             ],
         )
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="disabled",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="disabled",
     )
-    def test_service_events_for_pear_followup_skips_untagged_when_router_disabled(
+    def test_service_events_for_armada_followup_skips_untagged_when_router_disabled(
         self,
     ) -> None:
         sender = self.example_user("hamlet")
@@ -380,7 +380,7 @@ class TestServiceBotBasics(ZulipTestCase):
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
 
@@ -399,17 +399,17 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
-    def test_service_events_for_pear_followup_reuses_selected_bot_cache(self) -> None:
+    def test_service_events_for_armada_followup_reuses_selected_bot_cache(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
         Workspace.objects.create(
@@ -419,7 +419,7 @@ class TestServiceBotBasics(ZulipTestCase):
             response_policy="ambient",
         )
 
-        def route_pear_followup() -> dict[str, list[dict[str, Any]]]:
+        def route_armada_followup() -> dict[str, list[dict[str, Any]]]:
             return get_service_bot_events(
                 sender=sender,
                 service_bot_tuples=[],
@@ -434,29 +434,29 @@ class TestServiceBotBasics(ZulipTestCase):
 
         with mock.patch("zerver.lib.bot_config.get_bot_configs", wraps=get_bot_configs) as mock_get:
             self.assertEqual(
-                route_pear_followup()["embedded_bots"][0]["user_profile_id"],
-                pear_bot.id,
+                route_armada_followup()["embedded_bots"][0]["user_profile_id"],
+                armada_bot.id,
             )
             self.assertEqual(
-                route_pear_followup()["embedded_bots"][0]["user_profile_id"],
-                pear_bot.id,
+                route_armada_followup()["embedded_bots"][0]["user_profile_id"],
+                armada_bot.id,
             )
 
         self.assertEqual(mock_get.call_count, 1)
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
-    def test_service_events_for_pear_followup_uses_topic_response_policy(self) -> None:
+    def test_service_events_for_armada_followup_uses_topic_response_policy(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
 
@@ -482,8 +482,8 @@ class TestServiceBotBasics(ZulipTestCase):
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -530,17 +530,17 @@ class TestServiceBotBasics(ZulipTestCase):
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,
-        PEAR_ADDRESSING_ROUTER_RUNTIME="codex-exec",
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="codex-exec",
     )
-    def test_service_events_for_pear_followup_does_not_parse_topic_history(self) -> None:
+    def test_service_events_for_armada_followup_does_not_parse_topic_history(self) -> None:
         sender = self.example_user("hamlet")
         owner = self.example_user("cordelia")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             owner,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
         )
         stream = get_stream("Denmark", sender.realm)
         Workspace.objects.create(
@@ -551,7 +551,7 @@ class TestServiceBotBasics(ZulipTestCase):
         )
 
         with mock.patch(
-            "zerver.lib.armada.build_pear_active_session_summary_from_messages",
+            "zerver.lib.armada.build_armada_active_session_summary_from_messages",
             side_effect=AssertionError("send gate must not parse topic history"),
         ):
             event_dict = get_service_bot_events(
@@ -571,8 +571,8 @@ class TestServiceBotBasics(ZulipTestCase):
             {
                 "embedded_bots": [
                     {
-                        "trigger": PEAR_FOLLOWUP_TRIGGER,
-                        "user_profile_id": pear_bot.id,
+                        "trigger": ARMADA_FOLLOWUP_TRIGGER,
+                        "user_profile_id": armada_bot.id,
                     },
                 ],
             },
@@ -827,8 +827,8 @@ class TestServiceBotConfigHandler(ZulipTestCase):
         self.assertTrue(isinstance(bot_config, dict))
         self.assert_length(bot_config, 0)
 
-    def test_load_bot_config_template_for_pear(self) -> None:
-        bot_config = load_bot_config_template("pear")
+    def test_load_bot_config_template_for_armada(self) -> None:
+        bot_config = load_bot_config_template("armada")
         self.assertTrue(isinstance(bot_config, dict))
         self.assert_length(bot_config, 0)
 

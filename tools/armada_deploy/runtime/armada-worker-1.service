@@ -7,8 +7,8 @@ Wants=armada-zulip-dev.service
 Type=simple
 User=zulipdev
 WorkingDirectory=/home/zulipdev/zulip
-EnvironmentFile=/home/zulipdev/pear.env
-ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name pear_worker --worker_num 1 --automated'
+EnvironmentFile=/home/zulipdev/armada.env
+ExecStart=/bin/bash -lc 'cd /home/zulipdev/zulip && exec /home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py process_queue --queue_name armada_worker --worker_num 1 --automated'
 Restart=always
 RestartSec=5
 

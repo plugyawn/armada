@@ -179,7 +179,7 @@ test("get_list_info w/real stream_topic_history", ({override}) => {
         is_active_topic: true,
         url: "#narrow/channel/556-general/topic/topic.2011",
         contains_unread_mention: false,
-        has_pear_worktree: false,
+        has_armada_worktree: false,
     });
 
     override(narrow_state, "topic", () => "topic 6");
@@ -192,7 +192,7 @@ test("get_list_info w/real stream_topic_history", ({override}) => {
 
     assert.deepEqual(list_info.items[0], {
         contains_unread_mention: false,
-        has_pear_worktree: false,
+        has_armada_worktree: false,
         is_active_topic: false,
         is_muted: false,
         is_followed: false,
@@ -209,7 +209,7 @@ test("get_list_info w/real stream_topic_history", ({override}) => {
 
     assert.deepEqual(list_info.items[1], {
         contains_unread_mention: false,
-        has_pear_worktree: false,
+        has_armada_worktree: false,
         is_active_topic: false,
         is_muted: false,
         is_followed: false,
@@ -235,7 +235,7 @@ test("get_list_info w/real stream_topic_history", ({override}) => {
 
     assert.deepEqual(list_info.items[0], {
         contains_unread_mention: false,
-        has_pear_worktree: false,
+        has_armada_worktree: false,
         is_active_topic: false,
         is_muted: false,
         is_followed: false,

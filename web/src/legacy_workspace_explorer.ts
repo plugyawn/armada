@@ -1,11 +1,11 @@
-import type {PearWorkspaceSearchResponse} from "./legacy_workspace_api.ts";
-import type {PearWorkspaceTreeRow, PearWorkspaceTreeState} from "./legacy_workspace_tree.ts";
-import {pear_workspace_tree_window} from "./legacy_workspace_tree.ts";
+import type {ArmadaWorkspaceSearchResponse} from "./legacy_workspace_api.ts";
+import type {ArmadaWorkspaceTreeRow, ArmadaWorkspaceTreeState} from "./legacy_workspace_tree.ts";
+import {armada_workspace_tree_window} from "./legacy_workspace_tree.ts";
 
 const tree_window_limit = 200;
 const tree_window_step = 100;
 
-export type PearWorkspaceExplorerOptions = {
+export type ArmadaWorkspaceExplorerOptions = {
     treeRoot: HTMLElement;
     searchResultsRoot: HTMLElement;
     onSelect: (entryId: string) => void;
@@ -13,15 +13,15 @@ export type PearWorkspaceExplorerOptions = {
     onToggle: (entryId: string, expanded: boolean) => void;
     onLoadMore: (entryId: string) => void;
     onRevealSearchResult: (
-        response: PearWorkspaceSearchResponse["pear_workspace_search"],
+        response: ArmadaWorkspaceSearchResponse["armada_workspace_search"],
         entryId: string,
     ) => void;
 };
 
-export type PearWorkspaceExplorerController = {
-    render: (tree: PearWorkspaceTreeState, filter: string) => void;
+export type ArmadaWorkspaceExplorerController = {
+    render: (tree: ArmadaWorkspaceTreeState, filter: string) => void;
     renderSearchResults: (
-        response: PearWorkspaceSearchResponse["pear_workspace_search"] | undefined,
+        response: ArmadaWorkspaceSearchResponse["armada_workspace_search"] | undefined,
     ) => void;
     focusEntry: (entryId: string) => void;
     getRenderedRowCount: () => number;
@@ -29,7 +29,7 @@ export type PearWorkspaceExplorerController = {
 };
 
 type VisibleRows = {
-    rows: PearWorkspaceTreeRow[];
+    rows: ArmadaWorkspaceTreeRow[];
     hasMore: boolean;
     skipped: number;
 };
@@ -38,15 +38,15 @@ function normalized_filter(value: string): string {
     return value.trim().toLocaleLowerCase();
 }
 
-function filtered_rows(tree: PearWorkspaceTreeState, filter: string): VisibleRows {
+function filtered_rows(tree: ArmadaWorkspaceTreeState, filter: string): VisibleRows {
     const query = normalized_filter(filter);
     if (query === "") {
-        return pear_workspace_tree_window(tree, {
+        return armada_workspace_tree_window(tree, {
             offset: 0,
             limit: tree_window_limit,
         });
     }
-    const rows: PearWorkspaceTreeRow[] = [];
+    const rows: ArmadaWorkspaceTreeRow[] = [];
     let skipped = 0;
     let has_more = false;
     for (const entry of tree.entries.values()) {
@@ -71,25 +71,25 @@ function filtered_rows(tree: PearWorkspaceTreeState, filter: string): VisibleRow
     return {rows, hasMore: has_more, skipped};
 }
 
-function row_label(row: PearWorkspaceTreeRow): string {
+function row_label(row: ArmadaWorkspaceTreeRow): string {
     if (row.entry.kind === "directory") {
         return `${row.expanded ? "Expanded" : "Collapsed"} folder ${row.entry.name}`;
     }
     return row.entry.name;
 }
 
-export function create_pear_workspace_explorer(
-    options: PearWorkspaceExplorerOptions,
-): PearWorkspaceExplorerController {
+export function create_armada_workspace_explorer(
+    options: ArmadaWorkspaceExplorerOptions,
+): ArmadaWorkspaceExplorerController {
     const keyed_rows = new Map<string, HTMLElement>();
-    let current_tree: PearWorkspaceTreeState | undefined;
+    let current_tree: ArmadaWorkspaceTreeState | undefined;
     let current_filter = "";
     let visible: VisibleRows = {rows: [], skipped: 0, hasMore: false};
     let window_offset = 0;
     let focused_entry_id: string | undefined;
     let typeahead = "";
     let typeahead_timer: ReturnType<typeof setTimeout> | undefined;
-    let search_response: PearWorkspaceSearchResponse["pear_workspace_search"] | undefined;
+    let search_response: ArmadaWorkspaceSearchResponse["armada_workspace_search"] | undefined;
 
     const focus_row = (entry_id: string): void => {
         if (!visible.rows.some((row) => row.entry.entry_id === entry_id)) {
@@ -105,26 +105,26 @@ export function create_pear_workspace_explorer(
 
     const create_row = (entry_id: string): HTMLElement => {
         const element = document.createElement("div");
-        element.className = "pear-workspace-tree-row";
+        element.className = "legacy-workspace-tree-row";
         element.dataset["entryId"] = entry_id;
         element.setAttribute("role", "treeitem");
         element.tabIndex = -1;
         const disclosure = document.createElement("span");
-        disclosure.className = "pear-workspace-tree-row__disclosure";
+        disclosure.className = "legacy-workspace-tree-row__disclosure";
         disclosure.setAttribute("aria-hidden", "true");
         disclosure.dataset["role"] = "disclosure";
         const chevron = document.createElement("i");
         chevron.className = "zulip-icon zulip-icon-chevron-right";
         disclosure.append(chevron);
         const icon = document.createElement("i");
-        icon.className = "pear-workspace-tree-row__icon zulip-icon";
+        icon.className = "legacy-workspace-tree-row__icon zulip-icon";
         icon.setAttribute("aria-hidden", "true");
         icon.dataset["role"] = "icon";
         const name = document.createElement("span");
-        name.className = "pear-workspace-tree-row__name";
+        name.className = "legacy-workspace-tree-row__name";
         name.dataset["role"] = "name";
         const status = document.createElement("span");
-        status.className = "pear-workspace-tree-row__status";
+        status.className = "legacy-workspace-tree-row__status";
         status.dataset["role"] = "entry-status";
         element.append(disclosure, icon, name, status);
         return element;
@@ -132,14 +132,14 @@ export function create_pear_workspace_explorer(
 
     const update_row = (
         element: HTMLElement,
-        row: PearWorkspaceTreeRow,
-        tree: PearWorkspaceTreeState,
+        row: ArmadaWorkspaceTreeRow,
+        tree: ArmadaWorkspaceTreeState,
     ): void => {
         const {entry} = row;
         element.dataset["entryId"] = entry.entry_id;
         element.dataset["path"] = entry.path;
         element.dataset["kind"] = entry.kind;
-        element.style.setProperty("--pear-tree-depth", String(row.depth));
+        element.style.setProperty("--legacy-tree-depth", String(row.depth));
         element.setAttribute("aria-level", String(row.depth + 1));
         element.setAttribute("aria-label", row_label(row));
         element.setAttribute("aria-selected", String(tree.selectedId === entry.entry_id));
@@ -201,7 +201,7 @@ export function create_pear_workspace_explorer(
             return;
         }
         if (normalized_filter(current_filter) === "") {
-            visible = pear_workspace_tree_window(tree, {
+            visible = armada_workspace_tree_window(tree, {
                 offset: window_offset,
                 limit: tree_window_limit,
             });

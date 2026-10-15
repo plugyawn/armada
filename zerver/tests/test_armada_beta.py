@@ -22,8 +22,8 @@ from typing_extensions import override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.users import do_deactivate_user
-from zerver.lib.armada import PEAR_QUESTION_TIMEOUT_SECONDS
-from zerver.lib.armada_gate import invalidate_pear_selected_bot_cache
+from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
+from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
@@ -147,7 +147,7 @@ class ArmadaBetaTest(ZulipTestCase):
         self.assertIn('id="col"', html)
         # The page is told how long a run waits for an answer, so that a
         # question the server has given up on stops reading as waiting.
-        self.assertIn(f'data-question-timeout="{PEAR_QUESTION_TIMEOUT_SECONDS}"', html)
+        self.assertIn(f'data-question-timeout="{ARMADA_QUESTION_TIMEOUT_SECONDS}"', html)
         self.assertIn('data-live-run-ids="[]"', html)
         self.assertIn('data-read-receipts="on"', html)
         # The page signs in by the session alone: no API key is ever
@@ -193,15 +193,15 @@ class ArmadaBetaTest(ZulipTestCase):
 
         self.assertEqual(live_run_ids_for_user(hamlet), [queued.id, older.id])
 
-        # What the page is given is what pear/runs then lets this person
+        # What the page is given is what armada/runs then lets this person
         # read, in one request.
         self.login_user(hamlet)
         html = self.client_get("/beta/").content.decode()
         self.assertIn(f'data-live-run-ids="[{queued.id},{older.id}]"', html)
         result = self.client_get(
-            "/json/pear/runs", {"run_ids": orjson.dumps([queued.id, older.id]).decode()}
+            "/json/armada/runs", {"run_ids": orjson.dumps([queued.id, older.id]).decode()}
         )
-        runs = self.assert_json_success(result)["pear_runs"]
+        runs = self.assert_json_success(result)["armada_runs"]
         self.assertEqual({run["id"] for run in runs}, {queued.id, older.id})
 
         with mock.patch("zerver.views.armada_beta.ARMADA_BETA_LIVE_RUN_LIMIT", 1):
@@ -358,9 +358,9 @@ class PartnerTest(ZulipTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.realm = self.example_user("iago").realm
-        invalidate_pear_selected_bot_cache(self.realm.id)
+        invalidate_armada_selected_bot_cache(self.realm.id)
         self.agent = do_create_user(
-            "pear-agent-bot@zulip.testserver",
+            "armada-agent-bot@zulip.testserver",
             None,
             self.realm,
             "Pear",
@@ -368,8 +368,8 @@ class PartnerTest(ZulipTestCase):
             bot_owner=self.example_user("iago"),
             acting_user=None,
         )
-        Service.objects.create(name="pear", user_profile=self.agent, base_url="", token="")
-        invalidate_pear_selected_bot_cache(self.realm.id)
+        Service.objects.create(name="armada", user_profile=self.agent, base_url="", token="")
+        invalidate_armada_selected_bot_cache(self.realm.id)
         self.sprites = tempfile.TemporaryDirectory()
         with open(os.path.join(self.sprites.name, "species.json"), "w") as f:
             json.dump(PACK, f)
@@ -377,7 +377,7 @@ class PartnerTest(ZulipTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.addCleanup(self.sprites.cleanup)
-        self.addCleanup(invalidate_pear_selected_bot_cache, self.realm.id)
+        self.addCleanup(invalidate_armada_selected_bot_cache, self.realm.id)
 
     def new_person(self, name: str, tz: str = "") -> UserProfile:
         return do_create_user(

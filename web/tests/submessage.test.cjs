@@ -71,7 +71,7 @@ run_test("typed dispatch keeps Pear artifacts out of widget replay", () => {
         submessages: [
             {
                 id: 1,
-                msg_type: "pear_artifact",
+                msg_type: "artifact",
                 sender_id: 33,
                 content: '{"version":1,"blocks":[{"type":"copy","body":"safe"}]}',
             },

@@ -54,9 +54,9 @@ const muted_users_ui = mock_esm("../src/muted_users_ui");
 const narrow_title = mock_esm("../src/narrow_title");
 const navbar_alerts = mock_esm("../src/navbar_alerts");
 const pm_list = mock_esm("../src/pm_list");
-const pear_panel = mock_esm("../src/legacy_panel");
-const pear_run_state = mock_esm("../src/legacy_run_state");
-const pear_workspace_events = mock_esm("../src/legacy_workspace_events");
+const legacy_panel = mock_esm("../src/legacy_panel");
+const legacy_run_state = mock_esm("../src/legacy_run_state");
+const legacy_workspace_events = mock_esm("../src/legacy_workspace_events");
 const reactions = mock_esm("../src/reactions", {
     generate_clean_reactions() {},
 });
@@ -120,7 +120,7 @@ const {Filter} = zrequire("filter");
 const {initialize: initialize_realm_user_settings_defaults} = zrequire(
     "realm_user_settings_defaults",
 );
-const {is_pear_bot_user_id, set_current_user, set_realm} = zrequire("state_data");
+const {is_armada_bot_user_id, set_current_user, set_realm} = zrequire("state_data");
 const {initialize_user_settings} = zrequire("user_settings");
 
 const realm = make_realm();
@@ -172,22 +172,22 @@ function dispatch(ev) {
     server_events_dispatch.dispatch_normal_event(ev);
 }
 
-run_test("pear_run reaches the run state and the panel", ({override}) => {
+run_test("agent_run reaches the run state and the panel", ({override}) => {
     const state_stub = make_stub();
     const panel_stub = make_stub();
-    override(pear_run_state, "apply_pear_run_event", state_stub.f);
-    override(pear_panel, "handle_pear_run_event", panel_stub.f);
-    const event = {type: "pear_run", run_id: 7, status: "running"};
+    override(legacy_run_state, "apply_armada_run_event", state_stub.f);
+    override(legacy_panel, "handle_armada_run_event", panel_stub.f);
+    const event = {type: "agent_run", run_id: 7, status: "running"};
     dispatch(event);
     assert.equal(state_stub.get_args("event").event, event);
     assert.equal(panel_stub.get_args("event").event, event);
 });
 
-run_test("pear_workspace_changed reaches the Workspace event reducer", ({override}) => {
+run_test("workspace_changed reaches the Workspace event reducer", ({override}) => {
     const stub = make_stub();
-    override(pear_workspace_events, "apply_pear_workspace_changed_event", stub.f);
+    override(legacy_workspace_events, "apply_armada_workspace_changed_event", stub.f);
     const event = {
-        type: "pear_workspace_changed",
+        type: "workspace_changed",
         workspace_id: "workspace-a",
         revision: 7,
     };
@@ -916,7 +916,7 @@ run_test("realm_bot update", ({override}) => {
 });
 
 run_test("realm_bot events keep the Pear bot ids current", ({override}) => {
-    const pear_bot_id = test_user.user_id;
+    const armada_bot_id = test_user.user_id;
     override(bot_data, "add", noop);
     override(bot_data, "update", noop);
     override(bot_data, "del", noop);
@@ -924,30 +924,30 @@ run_test("realm_bot events keep the Pear bot ids current", ({override}) => {
     override(settings_bots, "toggle_bot_config_download_container", noop);
     override(settings_bots, "update_lock_icon_in_sidebar", noop);
     const update = (services) => {
-        dispatch({type: "realm_bot", op: "update", bot: {user_id: pear_bot_id, services}});
+        dispatch({type: "realm_bot", op: "update", bot: {user_id: armada_bot_id, services}});
     };
 
     dispatch({
         type: "realm_bot",
         op: "add",
-        bot: {user_id: pear_bot_id, services: [{service_name: "pear"}]},
+        bot: {user_id: armada_bot_id, services: [{service_name: "armada"}]},
     });
-    assert.ok(is_pear_bot_user_id(pear_bot_id));
+    assert.ok(is_armada_bot_user_id(armada_bot_id));
 
     // An update that carries no service data says nothing about
     // which embedded bot this is.
     update(undefined);
     update([]);
-    assert.ok(is_pear_bot_user_id(pear_bot_id));
+    assert.ok(is_armada_bot_user_id(armada_bot_id));
 
     update([{service_name: "converter"}]);
-    assert.ok(!is_pear_bot_user_id(pear_bot_id));
+    assert.ok(!is_armada_bot_user_id(armada_bot_id));
 
-    update([{service_name: "pear"}]);
-    assert.ok(is_pear_bot_user_id(pear_bot_id));
+    update([{service_name: "armada"}]);
+    assert.ok(is_armada_bot_user_id(armada_bot_id));
 
-    dispatch({type: "realm_bot", op: "delete", bot: {user_id: pear_bot_id}});
-    assert.ok(!is_pear_bot_user_id(pear_bot_id));
+    dispatch({type: "realm_bot", op: "delete", bot: {user_id: armada_bot_id}});
+    assert.ok(!is_armada_bot_user_id(armada_bot_id));
 });
 
 run_test("realm_emoji", ({override}) => {

@@ -70,7 +70,7 @@ function make_editor(overrides = {}) {
     document.body.append(root);
     const dirty_events = [];
     const language_errors = [];
-    const editor = source_editor.create_pear_workspace_source_editor({
+    const editor = source_editor.create_armada_workspace_source_editor({
         root,
         text: "initial\n",
         onDirty(event) {
@@ -85,7 +85,7 @@ function make_editor(overrides = {}) {
 }
 
 run_test("maps only supported filename extensions to Source grammars", () => {
-    const language_for_path = source_editor.pear_workspace_source_language_for_path;
+    const language_for_path = source_editor.armada_workspace_source_language_for_path;
     const cases = new Map([
         ["README.md", "markdown"],
         ["docs/GUIDE.MARKDOWN", "markdown"],

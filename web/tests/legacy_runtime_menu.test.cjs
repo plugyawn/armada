@@ -2,12 +2,12 @@
 
 const assert = require("node:assert/strict");
 
-const render_pear_runtime_menu_popover = require("../templates/legacy_runtime_menu_popover.hbs");
+const render_legacy_runtime_menu_popover = require("../templates/legacy_runtime_menu_popover.hbs");
 
 const {zrequire} = require("./lib/namespace.cjs");
 const {run_test} = require("./lib/test.cjs");
 
-const pear_runtime_menu = zrequire("legacy_runtime_menu");
+const legacy_runtime_menu = zrequire("legacy_runtime_menu");
 
 const fallback_efforts = [
     {effort: "low", label: "Low"},
@@ -19,7 +19,7 @@ const fallback_efforts = [
 function make_context(overrides = {}) {
     return {
         stream: "devel",
-        topic: "pear",
+        topic: "armada",
         model: "gpt-5.5",
         reasoning_effort: "medium",
         response_policy: "ambient",
@@ -29,15 +29,15 @@ function make_context(overrides = {}) {
 
 run_test("runtime_menu_selector_for_testing", () => {
     assert.equal(
-        pear_runtime_menu.runtime_menu_selector_for_testing,
-        "#pear-panel .pear-runtime-menu-trigger, .message_header_stream .pear-topic-header-runtime-control.pear-runtime-menu-trigger",
+        legacy_runtime_menu.runtime_menu_selector_for_testing,
+        "#legacy-panel .legacy-runtime-menu-trigger, .message_header_stream .legacy-topic-header-runtime-control.legacy-runtime-menu-trigger",
     );
-    for (const selector of pear_runtime_menu.forbidden_header_mount_selectors_for_testing) {
-        assert.ok(!pear_runtime_menu.runtime_menu_selector_for_testing.includes(selector));
+    for (const selector of legacy_runtime_menu.forbidden_header_mount_selectors_for_testing) {
+        assert.ok(!legacy_runtime_menu.runtime_menu_selector_for_testing.includes(selector));
     }
     assert.ok(
-        pear_runtime_menu.runtime_menu_selector_for_testing.includes(
-            ".message_header_stream .pear-topic-header-runtime-control",
+        legacy_runtime_menu.runtime_menu_selector_for_testing.includes(
+            ".message_header_stream .legacy-topic-header-runtime-control",
         ),
     );
 });
@@ -45,7 +45,7 @@ run_test("runtime_menu_selector_for_testing", () => {
 run_test("forbidden_header_mount_selectors_for_testing", () => {
     // Workspace/repo/runtime chrome must stay out of Zulip's global
     // navbar semantics. Stream/topic headers own topic-level controls.
-    assert.deepEqual(pear_runtime_menu.forbidden_header_mount_selectors_for_testing, [
+    assert.deepEqual(legacy_runtime_menu.forbidden_header_mount_selectors_for_testing, [
         "#top_navbar",
         "#navbar-middle",
         "#message_view_header",
@@ -73,37 +73,43 @@ run_test("model_reasoning_efforts", () => {
     });
 
     // A model's own supported_reasoning_levels win.
-    assert.deepEqual(pear_runtime_menu.model_reasoning_efforts(context, "gpt-5.5"), gpt_efforts);
+    assert.deepEqual(legacy_runtime_menu.model_reasoning_efforts(context, "gpt-5.5"), gpt_efforts);
 
     // Empty or absent per-model levels fall back to the context-wide
     // reasoning_efforts, as does an unknown model.
-    assert.deepEqual(pear_runtime_menu.model_reasoning_efforts(context, "haiku"), context_efforts);
-    assert.deepEqual(pear_runtime_menu.model_reasoning_efforts(context, "opus"), context_efforts);
     assert.deepEqual(
-        pear_runtime_menu.model_reasoning_efforts(context, "unknown"),
+        legacy_runtime_menu.model_reasoning_efforts(context, "haiku"),
+        context_efforts,
+    );
+    assert.deepEqual(legacy_runtime_menu.model_reasoning_efforts(context, "opus"), context_efforts);
+    assert.deepEqual(
+        legacy_runtime_menu.model_reasoning_efforts(context, "unknown"),
         context_efforts,
     );
 
     // With no usable context-wide efforts either, the built-in
     // fallback list is used.
     assert.deepEqual(
-        pear_runtime_menu.model_reasoning_efforts(make_context({reasoning_efforts: []}), "gpt-5.5"),
+        legacy_runtime_menu.model_reasoning_efforts(
+            make_context({reasoning_efforts: []}),
+            "gpt-5.5",
+        ),
         fallback_efforts,
     );
     assert.deepEqual(
-        pear_runtime_menu.model_reasoning_efforts(make_context(), "gpt-5.5"),
+        legacy_runtime_menu.model_reasoning_efforts(make_context(), "gpt-5.5"),
         fallback_efforts,
     );
 
     // An undefined context falls back too, without throwing.
     assert.deepEqual(
-        pear_runtime_menu.model_reasoning_efforts(undefined, "gpt-5.5"),
+        legacy_runtime_menu.model_reasoning_efforts(undefined, "gpt-5.5"),
         fallback_efforts,
     );
 });
 
 run_test("model_choices", () => {
-    assert.deepEqual(pear_runtime_menu.model_choices(undefined), []);
+    assert.deepEqual(legacy_runtime_menu.model_choices(undefined), []);
 
     // Catalog entries are mapped to choices, using display_name when
     // available and falling back to the slug; extra model_choices are
@@ -116,7 +122,7 @@ run_test("model_choices", () => {
         ],
         model_choices: ["haiku", "opus"],
     });
-    assert.deepEqual(pear_runtime_menu.model_choices(context), [
+    assert.deepEqual(legacy_runtime_menu.model_choices(context), [
         {value: "gpt-5.5", label: "GPT-5.5", selected: true},
         {value: "haiku", label: "haiku", selected: false},
         {value: "opus", label: "opus", selected: false},
@@ -129,7 +135,7 @@ run_test("model_choices", () => {
         model_catalog: [{slug: "gpt-5.5", display_name: "GPT-5.5"}],
         model_choices: ["opus"],
     });
-    assert.deepEqual(pear_runtime_menu.model_choices(custom_context), [
+    assert.deepEqual(legacy_runtime_menu.model_choices(custom_context), [
         {value: "custom-model", label: "custom-model", selected: true},
         {value: "gpt-5.5", label: "GPT-5.5", selected: false},
         {value: "opus", label: "opus", selected: false},
@@ -137,7 +143,7 @@ run_test("model_choices", () => {
 });
 
 run_test("effort_choices", () => {
-    assert.deepEqual(pear_runtime_menu.effort_choices(undefined), []);
+    assert.deepEqual(legacy_runtime_menu.effort_choices(undefined), []);
 
     const context = make_context({
         model: "gpt-5.5",
@@ -153,29 +159,32 @@ run_test("effort_choices", () => {
             },
         ],
     });
-    assert.deepEqual(pear_runtime_menu.effort_choices(context), [
+    assert.deepEqual(legacy_runtime_menu.effort_choices(context), [
         {value: "medium", label: "Medium", selected: false},
         {value: "high", label: "High", selected: true},
     ]);
 
     // Without a catalog, the built-in fallback efforts are offered,
     // still marking the selected reasoning_effort.
-    assert.deepEqual(pear_runtime_menu.effort_choices(make_context({reasoning_effort: "xhigh"})), [
-        {value: "low", label: "Low", selected: false},
-        {value: "medium", label: "Medium", selected: false},
-        {value: "high", label: "High", selected: false},
-        {value: "xhigh", label: "XHigh", selected: true},
-    ]);
+    assert.deepEqual(
+        legacy_runtime_menu.effort_choices(make_context({reasoning_effort: "xhigh"})),
+        [
+            {value: "low", label: "Low", selected: false},
+            {value: "medium", label: "Medium", selected: false},
+            {value: "high", label: "High", selected: false},
+            {value: "xhigh", label: "XHigh", selected: true},
+        ],
+    );
 });
 
 run_test("presence_choices", () => {
-    assert.deepEqual(pear_runtime_menu.presence_choices(undefined), []);
-    assert.deepEqual(pear_runtime_menu.presence_choices(make_context()), [
+    assert.deepEqual(legacy_runtime_menu.presence_choices(undefined), []);
+    assert.deepEqual(legacy_runtime_menu.presence_choices(make_context()), [
         {value: "ambient", label: "translated: Join when useful", selected: true},
         {value: "mentions_only", label: "translated: Only when asked", selected: false},
     ]);
     assert.deepEqual(
-        pear_runtime_menu.presence_choices(make_context({response_policy: "mentions_only"})),
+        legacy_runtime_menu.presence_choices(make_context({response_policy: "mentions_only"})),
         [
             {value: "ambient", label: "translated: Join when useful", selected: false},
             {value: "mentions_only", label: "translated: Only when asked", selected: true},
@@ -184,14 +193,14 @@ run_test("presence_choices", () => {
 });
 
 run_test("runtime_summary", () => {
-    assert.deepEqual(pear_runtime_menu.runtime_summary(undefined), {
+    assert.deepEqual(legacy_runtime_menu.runtime_summary(undefined), {
         model_label: "translated: Pear",
         effort_label: "",
         compact_label: "translated: Pear",
     });
 
     assert.deepEqual(
-        pear_runtime_menu.runtime_summary(
+        legacy_runtime_menu.runtime_summary(
             make_context({
                 model: "gpt-5.5",
                 reasoning_effort: "high",
@@ -207,7 +216,9 @@ run_test("runtime_summary", () => {
     );
 
     assert.deepEqual(
-        pear_runtime_menu.runtime_summary(make_context({model: "custom", reasoning_effort: "low"})),
+        legacy_runtime_menu.runtime_summary(
+            make_context({model: "custom", reasoning_effort: "low"}),
+        ),
         {
             model_label: "custom",
             effort_label: "Low",
@@ -216,7 +227,7 @@ run_test("runtime_summary", () => {
     );
 
     assert.deepEqual(
-        pear_runtime_menu.runtime_summary(
+        legacy_runtime_menu.runtime_summary(
             make_context({model: "custom", reasoning_effort: "xhigh"}),
         ),
         {
@@ -228,54 +239,54 @@ run_test("runtime_summary", () => {
 });
 
 run_test("runtime_status_for_testing", () => {
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing(undefined), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing(undefined), {
         glyph: "·",
         label: "translated: idle",
-        class_name: "pear-runtime-status-idle",
+        class_name: "legacy-runtime-status-idle",
         is_active: false,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "running"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "running"}), {
         glyph: "·",
         label: "translated: working",
-        class_name: "pear-runtime-status-active",
+        class_name: "legacy-runtime-status-active",
         is_active: true,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "queued"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "queued"}), {
         glyph: "·",
         label: "translated: queued",
-        class_name: "pear-runtime-status-active",
+        class_name: "legacy-runtime-status-active",
         is_active: true,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "loading"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "loading"}), {
         glyph: "·",
         label: "translated: loading",
-        class_name: "pear-runtime-status-active",
+        class_name: "legacy-runtime-status-active",
         is_active: true,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "paused"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "paused"}), {
         glyph: "✧",
         label: "translated: paused",
-        class_name: "pear-runtime-status-paused",
+        class_name: "legacy-runtime-status-paused",
         is_active: false,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "failed"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "failed"}), {
         glyph: "✷",
         label: "translated: failed",
-        class_name: "pear-runtime-status-blocked",
+        class_name: "legacy-runtime-status-blocked",
         is_active: false,
     });
-    assert.deepEqual(pear_runtime_menu.runtime_status_for_testing({status: "cancelled"}), {
+    assert.deepEqual(legacy_runtime_menu.runtime_status_for_testing({status: "cancelled"}), {
         glyph: "✷",
         label: "translated: cancelled",
-        class_name: "pear-runtime-status-blocked",
+        class_name: "legacy-runtime-status-blocked",
         is_active: false,
     });
 });
 
 run_test("build_runtime_usage_rows", () => {
-    assert.deepEqual(pear_runtime_menu.build_runtime_usage_rows(undefined), []);
+    assert.deepEqual(legacy_runtime_menu.build_runtime_usage_rows(undefined), []);
     assert.deepEqual(
-        pear_runtime_menu.build_runtime_usage_rows({
+        legacy_runtime_menu.build_runtime_usage_rows({
             input_tokens: 1_000,
             output_tokens: 250,
             reasoning_output_tokens: 40,
@@ -292,7 +303,7 @@ run_test("build_runtime_usage_rows", () => {
     );
 
     assert.deepEqual(
-        pear_runtime_menu.build_runtime_usage_rows({
+        legacy_runtime_menu.build_runtime_usage_rows({
             total_tokens: 9,
             duration_seconds: 2,
         }),
@@ -304,7 +315,7 @@ run_test("build_runtime_usage_rows", () => {
 });
 
 run_test("runtime_usage_meter_for_testing", () => {
-    assert.deepEqual(pear_runtime_menu.runtime_usage_meter_for_testing(undefined), {
+    assert.deepEqual(legacy_runtime_menu.runtime_usage_meter_for_testing(undefined), {
         has_meter: false,
         label: "",
         value: "",
@@ -312,7 +323,7 @@ run_test("runtime_usage_meter_for_testing", () => {
         is_hot: false,
     });
     assert.deepEqual(
-        pear_runtime_menu.runtime_usage_meter_for_testing({
+        legacy_runtime_menu.runtime_usage_meter_for_testing({
             cache_percent: 66.66,
         }),
         {
@@ -324,7 +335,7 @@ run_test("runtime_usage_meter_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_runtime_menu.runtime_usage_meter_for_testing({
+        legacy_runtime_menu.runtime_usage_meter_for_testing({
             cache_percent: 70,
         }),
         {
@@ -336,7 +347,7 @@ run_test("runtime_usage_meter_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_runtime_menu.runtime_usage_meter_for_testing({
+        legacy_runtime_menu.runtime_usage_meter_for_testing({
             cache_percent: 125,
         }),
         {
@@ -348,7 +359,7 @@ run_test("runtime_usage_meter_for_testing", () => {
         },
     );
     assert.deepEqual(
-        pear_runtime_menu.runtime_usage_meter_for_testing({
+        legacy_runtime_menu.runtime_usage_meter_for_testing({
             cache_percent: -5,
         }),
         {
@@ -361,13 +372,13 @@ run_test("runtime_usage_meter_for_testing", () => {
     );
 });
 
-run_test("runtime popover renders pear context meter line", () => {
-    const html = render_pear_runtime_menu_popover({
+run_test("runtime popover renders armada context meter line", () => {
+    const html = render_legacy_runtime_menu_popover({
         has_runtime: true,
         runtime_status: {
             glyph: "·",
             label: "Idle",
-            class_name: "pear-runtime-status-idle",
+            class_name: "legacy-runtime-status-idle",
             is_active: false,
         },
         runtime_model_label: "GPT-5.5",
@@ -385,9 +396,9 @@ run_test("runtime popover renders pear context meter line", () => {
         presence_choices: [],
     });
 
-    assert.match(html, /pear-runtime-meter-block pear-runtime-meter-hot/);
-    assert.match(html, /pear-runtime-meter-line/);
-    assert.match(html, /pear-runtime-meter-fill/);
+    assert.match(html, /legacy-runtime-meter-block legacy-runtime-meter-hot/);
+    assert.match(html, /legacy-runtime-meter-line/);
+    assert.match(html, /legacy-runtime-meter-fill/);
     // The fill width is applied from render_popover_content after the
     // template renders; an inline style attribute would trip template lint.
     assert.doesNotMatch(html, /style=/);
@@ -395,12 +406,12 @@ run_test("runtime popover renders pear context meter line", () => {
 });
 
 run_test("runtime popover does not expose workbench actions", () => {
-    const html = render_pear_runtime_menu_popover({
+    const html = render_legacy_runtime_menu_popover({
         has_runtime: true,
         runtime_status: {
             glyph: "·",
             label: "Idle",
-            class_name: "pear-runtime-status-idle",
+            class_name: "legacy-runtime-status-idle",
             is_active: false,
         },
         runtime_model_label: "GPT-5.5",
@@ -421,21 +432,21 @@ run_test("runtime popover does not expose workbench actions", () => {
         ],
     });
 
-    assert.doesNotMatch(html, /pear-workbench-menu-link/);
+    assert.doesNotMatch(html, /legacy-workbench-menu-link/);
     assert.doesNotMatch(html, />translated: Workbench</);
-    assert.doesNotMatch(html, /pear-runtime-model-select/);
-    assert.match(html, /pear-runtime-model-choice/);
-    assert.doesNotMatch(html, /pear-runtime-effort-range/);
-    assert.match(html, /pear-runtime-effort-choice/);
+    assert.doesNotMatch(html, /legacy-runtime-model-select/);
+    assert.match(html, /legacy-runtime-model-choice/);
+    assert.doesNotMatch(html, /legacy-runtime-effort-range/);
+    assert.match(html, /legacy-runtime-effort-choice/);
 });
 
 run_test("runtime popover uses compact radio menu rows", () => {
-    const html = render_pear_runtime_menu_popover({
+    const html = render_legacy_runtime_menu_popover({
         has_runtime: true,
         runtime_status: {
             glyph: "·",
             label: "Idle",
-            class_name: "pear-runtime-status-idle",
+            class_name: "legacy-runtime-status-idle",
             is_active: false,
         },
         runtime_model_label: "GPT-5.5",
@@ -462,23 +473,23 @@ run_test("runtime popover uses compact radio menu rows", () => {
         ],
     });
 
-    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Model<\/div>/);
-    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Thinking<\/div>/);
-    assert.match(html, /pear-runtime-menu-section[^>]*>translated: Presence<\/div>/);
-    assert.match(html, /pear-runtime-model-menu-choice[^>]+data-model="gpt-5.5"/);
-    assert.match(html, /pear-runtime-effort-menu-choice[^>]+data-effort="high"/);
-    assert.match(html, /pear-runtime-presence-menu-choice[^>]+data-policy="ambient"/);
+    assert.match(html, /legacy-runtime-menu-section[^>]*>translated: Model<\/div>/);
+    assert.match(html, /legacy-runtime-menu-section[^>]*>translated: Thinking<\/div>/);
+    assert.match(html, /legacy-runtime-menu-section[^>]*>translated: Presence<\/div>/);
+    assert.match(html, /legacy-runtime-model-menu-choice[^>]+data-model="gpt-5.5"/);
+    assert.match(html, /legacy-runtime-effort-menu-choice[^>]+data-effort="high"/);
+    assert.match(html, /legacy-runtime-presence-menu-choice[^>]+data-policy="ambient"/);
     assert.match(html, />translated: @Pear always works<\/div>/);
     assert.match(
         html,
-        /class="pear-runtime-model-choice" name="pear-runtime-model" value="gpt-5.5" checked/,
+        /class="legacy-runtime-model-choice" name="legacy-runtime-model" value="gpt-5.5" checked/,
     );
     assert.match(
         html,
-        /class="pear-runtime-effort-choice" name="pear-runtime-effort" value="high" checked/,
+        /class="legacy-runtime-effort-choice" name="legacy-runtime-effort" value="high" checked/,
     );
     assert.match(html, /role="menuitemradio" aria-checked="true"/);
-    assert.doesNotMatch(html, /pear-runtime-setting-row/);
-    assert.doesNotMatch(html, /pear-runtime-effort-range/);
+    assert.doesNotMatch(html, /legacy-runtime-setting-row/);
+    assert.doesNotMatch(html, /legacy-runtime-effort-range/);
     assert.doesNotMatch(html, /<select\b/);
 });

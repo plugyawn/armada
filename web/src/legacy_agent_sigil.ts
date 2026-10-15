@@ -1,5 +1,5 @@
 import {$t} from "./i18n.ts";
-import type * as pear_run_state from "./legacy_run_state.ts";
+import type * as legacy_run_state from "./legacy_run_state.ts";
 
 /* Agent identity helpers shared by the thread pane (cycler, strip) and
    the sidebar roster: deterministic 3x3 sigil from the thread id, status
@@ -44,7 +44,7 @@ export function status_tone_for_testing(status: string): "active" | "failed" | "
 }
 
 export function display_name_for_testing(
-    agent: pear_run_state.PearAgentThread,
+    agent: legacy_run_state.ArmadaAgentThread,
     index: number,
 ): string {
     return (
@@ -55,7 +55,7 @@ export function display_name_for_testing(
     );
 }
 
-export function create_sigil(agent: pear_run_state.PearAgentThread): HTMLElement {
+export function create_sigil(agent: legacy_run_state.ArmadaAgentThread): HTMLElement {
     const sigil = document.createElement("span");
     sigil.className = `message-thread-agent-sigil message-thread-agent-sigil-tone-${hash_thread_id(agent.thread_id) % 6}`;
     sigil.setAttribute("aria-hidden", "true");

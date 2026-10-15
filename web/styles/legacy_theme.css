@@ -1,4 +1,4 @@
-/* Pear host retheme — "Terminal Romantic" (pear/PEAR_DESIGN_LANGUAGE.md
+/* Pear host retheme — "Terminal Romantic" (armada/ARMADA_DESIGN_LANGUAGE.md
    §4.3). This layer redefines the small set of Zulip variables the app's
    shared surfaces sit on, entirely from Pear semantic tokens (which are
    light-dark() aware, so one block serves both themes). Structural and
@@ -9,50 +9,50 @@
 :root.dark-theme {
     /* The agent's tinted block gets a slightly deeper step in the light
        theme so the pixel voice keeps its contrast against it. */
-    --color-background-pear-message-content: light-dark(
-        var(--pear-surface-2),
-        var(--pear-surface-1)
+    --color-background-legacy-message-content: light-dark(
+        var(--legacy-surface-2),
+        var(--legacy-surface-1)
     );
 
     /* Page and panels use the neutral graphite ramp. */
-    --color-background: var(--pear-surface-0);
-    --color-background-navbar: var(--pear-surface-1);
-    --color-background-stream-message-content: var(--pear-surface-0);
-    --color-background-hover-narrow-filter: var(--pear-surface-3);
-    --color-background-active-narrow-filter: var(--pear-surface-2);
+    --color-background: var(--legacy-surface-0);
+    --color-background-navbar: var(--legacy-surface-1);
+    --color-background-stream-message-content: var(--legacy-surface-0);
+    --color-background-hover-narrow-filter: var(--legacy-surface-3);
+    --color-background-active-narrow-filter: var(--legacy-surface-2);
 
     /* Ink. */
-    --color-text-default: var(--pear-ink-1);
+    --color-text-default: var(--legacy-ink-1);
 
     /* Popovers: raised tone, hairline, the one soft shadow. */
-    --color-background-popover-menu: var(--pear-surface-2);
-    --color-border-popover-menu: var(--pear-hairline);
-    --box-shadow-popover-menu: var(--pear-shadow-pop);
+    --color-background-popover-menu: var(--legacy-surface-2);
+    --color-border-popover-menu: var(--legacy-hairline);
+    --box-shadow-popover-menu: var(--legacy-shadow-pop);
 
     /* Ordinary interaction is violet; Pear green is reserved for
        running, presence, and success state. */
-    --color-outline-focus: var(--pear-interaction);
-    --color-outline-button-focus: var(--pear-interaction);
-    --color-compose-focus-ring: var(--pear-interaction);
-    --color-message-content-container-border-focus: var(--pear-interaction);
+    --color-outline-focus: var(--legacy-interaction);
+    --color-outline-button-focus: var(--legacy-interaction);
+    --color-compose-focus-ring: var(--legacy-interaction);
+    --color-message-content-container-border-focus: var(--legacy-interaction);
 
     /* Sidebar fabric (B3): unread counters step off the blue tier
        system onto the graphite ramp. Prominent attention uses the
        interaction family; the active row reads in full ink and the
        sticky header floats on the one soft shadow. */
     --color-background-unread-counter-prominent: var(
-        --pear-interaction-fill-strong
+        --legacy-interaction-fill-strong
     );
-    --color-unread-counter-prominent: var(--pear-interaction);
-    --color-background-unread-counter-normal: var(--pear-surface-2);
-    --color-unread-counter-normal: var(--pear-ink-2);
-    --color-unread-counter-quiet: var(--pear-ink-3);
-    --box-shadow-unread-counter-normal: inset 0 0 0 1px var(--pear-hairline);
-    --color-background-unread-counter-no-alpha: var(--pear-surface-3);
-    --color-background-unread-counter-dot: var(--pear-interaction);
-    --color-text-active-narrow-filter: var(--pear-ink-1);
+    --color-unread-counter-prominent: var(--legacy-interaction);
+    --color-background-unread-counter-normal: var(--legacy-surface-2);
+    --color-unread-counter-normal: var(--legacy-ink-2);
+    --color-unread-counter-quiet: var(--legacy-ink-3);
+    --box-shadow-unread-counter-normal: inset 0 0 0 1px var(--legacy-hairline);
+    --color-background-unread-counter-no-alpha: var(--legacy-surface-3);
+    --color-background-unread-counter-dot: var(--legacy-interaction);
+    --color-text-active-narrow-filter: var(--legacy-ink-1);
     --box-shadow-sidebar-sticky-header-drop:
-        var(--pear-shadow-pop), 0 1px 0 var(--pear-hairline);
+        var(--legacy-shadow-pop), 0 1px 0 var(--legacy-hairline);
 
     /* Sidebar voice: sentence-case headings in a calm 500 (the
        shouting caps and small-caps action headings retire). */
@@ -67,81 +67,85 @@
        interaction, so they share one adaptive violet family. */
     --color-selected-message-outline: color-mix(
         in srgb,
-        var(--pear-interaction) 34%,
+        var(--legacy-interaction) 34%,
         transparent
     );
-    --color-unread-marker: var(--pear-interaction);
+    --color-unread-marker: var(--legacy-interaction);
     --color-background-direct-mention: color-mix(
         in srgb,
-        var(--pear-interaction) 7%,
-        var(--pear-surface-0)
+        var(--legacy-interaction) 7%,
+        var(--legacy-surface-0)
     );
     --color-background-group-mention: color-mix(
         in srgb,
-        var(--pear-interaction) 4%,
-        var(--pear-surface-0)
+        var(--legacy-interaction) 4%,
+        var(--legacy-surface-0)
     );
-    --color-background-text-direct-mention: var(--pear-interaction-fill);
+    --color-background-text-direct-mention: var(--legacy-interaction-fill);
     --color-background-text-hover-direct-mention: var(
-        --pear-interaction-fill-strong
+        --legacy-interaction-fill-strong
     );
     --color-background-text-group-mention: color-mix(
         in srgb,
-        var(--pear-interaction) 8%,
+        var(--legacy-interaction) 8%,
         transparent
     );
     --color-background-text-hover-group-mention: color-mix(
         in srgb,
-        var(--pear-interaction) 16%,
+        var(--legacy-interaction) 16%,
         transparent
     );
 
     /* Composer and message-expansion controls inherit the same fabric
        instead of mixing Zulip indigo, Pear green, and raw greys. */
-    --color-compose-box-background: var(--pear-surface-1);
-    --color-border-compose-content: var(--pear-hairline);
-    --color-compose-message-content-background: var(--pear-surface-0);
+    --color-compose-box-background: var(--legacy-surface-1);
+    --color-border-compose-content: var(--legacy-hairline);
+    --color-compose-message-content-background: var(--legacy-surface-0);
     --color-compose-collapsed-reply-button-area-background: var(
-        --pear-surface-1
+        --legacy-surface-1
     );
     --color-compose-collapsed-reply-button-area-background-interactive: var(
-        --pear-surface-2
+        --legacy-surface-2
     );
-    --color-compose-collapsed-reply-button-area-border: var(--pear-hairline);
+    --color-compose-collapsed-reply-button-area-border: var(--legacy-hairline);
     --color-compose-collapsed-reply-button-area-border-interactive: color-mix(
         in srgb,
-        var(--pear-interaction) 45%,
-        var(--pear-hairline)
+        var(--legacy-interaction) 45%,
+        var(--legacy-hairline)
     );
-    --color-compose-embedded-button-text-color: var(--pear-ink-2);
-    --color-compose-embedded-button-text-color-hover: var(--pear-interaction);
+    --color-compose-embedded-button-text-color: var(--legacy-ink-2);
+    --color-compose-embedded-button-text-color-hover: var(--legacy-interaction);
     --color-compose-embedded-button-background: transparent;
     --color-compose-embedded-button-background-hover: var(
-        --pear-interaction-fill
+        --legacy-interaction-fill
     );
-    --color-background-compose-new-message-button: var(--pear-surface-1);
-    --color-background-compose-new-message-button-hover: var(--pear-surface-2);
-    --color-background-compose-new-message-button-active: var(--pear-surface-3);
-    --color-border-compose-new-message-button: var(--pear-hairline);
+    --color-background-compose-new-message-button: var(--legacy-surface-1);
+    --color-background-compose-new-message-button-hover: var(
+        --legacy-surface-2
+    );
+    --color-background-compose-new-message-button-active: var(
+        --legacy-surface-3
+    );
+    --color-border-compose-new-message-button: var(--legacy-hairline);
     --color-border-compose-new-message-button-hover: color-mix(
         in srgb,
-        var(--pear-interaction) 45%,
-        var(--pear-hairline)
+        var(--legacy-interaction) 45%,
+        var(--legacy-hairline)
     );
-    --color-compose-send-button-background: var(--pear-interaction);
+    --color-compose-send-button-background: var(--legacy-interaction);
     --color-compose-send-button-background-interactive: color-mix(
         in srgb,
-        var(--pear-interaction) 76%,
-        var(--pear-ink-1)
+        var(--legacy-interaction) 76%,
+        var(--legacy-ink-1)
     );
-    --color-text-show-more-less-button: var(--pear-interaction);
-    --color-show-more-less-button-background: var(--pear-interaction-fill);
+    --color-text-show-more-less-button: var(--legacy-interaction);
+    --color-show-more-less-button-background: var(--legacy-interaction-fill);
     --color-show-more-less-button-background-hover: var(
-        --pear-interaction-fill-strong
+        --legacy-interaction-fill-strong
     );
     --color-show-more-less-button-background-active: color-mix(
         in srgb,
-        var(--pear-interaction) 24%,
+        var(--legacy-interaction) 24%,
         transparent
     );
 }
@@ -179,20 +183,20 @@
    language) but speak from the token system, not raw yellow. */
 .highlight,
 :root.dark-theme .highlight {
-    background-color: color-mix(in srgb, var(--pear-warn) 32%, transparent);
+    background-color: color-mix(in srgb, var(--legacy-warn) 32%, transparent);
 }
 
 /* Scrollbars are quiet ink — tone only, no outline ring. The
    dark-theme selectors outrank the host's dark override. */
 .simplebar-track .simplebar-scrollbar::before,
 :root.dark-theme .simplebar-track .simplebar-scrollbar::before {
-    background-color: var(--pear-ink-3);
+    background-color: var(--legacy-ink-3);
     box-shadow: none;
 }
 
 .simplebar-track .simplebar-scrollbar.simplebar-hover::before,
 :root.dark-theme .simplebar-track .simplebar-scrollbar.simplebar-hover::before {
-    background-color: var(--pear-ink-2);
+    background-color: var(--legacy-ink-2);
 }
 
 /* The prose measure caps near 72ch (design §8.1): full-width lines
@@ -208,8 +212,8 @@
    Keep channel identity in the icon and text; the structural surface stays
    on the same adaptive graphite ramp as the rest of the room. */
 .message_header_stream .message-header-contents {
-    background: var(--pear-surface-1) !important;
-    border-color: var(--pear-hairline);
+    background: var(--legacy-surface-1) !important;
+    border-color: var(--legacy-hairline);
 }
 
 /* Messages keep one inset from the card's edge on both sides, so the
@@ -221,15 +225,15 @@
 
 .message_row .messagebox-content {
     padding-left: 8px;
-    border-radius: var(--pear-radius-chip);
+    border-radius: var(--legacy-radius-chip);
 }
 
 /* Sidebar rows on both rails share one soft, inset shape and answer the
    pointer without a visible delay. */
 #left-sidebar .bottom_left_row,
 #right-sidebar .user_sidebar_entry {
-    border-radius: var(--pear-radius-chip);
-    transition: background-color var(--pear-dur-1) var(--pear-ease);
+    border-radius: var(--legacy-radius-chip);
+    transition: background-color var(--legacy-dur-1) var(--legacy-ease);
 }
 
 /* The room is set in Hanken. Form controls inherit so inputs match. */
@@ -238,7 +242,7 @@ input,
 button,
 select,
 textarea {
-    font-family: var(--pear-font-ui);
+    font-family: var(--legacy-font-ui);
 }
 
 /* Digits line up wherever they count. Text renders the way native
@@ -253,13 +257,13 @@ body {
 }
 
 /* Tooltip motion: a minimal fade+settle keyed by tippyjs.ts's
-   animation: "pear". Tippy drives the duration; we define the states. */
-.tippy-box[data-animation="pear"] {
+   animation: "armada". Tippy drives the duration; we define the states. */
+.tippy-box[data-animation="armada"] {
     transition-property: opacity, transform;
-    transition-timing-function: var(--pear-ease);
+    transition-timing-function: var(--legacy-ease);
 }
 
-.tippy-box[data-animation="pear"][data-state="hidden"] {
+.tippy-box[data-animation="armada"][data-state="hidden"] {
     opacity: 0;
     transform: translateY(2px) scale(0.985);
 }

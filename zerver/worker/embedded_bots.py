@@ -38,22 +38,22 @@ class EmbeddedBotWorker(QueueProcessingWorker):
         for service in services:
             service_message = dict(message)
             try:
-                if service.name == "pear":
-                    from zerver.lib.armada import PEAR_TRIGGER_MESSAGE_KEY
-                    from zerver.lib.armada_worker import PEAR_ADDRESSING_QUEUE_NAME
+                if service.name == "armada":
+                    from zerver.lib.armada import ARMADA_TRIGGER_MESSAGE_KEY
+                    from zerver.lib.armada_worker import ARMADA_ADDRESSING_QUEUE_NAME
 
-                    service_message[PEAR_TRIGGER_MESSAGE_KEY] = event["trigger"]
+                    service_message[ARMADA_TRIGGER_MESSAGE_KEY] = event["trigger"]
                 if event["trigger"] == "mention":
                     service_message["content"] = extract_query_without_mention(
                         message=service_message,
                         client=self.get_bot_api_client(user_profile),
                     )
                     assert service_message["content"] is not None
-                    if service.name == "pear":
-                        service_message["pear_explicit_mention"] = True
-                if service.name == "pear":
+                    if service.name == "armada":
+                        service_message["agent_explicit_mention"] = True
+                if service.name == "armada":
                     queue_json_publish_rollback_unsafe(
-                        PEAR_ADDRESSING_QUEUE_NAME,
+                        ARMADA_ADDRESSING_QUEUE_NAME,
                         {
                             "user_profile_id": user_profile_id,
                             "message": service_message,

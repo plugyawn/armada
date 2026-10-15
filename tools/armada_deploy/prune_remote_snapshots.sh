@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
+DEFAULT_STATE_PATH="$REPO_ROOT/output/armada-staging/server.json"
 STATE_PATH="$DEFAULT_STATE_PATH"
 KEEP=10
 YES=false
@@ -74,11 +74,11 @@ PY
 
 args=(
     /home/zulipdev/zulip/tools/armada_deploy/snapshot_retention.py
-    --root /home/zulipdev/pear-deploy-snapshots
+    --root /home/zulipdev/armada-deploy-snapshots
     --keep "$KEEP"
 )
 if [[ "$YES" == true ]]; then
     args+=(--yes)
 fi
 printf -v remote_command '%q ' "${args[@]}"
-ssh -F "$SSH_CONFIG" pear-staging-root "$remote_command"
+ssh -F "$SSH_CONFIG" armada-staging-root "$remote_command"

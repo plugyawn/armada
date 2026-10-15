@@ -7,7 +7,7 @@ import * as buddy_data from "./buddy_data.ts";
 import * as gear_menu_util from "./gear_menu_util.ts";
 import * as hash_util from "./hash_util.ts";
 import {$t} from "./i18n.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import * as message_delete from "./message_delete.ts";
 import * as message_edit from "./message_edit.ts";
 import type {MessageList} from "./message_list.ts";
@@ -49,7 +49,7 @@ type ActionPopoverContext = {
     should_display_read_receipts_option: boolean;
     should_display_add_reaction_option: boolean;
     should_display_message_report_option: boolean;
-    not_for_pear_run_id: number | undefined;
+    not_for_agent_run_id: number | undefined;
 };
 
 type TopicPopoverContext = {
@@ -229,9 +229,9 @@ export function get_actions_popover_content_context(
         // You can report any message you can access
         return true;
     };
-    const not_for_pear_run_id =
-        message.is_pear_message && not_spectator
-            ? pear_run_state.get_ambient_run_id(message.id)
+    const not_for_agent_run_id =
+        message.is_agent_message && not_spectator
+            ? legacy_run_state.get_ambient_run_id(message.id)
             : undefined;
 
     function is_add_reaction_icon_visible(): boolean {
@@ -265,7 +265,7 @@ export function get_actions_popover_content_context(
         should_display_read_receipts_option,
         should_display_quote_message,
         should_display_message_report_option: should_display_message_report_option(),
-        not_for_pear_run_id,
+        not_for_agent_run_id,
     };
 }
 

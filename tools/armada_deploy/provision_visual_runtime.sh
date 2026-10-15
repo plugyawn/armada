@@ -3,7 +3,7 @@
 set -euo pipefail
 
 MANIM_VERSION=0.20.1
-MANIM_TOOL_DIR=/opt/pear-visual-tools
+MANIM_TOOL_DIR=/opt/armada-visual-tools
 MANIM_BIN_DIR=/usr/local/bin
 PENROSE_VERSION=3.3.0
 PENROSE_COMMIT=fdece0c60e591f90f8c2282b1eb2dc8b93322bf2
@@ -46,11 +46,11 @@ check_runtime() {
         echo "unexpected Penrose renderer version" >&2
         return 1
     }
-    [[ -f "$PENROSE_CATALOG_DIR/.pear-commit" ]] || {
+    [[ -f "$PENROSE_CATALOG_DIR/.armada-commit" ]] || {
         echo "missing pinned Penrose catalog" >&2
         return 1
     }
-    catalog_commit="$(<"$PENROSE_CATALOG_DIR/.pear-commit")"
+    catalog_commit="$(<"$PENROSE_CATALOG_DIR/.armada-commit")"
     [[ "$catalog_commit" == "$PENROSE_COMMIT" ]] || {
         echo "unexpected Penrose catalog commit" >&2
         return 1
@@ -134,8 +134,8 @@ npm install \
     "@penrose/roger@$PENROSE_VERSION"
 
 existing_catalog_commit=""
-if [[ -f "$PENROSE_CATALOG_DIR/.pear-commit" ]]; then
-    existing_catalog_commit="$(<"$PENROSE_CATALOG_DIR/.pear-commit")"
+if [[ -f "$PENROSE_CATALOG_DIR/.armada-commit" ]]; then
+    existing_catalog_commit="$(<"$PENROSE_CATALOG_DIR/.armada-commit")"
 fi
 if [[ "$existing_catalog_commit" != "$PENROSE_COMMIT" ]]; then
     catalog_parent="$(dirname "$PENROSE_CATALOG_DIR")"
@@ -152,7 +152,7 @@ if [[ "$existing_catalog_commit" != "$PENROSE_COMMIT" ]]; then
         echo "Penrose tag resolved to an unexpected commit" >&2
         exit 1
     }
-    printf '%s\n' "$PENROSE_COMMIT" >"$temporary_catalog/.pear-commit"
+    printf '%s\n' "$PENROSE_COMMIT" >"$temporary_catalog/.armada-commit"
     rm -rf "$PENROSE_CATALOG_DIR"
     mv "$temporary_catalog" "$PENROSE_CATALOG_DIR"
     temporary_catalog=""

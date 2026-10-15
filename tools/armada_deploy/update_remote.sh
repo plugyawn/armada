@@ -4,27 +4,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PEAR_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
+ARMADA_ROOT="$(cd "$REPO_ROOT/.." && pwd)"
 # shellcheck source=tools/armada_deploy/deploy_common.sh
 source "$SCRIPT_DIR/deploy_common.sh"
-DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
+DEFAULT_STATE_PATH="$REPO_ROOT/output/armada-staging/server.json"
 REMOTE_PATH="/home/zulipdev/zulip"
 REMOTE_GIT_COMMON_DIR="/home/zulipdev/.git/modules/zulip"
-LOCAL_TERMINAL_ROOT="$PEAR_ROOT/zulip-terminal"
-LOCAL_PEAR_SKILLS_DIR="$PEAR_ROOT/pear/skills"
-REMOTE_PEAR_DIR="/home/zulipdev/pear"
-REMOTE_PEAR_SKILLS_DIR="$REMOTE_PEAR_DIR/skills"
-DEPLOY_RECORD_PATH="/var/lib/pear/deployed-sha"
-SNAPSHOT_ROOT="/home/zulipdev/pear-deploy-snapshots"
+LOCAL_TERMINAL_ROOT="$ARMADA_ROOT/zulip-terminal"
+LOCAL_ARMADA_SKILLS_DIR="$ARMADA_ROOT/armada/skills"
+REMOTE_ARMADA_DIR="/home/zulipdev/armada"
+REMOTE_ARMADA_SKILLS_DIR="$REMOTE_ARMADA_DIR/skills"
+DEPLOY_RECORD_PATH="/var/lib/armada/deployed-sha"
+SNAPSHOT_ROOT="/home/zulipdev/armada-deploy-snapshots"
 WORKSPACE_HELPER_RUNTIME="$SCRIPT_DIR/workspace_helper_runtime.py"
-PEAR_BUILD_SWAP_BYTES=$((8 * 1024 * 1024 * 1024))
+ARMADA_BUILD_SWAP_BYTES=$((8 * 1024 * 1024 * 1024))
 YES=false
 RUNTIME_SMOKE_ADMIN_EMAIL=""
 RUNTIME_SMOKE_TIMEOUT=150
 RUNTIME_SMOKE_EVIDENCE=""
 STATE_PATH="$DEFAULT_STATE_PATH"
 
-for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
+for env_file in "$ARMADA_ROOT/env.local" "$REPO_ROOT/.env.local"; do
     if [[ -f "$env_file" ]]; then
         set -a
         # shellcheck source=/dev/null
@@ -32,8 +32,8 @@ for env_file in "$PEAR_ROOT/env.local" "$REPO_ROOT/.env.local"; do
         set +a
     fi
 done
-PEAR_GEMINI_API_KEY="${PEAR_GEMINI_INTERACTIONS_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
-PEAR_PRIME_API_KEY="${PRIME_API_KEY:-${PRIMEINTELLECT_API_KEY:-${PRIME_INTELLECT_API_KEY:-}}}"
+ARMADA_GEMINI_API_KEY="${ARMADA_GEMINI_INTERACTIONS_API_KEY:-${GEMINI_API_KEY:-${GEMINI_KEY:-${GOOGLE_API_KEY:-${GOOGLE_GENAI_API_KEY:-}}}}}"
+ARMADA_PRIME_API_KEY="${PRIME_API_KEY:-${PRIMEINTELLECT_API_KEY:-${PRIME_INTELLECT_API_KEY:-}}}"
 
 fail() {
     echo "ERROR: $*" >&2
@@ -72,11 +72,11 @@ validate_local_deploy_git_metadata() {
     local parent_git_dir
     local parent_git_common_dir
 
-    if [[ ! -d "$PEAR_ROOT/.git" ]]; then
+    if [[ ! -d "$ARMADA_ROOT/.git" ]]; then
         fail "parent checkout must be the canonical /Users/progyan/codack checkout with a .git directory"
     fi
-    parent_git_dir="$(git -C "$PEAR_ROOT" rev-parse --path-format=absolute --git-dir)"
-    parent_git_common_dir="$(git -C "$PEAR_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+    parent_git_dir="$(git -C "$ARMADA_ROOT" rev-parse --path-format=absolute --git-dir)"
+    parent_git_common_dir="$(git -C "$ARMADA_ROOT" rev-parse --path-format=absolute --git-common-dir)"
     if [[ "$parent_git_dir" != "$parent_git_common_dir" ]]; then
         fail "parent checkout is a linked Git worktree ($parent_git_dir); deploy from the main checkout"
     fi
@@ -191,13 +191,13 @@ ssh_root() {
     ssh -F "$SSH_CONFIG" \
         -o ServerAliveInterval=30 \
         -o ServerAliveCountMax=20 \
-        pear-staging-root "$@"
+        armada-staging-root "$@"
 }
 
 ssh_zulip() {
     local command="$1"
     local wrapped
-    wrapped="$(printf '%q' "cd $REMOTE_PATH && set -a && . /home/zulipdev/pear.env && set +a && $command")"
+    wrapped="$(printf '%q' "cd $REMOTE_PATH && set -a && . /home/zulipdev/armada.env && set +a && $command")"
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
@@ -208,14 +208,14 @@ ssh_zulip_clean() {
     ssh_root "sudo -Hu zulipdev bash -lc $wrapped"
 }
 
-detect_remote_pear_schema_state() {
+detect_remote_armada_schema_state() {
     ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py shell -c 'from django.db import connection; cursor = connection.cursor(); cursor.execute(\"SELECT name FROM django_migrations WHERE app = %s AND name LIKE %s\", [\"zerver\", \"08%pear%\"]); names = {row[0] for row in cursor.fetchall()}; accepted = [{\"0805_pear_runtime\"}, {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\"}, {\"0805_pear_runtime\", \"0806_pear_workspace_scope_casefold\", \"0809_remove_pearworkspacenode_legacy_relationships\"}]; print(\"current\" if names in accepted else \"empty\" if not names else \"unexpected\")'"
 }
 
 preflight_remote_workspace_helper() {
     echo "Preflight: inspecting the isolated Workspace helper without mutation..."
     ssh_root python3 - preflight \
-        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --destination "$ARMADA_WORKSPACE_HELPER_PATH" \
         --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
         <"$WORKSPACE_HELPER_RUNTIME"
 }
@@ -244,12 +244,12 @@ install_and_verify_remote_workspace_helper() {
     echo "Installing the committed isolated Workspace helper atomically..."
     ssh_root python3 "$remote_runtime" install \
         --repo-root "$REMOTE_TRUSTED_RUNTIME" \
-        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --destination "$ARMADA_WORKSPACE_HELPER_PATH" \
         --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA"
     echo "Verifying the installed Workspace helper and its isolation-user protocol..."
     ssh_root python3 "$remote_runtime" verify \
         --repo-root "$REMOTE_TRUSTED_RUNTIME" \
-        --destination "$PEAR_WORKSPACE_HELPER_PATH" \
+        --destination "$ARMADA_WORKSPACE_HELPER_PATH" \
         --expected-sha256 "$LOCAL_WORKSPACE_HELPER_SHA" \
         --smoke-existing-isolation-user
 }
@@ -270,15 +270,15 @@ install_remote_runtime_config() {
 install_remote_prime_config() {
     # GPU launches are an optional capability: install the key when the local
     # deploy environment provides it, leave the remote untouched otherwise.
-    if [[ -z "$PEAR_PRIME_API_KEY" ]]; then
+    if [[ -z "$ARMADA_PRIME_API_KEY" ]]; then
         echo "Prime Intellect key not set locally; skipping remote install."
         return 0
     fi
     echo "Installing the shared Prime Intellect key without printing it..."
-    printf 'PRIME_API_KEY=%s\n' "$PEAR_PRIME_API_KEY" |
+    printf 'PRIME_API_KEY=%s\n' "$ARMADA_PRIME_API_KEY" |
         ssh_root 'set -euo pipefail
-env_path=/home/zulipdev/pear.env
-tmp="$(mktemp /home/zulipdev/.pear.env.XXXXXX)"
+env_path=/home/zulipdev/armada.env
+tmp="$(mktemp /home/zulipdev/.armada.env.XXXXXX)"
 trap '\''rm -f "$tmp"'\'' EXIT
 grep -Ev '\''^PRIME_API_KEY='\'' "$env_path" >"$tmp" || true
 cat >>"$tmp"
@@ -289,16 +289,16 @@ trap - EXIT'
 }
 
 install_remote_gemini_config() {
-    if [[ -z "$PEAR_GEMINI_API_KEY" ]]; then
+    if [[ -z "$ARMADA_GEMINI_API_KEY" ]]; then
         fail "Gemini Interactions API key is missing from the local deploy environment"
     fi
     echo "Installing the shared Gemini Interactions key without printing it..."
-    printf 'PEAR_GEMINI_INTERACTIONS_API_KEY=%s\n' "$PEAR_GEMINI_API_KEY" |
+    printf 'ARMADA_GEMINI_INTERACTIONS_API_KEY=%s\n' "$ARMADA_GEMINI_API_KEY" |
         ssh_root 'set -euo pipefail
-env_path=/home/zulipdev/pear.env
-tmp="$(mktemp /home/zulipdev/.pear.env.XXXXXX)"
+env_path=/home/zulipdev/armada.env
+tmp="$(mktemp /home/zulipdev/.armada.env.XXXXXX)"
 trap '\''rm -f "$tmp"'\'' EXIT
-grep -Ev '\''^PEAR_(ADDRESSING_ROUTER_GEMINI_API_KEY|GEMINI_INTERACTIONS_API_KEY)='\'' "$env_path" >"$tmp" || true
+grep -Ev '\''^ARMADA_(ADDRESSING_ROUTER_GEMINI_API_KEY|GEMINI_INTERACTIONS_API_KEY)='\'' "$env_path" >"$tmp" || true
 cat >>"$tmp"
 chown zulipdev:zulipdev "$tmp"
 chmod 600 "$tmp"
@@ -308,8 +308,8 @@ trap - EXIT'
 
 verify_remote_quiescence() {
     local phase="$1"
-    local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
-    local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local services="${2:-${ARMADA_DEPLOY_SERVICES[*]}}"
+    local queues="${3:-${ARMADA_DEPLOY_QUEUES[*]}}"
 
     echo "$phase: Pear run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
@@ -323,21 +323,21 @@ verify_remote_quiescence() {
 
     echo "$phase: queue quiescence"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_snapshot "$queues"; then
+        validate_armada_deploy_queue_snapshot "$queues"; then
         fail "$phase failed: one or more deploy-managed queues are busy, missing, or unconsumed"
     fi
 }
 
 wait_for_remote_drain() {
     local attempt
-    local worker_services="${1:-${PEAR_DEPLOY_WORKER_SERVICES[*]}}"
-    local queues="${2:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local worker_services="${1:-${ARMADA_DEPLOY_WORKER_SERVICES[*]}}"
+    local queues="${2:-${ARMADA_DEPLOY_QUEUES[*]}}"
     echo "Maintenance drain: waiting for Pear runs and queues to become idle..."
     for attempt in $(seq 1 60); do
         if ssh_root "systemctl is-active $worker_services" >/dev/null 2>&1 &&
             ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" >/dev/null 2>&1 &&
             ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" 2>/dev/null |
-                validate_pear_deploy_queue_snapshot "$queues" >/dev/null; then
+                validate_armada_deploy_queue_snapshot "$queues" >/dev/null; then
             echo "Maintenance drain: Pear runs and queues are idle."
             return 0
         fi
@@ -347,27 +347,27 @@ wait_for_remote_drain() {
     ssh_root "systemctl is-active $worker_services" || true
     ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0" || true
     ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_snapshot "$queues" || true
+        validate_armada_deploy_queue_snapshot "$queues" || true
     fail "maintenance drain did not become idle within 120 seconds"
 }
 
 verify_remote_stopped_quiescence() {
-    local queues="${1:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local queues="${1:-${ARMADA_DEPLOY_QUEUES[*]}}"
     echo "Stopped-state gate: Pear run health"
     if ! ssh_zulip "$REMOTE_PATH/tools/armada-health-report --max-active-runs 0 --max-stale-active-runs 0"; then
         fail "stopped-state gate failed: Pear has active or stale work"
     fi
     echo "Stopped-state gate: queue emptiness"
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_empty_snapshot "$queues"; then
+        validate_armada_deploy_queue_empty_snapshot "$queues"; then
         fail "stopped-state gate failed: one or more deploy-managed queues are busy or missing"
     fi
 }
 
 verify_remote_readiness() {
     local phase="$1"
-    local services="${2:-${PEAR_DEPLOY_SERVICES[*]}}"
-    local queues="${3:-${PEAR_DEPLOY_QUEUES[*]}}"
+    local services="${2:-${ARMADA_DEPLOY_SERVICES[*]}}"
+    local queues="${3:-${ARMADA_DEPLOY_QUEUES[*]}}"
     local queue_snapshot
 
     echo "$phase: Pear stale-run health"
@@ -385,15 +385,15 @@ verify_remote_readiness() {
         ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers"
     )"
     if ! printf '%s\n' "$queue_snapshot" |
-        validate_pear_deploy_queue_ready_snapshot "$queues"; then
+        validate_armada_deploy_queue_ready_snapshot "$queues"; then
         fail "$phase failed: one or more deploy-managed queues are missing or unconsumed"
     fi
-    if ! printf '%s\n' "$queue_snapshot" | validate_pear_worker_pool_snapshot; then
+    if ! printf '%s\n' "$queue_snapshot" | validate_armada_worker_pool_snapshot; then
         fail "$phase failed: the two-slot Pear worker pool is not fully connected"
     fi
 
     echo "$phase: worker delivery policy"
-    verify_remote_pear_worker_consumer_timeout_policy
+    verify_remote_armada_worker_consumer_timeout_policy
 }
 
 configure_predeploy_runtime_expectations() {
@@ -404,9 +404,9 @@ configure_predeploy_runtime_expectations() {
 
     PREDEPLOY_WORKER_SERVICES=()
     PREDEPLOY_QUEUES=()
-    for index in "${!PEAR_DEPLOY_WORKER_SERVICES[@]}"; do
-        service="${PEAR_DEPLOY_WORKER_SERVICES[$index]}"
-        queue="${PEAR_DEPLOY_QUEUES[$index]}"
+    for index in "${!ARMADA_DEPLOY_WORKER_SERVICES[@]}"; do
+        service="${ARMADA_DEPLOY_WORKER_SERVICES[$index]}"
+        queue="${ARMADA_DEPLOY_QUEUES[$index]}"
         if ssh_root "systemctl cat $service >/dev/null 2>&1"; then
             PREDEPLOY_WORKER_SERVICES+=("$service")
             PREDEPLOY_QUEUES+=("$queue")
@@ -420,7 +420,7 @@ configure_predeploy_runtime_expectations() {
         fi
         echo "Preflight: newly introduced service $service and queue $queue are absent as expected before cutover."
     done
-    PREDEPLOY_SERVICES=("${PREDEPLOY_WORKER_SERVICES[@]}" pear-zulip-dev)
+    PREDEPLOY_SERVICES=("${PREDEPLOY_WORKER_SERVICES[@]}" armada-zulip-dev)
 }
 
 verify_local_cutover_source() {
@@ -433,14 +433,14 @@ verify_local_cutover_source() {
     local untracked_source
     local skills_status
 
-    parent_head="$(git -C "$PEAR_ROOT" rev-parse HEAD)"
+    parent_head="$(git -C "$ARMADA_ROOT" rev-parse HEAD)"
     zulip_head="$(git -C "$REPO_ROOT" rev-parse HEAD)"
     terminal_head="$(git -C "$LOCAL_TERMINAL_ROOT" rev-parse HEAD)"
-    parent_status="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=no)"
+    parent_status="$(git -C "$ARMADA_ROOT" status --porcelain --untracked-files=no)"
     zulip_status="$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)"
     terminal_status="$(git -C "$LOCAL_TERMINAL_ROOT" status --porcelain --untracked-files=all)"
     untracked_source="$(local_untracked_source_files)"
-    skills_status="$(local_pear_skills_status)"
+    skills_status="$(local_armada_skills_status)"
     if [[
         "$parent_head" != "$LOCAL_PARENT_SHA" ||
         "$zulip_head" != "$LOCAL_SHA" ||
@@ -450,8 +450,8 @@ verify_local_cutover_source() {
         -n "$terminal_status" ||
         -n "$untracked_source" ||
         -n "$skills_status" ||
-        "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip)" != "$LOCAL_SHA" ||
-        "$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip-terminal)" != "$LOCAL_TERMINAL_SHA"
+        "$(git -C "$ARMADA_ROOT" rev-parse HEAD:zulip)" != "$LOCAL_SHA" ||
+        "$(git -C "$ARMADA_ROOT" rev-parse HEAD:zulip-terminal)" != "$LOCAL_TERMINAL_SHA"
     ]]; then
         fail "local coordinated source changed after preflight; refusing cutover"
     fi
@@ -499,9 +499,9 @@ verify_remote_deployed_source_clean() {
 }
 
 verify_remote_disk_capacity() {
-    local remote_asset_build_dir="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
+    local remote_asset_build_dir="/var/lib/armada-builds/asset-build-${LOCAL_SHA:0:12}"
     local runtime_path
-    local build_swap_bytes="$PEAR_BUILD_SWAP_BYTES"
+    local build_swap_bytes="$ARMADA_BUILD_SWAP_BYTES"
     if [[ "$ASSET_BUILD_REQUIRED" != true ]]; then
         build_swap_bytes=0
     fi
@@ -510,7 +510,7 @@ verify_remote_disk_capacity() {
         -
         --remote-path "$REMOTE_PATH"
         --git-common-dir "$REMOTE_GIT_COMMON_DIR"
-        --pear-skills-dir "$REMOTE_PEAR_SKILLS_DIR"
+        --armada-skills-dir "$REMOTE_ARMADA_SKILLS_DIR"
         --snapshot-root "$SNAPSHOT_ROOT"
         --asset-build-dir "$remote_asset_build_dir"
         --build-swap-bytes "$build_swap_bytes"
@@ -518,7 +518,7 @@ verify_remote_disk_capacity() {
     if [[ "$ASSET_BUILD_REQUIRED" != true ]]; then
         capacity_command+=(--reuse-assets)
     fi
-    for runtime_path in "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"; do
+    for runtime_path in "${ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"; do
         capacity_command+=(--runtime-path "$runtime_path")
     done
     echo "Preflight: estimating free space for rollback and selected asset strategy..."
@@ -528,12 +528,12 @@ verify_remote_disk_capacity() {
 }
 
 run_local_compat() {
-    local checker="$PEAR_ROOT/tools/check_pear_compat.py"
+    local checker="$ARMADA_ROOT/tools/check_armada_compat.py"
     if [[ ! -f "$checker" ]]; then
         fail "local Pear compatibility checker is missing: $checker"
     fi
     echo "Running local Pear contract compatibility check..."
-    (cd "$PEAR_ROOT" && python3 tools/check_pear_compat.py)
+    (cd "$ARMADA_ROOT" && python3 tools/check_armada_compat.py)
 }
 
 local_untracked_source_files() {
@@ -541,8 +541,8 @@ local_untracked_source_files() {
         filter_deploy_untracked_source_files
 }
 
-local_pear_skills_status() {
-    git -C "$PEAR_ROOT" status --porcelain --untracked-files=all -- pear/skills
+local_armada_skills_status() {
+    git -C "$ARMADA_ROOT" status --porcelain --untracked-files=all -- armada/skills
 }
 
 remote_untracked_source_files() {
@@ -584,11 +584,11 @@ remote_dirty_tree_matches_local_head() {
 }
 
 build_remote_production_assets() {
-    REMOTE_ASSET_BUILD_DIR="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}"
-    local build_log="$REMOTE_ASSET_BUILD_DIR/.pear-production-build.log"
-    local build_pid="$REMOTE_ASSET_BUILD_DIR/.pear-production-build.pid"
+    REMOTE_ASSET_BUILD_DIR="/var/lib/armada-builds/asset-build-${LOCAL_SHA:0:12}"
+    local build_log="$REMOTE_ASSET_BUILD_DIR/.armada-production-build.log"
+    local build_pid="$REMOTE_ASSET_BUILD_DIR/.armada-production-build.pid"
     echo "Staging source for an isolated production asset build..."
-    ssh_root "install -d -m 711 -o root -g root /var/lib/pear-builds; \
+    ssh_root "install -d -m 711 -o root -g root /var/lib/armada-builds; \
         rm -rf $REMOTE_ASSET_BUILD_DIR; \
         install -d -m 750 -o zulipdev -g zulipdev $REMOTE_ASSET_BUILD_DIR"
     # The remote checkout is clean and remains read-only throughout the build.
@@ -606,11 +606,11 @@ build_remote_production_assets() {
         --exclude '/web/tests/' \
         --exclude '/zerver/tests/' \
         --exclude '/zilencer/tests/' \
-        "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+        "${ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}" \
         --exclude '/.git' \
         -e "ssh -F $SSH_CONFIG" \
         "$REPO_ROOT/" \
-        "pear-staging:$REMOTE_ASSET_BUILD_DIR/"
+        "armada-staging:$REMOTE_ASSET_BUILD_DIR/"
     ssh_root "sudo -Hu zulipdev ln -s $REMOTE_PATH/.venv $REMOTE_ASSET_BUILD_DIR/.venv; \
         sudo -Hu zulipdev ln -s $REMOTE_PATH/zproject/dev-secrets.conf $REMOTE_ASSET_BUILD_DIR/zproject/dev-secrets.conf; \
         sudo -Hu zulipdev bash -lc 'umask 022 && mkdir -p \
@@ -628,7 +628,7 @@ BUILD_ROOT="$1"
 BUILD_LOG="$2"
 BUILD_PID="$3"
 set -a
-. /home/zulipdev/pear.env
+. /home/zulipdev/armada.env
 set +a
 unset PYTHONHOME PYTHONPATH
 cd "$BUILD_ROOT"
@@ -643,7 +643,7 @@ nohup env \
     PATH="$VENV_ROOT/bin:$PATH" \
     VIRTUAL_ENV="$VENV_ROOT" \
     PYTHONNOUSERSITE=1 \
-    bash -c "set -e; ZULIP_DEV_PRODUCTION_ASSETS=1 \"$VENV_ROOT/bin/python3\" -E ./tools/update-prod-static && \"$VENV_ROOT/bin/python3\" -E tools/armada_deploy/materialize_emoji_assets.py --build-root . && \"$VENV_ROOT/bin/python3\" -E tools/armada_deploy/production_assets.py --repo-root . && for generated_path in prod-static static/generated static/webpack-bundles static/images/landing-page/hello/generated web/generated locale; do [ ! -e \"\$generated_path\" ] || find \"\$generated_path\" -exec chmod go-w {} +; done && printf '\\nPEAR_PRODUCTION_ASSETS_OK\\n'" \
+    bash -c "set -e; ZULIP_DEV_PRODUCTION_ASSETS=1 \"$VENV_ROOT/bin/python3\" -E ./tools/update-prod-static && \"$VENV_ROOT/bin/python3\" -E tools/armada_deploy/materialize_emoji_assets.py --build-root . && \"$VENV_ROOT/bin/python3\" -E tools/armada_deploy/production_assets.py --repo-root . && for generated_path in prod-static static/generated static/webpack-bundles static/images/landing-page/hello/generated web/generated locale; do [ ! -e \"\$generated_path\" ] || find \"\$generated_path\" -exec chmod go-w {} +; done && printf '\\nARMADA_PRODUCTION_ASSETS_OK\\n'" \
     >"$BUILD_LOG" 2>&1 < /dev/null &
 printf '%s\n' "$!" >"$BUILD_PID"
 BUILD
@@ -665,7 +665,7 @@ if kill -0 "$pid" 2>/dev/null; then
     echo "RUNNING"
     exit 0
 fi
-if grep -q '^PEAR_PRODUCTION_ASSETS_OK$' "$BUILD_LOG"; then
+if grep -q '^ARMADA_PRODUCTION_ASSETS_OK$' "$BUILD_LOG"; then
     echo "COMPLETE"
     exit 0
 fi
@@ -693,13 +693,13 @@ REMOTE
 }
 
 enable_remote_build_swap() {
-    REMOTE_BUILD_SWAP_PATH="/var/lib/pear-builds/asset-build-${LOCAL_SHA:0:12}-$$.swap"
+    REMOTE_BUILD_SWAP_PATH="/var/lib/armada-builds/asset-build-${LOCAL_SHA:0:12}-$$.swap"
     echo "Enabling bounded temporary swap for the isolated production build..."
-    ssh_root bash -s -- "$REMOTE_BUILD_SWAP_PATH" "$PEAR_BUILD_SWAP_BYTES" <<'REMOTE'
+    ssh_root bash -s -- "$REMOTE_BUILD_SWAP_PATH" "$ARMADA_BUILD_SWAP_BYTES" <<'REMOTE'
 set -euo pipefail
 SWAP_PATH="$1"
 SWAP_BYTES="$2"
-if [[ ! "$SWAP_PATH" =~ ^/var/lib/pear-builds/asset-build-[0-9a-f]{12}-[0-9]+\.swap$ ]]; then
+if [[ ! "$SWAP_PATH" =~ ^/var/lib/armada-builds/asset-build-[0-9a-f]{12}-[0-9]+\.swap$ ]]; then
     echo "invalid temporary build swap path" >&2
     exit 1
 fi
@@ -898,7 +898,7 @@ cleanup_remote_deploy_scratch() {
         ssh_root "rm -rf $REMOTE_FROZEN_ASSET_DIR" >/dev/null 2>&1 || true
     fi
     if [[ -n "$REMOTE_TRUSTED_RUNTIME" ]]; then
-        remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+        remove_remote_armada_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
     fi
 }
 
@@ -908,7 +908,7 @@ arm_remote_rollback() {
 
     REMOTE_ROLLBACK_SCRIPT="$SNAPSHOT_DIR/rollback-runner.sh"
     REMOTE_ROLLBACK_STATUS_PATH="$SNAPSHOT_DIR/rollback.status"
-    REMOTE_ROLLBACK_UNIT="pear-deploy-rollback-$(basename "$SNAPSHOT_DIR" | tr -cd 'A-Za-z0-9_.-')"
+    REMOTE_ROLLBACK_UNIT="armada-deploy-rollback-$(basename "$SNAPSHOT_DIR" | tr -cd 'A-Za-z0-9_.-')"
     printf -v install_command \
         'install -m 700 %q %q && rm -f -- %q && test -x %q' \
         "$source_path" \
@@ -930,14 +930,14 @@ start_remote_rollback() {
         "$SNAPSHOT_DIR"
         "$REMOTE_PATH"
         "$REMOTE_GIT_COMMON_DIR"
-        "$REMOTE_PEAR_SKILLS_DIR"
+        "$REMOTE_ARMADA_SKILLS_DIR"
         "${PREDEPLOY_SERVICES[*]}"
         "${PREDEPLOY_QUEUES[*]}"
         "$FQDN"
-        "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
-        "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
-        "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
-        "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}"
+        "${#ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+        "${ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS[@]}"
+        "${#ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}"
+        "${ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}"
     )
 
     launch_command+=" --unit=$(printf '%q' "$REMOTE_ROLLBACK_UNIT")"
@@ -1035,7 +1035,7 @@ REMOTE_VERIFY
         return 1
     fi
     if ! ssh_root "rabbitmqctl list_queues name messages_ready messages_unacknowledged consumers" |
-        validate_pear_deploy_queue_snapshot "${PREDEPLOY_QUEUES[*]}"; then
+        validate_armada_deploy_queue_snapshot "${PREDEPLOY_QUEUES[*]}"; then
         echo "independent rollback queue check failed" >&2
         return 1
     fi
@@ -1098,9 +1098,9 @@ trap rollback_on_error EXIT
 
 validate_local_deploy_git_metadata
 
-LOCAL_PARENT_BRANCH="$(git -C "$PEAR_ROOT" branch --show-current)"
-LOCAL_PARENT_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD)"
-LOCAL_PARENT_STATUS="$(git -C "$PEAR_ROOT" status --porcelain --untracked-files=no)"
+LOCAL_PARENT_BRANCH="$(git -C "$ARMADA_ROOT" branch --show-current)"
+LOCAL_PARENT_SHA="$(git -C "$ARMADA_ROOT" rev-parse HEAD)"
+LOCAL_PARENT_STATUS="$(git -C "$ARMADA_ROOT" status --porcelain --untracked-files=no)"
 LOCAL_BRANCH="$(git -C "$REPO_ROOT" branch --show-current)"
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 LOCAL_GIT_COMMON_DIR="$(git -C "$REPO_ROOT" rev-parse --git-common-dir)"
@@ -1109,12 +1109,12 @@ LOCAL_UNTRACKED_SOURCE="$(local_untracked_source_files)"
 LOCAL_TERMINAL_BRANCH="$(git -C "$LOCAL_TERMINAL_ROOT" branch --show-current)"
 LOCAL_TERMINAL_SHA="$(git -C "$LOCAL_TERMINAL_ROOT" rev-parse HEAD)"
 LOCAL_TERMINAL_STATUS="$(git -C "$LOCAL_TERMINAL_ROOT" status --porcelain --untracked-files=all)"
-LOCAL_PINNED_ZULIP_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip)"
-LOCAL_PINNED_TERMINAL_SHA="$(git -C "$PEAR_ROOT" rev-parse HEAD:zulip-terminal)"
-LOCAL_PEAR_SKILLS_STATUS="$(local_pear_skills_status)"
-LOCAL_PEAR_SKILLS_TREE="$(git -C "$PEAR_ROOT" rev-parse HEAD:pear/skills)"
+LOCAL_PINNED_ZULIP_SHA="$(git -C "$ARMADA_ROOT" rev-parse HEAD:zulip)"
+LOCAL_PINNED_TERMINAL_SHA="$(git -C "$ARMADA_ROOT" rev-parse HEAD:zulip-terminal)"
+LOCAL_ARMADA_SKILLS_STATUS="$(local_armada_skills_status)"
+LOCAL_ARMADA_SKILLS_TREE="$(git -C "$ARMADA_ROOT" rev-parse HEAD:armada/skills)"
 LOCAL_CONTRACT_VERSION="$(
-    python3 - "$PEAR_ROOT/pear/contract.json" <<'PY'
+    python3 - "$ARMADA_ROOT/armada/contract.json" <<'PY'
 import json
 import sys
 
@@ -1154,20 +1154,20 @@ if [[ -n "$LOCAL_UNTRACKED_SOURCE" ]]; then
     echo "$LOCAL_UNTRACKED_SOURCE" >&2
     fail "local source tree has untracked files that rsync would omit; add, ignore, or remove them before deploying"
 fi
-if [[ ! -d "$LOCAL_PEAR_SKILLS_DIR" ]]; then
-    fail "local Pear skills directory is missing: $LOCAL_PEAR_SKILLS_DIR"
+if [[ ! -d "$LOCAL_ARMADA_SKILLS_DIR" ]]; then
+    fail "local Pear skills directory is missing: $LOCAL_ARMADA_SKILLS_DIR"
 fi
-if [[ -n "$LOCAL_PEAR_SKILLS_STATUS" ]]; then
-    echo "$LOCAL_PEAR_SKILLS_STATUS" >&2
-    fail "local pear/skills tree is dirty; commit or revert skill changes before deploying"
+if [[ -n "$LOCAL_ARMADA_SKILLS_STATUS" ]]; then
+    echo "$LOCAL_ARMADA_SKILLS_STATUS" >&2
+    fail "local armada/skills tree is dirty; commit or revert skill changes before deploying"
 fi
 
 LOCAL_WORKSPACE_HELPER_SHA="$(
-    git -C "$REPO_ROOT" cat-file blob "$LOCAL_SHA:$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" |
+    git -C "$REPO_ROOT" cat-file blob "$LOCAL_SHA:$ARMADA_WORKSPACE_HELPER_SOURCE_RELATIVE" |
         shasum -a 256 | awk '{print $1}'
 )"
 LOCAL_WORKSPACE_HELPER_WORKTREE_SHA="$(
-    shasum -a 256 "$REPO_ROOT/$PEAR_WORKSPACE_HELPER_SOURCE_RELATIVE" | awk '{print $1}'
+    shasum -a 256 "$REPO_ROOT/$ARMADA_WORKSPACE_HELPER_SOURCE_RELATIVE" | awk '{print $1}'
 )"
 if [[ "$LOCAL_WORKSPACE_HELPER_WORKTREE_SHA" != "$LOCAL_WORKSPACE_HELPER_SHA" ]]; then
     fail "local Workspace helper source does not match the committed $LOCAL_SHA blob"
@@ -1175,7 +1175,7 @@ fi
 
 echo "Preflight: parent $LOCAL_PARENT_BRANCH $LOCAL_PARENT_SHA is tracked-clean."
 echo "Preflight: parent pins Zulip $LOCAL_SHA and Zulip Terminal $LOCAL_TERMINAL_SHA."
-echo "Preflight: local pear/skills is tracked-clean."
+echo "Preflight: local armada/skills is tracked-clean."
 echo "Preflight: Pear contract version is $LOCAL_CONTRACT_VERSION."
 echo "Preflight: committed Workspace helper SHA-256 is $LOCAL_WORKSPACE_HELPER_SHA."
 
@@ -1221,8 +1221,8 @@ fi
 configure_predeploy_runtime_expectations
 
 echo "Preflight: remote tracked/untracked source tree is clean and not ahead of local pear-main."
-REMOTE_PEAR_SCHEMA_STATE="$(detect_remote_pear_schema_state | tail -n 1)"
-case "$REMOTE_PEAR_SCHEMA_STATE" in
+REMOTE_ARMADA_SCHEMA_STATE="$(detect_remote_armada_schema_state | tail -n 1)"
+case "$REMOTE_ARMADA_SCHEMA_STATE" in
     current)
         echo "Preflight: Pear database already uses the current migration baseline."
         ;;
@@ -1233,7 +1233,7 @@ case "$REMOTE_PEAR_SCHEMA_STATE" in
         fail "remote database contains a superseded or mixed Pear migration baseline"
         ;;
     *)
-        fail "could not classify remote Pear migration baseline: $REMOTE_PEAR_SCHEMA_STATE"
+        fail "could not classify remote Pear migration baseline: $REMOTE_ARMADA_SCHEMA_STATE"
         ;;
 esac
 classify_production_asset_requirement
@@ -1285,11 +1285,11 @@ else
 fi
 
 echo "Staging privileged deployment tooling from the pinned local commit..."
-REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_armada_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
 
 echo "Stopping app ingress before the final drain..."
 SERVICE_RESTART_REQUIRED=true
-ssh_root "systemctl stop pear-zulip-dev"
+ssh_root "systemctl stop armada-zulip-dev"
 wait_for_remote_drain "${PREDEPLOY_WORKER_SERVICES[*]}" "${PREDEPLOY_QUEUES[*]}"
 
 echo "Stopping queue workers after the drain..."
@@ -1304,7 +1304,7 @@ if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
         ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/freeze_asset_build.py" \
             --source-root "$REMOTE_ASSET_BUILD_DIR"
     )"
-    if [[ ! "$REMOTE_FROZEN_ASSET_DIR" =~ ^/root/pear-frozen-assets\.[A-Za-z0-9_-]+$ ]]; then
+    if [[ ! "$REMOTE_FROZEN_ASSET_DIR" =~ ^/root/armada-frozen-assets\.[A-Za-z0-9_-]+$ ]]; then
         fail "asset freezer returned an invalid root-owned path"
     fi
     ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/production_assets.py" \
@@ -1317,17 +1317,17 @@ echo "Snapshotting the drained remote tree to $SNAPSHOT_DIR"
 ssh_root bash -s -- \
     "$REMOTE_PATH" \
     "$REMOTE_GIT_COMMON_DIR" \
-    "$REMOTE_PEAR_SKILLS_DIR" \
+    "$REMOTE_ARMADA_SKILLS_DIR" \
     "$SNAPSHOT_DIR" \
-    "${#PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
-    "${PEAR_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
-    "${#PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
-    "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
+    "${#ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+    "${ARMADA_DEPLOY_RUNTIME_CONFIG_PATHS[@]}" \
+    "${#ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}" \
+    "${ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}" <<'REMOTE'
 set -euo pipefail
 umask 077
 REMOTE_PATH="$1"
 REMOTE_GIT_COMMON_DIR="$2"
-REMOTE_PEAR_SKILLS_DIR="$3"
+REMOTE_ARMADA_SKILLS_DIR="$3"
 SNAPSHOT_DIR="$4"
 RUNTIME_CONFIG_COUNT="$5"
 shift 5
@@ -1348,10 +1348,10 @@ rsync -a --delete \
 if [[ -d "$REMOTE_GIT_COMMON_DIR" ]]; then
     rsync -a --delete "$REMOTE_GIT_COMMON_DIR/" "$SNAPSHOT_DIR/git-common/"
 fi
-if [[ -d "$REMOTE_PEAR_SKILLS_DIR" ]]; then
-    install -d -m 755 "$SNAPSHOT_DIR/pear-skills"
-    rsync -a --delete "$REMOTE_PEAR_SKILLS_DIR/" "$SNAPSHOT_DIR/pear-skills/"
-    touch "$SNAPSHOT_DIR/pear-skills.exists"
+if [[ -d "$REMOTE_ARMADA_SKILLS_DIR" ]]; then
+    install -d -m 755 "$SNAPSHOT_DIR/armada-skills"
+    rsync -a --delete "$REMOTE_ARMADA_SKILLS_DIR/" "$SNAPSHOT_DIR/armada-skills/"
+    touch "$SNAPSHOT_DIR/armada-skills.exists"
 fi
 
 : >"$SNAPSHOT_DIR/generated-output.paths"
@@ -1398,26 +1398,26 @@ ROLLBACK_READY=true
 
 if [[ -d "$LOCAL_GIT_COMMON_DIR" ]]; then
     echo "Syncing Git metadata for this worktree..."
-    ssh -F "$SSH_CONFIG" pear-staging "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
+    ssh -F "$SSH_CONFIG" armada-staging "install -d -m 755 $REMOTE_GIT_COMMON_DIR"
     rsync -az --delete \
         -e "ssh -F $SSH_CONFIG" \
         "$LOCAL_GIT_COMMON_DIR/" \
-        "pear-staging:$REMOTE_GIT_COMMON_DIR/"
+        "armada-staging:$REMOTE_GIT_COMMON_DIR/"
 fi
 
 echo "Syncing checkout to $REMOTE_PATH..."
 rsync -az --delete \
-    "${PEAR_DEPLOY_RSYNC_EXCLUDES[@]}" \
+    "${ARMADA_DEPLOY_RSYNC_EXCLUDES[@]}" \
     -e "ssh -F $SSH_CONFIG" \
     "$REPO_ROOT/" \
-    "pear-staging:$REMOTE_PATH/"
+    "armada-staging:$REMOTE_PATH/"
 
-echo "Syncing Pear Codex skills to $REMOTE_PEAR_SKILLS_DIR..."
-ssh -F "$SSH_CONFIG" pear-staging "install -d -m 755 $REMOTE_PEAR_SKILLS_DIR"
+echo "Syncing Pear Codex skills to $REMOTE_ARMADA_SKILLS_DIR..."
+ssh -F "$SSH_CONFIG" armada-staging "install -d -m 755 $REMOTE_ARMADA_SKILLS_DIR"
 rsync -az --delete \
     -e "ssh -F $SSH_CONFIG" \
-    "$LOCAL_PEAR_SKILLS_DIR/" \
-    "pear-staging:$REMOTE_PEAR_SKILLS_DIR/"
+    "$LOCAL_ARMADA_SKILLS_DIR/" \
+    "armada-staging:$REMOTE_ARMADA_SKILLS_DIR/"
 
 if [[ "$ASSET_BUILD_REQUIRED" == true ]]; then
     cut_over_remote_production_assets "$REMOTE_FROZEN_ASSET_DIR"
@@ -1425,7 +1425,7 @@ else
     echo "Keeping the validated production asset graph from $ASSET_SOURCE_SHA."
 fi
 
-ssh -F "$SSH_CONFIG" pear-staging "git config --global --add safe.directory $REMOTE_PATH"
+ssh -F "$SSH_CONFIG" armada-staging "git config --global --add safe.directory $REMOTE_PATH"
 
 install_and_verify_remote_workspace_helper
 install_and_verify_remote_codex_sandbox
@@ -1437,18 +1437,18 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/runtime_config.py"
     --fqdn "$FQDN"
 install_remote_gemini_config
 install_remote_prime_config
-install_remote_pear_worker_consumer_timeout_policy
+install_remote_armada_worker_consumer_timeout_policy
 ssh_root "systemctl daemon-reload"
-ssh_root "systemctl enable ${PEAR_DEPLOY_SERVICES[*]}"
+ssh_root "systemctl enable ${ARMADA_DEPLOY_SERVICES[*]}"
 
 echo "Applying zerver migrations..."
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py migrate zerver --noinput"
 
 echo "Restarting Pear services..."
-ssh_root "systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
+ssh_root "systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"
 SERVICE_RESTART_REQUIRED=false
-wait_for_remote_pear_worker_consumer_timeout_queues
-wait_for_remote_pear_worker_pool_topology
+wait_for_remote_armada_worker_consumer_timeout_queues
+wait_for_remote_armada_worker_pool_topology
 
 echo "Waiting for the public Caddy app route to serve..."
 SITE_CODE=""
@@ -1494,12 +1494,12 @@ ssh_zulip_clean "./tools/test-backend \
 verify_remote_readiness "Post-deploy readiness"
 verify_remote_deployed_source_clean
 
-runtime_smoke="$REPO_ROOT/../tools/pear_dev_smoke.py"
+runtime_smoke="$REPO_ROOT/../tools/armada_dev_smoke.py"
 if [[ ! -f "$runtime_smoke" ]]; then
     fail "runtime smoke helper not found: $runtime_smoke"
 fi
 if [[ -z "$RUNTIME_SMOKE_EVIDENCE" ]]; then
-    RUNTIME_SMOKE_EVIDENCE="$REPO_ROOT/../var/pear-deploy-runtime-smoke-result.json"
+    RUNTIME_SMOKE_EVIDENCE="$REPO_ROOT/../var/armada-deploy-runtime-smoke-result.json"
 fi
 runtime_smoke_args=(
     "$runtime_smoke"
@@ -1518,22 +1518,22 @@ echo "Migration tail:"
 ssh_zulip "$REMOTE_PATH/.venv/bin/python3 $REMOTE_PATH/manage.py showmigrations zerver | tail"
 
 echo "Service status:"
-ssh_root "systemctl --no-pager --full status ${PEAR_DEPLOY_SERVICES[*]}" | sed -n "1,120p"
+ssh_root "systemctl --no-pager --full status ${ARMADA_DEPLOY_SERVICES[*]}" | sed -n "1,120p"
 
 echo "Pear worker pool log tail:"
-ssh_root 'journalctl -u pear-worker -u pear-worker-1 -n 80 --no-pager'
+ssh_root 'journalctl -u armada-worker -u armada-worker-1 -n 80 --no-pager'
 
-echo "pear-addressing log tail:"
-ssh_root 'journalctl -u pear-addressing -n 40 --no-pager'
+echo "armada-addressing log tail:"
+ssh_root 'journalctl -u armada-addressing -n 40 --no-pager'
 
-echo "pear-presentation log tail:"
-ssh_root 'journalctl -u pear-presentation -n 40 --no-pager'
+echo "armada-presentation log tail:"
+ssh_root 'journalctl -u armada-presentation -n 40 --no-pager'
 
-echo "pear-zulip-dev recent log tail:"
-ssh_root 'journalctl -u pear-zulip-dev -n 80 --no-pager'
+echo "armada-zulip-dev recent log tail:"
+ssh_root 'journalctl -u armada-zulip-dev -n 80 --no-pager'
 
 DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
+ssh_root 'install -d -m 755 -o root -g root /var/lib/armada'
 {
     # Preserve the historical first line for humans and any lightweight
     # consumers, then identify every coordinated source that shaped the deploy.
@@ -1543,7 +1543,7 @@ ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
     printf 'zulip_sha=%s\n' "$LOCAL_SHA"
     printf 'zulip_terminal_sha=%s\n' "$LOCAL_TERMINAL_SHA"
     printf 'contract_version=%s\n' "$LOCAL_CONTRACT_VERSION"
-    printf 'pear_skills_tree=%s\n' "$LOCAL_PEAR_SKILLS_TREE"
+    printf 'armada_skills_tree=%s\n' "$LOCAL_ARMADA_SKILLS_TREE"
     printf 'workspace_helper_sha256=%s\n' "$LOCAL_WORKSPACE_HELPER_SHA"
     printf 'asset_mode=production-hashed\n'
     printf 'asset_source_zulip_sha=%s\n' "$ASSET_SOURCE_SHA"
@@ -1552,7 +1552,7 @@ ssh_root 'install -d -m 755 -o root -g root /var/lib/pear'
 } | ssh_root python3 \
     "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/deployment_record.py" \
     --destination "$DEPLOY_RECORD_PATH"
-ssh_root 'rm -f -- /home/zulipdev/pear-deployed-sha'
+ssh_root 'rm -f -- /home/zulipdev/armada-deployed-sha'
 
 ROLLBACK_READY=false
 echo

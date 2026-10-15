@@ -397,7 +397,7 @@ function create_stream(): void {
         data["folder_id"] = JSON.stringify(folder_id);
     }
     if (repository_url !== "") {
-        data["pear_repository_url"] = repository_url;
+        data["repository_url"] = repository_url;
     }
 
     // Subscribe yourself and possible other people to a new stream.
@@ -406,13 +406,13 @@ function create_stream(): void {
         data,
         success(raw_data): void {
             const response = z
-                .object({pear_repository_error: z.optional(z.string())})
+                .object({armada_repository_error: z.optional(z.string())})
                 .parse(raw_data);
             $("#create_stream_name").val("");
             $("#create_stream_description").val("");
             $("#create_stream_repository_url").val("");
             loading.destroy_indicator($("#stream_creating_indicator"));
-            if (response.pear_repository_error !== undefined) {
+            if (response.armada_repository_error !== undefined) {
                 ui_report.client_error(
                     $t_html({
                         defaultMessage:

@@ -25,34 +25,34 @@ from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
 from zerver.lib.armada import (
-    PEAR_DEFAULT_RESPONSE_POLICY,
-    PEAR_REASONING_EFFORTS,
-    PearActiveSessionSummary,
-    PearAddressingIntentClassifier,
-    PearEmbeddedBotHandler,
-    PearPendingSteeringEvent,
-    PearReferencedMessage,
-    PearReferencedThread,
-    PearWorkerLeaseLostError,
-    PearWorkerRunStatus,
-    PearWorkerRuntime,
-    build_pear_active_session_summary,
-    build_pear_active_session_summary_from_messages,
-    get_pear_session_payload,
-    normalize_pear_response_policy,
-    pear_message_id,
-    pear_message_stream,
-    pear_message_topic,
-    pear_topic_scope,
-    trim_pear_text,
+    ARMADA_DEFAULT_RESPONSE_POLICY,
+    ARMADA_REASONING_EFFORTS,
+    ArmadaActiveSessionSummary,
+    ArmadaAddressingIntentClassifier,
+    ArmadaEmbeddedBotHandler,
+    ArmadaPendingSteeringEvent,
+    ArmadaReferencedMessage,
+    ArmadaReferencedThread,
+    ArmadaWorkerLeaseLostError,
+    ArmadaWorkerRunStatus,
+    ArmadaWorkerRuntime,
+    armada_message_id,
+    armada_message_stream,
+    armada_message_topic,
+    armada_topic_scope,
+    build_armada_active_session_summary,
+    build_armada_active_session_summary_from_messages,
+    get_armada_session_payload,
+    normalize_armada_response_policy,
+    trim_armada_text,
 )
 from zerver.lib.armada_agent import (
-    PearCodexAppServerToolRunner,
-    PearDisabledAgentRunner,
-    PearGeminiInteractionsAddressingIntentClassifier,
-    PearProcessIsolation,
+    ArmadaCodexAppServerToolRunner,
+    ArmadaDisabledAgentRunner,
+    ArmadaGeminiInteractionsAddressingIntentClassifier,
+    ArmadaProcessIsolation,
 )
-from zerver.lib.armada_skills import reconcile_pear_codex_skills
+from zerver.lib.armada_skills import reconcile_armada_codex_skills
 from zerver.lib.context_managers import lockfile
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import bulk_access_stream_messages_query
@@ -64,25 +64,25 @@ from zerver.models import Message, Realm, Stream
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
 from zerver.models.users import UserProfile
 
-PEAR_WORKER_QUEUE_NAME = "pear_worker"
-PEAR_WORKER_QUEUE_NAMES = (PEAR_WORKER_QUEUE_NAME, "pear_worker_1")
-PEAR_MONITOR_WORKER_QUEUE_NAME = "pear_monitor_worker"
-PEAR_ADDRESSING_QUEUE_NAME = "pear_addressing"
-PEAR_PRESENTATION_QUEUE_NAME = "pear_presentation"
-PEAR_RUN_ATTENTION_TTL_SECONDS = 15
-PEAR_PRESENTATION_CADENCE_SECONDS = 5
-PEAR_WORKER_TOPIC_HISTORY_LIMIT = 200
-PEAR_REFERENCED_CONVERSATION_LIMIT = 4
-PEAR_REFERENCED_MESSAGE_LIMIT = 30
-PEAR_REFERENCED_THREAD_TOKEN_LIMIT = 1500
-PEAR_REFERENCED_TOTAL_TOKEN_LIMIT = 3000
-PEAR_WORKER_RUN_ACTIVE_STATUSES = frozenset((AgentRun.QUEUED, AgentRun.RUNNING, AgentRun.DONE))
-PEAR_WORKER_RUN_BUSY_STATUSES = frozenset((AgentRun.QUEUED, AgentRun.RUNNING))
-PEAR_WORKER_RUN_TERMINAL_STATUSES = frozenset((AgentRun.DONE, AgentRun.CANCELLED))
-PEAR_WORKER_MAX_CLAIM_ATTEMPTS = 2
-PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
-PEAR_WORKER_STALE_HEARTBEAT_MISSES = 4
-PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunStatus]] = {
+ARMADA_WORKER_QUEUE_NAME = "armada_worker"
+ARMADA_WORKER_QUEUE_NAMES = (ARMADA_WORKER_QUEUE_NAME, "armada_worker_1")
+ARMADA_MONITOR_WORKER_QUEUE_NAME = "armada_monitor_worker"
+ARMADA_ADDRESSING_QUEUE_NAME = "armada_addressing"
+ARMADA_PRESENTATION_QUEUE_NAME = "armada_presentation"
+ARMADA_RUN_ATTENTION_TTL_SECONDS = 15
+ARMADA_PRESENTATION_CADENCE_SECONDS = 5
+ARMADA_WORKER_TOPIC_HISTORY_LIMIT = 200
+ARMADA_REFERENCED_CONVERSATION_LIMIT = 4
+ARMADA_REFERENCED_MESSAGE_LIMIT = 30
+ARMADA_REFERENCED_THREAD_TOKEN_LIMIT = 1500
+ARMADA_REFERENCED_TOTAL_TOKEN_LIMIT = 3000
+ARMADA_WORKER_RUN_ACTIVE_STATUSES = frozenset((AgentRun.QUEUED, AgentRun.RUNNING, AgentRun.DONE))
+ARMADA_WORKER_RUN_BUSY_STATUSES = frozenset((AgentRun.QUEUED, AgentRun.RUNNING))
+ARMADA_WORKER_RUN_TERMINAL_STATUSES = frozenset((AgentRun.DONE, AgentRun.CANCELLED))
+ARMADA_WORKER_MAX_CLAIM_ATTEMPTS = 2
+ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS = 15
+ARMADA_WORKER_STALE_HEARTBEAT_MISSES = 4
+ARMADA_RUN_LEGAL_TRANSITIONS: dict[ArmadaWorkerRunStatus, frozenset[ArmadaWorkerRunStatus]] = {
     AgentRun.QUEUED: frozenset((AgentRun.RUNNING, AgentRun.FAILED, AgentRun.CANCELLED)),
     AgentRun.RUNNING: frozenset((AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED)),
     AgentRun.FAILED: frozenset((AgentRun.QUEUED,)),
@@ -91,21 +91,21 @@ PEAR_RUN_LEGAL_TRANSITIONS: dict[PearWorkerRunStatus, frozenset[PearWorkerRunSta
 }
 
 
-def pear_worker_home_slot(user_profile_id: int, *, stream: str, topic: str) -> int:
+def armada_worker_home_slot(user_profile_id: int, *, stream: str, topic: str) -> int:
     """Return a stable home slot without creating a second ownership store."""
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     affinity_key = f"{user_profile_id}\0{stream}\0{topic}".encode()
     digest = hashlib.blake2s(affinity_key, digest_size=2).digest()
-    return int.from_bytes(digest, "big") % len(PEAR_WORKER_QUEUE_NAMES)
+    return int.from_bytes(digest, "big") % len(ARMADA_WORKER_QUEUE_NAMES)
 
 
-def pear_worker_queue_name(user_profile_id: int, *, stream: str, topic: str) -> str:
-    return PEAR_WORKER_QUEUE_NAMES[
-        pear_worker_home_slot(user_profile_id, stream=stream, topic=topic)
+def armada_worker_queue_name(user_profile_id: int, *, stream: str, topic: str) -> str:
+    return ARMADA_WORKER_QUEUE_NAMES[
+        armada_worker_home_slot(user_profile_id, stream=stream, topic=topic)
     ]
 
 
-def pear_referenced_conversations(content: str) -> list[tuple[str, str | None]]:
+def armada_referenced_conversations(content: str) -> list[tuple[str, str | None]]:
     if "#**" not in content:
         return []
     # Import lazily: the Markdown engine is intentionally not part of the
@@ -136,31 +136,31 @@ def pear_referenced_conversations(content: str) -> list[tuple[str, str | None]]:
             continue
         seen.add(reference_key)
         ordered.append(reference)
-        if len(ordered) >= PEAR_REFERENCED_CONVERSATION_LIMIT:
+        if len(ordered) >= ARMADA_REFERENCED_CONVERSATION_LIMIT:
             break
     return ordered
 
 
-def pear_reference_token_count(value: str) -> int:
+def armada_reference_token_count(value: str) -> int:
     # A deterministic, dependency-free conservative approximation is enough
     # for a hard context budget. Punctuation counts separately, as it does for
     # the model tokenizer, rather than treating an entire code line as one word.
     return len(re.findall(r"\w+|[^\w\s]", value, re.UNICODE))
 
 
-def load_pear_referenced_threads(
+def load_armada_referenced_threads(
     requesting_user: UserProfile | None,
     *,
     content: str,
     current_stream: str,
     current_topic: str,
-) -> list[PearReferencedThread]:
-    references = pear_referenced_conversations(content)
+) -> list[ArmadaReferencedThread]:
+    references = armada_referenced_conversations(content)
     if not references:
         return []
 
-    remaining_total_tokens = PEAR_REFERENCED_TOTAL_TOKEN_LIMIT
-    referenced_threads: list[PearReferencedThread] = []
+    remaining_total_tokens = ARMADA_REFERENCED_TOTAL_TOKEN_LIMIT
+    referenced_threads: list[ArmadaReferencedThread] = []
     for stream_name, topic_name in references:
         if (
             topic_name is not None
@@ -169,7 +169,7 @@ def load_pear_referenced_threads(
         ):
             continue
 
-        unavailable: PearReferencedThread = {
+        unavailable: ArmadaReferencedThread = {
             "stream": stream_name,
             "topic": topic_name,
             "accessible": False,
@@ -204,18 +204,18 @@ def load_pear_referenced_threads(
         )
         candidates = list(
             visible_query.select_related("sender").order_by("-id")[
-                : PEAR_REFERENCED_MESSAGE_LIMIT + 1
+                : ARMADA_REFERENCED_MESSAGE_LIMIT + 1
             ]
         )
-        has_earlier_messages = len(candidates) > PEAR_REFERENCED_MESSAGE_LIMIT
-        candidates = candidates[:PEAR_REFERENCED_MESSAGE_LIMIT]
+        has_earlier_messages = len(candidates) > ARMADA_REFERENCED_MESSAGE_LIMIT
+        candidates = candidates[:ARMADA_REFERENCED_MESSAGE_LIMIT]
         inaccessible_sender_ids = get_inaccessible_user_ids(
             [message.sender_id for message in candidates],
             requesting_user,
         )
 
-        thread_budget = min(PEAR_REFERENCED_THREAD_TOKEN_LIMIT, remaining_total_tokens)
-        selected_messages: list[PearReferencedMessage] = []
+        thread_budget = min(ARMADA_REFERENCED_THREAD_TOKEN_LIMIT, remaining_total_tokens)
+        selected_messages: list[ArmadaReferencedMessage] = []
         used_tokens = 0
         for candidate in candidates:
             sender_name = (
@@ -223,17 +223,17 @@ def load_pear_referenced_threads(
                 if candidate.sender_id in inaccessible_sender_ids
                 else candidate.sender.full_name
             )
-            clean_content = trim_pear_text(candidate.content, limit=1200)
-            message_tokens = pear_reference_token_count(sender_name) + pear_reference_token_count(
-                clean_content
-            )
+            clean_content = trim_armada_text(candidate.content, limit=1200)
+            message_tokens = armada_reference_token_count(
+                sender_name
+            ) + armada_reference_token_count(clean_content)
             if used_tokens + message_tokens > thread_budget:
                 has_earlier_messages = True
                 break
             selected_messages.append(
                 {
                     "message_id": candidate.id,
-                    "sender": trim_pear_text(sender_name, limit=120),
+                    "sender": trim_armada_text(sender_name, limit=120),
                     "sender_is_bot": candidate.sender.is_bot,
                     "content": clean_content,
                     "topic": candidate.topic_name(),
@@ -254,23 +254,23 @@ def load_pear_referenced_threads(
     return referenced_threads
 
 
-def pear_run_attention_cache_key(run_id: int) -> str:
-    return f"pear:run-attention:{run_id}"
+def armada_run_attention_cache_key(run_id: int) -> str:
+    return f"armada:run-attention:{run_id}"
 
 
-def pear_run_presentation_gate_cache_key(run_id: int) -> str:
-    return f"pear:run-presentation-gate:{run_id}"
+def armada_run_presentation_gate_cache_key(run_id: int) -> str:
+    return f"armada:run-presentation-gate:{run_id}"
 
 
-def mark_pear_run_attended(run_id: int) -> None:
-    cache.set(pear_run_attention_cache_key(run_id), True, PEAR_RUN_ATTENTION_TTL_SECONDS)
+def mark_armada_run_attended(run_id: int) -> None:
+    cache.set(armada_run_attention_cache_key(run_id), True, ARMADA_RUN_ATTENTION_TTL_SECONDS)
 
 
-def pear_run_is_attended(run_id: int) -> bool:
-    return cache.get(pear_run_attention_cache_key(run_id)) is True
+def armada_run_is_attended(run_id: int) -> bool:
+    return cache.get(armada_run_attention_cache_key(run_id)) is True
 
 
-def refresh_pear_workspace_after_terminal_run(workspace_node_id: int) -> None:
+def refresh_armada_workspace_after_terminal_run(workspace_node_id: int) -> None:
     """Observe direct runtime writes once a run can no longer mutate its worktree."""
     try:
         workspace_node = Workspace.objects.get(id=workspace_node_id)
@@ -286,25 +286,25 @@ def refresh_pear_workspace_after_terminal_run(workspace_node_id: int) -> None:
         )
 
 
-def maybe_enqueue_pear_run_presentation(run_id: int, source_event_id: int) -> bool:
-    if not pear_run_is_attended(run_id):
+def maybe_enqueue_armada_run_presentation(run_id: int, source_event_id: int) -> bool:
+    if not armada_run_is_attended(run_id):
         return False
     if not cache.add(
-        pear_run_presentation_gate_cache_key(run_id),
+        armada_run_presentation_gate_cache_key(run_id),
         True,
-        PEAR_PRESENTATION_CADENCE_SECONDS,
+        ARMADA_PRESENTATION_CADENCE_SECONDS,
     ):
         return False
     queue_json_publish_rollback_unsafe(
-        PEAR_PRESENTATION_QUEUE_NAME,
+        ARMADA_PRESENTATION_QUEUE_NAME,
         {"run_id": run_id, "source_event_id": source_event_id},
     )
     return True
 
 
-PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
-PEAR_GIT_STATUS_DELTA_TTL_SECONDS = 3
-pear_git_status_delta_cache: dict[
+ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
+ARMADA_GIT_STATUS_DELTA_TTL_SECONDS = 3
+armada_git_status_delta_cache: dict[
     tuple[str, str, str],
     tuple[float, dict[str, object]],
 ] = {}
@@ -312,22 +312,22 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class PearTopicRenameRefactorResult:
+class ArmadaTopicRenameRefactorResult:
     stream_name: str
     topic_name: str
     message: str
 
 
-def pear_worker_stale_after_seconds() -> int:
-    return PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS * PEAR_WORKER_STALE_HEARTBEAT_MISSES
+def armada_worker_stale_after_seconds() -> int:
+    return ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS * ARMADA_WORKER_STALE_HEARTBEAT_MISSES
 
 
-def pear_worker_run_is_stale(run: AgentRun, *, current_time: datetime) -> bool:
+def armada_worker_run_is_stale(run: AgentRun, *, current_time: datetime) -> bool:
     last_seen = run.heartbeat_at or run.date_updated
-    return last_seen <= current_time - timedelta(seconds=pear_worker_stale_after_seconds())
+    return last_seen <= current_time - timedelta(seconds=armada_worker_stale_after_seconds())
 
 
-def wait_for_redelivered_pear_worker_run(
+def wait_for_redelivered_armada_worker_run(
     *,
     bot_profile_id: int,
     trigger_message_id: int,
@@ -349,25 +349,25 @@ def wait_for_redelivered_pear_worker_run(
         if (
             run is None
             or run.status != AgentRun.RUNNING
-            or pear_worker_run_is_stale(run, current_time=current_time)
+            or armada_worker_run_is_stale(run, current_time=current_time)
         ):
             return
         last_seen = run.heartbeat_at or run.date_updated
         lease_remaining = (
-            last_seen + timedelta(seconds=pear_worker_stale_after_seconds()) - current_time
+            last_seen + timedelta(seconds=armada_worker_stale_after_seconds()) - current_time
         ).total_seconds()
         time.sleep(
             max(
                 0.05,
-                min(float(PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS), lease_remaining),
+                min(float(ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS), lease_remaining),
             )
         )
 
 
-def pear_workspace_is_paused(user_profile: UserProfile, *, stream: str, topic: str) -> bool:
+def armada_workspace_is_paused(user_profile: UserProfile, *, stream: str, topic: str) -> bool:
     if not stream:
         return False
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     return Workspace.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream,
@@ -376,7 +376,7 @@ def pear_workspace_is_paused(user_profile: UserProfile, *, stream: str, topic: s
     ).exists()
 
 
-def set_pear_workspace_paused(
+def set_armada_workspace_paused(
     user_profile: UserProfile,
     *,
     stream: str,
@@ -385,9 +385,9 @@ def set_pear_workspace_paused(
 ) -> None:
     if not stream:
         return
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     with transaction.atomic(savepoint=False):
-        workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+        workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
         workspace_node = Workspace.objects.select_for_update().get(id=workspace_node.id)
         if workspace_node.is_paused == is_paused:
             return
@@ -396,26 +396,26 @@ def set_pear_workspace_paused(
         workspace_node.save(update_fields=["is_paused", "date_updated"])
 
 
-def pear_workspace_response_policy(
+def armada_workspace_response_policy(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
     if not stream:
-        return PEAR_DEFAULT_RESPONSE_POLICY
-    stream, topic = pear_topic_scope(stream, topic)
+        return ARMADA_DEFAULT_RESPONSE_POLICY
+    stream, topic = armada_topic_scope(stream, topic)
     workspace_node = Workspace.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream,
         topic_name__iexact=topic,
     ).first()
     if workspace_node is None:
-        return PEAR_DEFAULT_RESPONSE_POLICY
-    return normalize_pear_response_policy(workspace_node.response_policy)
+        return ARMADA_DEFAULT_RESPONSE_POLICY
+    return normalize_armada_response_policy(workspace_node.response_policy)
 
 
-def set_pear_workspace_response_policy(
+def set_armada_workspace_response_policy(
     user_profile: UserProfile,
     *,
     stream: str,
@@ -424,9 +424,9 @@ def set_pear_workspace_response_policy(
 ) -> None:
     if not stream:
         return
-    stream, topic = pear_topic_scope(stream, topic)
-    clean_response_policy = normalize_pear_response_policy(response_policy)
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+    stream, topic = armada_topic_scope(stream, topic)
+    clean_response_policy = normalize_armada_response_policy(response_policy)
+    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.response_policy == clean_response_policy:
         return
     workspace_node.response_policy = clean_response_policy
@@ -434,18 +434,18 @@ def set_pear_workspace_response_policy(
     workspace_node.save(update_fields=["response_policy", "date_updated"])
 
 
-def settle_pear_run_result_message(run: AgentRun, *, content: str) -> None:
+def settle_armada_run_result_message(run: AgentRun, *, content: str) -> None:
     """Best-effort settlement through the run's canonical result Message."""
     message_id = run.result_message_id
     if message_id is None:
         return
     try:
         # Imported lazily: armada.py imports from this module.
-        from zerver.lib.armada import update_pear_worker_status_message
+        from zerver.lib.armada import update_armada_worker_status_message
         from zerver.lib.bot_lib import EmbeddedBotHandler
 
         bot_handler = EmbeddedBotHandler(run.bot_profile)
-        update_pear_worker_status_message(
+        update_armada_worker_status_message(
             bot_handler,
             progress_message_id=message_id,
             content=content,
@@ -457,15 +457,15 @@ def settle_pear_run_result_message(run: AgentRun, *, content: str) -> None:
         )
 
 
-def settle_orphaned_pear_run_message(run: AgentRun) -> None:
+def settle_orphaned_armada_run_message(run: AgentRun) -> None:
     """Best-effort: settle an interrupted run's visible progress message."""
-    settle_pear_run_result_message(
+    settle_armada_run_result_message(
         run,
         content="Run interrupted by a service restart.",
     )
 
 
-def reap_stale_pear_worker_runs(
+def reap_stale_armada_worker_runs(
     *,
     realm: Any | None = None,
     bot_profile: UserProfile | None = None,
@@ -475,7 +475,7 @@ def reap_stale_pear_worker_runs(
 ) -> int:
     """Fail RUNNING runs whose shared heartbeat lease expired."""
     current_time = timezone_now()
-    cutoff = current_time - timedelta(seconds=pear_worker_stale_after_seconds())
+    cutoff = current_time - timedelta(seconds=armada_worker_stale_after_seconds())
     stale_runs = AgentRun.objects.filter(status=AgentRun.RUNNING)
     if session_kinds is not None:
         stale_runs = stale_runs.filter(session_kind__in=list(session_kinds))
@@ -495,7 +495,7 @@ def reap_stale_pear_worker_runs(
     stale_run_ids = list(stale_runs.values_list("id", flat=True)[:100])
     reaped_count = 0
     settled_runs: list[AgentRun] = []
-    store = PearDatabaseWorkerRunStore()
+    store = ArmadaDatabaseWorkerRunStore()
     for run_id in stale_run_ids:
         with transaction.atomic(savepoint=False):
             run = (
@@ -505,7 +505,7 @@ def reap_stale_pear_worker_runs(
             )
             if run is None:
                 continue
-            if not pear_worker_run_is_stale(run, current_time=current_time):
+            if not armada_worker_run_is_stale(run, current_time=current_time):
                 continue
             if not store._transition(
                 run,
@@ -522,7 +522,7 @@ def reap_stale_pear_worker_runs(
                 "stale_reaped",
                 summary="Recovered stale Pear worker run.",
                 payload={
-                    "stale_after_seconds": pear_worker_stale_after_seconds(),
+                    "stale_after_seconds": armada_worker_stale_after_seconds(),
                     "heartbeat_at": run.heartbeat_at.isoformat()
                     if run.heartbeat_at is not None
                     else None,
@@ -532,11 +532,11 @@ def reap_stale_pear_worker_runs(
             reaped_count += 1
     # Message edits happen outside the row locks.
     for run in settled_runs:
-        settle_orphaned_pear_run_message(run)
+        settle_orphaned_armada_run_message(run)
     return reaped_count
 
 
-def maintain_pear_worker_run_liveness(
+def maintain_armada_worker_run_liveness(
     *,
     active_run_id: int | None,
     active_run_attempt: int | None,
@@ -551,7 +551,7 @@ def maintain_pear_worker_run_liveness(
     """
     if active_run_id is not None:
         if active_run_attempt is None:
-            raise PearWorkerLeaseLostError(
+            raise ArmadaWorkerLeaseLostError(
                 f"Pear worker run {active_run_id} has no active claim attempt."
             )
         current_time = timezone_now()
@@ -570,14 +570,14 @@ def maintain_pear_worker_run_liveness(
                 # process-local id and issuing this update.  That exact,
                 # completed attempt no longer needs a heartbeat and must not
                 # have its now-warm Codex process aborted.
-                return reap_stale_pear_worker_runs(session_kinds=session_kinds)
-            raise PearWorkerLeaseLostError(
+                return reap_stale_armada_worker_runs(session_kinds=session_kinds)
+            raise ArmadaWorkerLeaseLostError(
                 f"Pear worker run {active_run_id} attempt {active_run_attempt} lost its lease."
             )
-    return reap_stale_pear_worker_runs(session_kinds=session_kinds)
+    return reap_stale_armada_worker_runs(session_kinds=session_kinds)
 
 
-def latest_pear_codex_run_for_topic(
+def latest_armada_codex_run_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
@@ -585,7 +585,7 @@ def latest_pear_codex_run_for_topic(
     before_message_id: int,
     source_message_id: int | None = None,
 ) -> AgentRun | None:
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     workspace = Workspace.objects.filter(
         realm=user_profile.realm,
         stream_name__iexact=stream,
@@ -616,75 +616,77 @@ def latest_pear_codex_run_for_topic(
     return runs.order_by("-trigger_message_id", "-id").first()
 
 
-def pear_default_worker_model() -> str:
-    return str(settings.PEAR_WORKER_MODEL or "")
+def armada_default_worker_model() -> str:
+    return str(settings.ARMADA_WORKER_MODEL or "")
 
 
-def pear_default_worker_reasoning_effort() -> str:
-    effort = str(settings.PEAR_WORKER_REASONING_EFFORT or "").strip()
-    if effort in PEAR_REASONING_EFFORTS:
+def armada_default_worker_reasoning_effort() -> str:
+    effort = str(settings.ARMADA_WORKER_REASONING_EFFORT or "").strip()
+    if effort in ARMADA_REASONING_EFFORTS:
         return effort
     return "medium"
 
 
-def pear_default_worker_workdir() -> str:
-    return str(settings.PEAR_WORKER_WORKDIR or Path.cwd())
+def armada_default_worker_workdir() -> str:
+    return str(settings.ARMADA_WORKER_WORKDIR or Path.cwd())
 
 
-def pear_configured_worker_sandbox() -> str:
-    return str(settings.PEAR_WORKER_SANDBOX or "read-only")
+def armada_configured_worker_sandbox() -> str:
+    return str(settings.ARMADA_WORKER_SANDBOX or "read-only")
 
 
-def pear_runs_restricted() -> bool:
-    return settings.PEAR_WORKER_TRUSTED_USERS_ONLY or bool(settings.PEAR_WORKER_TRUSTED_USER_IDS)
+def armada_runs_restricted() -> bool:
+    return settings.ARMADA_WORKER_TRUSTED_USERS_ONLY or bool(
+        settings.ARMADA_WORKER_TRUSTED_USER_IDS
+    )
 
 
-def pear_user_is_trusted(user_profile: UserProfile) -> bool:
+def armada_user_is_trusted(user_profile: UserProfile) -> bool:
     """Whether this person may drive the agent (start, steer or answer
     runs) and give a new channel a repository URL, which makes the
     server fetch it."""
     return (
-        not pear_runs_restricted()
+        not armada_runs_restricted()
         or user_profile.is_realm_admin
-        or user_profile.id in settings.PEAR_WORKER_TRUSTED_USER_IDS
+        or user_profile.id in settings.ARMADA_WORKER_TRUSTED_USER_IDS
     )
 
 
-def pear_topic_isolation_backend() -> str:
-    return str(settings.PEAR_TOPIC_ISOLATION_BACKEND or "codex-sandbox")
+def armada_topic_isolation_backend() -> str:
+    return str(settings.ARMADA_TOPIC_ISOLATION_BACKEND or "codex-sandbox")
 
 
-def pear_topic_os_user_isolation_enabled() -> bool:
-    return pear_topic_isolation_backend() == "os-user"
+def armada_topic_os_user_isolation_enabled() -> bool:
+    return armada_topic_isolation_backend() == "os-user"
 
 
-def pear_topic_workdir_root() -> Path:
-    base_workdir = pear_normalize_path(pear_default_worker_workdir())
+def armada_topic_workdir_root() -> Path:
+    base_workdir = armada_normalize_path(armada_default_worker_workdir())
     default_root = (
-        Path("/srv/pear-workspaces")
-        if pear_topic_os_user_isolation_enabled()
-        else base_workdir.parent / "pear-workspaces"
+        Path("/srv/armada-workspaces")
+        if armada_topic_os_user_isolation_enabled()
+        else base_workdir.parent / "armada-workspaces"
     )
-    configured_root = settings.PEAR_TOPIC_WORKDIR_ROOT
+    configured_root = settings.ARMADA_TOPIC_WORKDIR_ROOT
     if isinstance(configured_root, str) and configured_root.strip():
-        root = pear_normalize_path(configured_root.strip())
+        root = armada_normalize_path(configured_root.strip())
         if root == base_workdir or root.is_relative_to(base_workdir):
             return default_root
-        if pear_topic_os_user_isolation_enabled():
-            service_home = pear_normalize_path(Path.home())
+        if armada_topic_os_user_isolation_enabled():
+            service_home = armada_normalize_path(Path.home())
             if root == service_home or root.is_relative_to(service_home):
                 return default_root
         return Path(configured_root.strip())
     return default_root
 
 
-def pear_topic_workdir_slug(
+def armada_topic_workdir_slug(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     human_slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", f"{stream}-{topic}").strip("-").lower()
     if not human_slug:
         human_slug = "topic"
@@ -692,7 +694,7 @@ def pear_topic_workdir_slug(
     return f"{human_slug[:48]}-{digest}"
 
 
-def pear_git_branch_name_is_valid(branch_name: str) -> bool:
+def armada_git_branch_name_is_valid(branch_name: str) -> bool:
     if not branch_name or branch_name.startswith("-"):
         return False
     try:
@@ -708,9 +710,9 @@ def pear_git_branch_name_is_valid(branch_name: str) -> bool:
     return completed.returncode == 0
 
 
-def pear_topic_branch_name(topic: str) -> str:
+def armada_topic_branch_name(topic: str) -> str:
     raw_topic = topic.strip()
-    if pear_git_branch_name_is_valid(raw_topic):
+    if armada_git_branch_name_is_valid(raw_topic):
         return raw_topic
 
     branch_name = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw_topic).strip("-.")
@@ -719,14 +721,14 @@ def pear_topic_branch_name(topic: str) -> str:
         branch_name = branch_name.removesuffix(".lock")
     if not branch_name:
         branch_name = "topic"
-    if pear_git_branch_name_is_valid(branch_name):
+    if armada_git_branch_name_is_valid(branch_name):
         return branch_name
 
     digest = hashlib.sha256(raw_topic.encode()).hexdigest()[:12]
     return f"topic-{digest}"
 
 
-def pear_project_cache_slug(
+def armada_project_cache_slug(
     user_profile: UserProfile,
     *,
     stream: str,
@@ -739,22 +741,22 @@ def pear_project_cache_slug(
     return f"{human_slug[:48]}-{digest}"
 
 
-def pear_expected_project_cache_path(
+def armada_expected_project_cache_path(
     user_profile: UserProfile,
     *,
     stream: str,
 ) -> Path:
     return (
-        pear_topic_workdir_root()
+        armada_topic_workdir_root()
         / "projects"
-        / pear_project_cache_slug(
+        / armada_project_cache_slug(
             user_profile,
             stream=stream,
         )
     ).with_suffix(".git")
 
 
-def pear_project_for_stream(
+def armada_project_for_stream(
     user_profile: UserProfile,
     *,
     stream: str,
@@ -769,7 +771,7 @@ def pear_project_for_stream(
         return None
 
     expected_cache_path = str(
-        pear_expected_project_cache_path(
+        armada_expected_project_cache_path(
             user_profile,
             stream=stream_obj.name,
         )
@@ -798,12 +800,12 @@ def pear_project_for_stream(
     return project
 
 
-def pear_workspace_node_default_branch(
+def armada_workspace_node_default_branch(
     *,
     project: Repository | None = None,
     topic: str = "",
 ) -> str:
-    # pear_topic_branch_name never returns an empty string (it falls back
+    # armada_topic_branch_name never returns an empty string (it falls back
     # to the literal "topic"), so blank candidates must be skipped here or
     # an unset project base ref would name every workspace branch "topic".
     # The topic outranks the parent branch: worktrees sharing one base
@@ -817,48 +819,48 @@ def pear_workspace_node_default_branch(
     for candidate in candidates:
         if not candidate.strip():
             continue
-        return pear_topic_branch_name(candidate)
+        return armada_topic_branch_name(candidate)
     return "main"
 
 
-def pear_expected_topic_workdir(
+def armada_expected_topic_workdir(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> Path:
-    return pear_topic_workdir_root() / pear_topic_workdir_slug(
+    return armada_topic_workdir_root() / armada_topic_workdir_slug(
         user_profile,
         stream=stream,
         topic=topic,
     )
 
 
-def pear_topic_isolation_username_for_realm(
+def armada_topic_isolation_username_for_realm(
     realm_id: int,
     *,
     stream: str,
     topic: str,
 ) -> str:
-    stream, topic = pear_topic_scope(stream, topic)
+    stream, topic = armada_topic_scope(stream, topic)
     digest = hashlib.sha256(f"{realm_id}\0{stream}\0{topic}".encode()).hexdigest()[:24]
-    return f"pear-{digest}"
+    return f"armada-{digest}"
 
 
-def pear_topic_isolation_username(
+def armada_topic_isolation_username(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
-    return pear_topic_isolation_username_for_realm(
+    return armada_topic_isolation_username_for_realm(
         user_profile.realm_id,
         stream=stream,
         topic=topic,
     )
 
 
-def pear_topic_isolation_user_exists(username: str) -> bool:
+def armada_topic_isolation_user_exists(username: str) -> bool:
     try:
         pwd.getpwnam(username)
     except KeyError:
@@ -866,66 +868,66 @@ def pear_topic_isolation_user_exists(username: str) -> bool:
     return True
 
 
-def pear_topic_process_isolation(
+def armada_topic_process_isolation(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
-) -> PearProcessIsolation | None:
-    if not pear_topic_os_user_isolation_enabled():
+) -> ArmadaProcessIsolation | None:
+    if not armada_topic_os_user_isolation_enabled():
         return None
-    username = pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
+    username = armada_topic_isolation_username(user_profile, stream=stream, topic=topic)
     home = f"/home/{username}"
-    return PearProcessIsolation(
+    return ArmadaProcessIsolation(
         username=username,
         home=home,
         codex_home=f"{home}/.codex",
     )
 
 
-def pear_shared_codex_home() -> Path:
+def armada_shared_codex_home() -> Path:
     return Path(os.getenv("CODEX_HOME") or Path.home() / ".codex").expanduser()
 
 
-def pear_codex_skills_source_dir() -> Path | None:
-    configured_path = settings.PEAR_CODEX_SKILLS_DIR
+def armada_codex_skills_source_dir() -> Path | None:
+    configured_path = settings.ARMADA_CODEX_SKILLS_DIR
     if isinstance(configured_path, str) and configured_path.strip():
-        return pear_normalize_path(configured_path)
+        return armada_normalize_path(configured_path)
     deploy_root = getattr(settings, "DEPLOY_ROOT", None)
     if isinstance(deploy_root, str) and deploy_root.strip():
-        return pear_normalize_path(Path(deploy_root).parent / "pear" / "skills")
+        return armada_normalize_path(Path(deploy_root).parent / "armada" / "skills")
     return None
 
 
-def pear_provision_codex_skills(codex_home: str | Path) -> list[str]:
-    source_dir = pear_codex_skills_source_dir()
+def armada_provision_codex_skills(codex_home: str | Path) -> list[str]:
+    source_dir = armada_codex_skills_source_dir()
     if source_dir is None or not source_dir.is_dir():
         return []
 
-    return reconcile_pear_codex_skills(source_dir, codex_home)
+    return reconcile_armada_codex_skills(source_dir, codex_home)
 
 
-def pear_normalize_path(path: str | Path) -> Path:
+def armada_normalize_path(path: str | Path) -> Path:
     return Path(path).expanduser().resolve(strict=False)
 
 
-def pear_workdir_is_under_topic_root(workdir: str | Path) -> bool:
-    workdir_path = pear_normalize_path(workdir)
-    topic_root = pear_normalize_path(pear_topic_workdir_root())
+def armada_workdir_is_under_topic_root(workdir: str | Path) -> bool:
+    workdir_path = armada_normalize_path(workdir)
+    topic_root = armada_normalize_path(armada_topic_workdir_root())
     return workdir_path == topic_root or workdir_path.is_relative_to(topic_root)
 
 
-def pear_workdir_uses_shared_git_admin(workdir: str | Path) -> bool:
+def armada_workdir_uses_shared_git_admin(workdir: str | Path) -> bool:
     try:
         return (Path(workdir) / ".git").is_file()
     except PermissionError:
         return False
 
 
-def pear_worker_runtime_isolation_error(workdir: str | None) -> str | None:
+def armada_worker_runtime_isolation_error(workdir: str | None) -> str | None:
     if workdir is None or not workdir.strip():
         return "Pear refused to start Codex because no isolated topic worktree was selected."
-    if pear_workdir_is_under_topic_root(workdir):
+    if armada_workdir_is_under_topic_root(workdir):
         return None
     return (
         "Pear refused to start Codex outside the Pear topic workspace root. "
@@ -933,51 +935,51 @@ def pear_worker_runtime_isolation_error(workdir: str | None) -> str | None:
     )
 
 
-def pear_worker_sandbox_for_workdir(workdir: str | None) -> str:
-    configured_sandbox = pear_configured_worker_sandbox()
-    if pear_worker_runtime_isolation_error(workdir) is not None:
+def armada_worker_sandbox_for_workdir(workdir: str | None) -> str:
+    configured_sandbox = armada_configured_worker_sandbox()
+    if armada_worker_runtime_isolation_error(workdir) is not None:
         return "read-only"
-    if pear_topic_os_user_isolation_enabled():
+    if armada_topic_os_user_isolation_enabled():
         return "danger-full-access"
     if configured_sandbox == "danger-full-access":
         return "workspace-write"
     return configured_sandbox
 
 
-def pear_worker_process_isolation_error(
-    process_isolation: PearProcessIsolation | None,
+def armada_worker_process_isolation_error(
+    process_isolation: ArmadaProcessIsolation | None,
     *,
     workdir: str,
 ) -> str | None:
     if process_isolation is None:
         return None
-    helper = str(settings.PEAR_TOPIC_ISOLATION_HELPER or "")
+    helper = str(settings.ARMADA_TOPIC_ISOLATION_HELPER or "")
     if not helper:
         return "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
-    if pear_worker_runtime_isolation_error(workdir) is not None:
+    if armada_worker_runtime_isolation_error(workdir) is not None:
         return (
             "Pear per-topic OS-user isolation refused to prepare a workdir outside "
             "the Pear topic workspace root."
         )
-    if pear_workdir_uses_shared_git_admin(workdir):
+    if armada_workdir_uses_shared_git_admin(workdir):
         return (
             "Pear per-topic OS-user isolation refused to launch from a shared Git "
             "worktree. Recreate this topic workspace as an independent clone first."
         )
 
-    codex_home_source = str(pear_shared_codex_home())
+    codex_home_source = str(armada_shared_codex_home())
     try:
-        pear_provision_codex_skills(codex_home_source)
+        armada_provision_codex_skills(codex_home_source)
     except OSError as error:
         return f"Pear Codex skills provisioning failed: {error}"
-    return pear_prepare_isolated_workdir(
+    return armada_prepare_isolated_workdir(
         isolation_username=process_isolation.username,
         workdir=workdir,
         codex_home_source=codex_home_source,
     )
 
 
-def pear_prepare_isolated_workdir(
+def armada_prepare_isolated_workdir(
     *,
     isolation_username: str,
     workdir: str,
@@ -988,13 +990,13 @@ def pear_prepare_isolated_workdir(
     use it. Required anywhere a workdir is consumed as the isolation user,
     not only at run start: zulipdev-owned clones fail git's dubious
     ownership guard for those consumers."""
-    helper = str(settings.PEAR_TOPIC_ISOLATION_HELPER or "")
+    helper = str(settings.ARMADA_TOPIC_ISOLATION_HELPER or "")
     if not helper:
         return (
             "Pear per-topic OS-user isolation is enabled, but no isolation helper is configured."
         )
     if codex_home_source is None:
-        codex_home_source = str(pear_shared_codex_home())
+        codex_home_source = str(armada_shared_codex_home())
     command = [
         "sudo",
         "-n",
@@ -1004,7 +1006,7 @@ def pear_prepare_isolated_workdir(
         "--workdir",
         workdir,
         "--topic-root",
-        str(pear_topic_workdir_root()),
+        str(armada_topic_workdir_root()),
         "--codex-home-source",
         codex_home_source,
     ]
@@ -1032,21 +1034,21 @@ def pear_prepare_isolated_workdir(
     return None
 
 
-def pear_workspace_workdir_needs_repair(workspace_node: Workspace) -> bool:
+def armada_workspace_workdir_needs_repair(workspace_node: Workspace) -> bool:
     workdir = workspace_node.workdir.strip()
     if not workdir:
         return True
-    workdir_path = pear_normalize_path(workdir)
-    topic_root = pear_normalize_path(pear_topic_workdir_root())
+    workdir_path = armada_normalize_path(workdir)
+    topic_root = armada_normalize_path(armada_topic_workdir_root())
     if workdir_path != topic_root and not workdir_path.is_relative_to(topic_root):
         return True
     if not workspace_node.topic_name:
         return False
-    base_workdir = pear_normalize_path(pear_default_worker_workdir())
+    base_workdir = armada_normalize_path(armada_default_worker_workdir())
     return workdir_path == base_workdir or workdir_path.is_relative_to(base_workdir)
 
 
-def pear_git_command_prefix(isolation_username: str | None = None) -> list[str]:
+def armada_git_command_prefix(isolation_username: str | None = None) -> list[str]:
     if isolation_username is None:
         return ["git"]
     return [
@@ -1059,7 +1061,7 @@ def pear_git_command_prefix(isolation_username: str | None = None) -> list[str]:
     ]
 
 
-def pear_git_branch_exists(
+def armada_git_branch_exists(
     base_path: Path,
     branch_name: str,
     *,
@@ -1067,7 +1069,7 @@ def pear_git_branch_exists(
 ) -> bool:
     completed = subprocess.run(
         [
-            *pear_git_command_prefix(isolation_username),
+            *armada_git_command_prefix(isolation_username),
             "-C",
             str(base_path),
             "rev-parse",
@@ -1082,7 +1084,7 @@ def pear_git_branch_exists(
     return completed.returncode == 0
 
 
-def pear_path_is_git_worktree(
+def armada_path_is_git_worktree(
     path: Path,
     *,
     isolation_username: str | None = None,
@@ -1090,7 +1092,7 @@ def pear_path_is_git_worktree(
     try:
         completed = subprocess.run(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "rev-parse",
@@ -1106,7 +1108,7 @@ def pear_path_is_git_worktree(
     return completed.returncode == 0
 
 
-def pear_git_current_branch_name(
+def armada_git_current_branch_name(
     path: Path,
     *,
     isolation_username: str | None = None,
@@ -1114,7 +1116,7 @@ def pear_git_current_branch_name(
     try:
         completed = subprocess.run(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "branch",
@@ -1130,23 +1132,23 @@ def pear_git_current_branch_name(
         return ""
     if completed.returncode != 0:
         return ""
-    return pear_topic_branch_name(completed.stdout.strip())
+    return armada_topic_branch_name(completed.stdout.strip())
 
 
-def pear_switch_workdir_to_branch(
+def armada_switch_workdir_to_branch(
     path: Path,
     branch_name: str,
     *,
     isolation_username: str | None = None,
 ) -> bool:
     try:
-        if pear_git_branch_exists(
+        if armada_git_branch_exists(
             path,
             branch_name,
             isolation_username=isolation_username,
         ):
             args = [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "switch",
@@ -1154,7 +1156,7 @@ def pear_switch_workdir_to_branch(
             ]
         else:
             args = [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "switch",
@@ -1173,7 +1175,7 @@ def pear_switch_workdir_to_branch(
     return completed.returncode == 0
 
 
-def pear_workspace_relative_path(workdir: str, relative_path: str) -> Path | None:
+def armada_workspace_relative_path(workdir: str, relative_path: str) -> Path | None:
     """Resolve a client-supplied path, refusing anything that could
     escape the workdir (or poke at .git internals)."""
     normalized = posixpath.normpath(relative_path.strip())
@@ -1188,7 +1190,7 @@ def pear_workspace_relative_path(workdir: str, relative_path: str) -> Path | Non
     return Path(workdir) / normalized
 
 
-def pear_resolve_file_path(
+def armada_resolve_file_path(
     path: Path,
     *,
     isolation_username: str | None = None,
@@ -1244,7 +1246,7 @@ def pear_resolve_file_path(
     return Path(resolved_value)
 
 
-def pear_read_text_path(path: Path, *, isolation_username: str | None = None) -> str:
+def armada_read_text_path(path: Path, *, isolation_username: str | None = None) -> str:
     if isolation_username is None:
         try:
             return path.read_text(encoding="utf-8")
@@ -1285,7 +1287,7 @@ def pear_read_text_path(path: Path, *, isolation_username: str | None = None) ->
     return completed.stdout
 
 
-def pear_read_bytes_path(
+def armada_read_bytes_path(
     path: Path,
     *,
     isolation_username: str | None = None,
@@ -1339,7 +1341,7 @@ def pear_read_bytes_path(
         raise OSError(f"Could not decode {path}: {error}") from error
 
 
-def pear_write_text_path(
+def armada_write_text_path(
     path: Path,
     content: str,
     *,
@@ -1383,22 +1385,22 @@ def pear_write_text_path(
     return completed.returncode == 0
 
 
-def ensure_pear_workspace_node(
+def ensure_armada_workspace_node(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> Workspace:
-    stream, topic = pear_topic_scope(stream, topic)
-    project = pear_project_for_stream(user_profile, stream=stream)
+    stream, topic = armada_topic_scope(stream, topic)
+    project = armada_project_for_stream(user_profile, stream=stream)
     if project is None:
         raise JsonableError(_("Could not create a repository for this channel."))
-    origin = ensure_pear_project_origin(user_profile, project)
-    branch_name = pear_workspace_node_default_branch(
+    origin = ensure_armada_project_origin(user_profile, project)
+    branch_name = armada_workspace_node_default_branch(
         project=project,
         topic=topic,
     )
-    expected_workdir = str(pear_expected_topic_workdir(user_profile, stream=stream, topic=topic))
+    expected_workdir = str(armada_expected_topic_workdir(user_profile, stream=stream, topic=topic))
     workspace_node, _created = Workspace.objects.get_or_create(
         realm=user_profile.realm,
         stream_name=stream,
@@ -1410,8 +1412,8 @@ def ensure_pear_workspace_node(
             "base_ref": project.default_base_ref,
             "base_commit": project.default_base_commit,
             "isolation_username": (
-                pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
-                if pear_topic_os_user_isolation_enabled()
+                armada_topic_isolation_username(user_profile, stream=stream, topic=topic)
+                if armada_topic_os_user_isolation_enabled()
                 else ""
             ),
         },
@@ -1420,7 +1422,7 @@ def ensure_pear_workspace_node(
     if project is not None and workspace_node.project_id != project.id:
         workspace_node.project = project
         update_fields.append("project")
-    if pear_workspace_workdir_needs_repair(workspace_node):
+    if armada_workspace_workdir_needs_repair(workspace_node):
         workspace_node.workdir = expected_workdir
         update_fields.append("workdir")
     if workspace_node.branch_name != branch_name:
@@ -1433,8 +1435,8 @@ def ensure_pear_workspace_node(
         workspace_node.base_commit = project.default_base_commit
         update_fields.append("base_commit")
     expected_isolation_username = (
-        pear_topic_isolation_username(user_profile, stream=stream, topic=topic)
-        if pear_topic_os_user_isolation_enabled()
+        armada_topic_isolation_username(user_profile, stream=stream, topic=topic)
+        if armada_topic_os_user_isolation_enabled()
         else ""
     )
     if workspace_node.isolation_username != expected_isolation_username:
@@ -1446,10 +1448,10 @@ def ensure_pear_workspace_node(
     existing_isolation_username = (
         workspace_node.isolation_username
         if workspace_node.isolation_username
-        and pear_topic_isolation_user_exists(workspace_node.isolation_username)
+        and armada_topic_isolation_user_exists(workspace_node.isolation_username)
         else None
     )
-    effective_branch = ensure_pear_topic_workdir(
+    effective_branch = ensure_armada_topic_workdir(
         workspace_node.workdir,
         origin=origin,
         branch_name=workspace_node.branch_name,
@@ -1457,7 +1459,7 @@ def ensure_pear_workspace_node(
         isolation_username=existing_isolation_username,
     )
     effective_branch_name = (
-        pear_topic_branch_name(effective_branch) if isinstance(effective_branch, str) else ""
+        armada_topic_branch_name(effective_branch) if isinstance(effective_branch, str) else ""
     )
     if effective_branch_name and workspace_node.branch_name != effective_branch_name:
         workspace_node.branch_name = effective_branch_name
@@ -1466,7 +1468,7 @@ def ensure_pear_workspace_node(
     return workspace_node
 
 
-def pear_ensure_workdir_git_identity(
+def armada_ensure_workdir_git_identity(
     path: Path,
     *,
     isolation_username: str | None = None,
@@ -1478,7 +1480,7 @@ def pear_ensure_workdir_git_identity(
     try:
         existing = subprocess.run(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "config",
@@ -1493,7 +1495,7 @@ def pear_ensure_workdir_git_identity(
             return
         subprocess.run(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "config",
@@ -1507,7 +1509,7 @@ def pear_ensure_workdir_git_identity(
         )
         subprocess.run(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "config",
@@ -1523,7 +1525,7 @@ def pear_ensure_workdir_git_identity(
         pass
 
 
-def ensure_pear_topic_workdir(
+def ensure_armada_topic_workdir(
     workdir: str,
     *,
     origin: str | Path,
@@ -1531,7 +1533,7 @@ def ensure_pear_topic_workdir(
     base_ref: str,
     isolation_username: str | None = None,
 ) -> str:
-    branch = pear_provision_topic_workdir(
+    branch = armada_provision_topic_workdir(
         workdir,
         origin=origin,
         branch_name=branch_name,
@@ -1539,23 +1541,23 @@ def ensure_pear_topic_workdir(
         isolation_username=isolation_username,
     )
     path = Path(workdir)
-    if pear_path_is_git_worktree(path, isolation_username=isolation_username):
-        pear_ensure_workdir_git_identity(
+    if armada_path_is_git_worktree(path, isolation_username=isolation_username):
+        armada_ensure_workdir_git_identity(
             path,
             isolation_username=isolation_username,
         )
     return branch
 
 
-def pear_ensure_origin_branch(
+def armada_ensure_origin_branch(
     origin: Path,
     *,
     branch_name: str,
     base_ref: str,
 ) -> None:
-    if pear_git_branch_exists(origin, branch_name):
+    if armada_git_branch_exists(origin, branch_name):
         return
-    base_commit = pear_run_git_checked(
+    base_commit = armada_run_git_checked(
         [
             "git",
             "--git-dir",
@@ -1567,7 +1569,7 @@ def pear_ensure_origin_branch(
         error_message="Could not find the channel repository base branch.",
         timeout=10,
     ).stdout.strip()
-    pear_run_git_checked(
+    armada_run_git_checked(
         [
             "git",
             "--git-dir",
@@ -1581,7 +1583,7 @@ def pear_ensure_origin_branch(
     )
 
 
-def pear_provision_topic_workdir(
+def armada_provision_topic_workdir(
     workdir: str,
     *,
     origin: str | Path,
@@ -1591,16 +1593,16 @@ def pear_provision_topic_workdir(
 ) -> str:
     path = Path(workdir)
     origin_path = Path(origin)
-    branch_name = pear_topic_branch_name(branch_name)
-    base_ref = pear_topic_branch_name(base_ref)
-    pear_ensure_origin_branch(
+    branch_name = armada_topic_branch_name(branch_name)
+    base_ref = armada_topic_branch_name(base_ref)
+    armada_ensure_origin_branch(
         origin_path,
         branch_name=branch_name,
         base_ref=base_ref,
     )
 
     if path.exists():
-        if not pear_path_is_git_worktree(
+        if not armada_path_is_git_worktree(
             path,
             isolation_username=isolation_username,
         ):
@@ -1611,13 +1613,13 @@ def pear_provision_topic_workdir(
             # wrong-file case the strict check exists for.
             if (
                 isolation_username is not None
-                and settings.PEAR_TOPIC_ISOLATION_HELPER
-                and pear_path_is_git_worktree(
+                and settings.ARMADA_TOPIC_ISOLATION_HELPER
+                and armada_path_is_git_worktree(
                     path,
                     isolation_username=None,
                 )
             ):
-                prep_error = pear_prepare_isolated_workdir(
+                prep_error = armada_prepare_isolated_workdir(
                     isolation_username=isolation_username,
                     workdir=str(path),
                 )
@@ -1627,9 +1629,9 @@ def pear_provision_topic_workdir(
                 raise JsonableError(
                     _("This topic has a non-Git workspace; reset it before starting Armada.")
                 )
-        origin_url = pear_run_git_checked(
+        origin_url = armada_run_git_checked(
             [
-                *pear_git_command_prefix(isolation_username),
+                *armada_git_command_prefix(isolation_username),
                 "-C",
                 str(path),
                 "remote",
@@ -1639,15 +1641,15 @@ def pear_provision_topic_workdir(
             error_message="Could not inspect the topic repository.",
             timeout=10,
         ).stdout.strip()
-        if pear_normalize_path(origin_url) != pear_normalize_path(origin_path):
+        if armada_normalize_path(origin_url) != armada_normalize_path(origin_path):
             raise JsonableError(
                 _("This topic workspace is not attached to its channel repository.")
             )
-        current_branch = pear_git_current_branch_name(
+        current_branch = armada_git_current_branch_name(
             path,
             isolation_username=isolation_username,
         )
-        if current_branch != branch_name and not pear_switch_workdir_to_branch(
+        if current_branch != branch_name and not armada_switch_workdir_to_branch(
             path,
             branch_name,
             isolation_username=isolation_username,
@@ -1656,7 +1658,7 @@ def pear_provision_topic_workdir(
         return branch_name
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    pear_run_git_checked(
+    armada_run_git_checked(
         [
             "git",
             "clone",
@@ -1672,13 +1674,13 @@ def pear_provision_topic_workdir(
     )
     exclude_path = path / ".git" / "info" / "exclude"
     with exclude_path.open("a", encoding="utf-8") as exclude_file:
-        exclude_file.write("\n# Armada runtime outputs\n.pear/\n")
-    if isolation_username is not None and settings.PEAR_TOPIC_ISOLATION_HELPER:
+        exclude_file.write("\n# Armada runtime outputs\n.armada/\n")
+    if isolation_username is not None and settings.ARMADA_TOPIC_ISOLATION_HELPER:
         # Hand the fresh clone to the isolation user immediately: every
         # later consumer (attach checks, runtime, workspace IO) runs git as
         # that user, and a zulipdev-owned clone fails the dubious-ownership
         # guard from its first breath.
-        prep_error = pear_prepare_isolated_workdir(
+        prep_error = armada_prepare_isolated_workdir(
             isolation_username=isolation_username,
             workdir=str(path),
         )
@@ -1687,7 +1689,7 @@ def pear_provision_topic_workdir(
     return branch_name
 
 
-def clean_pear_repository_url(repository_url: str) -> str:
+def clean_armada_repository_url(repository_url: str) -> str:
     clean_url = repository_url.strip()
     if not clean_url:
         return ""
@@ -1708,13 +1710,13 @@ def clean_pear_repository_url(repository_url: str) -> str:
     return clean_url
 
 
-def pear_run_git_checked(
+def armada_run_git_checked(
     command: Sequence[str],
     *,
     error_message: str,
     input_text: str | None = None,
     env: dict[str, str] | None = None,
-    timeout: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+    timeout: int = ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess[str]:
     try:
         completed = subprocess.run(
@@ -1733,8 +1735,8 @@ def pear_run_git_checked(
     return completed
 
 
-def pear_seed_empty_bare_origin(origin: Path, *, branch_name: str) -> str:
-    tree = pear_run_git_checked(
+def armada_seed_empty_bare_origin(origin: Path, *, branch_name: str) -> str:
+    tree = armada_run_git_checked(
         ["git", "--git-dir", str(origin), "mktree"],
         error_message="Could not initialize the channel repository.",
         input_text="",
@@ -1747,13 +1749,13 @@ def pear_seed_empty_bare_origin(origin: Path, *, branch_name: str) -> str:
         "GIT_COMMITTER_NAME": "Armada",
         "GIT_COMMITTER_EMAIL": f"armada-worker@{settings.EXTERNAL_HOST.split(':')[0]}",
     }
-    commit = pear_run_git_checked(
+    commit = armada_run_git_checked(
         ["git", "--git-dir", str(origin), "commit-tree", tree, "-m", "Initialize workspace"],
         error_message="Could not initialize the channel repository.",
         env=identity_env,
         timeout=10,
     ).stdout.strip()
-    pear_run_git_checked(
+    armada_run_git_checked(
         ["git", "--git-dir", str(origin), "update-ref", f"refs/heads/{branch_name}", commit],
         error_message="Could not initialize the channel repository.",
         timeout=10,
@@ -1761,27 +1763,27 @@ def pear_seed_empty_bare_origin(origin: Path, *, branch_name: str) -> str:
     return commit
 
 
-def pear_initialize_bare_origin(
+def armada_initialize_bare_origin(
     origin: Path,
     *,
     repository_url: str,
-    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+    fetch_timeout_seconds: int = ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> tuple[str, str]:
-    pear_run_git_checked(
+    armada_run_git_checked(
         ["git", "init", "--bare", "--quiet", "--initial-branch=main", str(origin)],
         error_message="Could not initialize the channel repository.",
         timeout=30,
     )
     if not repository_url:
         base_ref = "main"
-        base_commit = pear_seed_empty_bare_origin(origin, branch_name=base_ref)
+        base_commit = armada_seed_empty_bare_origin(origin, branch_name=base_ref)
     else:
-        pear_run_git_checked(
+        armada_run_git_checked(
             ["git", "--git-dir", str(origin), "remote", "add", "upstream", repository_url],
             error_message="Could not configure the channel repository.",
             timeout=10,
         )
-        pear_run_git_checked(
+        armada_run_git_checked(
             [
                 "git",
                 "--git-dir",
@@ -1796,7 +1798,7 @@ def pear_initialize_bare_origin(
             error_message="Could not clone the Git repository.",
             timeout=fetch_timeout_seconds,
         )
-        remote_refs = pear_run_git_checked(
+        remote_refs = armada_run_git_checked(
             [
                 "git",
                 "--git-dir",
@@ -1815,7 +1817,7 @@ def pear_initialize_bare_origin(
             (candidate for candidate in ("main", "master") if candidate in candidates),
             candidates[0],
         )
-        base_commit = pear_run_git_checked(
+        base_commit = armada_run_git_checked(
             [
                 "git",
                 "--git-dir",
@@ -1827,7 +1829,7 @@ def pear_initialize_bare_origin(
             error_message="Could not inspect the Git repository.",
             timeout=10,
         ).stdout.strip()
-        pear_run_git_checked(
+        armada_run_git_checked(
             [
                 "git",
                 "--git-dir",
@@ -1839,7 +1841,7 @@ def pear_initialize_bare_origin(
             error_message="Could not initialize the channel repository.",
             timeout=10,
         )
-    pear_run_git_checked(
+    armada_run_git_checked(
         [
             "git",
             "--git-dir",
@@ -1854,14 +1856,14 @@ def pear_initialize_bare_origin(
     return base_ref, base_commit
 
 
-def ensure_pear_project_origin(
+def ensure_armada_project_origin(
     user_profile: UserProfile,
     project: Repository,
     *,
     refresh_upstream: bool = False,
-    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+    fetch_timeout_seconds: int = ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> Path:
-    origin = pear_expected_project_cache_path(
+    origin = armada_expected_project_cache_path(
         user_profile,
         stream=project.stream.name,
     )
@@ -1870,14 +1872,14 @@ def ensure_pear_project_origin(
     try:
         with lockfile(str(lock_path)):
             if origin.exists():
-                is_bare = pear_run_git_checked(
+                is_bare = armada_run_git_checked(
                     ["git", "--git-dir", str(origin), "rev-parse", "--is-bare-repository"],
                     error_message="The channel repository cache is invalid.",
                     timeout=10,
                 ).stdout.strip()
                 if is_bare != "true":
                     raise JsonableError(_("The channel repository cache is invalid."))
-                configured_url = pear_run_git_checked(
+                configured_url = armada_run_git_checked(
                     [
                         "git",
                         "--git-dir",
@@ -1894,7 +1896,7 @@ def ensure_pear_project_origin(
                         _("This channel already has a different Git repository.")
                     )
                 if project.repository_url and refresh_upstream:
-                    pear_run_git_checked(
+                    armada_run_git_checked(
                         [
                             "git",
                             "--git-dir",
@@ -1911,13 +1913,13 @@ def ensure_pear_project_origin(
                     )
                 base_ref = (
                     project.default_base_ref.strip()
-                    or pear_run_git_checked(
+                    or armada_run_git_checked(
                         ["git", "--git-dir", str(origin), "symbolic-ref", "--short", "HEAD"],
                         error_message="Could not inspect the channel repository.",
                         timeout=10,
                     ).stdout.strip().removeprefix("refs/heads/")
                 )
-                base_commit = pear_run_git_checked(
+                base_commit = armada_run_git_checked(
                     [
                         "git",
                         "--git-dir",
@@ -1937,7 +1939,7 @@ def ensure_pear_project_origin(
                     )
                 )
                 try:
-                    base_ref, base_commit = pear_initialize_bare_origin(
+                    base_ref, base_commit = armada_initialize_bare_origin(
                         temporary,
                         repository_url=project.repository_url.strip(),
                         fetch_timeout_seconds=fetch_timeout_seconds,
@@ -1975,28 +1977,28 @@ def ensure_pear_project_origin(
     return origin
 
 
-def configure_pear_channel_repository_workspace(
+def configure_armada_channel_repository_workspace(
     user_profile: UserProfile,
     *,
     stream: str,
     repository_url: str,
-    fetch_timeout_seconds: int = PEAR_REPOSITORY_CLONE_TIMEOUT_SECONDS,
+    fetch_timeout_seconds: int = ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS,
 ) -> Workspace:
     """Give a channel its repository and fetch it.  Channel creation calls
     this inside its request; an operator attaching a repository too large
     to fetch within the web server's request limit calls it from
     `manage.py shell` with a longer fetch_timeout_seconds
     (docs/armada/deploy.md, 6.5)."""
-    stream, _topic = pear_topic_scope(stream, "")
-    clean_url = clean_pear_repository_url(repository_url)
-    project = pear_project_for_stream(user_profile, stream=stream)
+    stream, _topic = armada_topic_scope(stream, "")
+    clean_url = clean_armada_repository_url(repository_url)
+    project = armada_project_for_stream(user_profile, stream=stream)
     if project is None:
         raise JsonableError(_("Could not configure this channel workspace."))
     if project.repository_url and project.repository_url != clean_url:
         raise JsonableError(
             _("This channel already has a different Git repository.")
         )
-    origin = pear_expected_project_cache_path(user_profile, stream=stream)
+    origin = armada_expected_project_cache_path(user_profile, stream=stream)
     if not project.repository_url and origin.exists():
         raise JsonableError(
             _(
@@ -2017,20 +2019,20 @@ def configure_pear_channel_repository_workspace(
                 "date_updated",
             ]
         )
-    ensure_pear_project_origin(
+    ensure_armada_project_origin(
         user_profile,
         project,
         refresh_upstream=True,
         fetch_timeout_seconds=fetch_timeout_seconds,
     )
-    return ensure_pear_workspace_node(
+    return ensure_armada_workspace_node(
         user_profile,
         stream=stream,
         topic="",
     )
 
 
-def maybe_refactor_pear_workspace_on_move(
+def maybe_refactor_armada_workspace_on_move(
     user_profile: UserProfile,
     *,
     old_stream: Stream,
@@ -2038,9 +2040,9 @@ def maybe_refactor_pear_workspace_on_move(
     new_stream: Stream,
     new_topic: str,
     moved_all_visible_messages: bool,
-) -> PearTopicRenameRefactorResult | None:
-    old_stream_name, old_topic_name = pear_topic_scope(old_stream.name, old_topic)
-    new_stream_name, new_topic_name = pear_topic_scope(new_stream.name, new_topic)
+) -> ArmadaTopicRenameRefactorResult | None:
+    old_stream_name, old_topic_name = armada_topic_scope(old_stream.name, old_topic)
+    new_stream_name, new_topic_name = armada_topic_scope(new_stream.name, new_topic)
     if old_stream_name == new_stream_name and old_topic_name == new_topic_name:
         return None
     workspace_node = Workspace.objects.filter(
@@ -2071,7 +2073,7 @@ def maybe_refactor_pear_workspace_on_move(
             topic_name=new_topic_name,
             date_updated=timezone_now(),
         )
-        return PearTopicRenameRefactorResult(
+        return ArmadaTopicRenameRefactorResult(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
@@ -2087,7 +2089,7 @@ def maybe_refactor_pear_workspace_on_move(
         )
 
     if not moved_all_visible_messages:
-        return PearTopicRenameRefactorResult(
+        return ArmadaTopicRenameRefactorResult(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
@@ -2102,10 +2104,10 @@ def maybe_refactor_pear_workspace_on_move(
         stream_name__iexact=old_stream_name,
         topic_name__iexact=old_topic_name,
         session_kind=AgentRun.SHARED,
-        status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+        status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
     ).exists()
     if busy_run_exists:
-        reap_stale_pear_worker_runs(
+        reap_stale_armada_worker_runs(
             realm=user_profile.realm,
             stream=old_stream_name,
             topic=old_topic_name,
@@ -2115,10 +2117,10 @@ def maybe_refactor_pear_workspace_on_move(
             stream_name__iexact=old_stream_name,
             topic_name__iexact=old_topic_name,
             session_kind=AgentRun.SHARED,
-            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+            status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         ).exists()
     if busy_run_exists:
-        return PearTopicRenameRefactorResult(
+        return ArmadaTopicRenameRefactorResult(
             stream_name=new_stream.name,
             topic_name=new_topic,
             message=(
@@ -2140,7 +2142,7 @@ def maybe_refactor_pear_workspace_on_move(
         date_updated=timestamp,
     )
 
-    return PearTopicRenameRefactorResult(
+    return ArmadaTopicRenameRefactorResult(
         stream_name=new_stream.name,
         topic_name=new_topic,
         message=(
@@ -2151,14 +2153,14 @@ def maybe_refactor_pear_workspace_on_move(
     )
 
 
-def maybe_refactor_pear_stream_workspaces_on_rename(
+def maybe_refactor_armada_stream_workspaces_on_rename(
     user_profile: UserProfile,
     *,
     old_stream_name: str,
     new_stream_name: str,
 ) -> str | None:
-    old_scope_stream, _topic = pear_topic_scope(old_stream_name, "")
-    new_scope_stream, _topic = pear_topic_scope(new_stream_name, "")
+    old_scope_stream, _topic = armada_topic_scope(old_stream_name, "")
+    new_scope_stream, _topic = armada_topic_scope(new_stream_name, "")
     if old_scope_stream == new_scope_stream:
         return None
 
@@ -2204,7 +2206,7 @@ def maybe_refactor_pear_stream_workspaces_on_rename(
     )
 
 
-def pear_git_output(
+def armada_git_output(
     workdir: str,
     args: list[str],
     *,
@@ -2270,10 +2272,10 @@ def pear_git_output(
     return completed.stdout.strip()
 
 
-PEAR_GIT_CHANGED_FILES_LIMIT = 50
+ARMADA_GIT_CHANGED_FILES_LIMIT = 50
 
 
-def pear_git_changed_file_from_status_line(line: str) -> dict[str, str] | None:
+def armada_git_changed_file_from_status_line(line: str) -> dict[str, str] | None:
     record_type, _, rest = line.partition(" ")
     if record_type == "?":
         return {"status": "??", "kind": "untracked", "path": rest}
@@ -2308,7 +2310,7 @@ def pear_git_changed_file_from_status_line(line: str) -> dict[str, str] | None:
     return {"status": status, "kind": kind, "path": path}
 
 
-def parse_pear_git_status_delta(
+def parse_armada_git_status_delta(
     status_output: str,
     *,
     workdir: str,
@@ -2328,8 +2330,8 @@ def parse_pear_git_status_delta(
             continue
         if not line.startswith("# "):
             changed_count += 1
-            changed_file = pear_git_changed_file_from_status_line(line)
-            if changed_file is not None and len(changed_files) <= PEAR_GIT_CHANGED_FILES_LIMIT:
+            changed_file = armada_git_changed_file_from_status_line(line)
+            if changed_file is not None and len(changed_files) <= ARMADA_GIT_CHANGED_FILES_LIMIT:
                 changed_files.append(changed_file)
             continue
         if line.startswith("# branch.oid "):
@@ -2368,23 +2370,23 @@ def parse_pear_git_status_delta(
         "behind": behind,
         "dirty": changed_count > 0,
         "changed_count": changed_count,
-        "changed_files": changed_files[:PEAR_GIT_CHANGED_FILES_LIMIT],
-        "changed_files_truncated": len(changed_files) > PEAR_GIT_CHANGED_FILES_LIMIT,
+        "changed_files": changed_files[:ARMADA_GIT_CHANGED_FILES_LIMIT],
+        "changed_files_truncated": len(changed_files) > ARMADA_GIT_CHANGED_FILES_LIMIT,
         "detached": detached,
         "branch_matches_topic": bool(topic and not detached and branch == topic),
     }
 
 
-def invalidate_pear_git_status_delta(workdir: str | None = None) -> None:
+def invalidate_armada_git_status_delta(workdir: str | None = None) -> None:
     if workdir is None:
-        pear_git_status_delta_cache.clear()
+        armada_git_status_delta_cache.clear()
         return
-    for cache_key in list(pear_git_status_delta_cache):
+    for cache_key in list(armada_git_status_delta_cache):
         if cache_key[0] == workdir:
-            del pear_git_status_delta_cache[cache_key]
+            del armada_git_status_delta_cache[cache_key]
 
 
-def pear_git_status_delta(
+def armada_git_status_delta(
     workdir: str,
     *,
     topic: str = "",
@@ -2396,13 +2398,13 @@ def pear_git_status_delta(
     topic = topic.lower()
     cache_key = (workdir, isolation_username or "", topic)
     current_time = time.monotonic()
-    cached = pear_git_status_delta_cache.get(cache_key)
+    cached = armada_git_status_delta_cache.get(cache_key)
     if cached is not None:
         cached_at, delta = cached
-        if current_time - cached_at < PEAR_GIT_STATUS_DELTA_TTL_SECONDS:
+        if current_time - cached_at < ARMADA_GIT_STATUS_DELTA_TTL_SECONDS:
             return dict(delta)
 
-    status_output = pear_git_output(
+    status_output = armada_git_output(
         workdir,
         ["status", "--porcelain=v2", "--branch"],
         isolation_username=isolation_username,
@@ -2410,7 +2412,7 @@ def pear_git_status_delta(
     if not status_output:
         return {"available": False, "workdir": workdir}
 
-    delta = parse_pear_git_status_delta(status_output, workdir=workdir, topic=topic)
+    delta = parse_armada_git_status_delta(status_output, workdir=workdir, topic=topic)
     # The topic header's commit sentence (design §8.2): latest commit
     # identity plus the total count, fetched with the same isolation and
     # cached under the same TTL as the rest of the delta. An unborn HEAD
@@ -2418,7 +2420,7 @@ def pear_git_status_delta(
     # describe, so skip the reads instead of letting git fail them
     # noisily on every refresh of a freshly initialized workspace.
     if delta["head_short"]:
-        log_output = pear_git_output(
+        log_output = armada_git_output(
             workdir,
             ["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%ct"],
             isolation_username=isolation_username,
@@ -2427,22 +2429,22 @@ def pear_git_status_delta(
         if len(log_parts) == 4 and log_parts[0]:
             delta["last_commit"] = {
                 "sha": log_parts[0],
-                "subject": trim_pear_text(log_parts[1], limit=200),
-                "author": trim_pear_text(log_parts[2], limit=80),
+                "subject": trim_armada_text(log_parts[1], limit=200),
+                "author": trim_armada_text(log_parts[2], limit=80),
                 "timestamp": int(log_parts[3]) if log_parts[3].isdigit() else None,
             }
-        count_output = pear_git_output(
+        count_output = armada_git_output(
             workdir,
             ["rev-list", "--count", "HEAD"],
             isolation_username=isolation_username,
         ).strip()
         if count_output.isdigit():
             delta["commit_count"] = int(count_output)
-    pear_git_status_delta_cache[cache_key] = (current_time, dict(delta))
+    armada_git_status_delta_cache[cache_key] = (current_time, dict(delta))
     return delta
 
 
-def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
+def armada_git_remote_label(remote_url: str, repo_root: str) -> str:
     clean_url = remote_url.strip()
     if clean_url:
         if clean_url.startswith("git@") and ":" in clean_url:
@@ -2454,45 +2456,45 @@ def pear_git_remote_label(remote_url: str, repo_root: str) -> str:
     return Path(repo_root).name
 
 
-def build_pear_workspace_context(
+def build_armada_workspace_context(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> dict[str, str]:
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
-    workdir = workspace_node.workdir.strip() or pear_default_worker_workdir()
+    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+    workdir = workspace_node.workdir.strip() or armada_default_worker_workdir()
     workspace_repo = (
         workspace_node.project.repository_url.strip()
         if workspace_node.project_id is not None
         else ""
     )
-    repository = pear_logical_repository_label(
+    repository = armada_logical_repository_label(
         stream=stream,
         context_repo=workspace_repo,
         parent_repo="",
     )
-    worktree = pear_logical_worktree_label(
+    worktree = armada_logical_worktree_label(
         stream=stream,
         topic=topic,
         fallback=Path(workdir).name,
     )
     return {
         "repository": repository,
-        "remote_url": pear_pinned_repository_value(workspace_repo)
+        "remote_url": armada_pinned_repository_value(workspace_repo)
         or "",
         "worktree": worktree,
         "workdir": workdir,
-        "branch": workspace_node.branch_name.strip() or pear_workspace_node_default_branch(),
+        "branch": workspace_node.branch_name.strip() or armada_workspace_node_default_branch(),
         "head": "",
     }
 
 
-def pear_repo_artifact_value_is_durable(repo_value: str) -> bool:
+def armada_repo_artifact_value_is_durable(repo_value: str) -> bool:
     value = repo_value.strip()
     if not value:
         return False
-    if pear_repo_artifact_value_is_local_topic_path(value):
+    if armada_repo_artifact_value_is_local_topic_path(value):
         return True
     if value.startswith("git@") and ":" in value:
         return True
@@ -2504,46 +2506,46 @@ def pear_repo_artifact_value_is_durable(repo_value: str) -> bool:
     return re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\s+<[^>\n]+>)?", value) is not None
 
 
-def pear_repo_artifact_value_is_local_topic_path(repo_value: str) -> bool:
+def armada_repo_artifact_value_is_local_topic_path(repo_value: str) -> bool:
     value = repo_value.strip()
     if not value or not Path(value).is_absolute():
         return False
     try:
-        local_path = pear_normalize_path(value)
+        local_path = armada_normalize_path(value)
     except (OSError, RuntimeError):
         return False
     try:
-        topic_root = pear_normalize_path(pear_topic_workdir_root())
-        return pear_workdir_is_under_topic_root(local_path) and local_path != topic_root
+        topic_root = armada_normalize_path(armada_topic_workdir_root())
+        return armada_workdir_is_under_topic_root(local_path) and local_path != topic_root
     except OSError:
         return False
 
 
-def pear_pinned_repository_value(repo_value: str) -> str:
+def armada_pinned_repository_value(repo_value: str) -> str:
     value = repo_value.strip()
     if not value:
         return ""
-    if not pear_repo_artifact_value_is_durable(value):
+    if not armada_repo_artifact_value_is_durable(value):
         return ""
-    if pear_repo_artifact_value_is_local_topic_path(value):
+    if armada_repo_artifact_value_is_local_topic_path(value):
         return ""
     return value
 
 
-def pear_logical_repository_label(
+def armada_logical_repository_label(
     *,
     stream: str,
     context_repo: str,
     parent_repo: str,
 ) -> str:
     for repo_value in (context_repo, parent_repo):
-        pinned_repo = pear_pinned_repository_value(repo_value)
+        pinned_repo = armada_pinned_repository_value(repo_value)
         if pinned_repo:
             return pinned_repo
     return stream
 
 
-def pear_logical_worktree_label(*, stream: str, topic: str, fallback: str) -> str:
+def armada_logical_worktree_label(*, stream: str, topic: str, fallback: str) -> str:
     if topic:
         return topic
     if stream:
@@ -2551,142 +2553,142 @@ def pear_logical_worktree_label(*, stream: str, topic: str, fallback: str) -> st
     return fallback
 
 
-def pear_worker_model_for_topic(
+def armada_worker_model_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
     if not stream:
-        return pear_default_worker_model()
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+        return armada_default_worker_model()
+    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.model.strip():
         return workspace_node.model.strip()
-    return pear_default_worker_model()
+    return armada_default_worker_model()
 
 
-def pear_worker_reasoning_effort_for_topic(
+def armada_worker_reasoning_effort_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
     if not stream:
-        return pear_default_worker_reasoning_effort()
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+        return armada_default_worker_reasoning_effort()
+    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
     if workspace_node.reasoning_effort.strip():
         return workspace_node.reasoning_effort.strip()
-    return pear_default_worker_reasoning_effort()
+    return armada_default_worker_reasoning_effort()
 
 
-def pear_worker_workdir_for_topic(
+def armada_worker_workdir_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
     if not stream:
-        return pear_default_worker_workdir()
-    workspace_node = ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
-    return workspace_node.workdir.strip() or pear_default_worker_workdir()
+        return armada_default_worker_workdir()
+    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+    return workspace_node.workdir.strip() or armada_default_worker_workdir()
 
 
-def pear_worker_sandbox_for_topic(
+def armada_worker_sandbox_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
 ) -> str:
-    return pear_worker_sandbox_for_workdir(
-        pear_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
+    return armada_worker_sandbox_for_workdir(
+        armada_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
     )
 
 
-def build_pear_worker_runtime_from_settings(
+def build_armada_worker_runtime_from_settings(
     *,
     model_override: str | None = None,
     workdir_override: str | None = None,
     reasoning_effort_override: str | None = None,
     sandbox_override: str | None = None,
-    process_isolation_override: PearProcessIsolation | None = None,
+    process_isolation_override: ArmadaProcessIsolation | None = None,
     process_isolation_error: str | None = None,
-) -> PearWorkerRuntime:
-    runtime = settings.PEAR_WORKER_AGENT_RUNTIME
-    model = model_override if model_override is not None else settings.PEAR_WORKER_MODEL
-    workdir = workdir_override if workdir_override is not None else settings.PEAR_WORKER_WORKDIR
+) -> ArmadaWorkerRuntime:
+    runtime = settings.ARMADA_WORKER_AGENT_RUNTIME
+    model = model_override if model_override is not None else settings.ARMADA_WORKER_MODEL
+    workdir = workdir_override if workdir_override is not None else settings.ARMADA_WORKER_WORKDIR
     sandbox = (
         sandbox_override
         if sandbox_override is not None
-        else pear_worker_sandbox_for_workdir(workdir)
+        else armada_worker_sandbox_for_workdir(workdir)
     )
     reasoning_effort = (
         reasoning_effort_override
         if reasoning_effort_override is not None
-        else pear_default_worker_reasoning_effort()
+        else armada_default_worker_reasoning_effort()
     )
-    isolation_error = pear_worker_runtime_isolation_error(workdir)
+    isolation_error = armada_worker_runtime_isolation_error(workdir)
     if runtime != "disabled" and isolation_error is not None:
-        return PearWorkerRuntime(PearDisabledAgentRunner(isolation_error))
+        return ArmadaWorkerRuntime(ArmadaDisabledAgentRunner(isolation_error))
     if runtime != "disabled" and process_isolation_error is not None:
-        return PearWorkerRuntime(PearDisabledAgentRunner(process_isolation_error))
+        return ArmadaWorkerRuntime(ArmadaDisabledAgentRunner(process_isolation_error))
     if runtime != "disabled" and process_isolation_override is None:
         try:
-            pear_provision_codex_skills(pear_shared_codex_home())
+            armada_provision_codex_skills(armada_shared_codex_home())
         except OSError as error:
-            return PearWorkerRuntime(
-                PearDisabledAgentRunner(f"Pear Codex skills provisioning failed: {error}")
+            return ArmadaWorkerRuntime(
+                ArmadaDisabledAgentRunner(f"Pear Codex skills provisioning failed: {error}")
             )
     if runtime == "codex-app-server":
-        return PearWorkerRuntime(
-            PearCodexAppServerToolRunner(
-                codex_bin=settings.PEAR_WORKER_CODEX_BIN,
+        return ArmadaWorkerRuntime(
+            ArmadaCodexAppServerToolRunner(
+                codex_bin=settings.ARMADA_WORKER_CODEX_BIN,
                 workdir=workdir,
                 model=model,
                 sandbox=sandbox,
-                approval_policy=settings.PEAR_WORKER_APPROVAL_POLICY,
-                timeout_seconds=settings.PEAR_WORKER_TIMEOUT_SECONDS,
-                output_limit=settings.PEAR_WORKER_OUTPUT_LIMIT,
-                service_tier=settings.PEAR_WORKER_SERVICE_TIER,
-                fast_mode_enabled=settings.PEAR_WORKER_FAST_MODE,
-                memories_enabled=settings.PEAR_WORKER_CODEX_MEMORIES,
+                approval_policy=settings.ARMADA_WORKER_APPROVAL_POLICY,
+                timeout_seconds=settings.ARMADA_WORKER_TIMEOUT_SECONDS,
+                output_limit=settings.ARMADA_WORKER_OUTPUT_LIMIT,
+                service_tier=settings.ARMADA_WORKER_SERVICE_TIER,
+                fast_mode_enabled=settings.ARMADA_WORKER_FAST_MODE,
+                memories_enabled=settings.ARMADA_WORKER_CODEX_MEMORIES,
                 reasoning_effort=reasoning_effort,
-                ephemeral=settings.PEAR_WORKER_CODEX_EPHEMERAL,
+                ephemeral=settings.ARMADA_WORKER_CODEX_EPHEMERAL,
                 process_isolation=process_isolation_override,
             )
         )
     if runtime != "disabled":
-        return PearWorkerRuntime(
-            PearDisabledAgentRunner(
+        return ArmadaWorkerRuntime(
+            ArmadaDisabledAgentRunner(
                 f"Pear worker agent runtime is unsupported: {runtime!r}. "
                 "Use codex-app-server for worker turns; configure ambient "
-                "message routing with PEAR_ADDRESSING_ROUTER_RUNTIME."
+                "message routing with ARMADA_ADDRESSING_ROUTER_RUNTIME."
             )
         )
-    return PearWorkerRuntime(
-        PearDisabledAgentRunner(
-            "Pear worker agent runtime is disabled. Set PEAR_WORKER_AGENT_RUNTIME "
+    return ArmadaWorkerRuntime(
+        ArmadaDisabledAgentRunner(
+            "Pear worker agent runtime is disabled. Set ARMADA_WORKER_AGENT_RUNTIME "
             "to 'codex-app-server' for direct Codex app-server control."
         )
     )
 
 
-def build_pear_addressing_intent_classifier_from_settings() -> (
-    PearAddressingIntentClassifier | None
+def build_armada_addressing_intent_classifier_from_settings() -> (
+    ArmadaAddressingIntentClassifier | None
 ):
-    runtime = settings.PEAR_ADDRESSING_ROUTER_RUNTIME
+    runtime = settings.ARMADA_ADDRESSING_ROUTER_RUNTIME
     if runtime == "gemini-interactions":
-        return PearGeminiInteractionsAddressingIntentClassifier(
-            api_key=settings.PEAR_GEMINI_INTERACTIONS_API_KEY,
-            model=settings.PEAR_ADDRESSING_ROUTER_GEMINI_MODEL,
+        return ArmadaGeminiInteractionsAddressingIntentClassifier(
+            api_key=settings.ARMADA_GEMINI_INTERACTIONS_API_KEY,
+            model=settings.ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL,
             timeout_seconds=4,
             output_limit=1000,
-            url=settings.PEAR_GEMINI_INTERACTIONS_URL,
-            thinking_level=settings.PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL,
+            url=settings.ARMADA_GEMINI_INTERACTIONS_URL,
+            thinking_level=settings.ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL,
         )
     return None
 
 
-class PearDatabaseWorkerRunStore:
+class ArmadaDatabaseWorkerRunStore:
     def __init__(self) -> None:
         # A store instance belongs to one queue delivery. Once it claims a run,
         # its attempt number becomes the fencing token for every worker-owned
@@ -2721,7 +2723,7 @@ class PearDatabaseWorkerRunStore:
             or run.attempts != claimed_attempt
             or (require_running and run.status != AgentRun.RUNNING)
         ):
-            raise PearWorkerLeaseLostError(
+            raise ArmadaWorkerLeaseLostError(
                 f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
             )
 
@@ -2760,12 +2762,12 @@ class PearDatabaseWorkerRunStore:
         *,
         exclude_run_id: int | None = None,
     ) -> bool:
-        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+        realm_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM
         if realm_limit <= 0:
             return False
         busy_runs = AgentRun.objects.filter(
             realm=user_profile.realm,
-            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+            status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         )
         if exclude_run_id is not None:
             busy_runs = busy_runs.exclude(id=exclude_run_id)
@@ -2779,7 +2781,7 @@ class PearDatabaseWorkerRunStore:
         topic: str,
         exclude_run_id: int | None = None,
     ) -> bool:
-        topic_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
+        topic_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
         if topic_limit <= 0:
             return False
         busy_runs = AgentRun.objects.filter(
@@ -2788,7 +2790,7 @@ class PearDatabaseWorkerRunStore:
             stream_name__iexact=stream,
             topic_name__iexact=topic,
             session_kind=AgentRun.SHARED,
-            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+            status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         )
         if exclude_run_id is not None:
             busy_runs = busy_runs.exclude(id=exclude_run_id)
@@ -2821,11 +2823,11 @@ class PearDatabaseWorkerRunStore:
     ) -> int | None:
         if not stream:
             return None
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        reap_stale_pear_worker_runs(
+        reap_stale_armada_worker_runs(
             realm=user_profile.realm,
             bot_profile=user_profile,
             stream=stream,
@@ -2839,7 +2841,7 @@ class PearDatabaseWorkerRunStore:
                 stream_name__iexact=stream,
                 topic_name__iexact=topic,
                 session_kind=AgentRun.SHARED,
-                status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+                status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
             )
             .order_by("-date_updated", "-id")
             .first()
@@ -2859,7 +2861,7 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         if message_id <= 0 or progress_message_id is None:
             return
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -2872,7 +2874,7 @@ class PearDatabaseWorkerRunStore:
                     trigger_message_id=message_id,
                     stream_name__iexact=stream,
                     topic_name__iexact=topic,
-                    status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+                    status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
                 )
                 .first()
             )
@@ -2911,7 +2913,7 @@ class PearDatabaseWorkerRunStore:
         """
         if message_id <= 0:
             return None
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
 
@@ -2923,7 +2925,7 @@ class PearDatabaseWorkerRunStore:
                     trigger_message_id=message_id,
                     stream_name__iexact=stream,
                     topic_name__iexact=topic,
-                    status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+                    status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
                 )
                 .first()
             )
@@ -2960,11 +2962,11 @@ class PearDatabaseWorkerRunStore:
             return "Pear Codex runs currently require a channel topic."
         if message_id <= 0 or requesting_user_id is None:
             return None
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        reap_stale_pear_worker_runs(realm=user_profile.realm)
+        reap_stale_armada_worker_runs(realm=user_profile.realm)
 
         try:
             requesting_user = UserProfile.objects.get(
@@ -2974,9 +2976,9 @@ class PearDatabaseWorkerRunStore:
         except UserProfile.DoesNotExist:
             return "Pear could not identify the requesting user."
 
-        if not pear_user_is_trusted(requesting_user):
+        if not armada_user_is_trusted(requesting_user):
             return "This user is not allowed to start Pear worker runs."
-        if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
+        if armada_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
 
         queued_run = AgentRun.objects.filter(
@@ -2990,11 +2992,11 @@ class PearDatabaseWorkerRunStore:
         if queued_run is not None:
             return None
 
-        topic_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
-        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+        topic_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
+        realm_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM
         busy_runs = AgentRun.objects.filter(
             realm=user_profile.realm,
-            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+            status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         )
         if (
             topic_limit > 0
@@ -3025,11 +3027,11 @@ class PearDatabaseWorkerRunStore:
             return "Pear Codex runs currently require a channel topic."
         if message_id <= 0 or requesting_user_id is None:
             return None
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        reap_stale_pear_worker_runs(realm=user_profile.realm)
+        reap_stale_armada_worker_runs(realm=user_profile.realm)
         try:
             requesting_user = UserProfile.objects.get(
                 id=requesting_user_id,
@@ -3037,9 +3039,9 @@ class PearDatabaseWorkerRunStore:
             )
         except UserProfile.DoesNotExist:
             return "Pear could not identify the requesting user."
-        if not pear_user_is_trusted(requesting_user):
+        if not armada_user_is_trusted(requesting_user):
             return "This user is not allowed to start Pear worker runs."
-        if pear_workspace_is_paused(user_profile, stream=stream, topic=topic):
+        if armada_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "Pear session is paused until a resume control is posted."
         if AgentRun.objects.filter(
             bot_profile=user_profile,
@@ -3050,10 +3052,10 @@ class PearDatabaseWorkerRunStore:
             status=AgentRun.QUEUED,
         ).exists():
             return None
-        realm_limit = settings.PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM
+        realm_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM
         busy_runs = AgentRun.objects.filter(
             realm=user_profile.realm,
-            status__in=PEAR_WORKER_RUN_BUSY_STATUSES,
+            status__in=ARMADA_WORKER_RUN_BUSY_STATUSES,
         )
         if realm_limit > 0 and busy_runs.count() >= realm_limit:
             return "Pear already has the maximum number of active worker runs in this realm."
@@ -3072,7 +3074,7 @@ class PearDatabaseWorkerRunStore:
             return False
         if message_id <= 0:
             return True
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -3098,7 +3100,7 @@ class PearDatabaseWorkerRunStore:
                         and run.topic_name.casefold() == topic.casefold()
                         and run.source_message_id == source_message_id
                     )
-                if run is not None and run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
+                if run is not None and run.status in ARMADA_WORKER_RUN_ACTIVE_STATUSES:
                     return False
                 if self._shared_topic_run_limit_reached(
                     user_profile,
@@ -3186,7 +3188,7 @@ class PearDatabaseWorkerRunStore:
         """Create telemetry for an ordinary threaded Message's native /btw turn."""
         if not stream or message_id <= 0 or source_message_id <= 0:
             return False
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
         requesting_user = None
@@ -3216,7 +3218,7 @@ class PearDatabaseWorkerRunStore:
                         and run.topic_name.casefold() == topic.casefold()
                         and run.source_message_id == source_message_id
                     )
-                if run is not None and run.status in PEAR_WORKER_RUN_ACTIVE_STATUSES:
+                if run is not None and run.status in ARMADA_WORKER_RUN_ACTIVE_STATUSES:
                     return False
                 if self._realm_run_limit_reached(
                     user_profile,
@@ -3298,7 +3300,7 @@ class PearDatabaseWorkerRunStore:
             return False
         if message_id <= 0:
             return True
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -3316,7 +3318,7 @@ class PearDatabaseWorkerRunStore:
                 topic_is_paused = (
                     workspace_node.is_paused
                     if workspace_node is not None
-                    else pear_workspace_is_paused(
+                    else armada_workspace_is_paused(
                         user_profile,
                         stream=stream,
                         topic=topic,
@@ -3376,7 +3378,7 @@ class PearDatabaseWorkerRunStore:
                     return True
 
                 if topic_is_paused:
-                    if run.status in PEAR_WORKER_RUN_BUSY_STATUSES:
+                    if run.status in ARMADA_WORKER_RUN_BUSY_STATUSES:
                         self._transition(
                             run,
                             AgentRun.FAILED,
@@ -3425,7 +3427,7 @@ class PearDatabaseWorkerRunStore:
                             reason="already_running",
                         )
                         return False
-                    if run.attempts >= PEAR_WORKER_MAX_CLAIM_ATTEMPTS:
+                    if run.attempts >= ARMADA_WORKER_MAX_CLAIM_ATTEMPTS:
                         self._transition(
                             run,
                             AgentRun.FAILED,
@@ -3468,7 +3470,7 @@ class PearDatabaseWorkerRunStore:
                         run.events.order_by("-id").values_list("event_type", flat=True).first()
                     )
                     if latest_event_type == "stale_reaped":
-                        if run.attempts >= PEAR_WORKER_MAX_CLAIM_ATTEMPTS:
+                        if run.attempts >= ARMADA_WORKER_MAX_CLAIM_ATTEMPTS:
                             self._record_claim_dropped(
                                 run,
                                 stream=stream,
@@ -3555,7 +3557,7 @@ class PearDatabaseWorkerRunStore:
         # threaded Message, so settle that exact entity rather than inventing
         # pump-specific presentation state.
         assert settled_run is not None
-        settle_pear_run_result_message(
+        settle_armada_run_result_message(
             settled_run,
             content="This side conversation could not start because its request message was deleted.",
         )
@@ -3564,7 +3566,7 @@ class PearDatabaseWorkerRunStore:
         self,
         bot_handler: Any,
         message_id: int,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
         *,
         stream: str,
         topic: str,
@@ -3573,7 +3575,7 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         if message_id <= 0:
             return
-        stream, topic = pear_topic_scope(stream, topic)
+        stream, topic = armada_topic_scope(stream, topic)
 
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
@@ -3705,14 +3707,14 @@ class PearDatabaseWorkerRunStore:
         )
 
     def _run_is_stale(self, run: AgentRun, *, current_time: datetime) -> bool:
-        return pear_worker_run_is_stale(run, current_time=current_time)
+        return armada_worker_run_is_stale(run, current_time=current_time)
 
     def _heartbeat_due(self, run: AgentRun, *, current_time: datetime) -> bool:
         if run.status != AgentRun.RUNNING:
             return False
         last_heartbeat = run.heartbeat_at or run.date_updated
         return last_heartbeat <= current_time - timedelta(
-            seconds=PEAR_WORKER_HEARTBEAT_INTERVAL_SECONDS
+            seconds=ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS
         )
 
     def _apply_heartbeat_if_due(
@@ -3862,7 +3864,7 @@ class PearDatabaseWorkerRunStore:
             return False
         claimed_attempt = self._claimed_attempt(user_profile.id, message_id)
         if claimed_attempt is not None and run.attempts != claimed_attempt:
-            raise PearWorkerLeaseLostError(
+            raise ArmadaWorkerLeaseLostError(
                 f"Pear worker run for message {message_id} lost attempt {claimed_attempt}."
             )
         if run.status == AgentRun.CANCELLED:
@@ -3883,8 +3885,8 @@ class PearDatabaseWorkerRunStore:
     ) -> str:
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        stream, topic = pear_topic_scope(stream, topic)
-        return pear_workspace_response_policy(
+        stream, topic = armada_topic_scope(stream, topic)
+        return armada_workspace_response_policy(
             user_profile,
             stream=stream,
             topic=topic,
@@ -3900,8 +3902,8 @@ class PearDatabaseWorkerRunStore:
     ) -> None:
         user_profile = bot_handler.user_profile
         assert isinstance(user_profile, UserProfile)
-        stream, topic = pear_topic_scope(stream, topic)
-        set_pear_workspace_response_policy(
+        stream, topic = armada_topic_scope(stream, topic)
+        set_armada_workspace_response_policy(
             user_profile,
             stream=stream,
             topic=topic,
@@ -3914,7 +3916,7 @@ class PearDatabaseWorkerRunStore:
         message_id: int,
         *,
         after_event_id: int,
-    ) -> list[PearPendingSteeringEvent]:
+    ) -> list[ArmadaPendingSteeringEvent]:
         if message_id <= 0:
             return []
 
@@ -3937,7 +3939,7 @@ class PearDatabaseWorkerRunStore:
             event_type="steering",
             id__gt=after_event_id,
         ).order_by("id")
-        pending_events: list[PearPendingSteeringEvent] = []
+        pending_events: list[ArmadaPendingSteeringEvent] = []
         for event in events:
             payload = event.payload
             instruction = ""
@@ -3953,7 +3955,7 @@ class PearDatabaseWorkerRunStore:
                 instruction = event.summary.strip()
             if not instruction:
                 continue
-            pending_event: PearPendingSteeringEvent = {
+            pending_event: ArmadaPendingSteeringEvent = {
                 "event_id": event.id,
                 "message_id": message_id_value,
                 "instruction": instruction,
@@ -3969,7 +3971,7 @@ class PearDatabaseWorkerRunStore:
                     .first()
                 )
             if steering_message is not None:
-                referenced_threads = load_pear_referenced_threads(
+                referenced_threads = load_armada_referenced_threads(
                     steering_message.sender if steering_message.sender.is_active else None,
                     content=steering_message.content,
                     current_stream=run.stream_name,
@@ -3983,7 +3985,7 @@ class PearDatabaseWorkerRunStore:
     def _update_run(
         self,
         run: AgentRun,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
         *,
         stream: str,
         topic: str,
@@ -4022,7 +4024,7 @@ class PearDatabaseWorkerRunStore:
     def _transition(
         self,
         run: AgentRun,
-        status: PearWorkerRunStatus,
+        status: ArmadaWorkerRunStatus,
         *,
         stream: str,
         topic: str,
@@ -4032,7 +4034,7 @@ class PearDatabaseWorkerRunStore:
     ) -> bool:
         old_status = run.status
         same_status = old_status == status
-        legal_statuses = PEAR_RUN_LEGAL_TRANSITIONS.get(old_status, frozenset())
+        legal_statuses = ARMADA_RUN_LEGAL_TRANSITIONS.get(old_status, frozenset())
         is_explicit_requeue = (
             old_status == AgentRun.FAILED and status == AgentRun.QUEUED and allow_requeue
         )
@@ -4079,7 +4081,7 @@ class PearDatabaseWorkerRunStore:
             ]
         )
         if run.workdir:
-            invalidate_pear_git_status_delta(run.workdir)
+            invalidate_armada_git_status_delta(run.workdir)
         if (
             not same_status
             and status in (AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED)
@@ -4087,7 +4089,7 @@ class PearDatabaseWorkerRunStore:
         ):
             workspace_node_id = run.workspace_node_id
             transaction.on_commit(
-                lambda: refresh_pear_workspace_after_terminal_run(workspace_node_id)
+                lambda: refresh_armada_workspace_after_terminal_run(workspace_node_id)
             )
         return True
 
@@ -4158,24 +4160,24 @@ class PearDatabaseWorkerRunStore:
                 )
                 run.tool_count += event_tool_count
             if run.workdir:
-                invalidate_pear_git_status_delta(run.workdir)
+                invalidate_armada_git_status_delta(run.workdir)
             current_time = timezone_now()
             if self._heartbeat_due(run, current_time=current_time):
                 run.heartbeat_at = current_time
                 run.date_updated = current_time
                 run.save(update_fields=["heartbeat_at", "date_updated"])
-            from zerver.actions.armada import send_pear_run_event
+            from zerver.actions.armada import send_armada_run_event
 
             # This helper builds the payload from the current row now, then
             # uses send_event_on_commit for delivery after durability.
-            send_pear_run_event(run, run_event)
+            send_armada_run_event(run, run_event)
             if event_type in {"steering_applied", "tool_results", "transcript"}:
                 transaction.on_commit(
-                    lambda: maybe_enqueue_pear_run_presentation(run.id, run_event.id)
+                    lambda: maybe_enqueue_armada_run_presentation(run.id, run_event.id)
                 )
 
     def _runtime_label(self) -> str:
-        return str(settings.PEAR_WORKER_AGENT_RUNTIME or "")
+        return str(settings.ARMADA_WORKER_AGENT_RUNTIME or "")
 
     def _model_label(
         self,
@@ -4184,7 +4186,7 @@ class PearDatabaseWorkerRunStore:
         stream: str,
         topic: str,
     ) -> str:
-        return pear_worker_model_for_topic(user_profile, stream=stream, topic=topic)
+        return armada_worker_model_for_topic(user_profile, stream=stream, topic=topic)
 
     def _sandbox_label(
         self,
@@ -4193,10 +4195,10 @@ class PearDatabaseWorkerRunStore:
         stream: str,
         topic: str,
     ) -> str:
-        return pear_worker_sandbox_for_topic(user_profile, stream=stream, topic=topic)
+        return armada_worker_sandbox_for_topic(user_profile, stream=stream, topic=topic)
 
     def _approval_policy_label(self) -> str:
-        return str(settings.PEAR_WORKER_APPROVAL_POLICY or "")
+        return str(settings.ARMADA_WORKER_APPROVAL_POLICY or "")
 
     def _workdir_label(
         self,
@@ -4205,7 +4207,7 @@ class PearDatabaseWorkerRunStore:
         stream: str,
         topic: str,
     ) -> str:
-        return pear_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
+        return armada_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
 
     def _workspace_node_for_topic(
         self,
@@ -4216,10 +4218,10 @@ class PearDatabaseWorkerRunStore:
     ) -> Workspace | None:
         if not stream:
             return None
-        return ensure_pear_workspace_node(user_profile, stream=stream, topic=topic)
+        return ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
 
 
-class PearQueueWorkerDispatcher:
+class ArmadaQueueWorkerDispatcher:
     def warm(
         self,
         bot_handler: Any,
@@ -4232,11 +4234,11 @@ class PearQueueWorkerDispatcher:
         if not isinstance(user_profile_id, int):
             raise AssertionError("Pear queue warm requires a bot user id")
         queue_json_publish_rollback_unsafe(
-            pear_worker_queue_name(user_profile_id, stream=stream, topic=topic),
+            armada_worker_queue_name(user_profile_id, stream=stream, topic=topic),
             {
                 "warm_only": True,
                 "user_profile_id": user_profile_id,
-                "message_id": pear_message_id(message),
+                "message_id": armada_message_id(message),
                 "stream": stream,
                 "topic": topic,
                 "content": str(message.get("content", "")),
@@ -4246,12 +4248,12 @@ class PearQueueWorkerDispatcher:
 
     def dispatch(
         self,
-        _pear_handler: PearEmbeddedBotHandler,
+        _armada_handler: ArmadaEmbeddedBotHandler,
         bot_handler: Any,
         message: dict[str, Any],
         *,
         content: str,
-        active_session: PearActiveSessionSummary | None,
+        active_session: ArmadaActiveSessionSummary | None,
         message_id: int,
         stream: str,
         topic: str,
@@ -4274,9 +4276,9 @@ class PearQueueWorkerDispatcher:
         context_stream = stream or source_stream
         context_topic = topic or source_topic
         queue_name = (
-            PEAR_MONITOR_WORKER_QUEUE_NAME
+            ARMADA_MONITOR_WORKER_QUEUE_NAME
             if session_kind == AgentRun.MONITOR
-            else pear_worker_queue_name(
+            else armada_worker_queue_name(
                 user_profile_id,
                 stream=context_stream,
                 topic=context_topic,
@@ -4301,21 +4303,21 @@ class PearQueueWorkerDispatcher:
         )
 
 
-def load_pear_active_session_from_zulip(
+def load_armada_active_session_from_zulip(
     message: dict[str, Any],
     bot_handler: Any,
-) -> PearActiveSessionSummary:
+) -> ArmadaActiveSessionSummary:
     user_profile = bot_handler.user_profile
     assert isinstance(user_profile, UserProfile)
-    pear_session = get_pear_session_payload(
-        stream=pear_message_stream(message),
-        topic=pear_message_topic(message),
+    armada_session = get_armada_session_payload(
+        stream=armada_message_stream(message),
+        topic=armada_message_topic(message),
     )
     try:
-        stream, _sub = access_stream_by_name(user_profile, pear_session["stream"])
+        stream, _sub = access_stream_by_name(user_profile, armada_session["stream"])
     except JsonableError:
-        return build_pear_active_session_summary(
-            pear_session=pear_session,
+        return build_armada_active_session_summary(
+            armada_session=armada_session,
             source="server",
             stream_exists=False,
             topic_message_count=0,
@@ -4326,9 +4328,9 @@ def load_pear_active_session_from_zulip(
     message_query = messages_for_topic(
         user_profile.realm_id,
         stream.recipient_id,
-        pear_session["topic"],
+        armada_session["topic"],
     )
-    trigger_message_id = pear_message_id(message)
+    trigger_message_id = armada_message_id(message)
     if trigger_message_id > 0:
         message_query = message_query.filter(id__lte=trigger_message_id)
     message_count = message_query.count()
@@ -4338,7 +4340,7 @@ def load_pear_active_session_from_zulip(
             "content",
             "sender__is_bot",
             "sender__full_name",
-        )[:PEAR_WORKER_TOPIC_HISTORY_LIMIT]
+        )[:ARMADA_WORKER_TOPIC_HISTORY_LIMIT]
     )
     if trigger_message_id not in {row[0] for row in message_rows}:
         trigger_sender_name = str(
@@ -4348,10 +4350,10 @@ def load_pear_active_session_from_zulip(
             (trigger_message_id, str(message.get("content", "")), False, trigger_sender_name)
         )
         message_count = max(message_count, len(message_rows))
-    latest_codex_run = latest_pear_codex_run_for_topic(
+    latest_codex_run = latest_armada_codex_run_for_topic(
         user_profile,
-        stream=pear_session["stream"],
-        topic=pear_session["topic"],
+        stream=armada_session["stream"],
+        topic=armada_session["topic"],
         before_message_id=trigger_message_id,
         source_message_id=(
             message["thread_root_message_id"]
@@ -4411,19 +4413,19 @@ def load_pear_active_session_from_zulip(
         if isinstance(requesting_user_id, int)
         else None
     )
-    referenced_threads = load_pear_referenced_threads(
+    referenced_threads = load_armada_referenced_threads(
         requesting_user,
         content=str(message.get("content", "")),
-        current_stream=pear_session["stream"],
-        current_topic=pear_session["topic"],
+        current_stream=armada_session["stream"],
+        current_topic=armada_session["topic"],
     )
-    workspace_context = build_pear_workspace_context(
+    workspace_context = build_armada_workspace_context(
         user_profile,
-        stream=pear_session["stream"],
-        topic=pear_session["topic"],
+        stream=armada_session["stream"],
+        topic=armada_session["topic"],
     )
-    return build_pear_active_session_summary_from_messages(
-        pear_session=pear_session,
+    return build_armada_active_session_summary_from_messages(
+        armada_session=armada_session,
         source="server",
         stream_exists=True,
         messages=message_rows,
@@ -4436,14 +4438,14 @@ def load_pear_active_session_from_zulip(
         ),
         current_trigger_message_id=trigger_message_id if trigger_message_id > 0 else None,
         workspace_context=workspace_context,
-        is_paused=pear_workspace_is_paused(
+        is_paused=armada_workspace_is_paused(
             user_profile,
-            stream=pear_session["stream"],
-            topic=pear_session["topic"],
+            stream=armada_session["stream"],
+            topic=armada_session["topic"],
         ),
-        response_policy=pear_workspace_response_policy(
+        response_policy=armada_workspace_response_policy(
             user_profile,
-            stream=pear_session["stream"],
-            topic=pear_session["topic"],
+            stream=armada_session["stream"],
+            topic=armada_session["topic"],
         ),
     )

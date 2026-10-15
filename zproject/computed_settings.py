@@ -1315,52 +1315,52 @@ TOPIC_SUMMARIZATION_API_KEY = get_secret("topic_summarization_api_key", None)
 PARTIAL_USERS = bool(os.environ.get("PARTIAL_USERS"))
 
 ########################################################################
-# PEAR SETTINGS
+# ARMADA SETTINGS
 ########################################################################
 
-_PEAR_TRUE_VALUES: Final = frozenset(("1", "true", "yes", "on"))
-_PEAR_FALSE_VALUES: Final = frozenset(("0", "false", "no", "off"))
+_ARMADA_TRUE_VALUES: Final = frozenset(("1", "true", "yes", "on"))
+_ARMADA_FALSE_VALUES: Final = frozenset(("0", "false", "no", "off"))
 
 
-def _pear_env_string(name: str, default: str) -> str:
+def _armada_env_string(name: str, default: str) -> str:
     return os.getenv(name, default)
 
 
-def _pear_env_optional_string(name: str, default: str | None) -> str | None:
+def _armada_env_optional_string(name: str, default: str | None) -> str | None:
     return os.getenv(name, default) or None
 
 
-def _pear_env_bool(name: str, default: bool) -> bool:
+def _armada_env_bool(name: str, default: bool) -> bool:
     raw_value = os.getenv(name)
     if raw_value is None:
         return default
     normalized_value = raw_value.lower()
-    if normalized_value in _PEAR_TRUE_VALUES:
+    if normalized_value in _ARMADA_TRUE_VALUES:
         return True
-    if normalized_value in _PEAR_FALSE_VALUES:
+    if normalized_value in _ARMADA_FALSE_VALUES:
         return False
     raise ValueError(f"{name} must be a boolean value, not {raw_value!r}")
 
 
-def _pear_env_int(name: str, default: int) -> int:
+def _armada_env_int(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
-def _pear_env_string_list(name: str, default: list[str]) -> list[str]:
+def _armada_env_string_list(name: str, default: list[str]) -> list[str]:
     raw_value = os.getenv(name)
     if raw_value is None:
         return list(default)
     return [value for value in raw_value.replace(",", " ").split() if value]
 
 
-def _pear_env_int_list(name: str, default: list[int]) -> list[int]:
+def _armada_env_int_list(name: str, default: list[int]) -> list[int]:
     raw_value = os.getenv(name)
     if raw_value is None:
         return list(default)
     return [int(value) for value in raw_value.replace(",", " ").split()]
 
 
-def _pear_env_gemini_api_key(name: str, default: str) -> str:
+def _armada_env_gemini_api_key(name: str, default: str) -> str:
     return (
         os.getenv(name)
         or os.getenv("GEMINI_API_KEY")
@@ -1371,83 +1371,83 @@ def _pear_env_gemini_api_key(name: str, default: str) -> str:
     )
 
 
-def _pear_configured_default(name: str) -> Any:
+def _armada_configured_default(name: str) -> Any:
     return getattr(_configured_settings, name)
 
 
-def _pear_parse_string(name: str) -> str:
-    return _pear_env_string(name, _pear_configured_default(name))
+def _armada_parse_string(name: str) -> str:
+    return _armada_env_string(name, _armada_configured_default(name))
 
 
-def _pear_parse_optional_string(name: str) -> str | None:
-    return _pear_env_optional_string(name, _pear_configured_default(name))
+def _armada_parse_optional_string(name: str) -> str | None:
+    return _armada_env_optional_string(name, _armada_configured_default(name))
 
 
-def _pear_parse_bool(name: str) -> bool:
-    return _pear_env_bool(name, _pear_configured_default(name))
+def _armada_parse_bool(name: str) -> bool:
+    return _armada_env_bool(name, _armada_configured_default(name))
 
 
-def _pear_parse_int(name: str) -> int:
-    return _pear_env_int(name, _pear_configured_default(name))
+def _armada_parse_int(name: str) -> int:
+    return _armada_env_int(name, _armada_configured_default(name))
 
 
-def _pear_parse_string_list(name: str) -> list[str]:
-    return _pear_env_string_list(name, _pear_configured_default(name))
+def _armada_parse_string_list(name: str) -> list[str]:
+    return _armada_env_string_list(name, _armada_configured_default(name))
 
 
-def _pear_parse_int_list(name: str) -> list[int]:
-    return _pear_env_int_list(name, _pear_configured_default(name))
+def _armada_parse_int_list(name: str) -> list[int]:
+    return _armada_env_int_list(name, _armada_configured_default(name))
 
 
-def _pear_parse_worker_model_choices(name: str) -> list[str]:
-    choices = _pear_parse_string_list(name)
-    model = _pear_parse_optional_string("PEAR_WORKER_MODEL")
+def _armada_parse_worker_model_choices(name: str) -> list[str]:
+    choices = _armada_parse_string_list(name)
+    model = _armada_parse_optional_string("ARMADA_WORKER_MODEL")
     if model is not None and model not in choices:
         choices.insert(0, model)
     return choices
 
 
-def _pear_parse_gemini_api_key(name: str) -> str:
-    return _pear_env_gemini_api_key(name, _pear_configured_default(name))
+def _armada_parse_gemini_api_key(name: str) -> str:
+    return _armada_env_gemini_api_key(name, _armada_configured_default(name))
 
 
-_PEAR_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
-    "PEAR_WORKER_AGENT_RUNTIME": _pear_parse_string,
-    "PEAR_WORKER_CODEX_BIN": _pear_parse_string,
-    "PEAR_WORKER_WORKDIR": _pear_parse_optional_string,
-    "PEAR_TOPIC_WORKDIR_ROOT": _pear_parse_optional_string,
-    "PEAR_TOPIC_ISOLATION_BACKEND": _pear_parse_string,
-    "PEAR_TOPIC_ISOLATION_HELPER": _pear_parse_string,
-    "PEAR_WORKER_MODEL": _pear_parse_optional_string,
-    "PEAR_WORKER_MODEL_CHOICES": _pear_parse_worker_model_choices,
-    "PEAR_WORKER_SERVICE_TIER": _pear_parse_optional_string,
-    "PEAR_WORKER_FAST_MODE": _pear_parse_bool,
-    "PEAR_WORKER_REASONING_EFFORT": _pear_parse_string,
-    "PEAR_WORKER_SANDBOX": _pear_parse_string,
-    "PEAR_WORKER_APPROVAL_POLICY": _pear_parse_string,
-    "PEAR_WORKER_TIMEOUT_SECONDS": _pear_parse_int,
-    "PEAR_WORKER_OUTPUT_LIMIT": _pear_parse_int,
-    "PEAR_WORKER_CODEX_EPHEMERAL": _pear_parse_bool,
-    "PEAR_WORKER_CODEX_MEMORIES": _pear_parse_bool,
-    "PEAR_CODEX_SKILLS_DIR": _pear_parse_optional_string,
-    "PEAR_WORKER_TRUSTED_USERS_ONLY": _pear_parse_bool,
-    "PEAR_WORKER_TRUSTED_USER_IDS": _pear_parse_int_list,
-    "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC": _pear_parse_int,
-    "PEAR_WORKER_MAX_ACTIVE_RUNS_PER_REALM": _pear_parse_int,
-    "PEAR_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES": _pear_parse_int,
-    "PEAR_WORKSPACE_INDEX_LOCAL_MAX_PATHS": _pear_parse_int,
-    "PEAR_ADDRESSING_ROUTER_RUNTIME": _pear_parse_string,
-    "PEAR_GEMINI_INTERACTIONS_API_KEY": _pear_parse_gemini_api_key,
-    "PEAR_GEMINI_INTERACTIONS_URL": _pear_parse_string,
-    "PEAR_ADDRESSING_ROUTER_GEMINI_MODEL": _pear_parse_string,
-    "PEAR_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL": _pear_parse_optional_string,
-    "PEAR_PRESENTATION_GEMINI_MODEL": _pear_parse_string,
-    "PEAR_PRESENTATION_GEMINI_THINKING_LEVEL": _pear_parse_optional_string,
+_ARMADA_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
+    "ARMADA_WORKER_AGENT_RUNTIME": _armada_parse_string,
+    "ARMADA_WORKER_CODEX_BIN": _armada_parse_string,
+    "ARMADA_WORKER_WORKDIR": _armada_parse_optional_string,
+    "ARMADA_TOPIC_WORKDIR_ROOT": _armada_parse_optional_string,
+    "ARMADA_TOPIC_ISOLATION_BACKEND": _armada_parse_string,
+    "ARMADA_TOPIC_ISOLATION_HELPER": _armada_parse_string,
+    "ARMADA_WORKER_MODEL": _armada_parse_optional_string,
+    "ARMADA_WORKER_MODEL_CHOICES": _armada_parse_worker_model_choices,
+    "ARMADA_WORKER_SERVICE_TIER": _armada_parse_optional_string,
+    "ARMADA_WORKER_FAST_MODE": _armada_parse_bool,
+    "ARMADA_WORKER_REASONING_EFFORT": _armada_parse_string,
+    "ARMADA_WORKER_SANDBOX": _armada_parse_string,
+    "ARMADA_WORKER_APPROVAL_POLICY": _armada_parse_string,
+    "ARMADA_WORKER_TIMEOUT_SECONDS": _armada_parse_int,
+    "ARMADA_WORKER_OUTPUT_LIMIT": _armada_parse_int,
+    "ARMADA_WORKER_CODEX_EPHEMERAL": _armada_parse_bool,
+    "ARMADA_WORKER_CODEX_MEMORIES": _armada_parse_bool,
+    "ARMADA_CODEX_SKILLS_DIR": _armada_parse_optional_string,
+    "ARMADA_WORKER_TRUSTED_USERS_ONLY": _armada_parse_bool,
+    "ARMADA_WORKER_TRUSTED_USER_IDS": _armada_parse_int_list,
+    "ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC": _armada_parse_int,
+    "ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM": _armada_parse_int,
+    "ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES": _armada_parse_int,
+    "ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS": _armada_parse_int,
+    "ARMADA_ADDRESSING_ROUTER_RUNTIME": _armada_parse_string,
+    "ARMADA_GEMINI_INTERACTIONS_API_KEY": _armada_parse_gemini_api_key,
+    "ARMADA_GEMINI_INTERACTIONS_URL": _armada_parse_string,
+    "ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL": _armada_parse_string,
+    "ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL": _armada_parse_optional_string,
+    "ARMADA_PRESENTATION_GEMINI_MODEL": _armada_parse_string,
+    "ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL": _armada_parse_optional_string,
 }
 
 
-for _pear_setting_name, _pear_parser in _PEAR_ENV_OVERRIDES.items():
-    globals()[_pear_setting_name] = _pear_parser(_pear_setting_name)
+for _armada_setting_name, _armada_parser in _ARMADA_ENV_OVERRIDES.items():
+    globals()[_armada_setting_name] = _armada_parser(_armada_setting_name)
 
-del _pear_parser
-del _pear_setting_name
+del _armada_parser
+del _armada_setting_name

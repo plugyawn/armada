@@ -6,23 +6,23 @@ from django.conf import settings
 from django.db import transaction
 from typing_extensions import override
 
-from zerver.actions.armada import send_pear_run_event
-from zerver.lib.armada_agent import PearAgentRuntimeError, PearGeminiInteractionsClient
+from zerver.actions.armada import send_armada_run_event
+from zerver.lib.armada_agent import ArmadaAgentRuntimeError, ArmadaGeminiInteractionsClient
 from zerver.lib.armada_presentation import (
-    build_pear_presentation_input,
-    pear_presentation_current_step,
-    pear_presentation_plan,
-    request_pear_presentation_overview,
+    armada_presentation_current_step,
+    armada_presentation_plan,
+    build_armada_presentation_input,
+    request_armada_presentation_overview,
 )
-from zerver.lib.armada_worker import PEAR_PRESENTATION_QUEUE_NAME, pear_run_is_attended
+from zerver.lib.armada_worker import ARMADA_PRESENTATION_QUEUE_NAME, armada_run_is_attended
 from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
 logger = logging.getLogger(__name__)
 
 
-@assign_queue(PEAR_PRESENTATION_QUEUE_NAME)
-class PearPresentationWorker(QueueProcessingWorker):
+@assign_queue(ARMADA_PRESENTATION_QUEUE_NAME)
+class ArmadaPresentationWorker(QueueProcessingWorker):
     """Produce optional factual UI copy without entering the Codex runtime path."""
 
     PREFETCH = 1
@@ -31,11 +31,11 @@ class PearPresentationWorker(QueueProcessingWorker):
     @override
     def setup(self) -> None:
         super().setup()
-        self.client = PearGeminiInteractionsClient(
-            api_key=settings.PEAR_GEMINI_INTERACTIONS_API_KEY,
+        self.client = ArmadaGeminiInteractionsClient(
+            api_key=settings.ARMADA_GEMINI_INTERACTIONS_API_KEY,
             timeout_seconds=3,
             output_limit=48,
-            url=settings.PEAR_GEMINI_INTERACTIONS_URL,
+            url=settings.ARMADA_GEMINI_INTERACTIONS_URL,
         )
 
     @override
@@ -50,13 +50,13 @@ class PearPresentationWorker(QueueProcessingWorker):
         if (
             run is None
             or run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}
-            or not pear_run_is_attended(run.id)
+            or not armada_run_is_attended(run.id)
         ):
             return
-        plan = pear_presentation_plan(run)
+        plan = armada_presentation_plan(run)
         if plan is None:
             return
-        current_step = pear_presentation_current_step(plan)
+        current_step = armada_presentation_current_step(plan)
         previous = run.events.filter(event_type="presentation").order_by("-id").first()
         previous_payload = previous.payload if previous is not None else {}
         previous_source_id = (
@@ -67,18 +67,18 @@ class PearPresentationWorker(QueueProcessingWorker):
         source_events = list(
             reversed(list(run.events.filter(id__lte=source_event_id).order_by("-id")[:50]))
         )
-        input_text = build_pear_presentation_input(
+        input_text = build_armada_presentation_input(
             plan=plan,
             events=source_events,
         )
         try:
-            overview = request_pear_presentation_overview(
+            overview = request_armada_presentation_overview(
                 self.client,
-                model=settings.PEAR_PRESENTATION_GEMINI_MODEL,
-                thinking_level=settings.PEAR_PRESENTATION_GEMINI_THINKING_LEVEL,
+                model=settings.ARMADA_PRESENTATION_GEMINI_MODEL,
+                thinking_level=settings.ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL,
                 input_text=input_text,
             )
-        except PearAgentRuntimeError:
+        except ArmadaAgentRuntimeError:
             logger.warning("Pear presentation update failed", exc_info=True)
             return
         if not overview:
@@ -90,10 +90,10 @@ class PearPresentationWorker(QueueProcessingWorker):
             if run.status not in {
                 AgentRun.QUEUED,
                 AgentRun.RUNNING,
-            } or not pear_run_is_attended(run.id):
+            } or not armada_run_is_attended(run.id):
                 return
-            latest_plan = pear_presentation_plan(run)
-            if latest_plan is None or pear_presentation_current_step(latest_plan) != current_step:
+            latest_plan = armada_presentation_plan(run)
+            if latest_plan is None or armada_presentation_current_step(latest_plan) != current_step:
                 return
             presentation_event = AgentRunEvent.objects.create(
                 run=run,
@@ -105,4 +105,4 @@ class PearPresentationWorker(QueueProcessingWorker):
                     "current_step": current_step,
                 },
             )
-        send_pear_run_event(run, presentation_event)
+        send_armada_run_event(run, presentation_event)

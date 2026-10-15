@@ -66,7 +66,7 @@ def set_bot_config(bot_profile: UserProfile, key: str, value: str) -> None:
 
 
 def load_bot_config_template(bot: str) -> dict[str, str]:
-    if bot == "pear":
+    if bot == "armada":
         return {}
 
     bot_module_name = f"zulip_bots.bots.{bot}"

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "output" / "pear-staging"
+DEFAULT_OUTPUT_DIR = REPO_ROOT / "output" / "armada-staging"
 DEFAULT_ENV_FILES = [
     REPO_ROOT.parent / "env.local",
     REPO_ROOT / ".env.local",
@@ -211,14 +211,14 @@ def write_ssh_config(output_dir: Path, ip_address: str, ssh_private_key: Path) -
     identity = ssh_private_key.expanduser()
     path.write_text(
         f"""\
-Host pear-staging
+Host armada-staging
     HostName {ip_address}
     User zulipdev
     IdentityFile {identity}
     StrictHostKeyChecking accept-new
     ServerAliveInterval 30
 
-Host pear-staging-root
+Host armada-staging-root
     HostName {ip_address}
     User root
     IdentityFile {identity}
@@ -342,13 +342,17 @@ def create(args: argparse.Namespace) -> None:
     print()
     print(f"State: {output_dir / 'server.json'}")
     print(f"URL: https://{fqdn}/devlogin/")
-    print(f"SSH: ssh -F {shlex.quote(str(ssh_config))} pear-staging")
-    print(f"Next: tools/armada_deploy/bootstrap_remote.sh {shlex.quote(str(output_dir / 'server.json'))}")
+    print(f"SSH: ssh -F {shlex.quote(str(ssh_config))} armada-staging")
+    print(
+        f"Next: tools/armada_deploy/bootstrap_remote.sh {shlex.quote(str(output_dir / 'server.json'))}"
+    )
 
 
 def destroy(args: argparse.Namespace) -> None:
     load_default_env(args.env_file)
-    do_token = require_env("DigitalOcean token", "DIGITALOCEAN_ACCESS_TOKEN", "DO_API_TOKEN", "DIGITAL_OCEAN_API")
+    do_token = require_env(
+        "DigitalOcean token", "DIGITALOCEAN_ACCESS_TOKEN", "DO_API_TOKEN", "DIGITAL_OCEAN_API"
+    )
     do = DigitalOcean(do_token)
     droplet = do.find_droplet(args.name)
     if droplet is None:
@@ -380,15 +384,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     create_parser = subparsers.add_parser("create")
     create_parser.set_defaults(func=create)
-    create_parser.add_argument("--name", default="pear-backpropaganda")
+    create_parser.add_argument("--name", default="armada-backpropaganda")
     create_parser.add_argument("--domain", default="backpropaganda.net")
-    create_parser.add_argument("--subdomain", default="pear")
+    create_parser.add_argument("--subdomain", default="armada")
     create_parser.add_argument("--region", default="nyc3")
     create_parser.add_argument("--size", default="s-4vcpu-8gb")
     create_parser.add_argument("--image", default="ubuntu-24-04-x64")
     create_parser.add_argument("--ttl", type=int, default=600)
-    create_parser.add_argument("--tag", action="append", default=["pear", "zulip-dev"])
-    create_parser.add_argument("--ssh-key-name", default="pear-staging")
+    create_parser.add_argument("--tag", action="append", default=["armada", "zulip-dev"])
+    create_parser.add_argument("--ssh-key-name", default="armada-staging")
     create_parser.add_argument("--ssh-public-key", default="~/.ssh/id_ed25519.pub")
     create_parser.add_argument("--ssh-private-key", default="~/.ssh/id_ed25519")
     create_parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
@@ -396,9 +400,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     destroy_parser = subparsers.add_parser("destroy")
     destroy_parser.set_defaults(func=destroy)
-    destroy_parser.add_argument("--name", default="pear-backpropaganda")
+    destroy_parser.add_argument("--name", default="armada-backpropaganda")
     destroy_parser.add_argument("--domain", default="backpropaganda.net")
-    destroy_parser.add_argument("--subdomain", default="pear")
+    destroy_parser.add_argument("--subdomain", default="armada")
     destroy_parser.add_argument("--delete-dns", action="store_true")
     destroy_parser.add_argument("--yes", action="store_true")
     return parser

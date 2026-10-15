@@ -21,26 +21,26 @@ from typing import Any, Final
 
 from django.utils.timezone import now as timezone_now
 
-from zerver.lib.armada import pear_topic_scope
-from zerver.lib.armada_agent import PearProcessIsolation, pear_isolated_command
-from zerver.lib.armada_artifact import PearArtifactError, canonicalize_pear_artifact
+from zerver.lib.armada import armada_topic_scope
+from zerver.lib.armada_agent import ArmadaProcessIsolation, armada_isolated_command
+from zerver.lib.armada_artifact import ArmadaArtifactError, canonicalize_armada_artifact
 from zerver.models import AgentMonitor, UserProfile
 
 logger = logging.getLogger(__name__)
 
-PEAR_MONITOR_MAX_PER_TOPIC: Final = 8
-PEAR_MONITOR_MAX_PER_REALM: Final = 32
-PEAR_MONITOR_MIN_CADENCE_SECONDS: Final = 5
-PEAR_MONITOR_MAX_CADENCE_SECONDS: Final = 86400
-PEAR_MONITOR_FAILURE_LIMIT: Final = 5
-PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS: Final = 8
-PEAR_MONITOR_RECIPE_OUTPUT_LIMIT: Final = 64_000
-PEAR_MONITOR_TICK_BATCH_LIMIT: Final = 16
-PEAR_MONITOR_SPEC_DIR: Final = ".pear/monitors"
-PEAR_MONITOR_SETUP_STALE_SECONDS: Final = 1800
-PEAR_MONITOR_PARSE_MODES: Final = frozenset({"text", "regex", "json", "static"})
+ARMADA_MONITOR_MAX_PER_TOPIC: Final = 8
+ARMADA_MONITOR_MAX_PER_REALM: Final = 32
+ARMADA_MONITOR_MIN_CADENCE_SECONDS: Final = 5
+ARMADA_MONITOR_MAX_CADENCE_SECONDS: Final = 86400
+ARMADA_MONITOR_FAILURE_LIMIT: Final = 5
+ARMADA_MONITOR_RECIPE_TIMEOUT_SECONDS: Final = 8
+ARMADA_MONITOR_RECIPE_OUTPUT_LIMIT: Final = 64_000
+ARMADA_MONITOR_TICK_BATCH_LIMIT: Final = 16
+ARMADA_MONITOR_SPEC_DIR: Final = ".armada/monitors"
+ARMADA_MONITOR_SETUP_STALE_SECONDS: Final = 1800
+ARMADA_MONITOR_PARSE_MODES: Final = frozenset({"text", "regex", "json", "static"})
 
-PEAR_MONITOR_CONTRACT_PREFIX: Final = """\
+ARMADA_MONITOR_CONTRACT_PREFIX: Final = """\
 You are setting up a Pear wall monitor: a small standing display block \
 that keeps one thing visible next to a Zulip topic. You run once, now, \
 to write its spec; after that a dumb scheduler re-runs your recipe on a \
@@ -90,11 +90,11 @@ watches.
 """
 
 
-def pear_monitor_spec_relative_path(monitor_id: int) -> str:
-    return f"{PEAR_MONITOR_SPEC_DIR}/monitor-{monitor_id}.json"
+def armada_monitor_spec_relative_path(monitor_id: int) -> str:
+    return f"{ARMADA_MONITOR_SPEC_DIR}/monitor-{monitor_id}.json"
 
 
-def build_pear_monitor_contract(
+def build_armada_monitor_contract(
     *,
     monitor_id: int,
     ask: str,
@@ -102,9 +102,9 @@ def build_pear_monitor_contract(
     topic: str,
     repair_error: str = "",
 ) -> str:
-    prefix = PEAR_MONITOR_CONTRACT_PREFIX % {
-        "timeout_seconds": PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS,
-        "spec_path": pear_monitor_spec_relative_path(monitor_id),
+    prefix = ARMADA_MONITOR_CONTRACT_PREFIX % {
+        "timeout_seconds": ARMADA_MONITOR_RECIPE_TIMEOUT_SECONDS,
+        "spec_path": armada_monitor_spec_relative_path(monitor_id),
     }
     lines = [
         prefix,
@@ -119,70 +119,70 @@ def build_pear_monitor_contract(
     return "\n".join(lines)
 
 
-class PearMonitorSpecError(Exception):
+class ArmadaMonitorSpecError(Exception):
     pass
 
 
 def _clean_string(value: Any, *, limit: int) -> str:
     if not isinstance(value, str | int | float):
-        raise PearMonitorSpecError("Expected a string value.")
+        raise ArmadaMonitorSpecError("Expected a string value.")
     return str(value).strip()[:limit]
 
 
-def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
+def armada_validate_monitor_spec(raw: Any) -> dict[str, Any]:
     """Validate a monitor wrapper around one canonical artifact document."""
     if not isinstance(raw, dict):
-        raise PearMonitorSpecError("Spec must be a JSON object.")
+        raise ArmadaMonitorSpecError("Spec must be a JSON object.")
     artifact_raw = raw.get("artifact")
     if artifact_raw is None and raw.get("version") == 1:
         artifact_raw = raw
         raw = {"artifact": raw, "recipe": {"parse": {"mode": "static"}}}
     try:
-        artifact, _encoded = canonicalize_pear_artifact(artifact_raw)
-    except PearArtifactError as error:
-        raise PearMonitorSpecError(f"Invalid artifact: {error}") from error
+        artifact, _encoded = canonicalize_armada_artifact(artifact_raw)
+    except ArmadaArtifactError as error:
+        raise ArmadaMonitorSpecError(f"Invalid artifact: {error}") from error
     title = _clean_string(raw.get("title", artifact.get("title", "")), limit=60)
     cadence = raw.get("cadence_seconds", 20)
     if not isinstance(cadence, int | float) or isinstance(cadence, bool):
-        raise PearMonitorSpecError("cadence_seconds must be a number.")
+        raise ArmadaMonitorSpecError("cadence_seconds must be a number.")
     cadence = int(
-        min(max(cadence, PEAR_MONITOR_MIN_CADENCE_SECONDS), PEAR_MONITOR_MAX_CADENCE_SECONDS)
+        min(max(cadence, ARMADA_MONITOR_MIN_CADENCE_SECONDS), ARMADA_MONITOR_MAX_CADENCE_SECONDS)
     )
 
     recipe = raw.get("recipe", {"parse": {"mode": "static"}})
     if not isinstance(recipe, dict):
-        raise PearMonitorSpecError("recipe must be an object.")
+        raise ArmadaMonitorSpecError("recipe must be an object.")
     command = _clean_string(recipe.get("command", ""), limit=2000)
     parse = recipe.get("parse")
     if not isinstance(parse, dict):
-        raise PearMonitorSpecError("recipe.parse must be an object.")
+        raise ArmadaMonitorSpecError("recipe.parse must be an object.")
     mode = parse.get("mode")
-    if mode not in PEAR_MONITOR_PARSE_MODES:
-        raise PearMonitorSpecError(f"Unknown parse mode: {mode!r}.")
+    if mode not in ARMADA_MONITOR_PARSE_MODES:
+        raise ArmadaMonitorSpecError(f"Unknown parse mode: {mode!r}.")
     if mode != "static" and not command:
-        raise PearMonitorSpecError("recipe.command is required unless parse mode is static.")
+        raise ArmadaMonitorSpecError("recipe.command is required unless parse mode is static.")
     pattern = ""
     if mode == "regex":
         pattern = _clean_string(parse.get("pattern", ""), limit=1000)
         try:
             re.compile(pattern)
         except re.error as error:
-            raise PearMonitorSpecError(f"Invalid regex pattern: {error}") from error
+            raise ArmadaMonitorSpecError(f"Invalid regex pattern: {error}") from error
     bindings = recipe.get("bindings", {})
     if not isinstance(bindings, dict):
-        raise PearMonitorSpecError("recipe.bindings must be an object.")
+        raise ArmadaMonitorSpecError("recipe.bindings must be an object.")
     clean_bindings: dict[str, str] = {}
     for key, source in bindings.items():
         if not re.fullmatch(r"data\.[A-Za-z][A-Za-z0-9_-]{0,39}", str(key)):
-            raise PearMonitorSpecError(f"Binding key must be a bounded data.<name>: {key!r}.")
+            raise ArmadaMonitorSpecError(f"Binding key must be a bounded data.<name>: {key!r}.")
         if not isinstance(source, str) or not re.fullmatch(
             r"(group:[A-Za-z_][A-Za-z0-9_]*|path:[\w.\[\]-]+|text|lines:\d+|literal:.*)",
             source,
         ):
-            raise PearMonitorSpecError(f"Bad binding source: {source!r}.")
+            raise ArmadaMonitorSpecError(f"Bad binding source: {source!r}.")
         clean_bindings[str(key)] = source
     if len(clean_bindings) > 32:
-        raise PearMonitorSpecError("recipe.bindings exceeds 32 data fields.")
+        raise ArmadaMonitorSpecError("recipe.bindings exceeds 32 data fields.")
 
     return {
         "title": title,
@@ -196,11 +196,11 @@ def pear_validate_monitor_spec(raw: Any) -> dict[str, Any]:
     }
 
 
-def pear_monitor_run_recipe_command(
+def armada_monitor_run_recipe_command(
     command: str,
     *,
     workdir: str,
-    process_isolation: PearProcessIsolation | None,
+    process_isolation: ArmadaProcessIsolation | None,
 ) -> str:
     """Run a recipe command, isolation-aware, with a stripped environment
     so worker secrets never leak into agent-authored shell. The chdir
@@ -212,7 +212,7 @@ def pear_monitor_run_recipe_command(
             "static artifacts remain available without process isolation"
         )
     wrapped = f"cd {shlex.quote(workdir)} && ({command})"
-    argv = pear_isolated_command(["/usr/bin/env", "bash", "-c", wrapped], process_isolation)
+    argv = armada_isolated_command(["/usr/bin/env", "bash", "-c", wrapped], process_isolation)
     env = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
         "HOME": process_isolation.home,
@@ -223,13 +223,13 @@ def pear_monitor_run_recipe_command(
         env=env,
         capture_output=True,
         text=True,
-        timeout=PEAR_MONITOR_RECIPE_TIMEOUT_SECONDS,
+        timeout=ARMADA_MONITOR_RECIPE_TIMEOUT_SECONDS,
         check=False,
     )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise OSError(f"recipe exited {completed.returncode}: {detail[:300]}")
-    return completed.stdout[:PEAR_MONITOR_RECIPE_OUTPUT_LIMIT]
+    return completed.stdout[:ARMADA_MONITOR_RECIPE_OUTPUT_LIMIT]
 
 
 def _json_path_lookup(data: Any, path: str) -> Any:
@@ -249,7 +249,7 @@ def _json_path_lookup(data: Any, path: str) -> Any:
     return current
 
 
-def pear_monitor_bind_data(recipe: dict[str, Any], output: str) -> dict[str, Any]:
+def armada_monitor_bind_data(recipe: dict[str, Any], output: str) -> dict[str, Any]:
     """Evaluate recipe output into bounded artifact data fields."""
     parse = recipe.get("parse", {})
     mode = parse.get("mode", "text")
@@ -296,11 +296,11 @@ def pear_monitor_bind_data(recipe: dict[str, Any], output: str) -> dict[str, Any
     return bound
 
 
-def pear_monitor_apply_tick(
+def armada_monitor_apply_tick(
     monitor: AgentMonitor,
     *,
     workdir: str,
-    process_isolation: PearProcessIsolation | None,
+    process_isolation: ArmadaProcessIsolation | None,
 ) -> None:
     """Run one tick for a live monitor and persist the outcome."""
     now = timezone_now()
@@ -309,16 +309,16 @@ def pear_monitor_apply_tick(
         if recipe.get("parse", {}).get("mode") == "static":
             bound: dict[str, Any] = {}
         else:
-            output = pear_monitor_run_recipe_command(
+            output = armada_monitor_run_recipe_command(
                 recipe.get("command", ""),
                 workdir=workdir,
                 process_isolation=process_isolation,
             )
-            bound = pear_monitor_bind_data(recipe, output)
+            bound = armada_monitor_bind_data(recipe, output)
     except (OSError, subprocess.TimeoutExpired, ValueError) as error:
         monitor.consecutive_failures += 1
         monitor.last_error = str(error)[:500]
-        if monitor.consecutive_failures >= PEAR_MONITOR_FAILURE_LIMIT:
+        if monitor.consecutive_failures >= ARMADA_MONITOR_FAILURE_LIMIT:
             monitor.status = AgentMonitor.ERROR
             monitor.next_due_at = None
         else:
@@ -359,17 +359,17 @@ def pear_monitor_apply_tick(
     )
 
 
-def pear_run_due_monitor_ticks() -> int:
+def armada_run_due_monitor_ticks() -> int:
     """One scheduler pass; returns how many monitors ticked. Runs on the
     worker's tick thread — model-free by construction."""
     from zerver.lib.armada_worker import (
-        pear_topic_process_isolation,
-        pear_worker_workdir_for_topic,
-        pear_workspace_is_paused,
+        armada_topic_process_isolation,
+        armada_worker_workdir_for_topic,
+        armada_workspace_is_paused,
     )
 
     now = timezone_now()
-    stale_setup_cutoff = now - timedelta(seconds=PEAR_MONITOR_SETUP_STALE_SECONDS)
+    stale_setup_cutoff = now - timedelta(seconds=ARMADA_MONITOR_SETUP_STALE_SECONDS)
     AgentMonitor.objects.filter(
         status=AgentMonitor.PROVISIONING, date_created__lt=stale_setup_cutoff
     ).update(status=AgentMonitor.ERROR, last_error="Setup never completed.", date_updated=now)
@@ -377,31 +377,31 @@ def pear_run_due_monitor_ticks() -> int:
     due = list(
         AgentMonitor.objects.select_related("bot_profile")
         .filter(status=AgentMonitor.LIVE, next_due_at__lte=now)
-        .order_by("next_due_at")[:PEAR_MONITOR_TICK_BATCH_LIMIT]
+        .order_by("next_due_at")[:ARMADA_MONITOR_TICK_BATCH_LIMIT]
     )
     ticked = 0
     for monitor in due:
         try:
-            if pear_workspace_is_paused(
+            if armada_workspace_is_paused(
                 monitor.bot_profile, stream=monitor.stream_name, topic=monitor.topic_name
             ):
                 monitor.next_due_at = now + timedelta(seconds=monitor.cadence_seconds)
                 monitor.save(update_fields=["next_due_at"])
                 continue
-            workdir = pear_worker_workdir_for_topic(
+            workdir = armada_worker_workdir_for_topic(
                 monitor.bot_profile, stream=monitor.stream_name, topic=monitor.topic_name
             )
-            process_isolation = pear_topic_process_isolation(
+            process_isolation = armada_topic_process_isolation(
                 monitor.bot_profile, stream=monitor.stream_name, topic=monitor.topic_name
             )
-            pear_monitor_apply_tick(monitor, workdir=workdir, process_isolation=process_isolation)
+            armada_monitor_apply_tick(monitor, workdir=workdir, process_isolation=process_isolation)
             ticked += 1
         except Exception:
             logger.exception("Pear monitor tick failed for monitor %s", monitor.id)
     return ticked
 
 
-def pear_apply_monitor_setup_result(
+def armada_apply_monitor_setup_result(
     bot_profile: UserProfile,
     anchor_message_id: int,
     *,
@@ -410,7 +410,7 @@ def pear_apply_monitor_setup_result(
 ) -> None:
     """Post-turn hook: after a MONITOR run settles, read the spec file
     the agent wrote in the worktree and bring the monitor live."""
-    from zerver.lib.armada_worker import pear_read_bytes_path
+    from zerver.lib.armada_worker import armada_read_bytes_path
     from zerver.models import AgentRun
 
     monitor = AgentMonitor.objects.filter(
@@ -419,15 +419,15 @@ def pear_apply_monitor_setup_result(
     if monitor is None:
         return
     now = timezone_now()
-    spec_path = Path(workdir) / pear_monitor_spec_relative_path(monitor.id)
+    spec_path = Path(workdir) / armada_monitor_spec_relative_path(monitor.id)
     try:
-        raw_bytes = pear_read_bytes_path(
+        raw_bytes = armada_read_bytes_path(
             spec_path, isolation_username=isolation_username, max_bytes=100_000
         )
         if not raw_bytes:
-            raise PearMonitorSpecError("The agent did not write the spec file.")
-        spec = pear_validate_monitor_spec(json.loads(raw_bytes))
-    except (OSError, json.JSONDecodeError, PearMonitorSpecError) as error:
+            raise ArmadaMonitorSpecError("The agent did not write the spec file.")
+        spec = armada_validate_monitor_spec(json.loads(raw_bytes))
+    except (OSError, json.JSONDecodeError, ArmadaMonitorSpecError) as error:
         monitor.status = AgentMonitor.ERROR
         monitor.last_error = f"Setup failed: {error}"[:500]
         monitor.date_updated = now
@@ -464,7 +464,7 @@ def pear_apply_monitor_setup_result(
     )
 
 
-def pear_create_monitor_from_spec(
+def armada_create_monitor_from_spec(
     *,
     realm: Any,
     bot_profile: UserProfile,
@@ -478,8 +478,8 @@ def pear_create_monitor_from_spec(
     """Create a LIVE monitor directly from a validated spec — the
     pin-to-wall path: an artifact the agent already composed in chat needs
     no setup run, no DM anchor, no provisioning state."""
-    spec = pear_validate_monitor_spec(raw_spec)
-    stream_name, topic_name = pear_topic_scope(stream_name, topic_name)
+    spec = armada_validate_monitor_spec(raw_spec)
+    stream_name, topic_name = armada_topic_scope(stream_name, topic_name)
     return AgentMonitor.objects.create(
         realm=realm,
         bot_profile=bot_profile,
@@ -497,7 +497,7 @@ def pear_create_monitor_from_spec(
     )
 
 
-def serialize_pear_monitor(monitor: AgentMonitor) -> dict[str, Any]:
+def serialize_armada_monitor(monitor: AgentMonitor) -> dict[str, Any]:
     return {
         "id": monitor.id,
         "title": monitor.title,

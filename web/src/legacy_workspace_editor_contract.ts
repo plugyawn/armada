@@ -1,48 +1,48 @@
 import type {
-    PearWorkspaceEntry,
-    PearWorkspaceFile,
-    get_pear_workspace_file,
-    pear_workspace_raw_url,
-    put_pear_workspace_file,
+    ArmadaWorkspaceEntry,
+    ArmadaWorkspaceFile,
+    armada_workspace_raw_url,
+    get_armada_workspace_file,
+    put_armada_workspace_file,
 } from "./legacy_workspace_api.ts";
 import type {
-    PearWorkspaceMarkdownEditor,
-    PearWorkspaceMarkdownEditorResult,
+    ArmadaWorkspaceMarkdownEditor,
+    ArmadaWorkspaceMarkdownEditorResult,
 } from "./legacy_workspace_markdown_editor.ts";
 import type {
-    PearWorkspaceSourceEditor,
-    create_pear_workspace_source_editor,
+    ArmadaWorkspaceSourceEditor,
+    create_armada_workspace_source_editor,
 } from "./legacy_workspace_source_editor.ts";
 import type {
-    PearWorkspaceDocumentIdentity,
-    PearWorkspaceDocumentSession,
-    PearWorkspaceStoreState,
+    ArmadaWorkspaceDocumentIdentity,
+    ArmadaWorkspaceDocumentSession,
+    ArmadaWorkspaceStoreState,
 } from "./legacy_workspace_store.ts";
 
-export type PearWorkspaceEditorSurface =
+export type ArmadaWorkspaceEditorSurface =
     | {kind: "empty"}
-    | {kind: "loading"; entry: PearWorkspaceEntry}
-    | {kind: "text"; entry: PearWorkspaceEntry; file: PearWorkspaceFile}
-    | {kind: "raster"; entry: PearWorkspaceEntry; rawUrl: string}
-    | {kind: "binary"; entry: PearWorkspaceEntry; message: string}
+    | {kind: "loading"; entry: ArmadaWorkspaceEntry}
+    | {kind: "text"; entry: ArmadaWorkspaceEntry; file: ArmadaWorkspaceFile}
+    | {kind: "raster"; entry: ArmadaWorkspaceEntry; rawUrl: string}
+    | {kind: "binary"; entry: ArmadaWorkspaceEntry; message: string}
     | {
           kind: "oversize";
-          entry: PearWorkspaceEntry;
+          entry: ArmadaWorkspaceEntry;
           maxBytes: number;
           rawAvailable: boolean;
       }
     | {
           kind: "error";
-          entry: PearWorkspaceEntry | undefined;
+          entry: ArmadaWorkspaceEntry | undefined;
           message: string;
           action?: "retry" | "source";
       };
 
-export type PearWorkspaceEditorSnapshot = {
-    surface: PearWorkspaceEditorSurface;
-    store: PearWorkspaceStoreState;
-    activeDocument: PearWorkspaceDocumentSession | undefined;
-    activeIdentity: PearWorkspaceDocumentIdentity | undefined;
+export type ArmadaWorkspaceEditorSnapshot = {
+    surface: ArmadaWorkspaceEditorSurface;
+    store: ArmadaWorkspaceStoreState;
+    activeDocument: ArmadaWorkspaceDocumentSession | undefined;
+    activeIdentity: ArmadaWorkspaceDocumentIdentity | undefined;
     mountedAdapter: "rich" | "source" | undefined;
     richModeLoading: boolean;
     richModeIssue:
@@ -51,21 +51,21 @@ export type PearWorkspaceEditorSnapshot = {
     notice: string | undefined;
 };
 
-export type PearWorkspaceEditorSaveEvent = {
+export type ArmadaWorkspaceEditorSaveEvent = {
     oldEntryId: string;
     newEntryId: string;
     path: string;
     workspaceRevision: number;
 };
 
-export type PearWorkspaceEditorSelectionContext = {
+export type ArmadaWorkspaceEditorSelectionContext = {
     path: string;
     selectedText: string;
     startLine?: number;
     endLine?: number;
 };
 
-export type PearWorkspaceEditorPreferences = {
+export type ArmadaWorkspaceEditorPreferences = {
     mode: "rich" | "source";
     documents: Record<
         string,
@@ -76,8 +76,8 @@ export type PearWorkspaceEditorPreferences = {
     >;
 };
 
-export type PearWorkspaceRichEditorModule = {
-    create_pear_workspace_markdown_editor: (options: {
+export type ArmadaWorkspaceRichEditorModule = {
+    create_armada_workspace_markdown_editor: (options: {
         root: HTMLElement;
         markdown: string;
         editRevision: number;
@@ -96,35 +96,35 @@ export type PearWorkspaceRichEditorModule = {
             editRevision: number;
             message: string;
         }) => void;
-    }) => Promise<PearWorkspaceMarkdownEditorResult>;
+    }) => Promise<ArmadaWorkspaceMarkdownEditorResult>;
 };
 
-export type PearWorkspaceSourceEditorModule = {
-    create_pear_workspace_source_editor: typeof create_pear_workspace_source_editor;
+export type ArmadaWorkspaceSourceEditorModule = {
+    create_armada_workspace_source_editor: typeof create_armada_workspace_source_editor;
 };
 
-export type PearWorkspaceScheduledWork = {cancel: () => void};
+export type ArmadaWorkspaceScheduledWork = {cancel: () => void};
 
-export type PearWorkspaceEditorDependencies = {
-    getFile: typeof get_pear_workspace_file;
-    putFile: typeof put_pear_workspace_file;
-    rawUrl: typeof pear_workspace_raw_url;
-    loadSourceEditor: () => Promise<PearWorkspaceSourceEditorModule>;
-    loadRichEditor: () => Promise<PearWorkspaceRichEditorModule>;
-    scheduleSourceFlush: (callback: () => void) => PearWorkspaceScheduledWork;
-    scheduleAutosave: (callback: () => void) => PearWorkspaceScheduledWork;
+export type ArmadaWorkspaceEditorDependencies = {
+    getFile: typeof get_armada_workspace_file;
+    putFile: typeof put_armada_workspace_file;
+    rawUrl: typeof armada_workspace_raw_url;
+    loadSourceEditor: () => Promise<ArmadaWorkspaceSourceEditorModule>;
+    loadRichEditor: () => Promise<ArmadaWorkspaceRichEditorModule>;
+    scheduleSourceFlush: (callback: () => void) => ArmadaWorkspaceScheduledWork;
+    scheduleAutosave: (callback: () => void) => ArmadaWorkspaceScheduledWork;
 };
 
-export type PearWorkspaceEditorController = {
+export type ArmadaWorkspaceEditorController = {
     activateWorkspace: (
         workspaceId: string,
         workspaceRevision: number,
         limits: {rawBytes: number | null; textBytes: number; writable: boolean},
-        preferences?: PearWorkspaceEditorPreferences,
+        preferences?: ArmadaWorkspaceEditorPreferences,
     ) => void;
-    open: (entry: PearWorkspaceEntry, preferredMode?: "rich" | "source") => Promise<void>;
+    open: (entry: ArmadaWorkspaceEntry, preferredMode?: "rich" | "source") => Promise<void>;
     reconcileEntry: (
-        entry: PearWorkspaceEntry,
+        entry: ArmadaWorkspaceEntry,
         workspaceRevision: number,
         previousPath?: string,
     ) => Promise<"conflict" | "current" | "error" | "missing">;
@@ -134,27 +134,27 @@ export type PearWorkspaceEditorController = {
     save: () => Promise<void>;
     discardChanges: () => Promise<void>;
     resolveConflict: (resolution: "overwrite" | "reload") => Promise<void>;
-    getSnapshot: () => PearWorkspaceEditorSnapshot;
-    getSelectionContext: () => PearWorkspaceEditorSelectionContext | undefined;
-    getPreferences: () => PearWorkspaceEditorPreferences;
+    getSnapshot: () => ArmadaWorkspaceEditorSnapshot;
+    getSelectionContext: () => ArmadaWorkspaceEditorSelectionContext | undefined;
+    getPreferences: () => ArmadaWorkspaceEditorPreferences;
     destroy: () => Promise<void>;
 };
 
-export type PearWorkspaceEditorOptions = {
+export type ArmadaWorkspaceEditorOptions = {
     root: HTMLElement;
-    onUpdate: (snapshot: PearWorkspaceEditorSnapshot) => void;
-    onSaved?: (event: PearWorkspaceEditorSaveEvent) => void;
-    dependencies?: Partial<PearWorkspaceEditorDependencies>;
+    onUpdate: (snapshot: ArmadaWorkspaceEditorSnapshot) => void;
+    onSaved?: (event: ArmadaWorkspaceEditorSaveEvent) => void;
+    dependencies?: Partial<ArmadaWorkspaceEditorDependencies>;
 };
 
-export type PearWorkspaceMountedAdapter =
+export type ArmadaWorkspaceMountedAdapter =
     | {
           kind: "source";
-          identity: PearWorkspaceDocumentIdentity;
-          editor: PearWorkspaceSourceEditor;
+          identity: ArmadaWorkspaceDocumentIdentity;
+          editor: ArmadaWorkspaceSourceEditor;
       }
     | {
           kind: "rich";
-          identity: PearWorkspaceDocumentIdentity;
-          editor: PearWorkspaceMarkdownEditor;
+          identity: ArmadaWorkspaceDocumentIdentity;
+          editor: ArmadaWorkspaceMarkdownEditor;
       };

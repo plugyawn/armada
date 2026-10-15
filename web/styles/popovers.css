@@ -55,7 +55,7 @@
 }
 
 .tippy-box[data-theme="dropdown-widget"] {
-    border-radius: var(--pear-radius-card);
+    border-radius: var(--legacy-radius-card);
     background-color: var(--color-background-dropdown-widget);
     border: 1px solid var(--color-border-dropdown-widget);
     box-shadow:
@@ -82,7 +82,7 @@
 .tippy-box[data-theme="popover-menu"] {
     background-color: var(--color-background-popover-menu);
     border: 1px solid var(--color-border-popover-menu);
-    border-radius: var(--pear-radius-card);
+    border-radius: var(--legacy-radius-card);
     box-shadow: var(--box-shadow-popover-menu);
     font-size: 1.0714em; /* 15px at 14px em */
 
@@ -997,7 +997,7 @@ ul.popover-group-menu-member-list {
     max-height: 85vh;
     overflow-x: hidden;
     user-select: none;
-    border-radius: var(--pear-radius-card);
+    border-radius: var(--legacy-radius-card);
 
     .simplebar-content {
         /* Set the popover menu width equal to the width of the

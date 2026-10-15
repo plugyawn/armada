@@ -28,9 +28,9 @@ organization would find useful.
 
 Pear uses Zulip's channel and topic model as the shared work surface for
 pair-programming with an AI agent. The initial Pear contract reserves the
-`pair-programming` channel and `pear/` topic prefix for agent-assisted coding
+`pair-programming` channel and `armada/` topic prefix for agent-assisted coding
 sessions. A typical session starts by mentioning `@Pear` in the
-`pair-programming > pear/session` topic with a concrete coding task; Pear then
+`pair-programming > armada/session` topic with a concrete coding task; Pear then
 keeps its checklist and verification evidence in that same topic so the whole
 team can steer and review the work.
 
@@ -115,8 +115,8 @@ owner/reviewer routing, scope classification, priority/risk, and next action.
 `Meta Y` asks Pear to run and repair local verification, while `Meta X` drafts a
 ticket, issue, spec, doc, or release note from the active topic.
 The server exposes the same startup contract to clients through
-`GET /json/pear/session` and `GET /api/v1/pear/session`. It also exposes
-`GET /json/pear/session/active` and `GET /api/v1/pear/session/active`, which
+`GET /json/armada/session` and `GET /api/v1/armada/session`. It also exposes
+`GET /json/armada/session/active` and `GET /api/v1/armada/session/active`, which
 summarize the latest checklist state from messages in the durable Pear topic.
 The active-session response includes worker readiness fields so a Pear runtime
 can tell when a topic is ready for work, paused, missing, or still waiting for a
@@ -134,7 +134,7 @@ not trigger follow-up runs.
 The server registers Pear as an embedded bot service so a configured Pear bot
 can acknowledge `@Pear` mentions with the first in-thread checklist before the
 full agent runtime takes over. The embedded bot dispatches real work to the
-dedicated `pear_worker` queue, which posts in-thread startup progress before
+dedicated `armada_worker` queue, which posts in-thread startup progress before
 invoking Codex, including durable `Runtime:` and `Verification:` artifact lines,
 then posts a separate completion message with the configured runtime's
 verification artifacts. The worker refuses to run when the active-session
@@ -165,7 +165,7 @@ Memory-forget controls are also handled as non-worker audit responses:
 `@Pear forget latest memory` resolves to the latest active `Memory:` line in the
 topic. Newer matching `Memory:` lines restore that memory in active views.
 The worker uses a standard Codex agent runtime selected by
-`PEAR_WORKER_AGENT_RUNTIME`. Prefer `codex-agents-mcp` for first-class tool
+`ARMADA_WORKER_AGENT_RUNTIME`. Prefer `codex-agents-mcp` for first-class tool
 usage; it runs through the OpenAI Agents SDK with Codex exposed as an MCP
 server. `codex-sdk` runs through the official `openai-codex` Python SDK, which
 controls the local Codex app-server over JSON-RPC for direct Codex thread,
@@ -193,18 +193,18 @@ Codex threads as well; when the installed SDK exposes a thread resume API, Pear
 passes the documented sandbox and model arguments, plus cwd/resume arguments
 when the installed SDK method supports them, and posts the thread ID again so
 later turns keep the same continuity.
-The parent Pear workspace includes `tools/pear_runtime_smoke.py` for live
+The parent Pear workspace includes `tools/armada_runtime_smoke.py` for live
 runtime verification: it sends a uniquely marked `@Pear` request to a Pear
 topic, waits for exactly one worker progress post with a `Runtime:` artifact and
 an artifact line, and checks the active-session endpoint for the latest request
 and verification.
-For local development, `tools/pear_dev_smoke.py` starts Zulip's
+For local development, `tools/armada_dev_smoke.py` starts Zulip's
 `tools/run-dev --test` server with the disabled Pear worker runtime, including
 the queue workers required for embedded-bot dispatch and the dedicated
-`pear_worker` runtime queue. It provisions the Pear embedded bot and runs that
+`armada_worker` runtime queue. It provisions the Pear embedded bot and runs that
 smoke check without invoking Codex or an external model provider.
 For first-class tool orchestration, set
-`PEAR_WORKER_AGENT_RUNTIME = "codex-agents-mcp"` and install `openai-agents` in
+`ARMADA_WORKER_AGENT_RUNTIME = "codex-agents-mcp"` and install `openai-agents` in
 the worker environment. `Meta Y` in zulip-terminal opens a verify-changes
 starter that asks Pear to run checks through that configured runtime, fix
 focused failures, and post command/result evidence. `Meta X` opens a
@@ -212,20 +212,20 @@ draft-artifact starter that asks Pear to turn the active topic into a ticket,
 issue, spec, doc, or release note, with `Doc:`, `Ticket:`, and `Issue:` artifact
 lines recognized as durable outputs. For a local Codex CLI
 worker, set
-`PEAR_WORKER_AGENT_RUNTIME = "codex-exec"` and `PEAR_WORKER_WORKDIR` to the
+`ARMADA_WORKER_AGENT_RUNTIME = "codex-exec"` and `ARMADA_WORKER_WORKDIR` to the
 Pear control-plane checkout. Normal Codex runs execute from isolated workdirs
-under `PEAR_TOPIC_WORKDIR_ROOT`, not from the host Zulip checkout. Use
-`PEAR_WORKER_SANDBOX = "workspace-write"` for topic work. Pear downgrades
+under `ARMADA_TOPIC_WORKDIR_ROOT`, not from the host Zulip checkout. Use
+`ARMADA_WORKER_SANDBOX = "workspace-write"` for topic work. Pear downgrades
 `danger-full-access` for topic workdirs and refuses to launch Codex when the
 resolved workdir is outside the Pear topic workspace root.
 
 For a hosted server, follow "Security" in `docs/armada/deploy.md`, which
 supersedes this section: keep the default `codex-sandbox` isolation with
 `workspace-write` and restrict who drives the agent. The
-`PEAR_TOPIC_ISOLATION_BACKEND = "os-user"` backend below runs agents
+`ARMADA_TOPIC_ISOLATION_BACKEND = "os-user"` backend below runs agents
 without Codex's sandbox (so with network access), and its root-owned
-`pear-topic-isolate` helper is not packaged for a production install.
-That backend creates a stable `pear-<topic digest>` Unix user per Zulip topic,
+`armada-topic-isolate` helper is not packaged for a production install.
+That backend creates a stable `armada-<topic digest>` Unix user per Zulip topic,
 copies the worker Codex login into that user's private home, chowns the topic
 workdir to that user, and launches Codex through `sudo -u <topic user>`.
 Topic checkouts in this mode are independent clones/directories. Pear refuses
@@ -233,17 +233,17 @@ to launch from a legacy Git worktree whose `.git` file points back into a
 shared checkout, because that shares Git admin/object state across topics.
 
 Use
-`PEAR_WORKER_APPROVAL_POLICY` and `PEAR_WORKER_MODEL` to make the agent's
+`ARMADA_WORKER_APPROVAL_POLICY` and `ARMADA_WORKER_MODEL` to make the agent's
 command and model policy explicit. The approval-policy setting accepts
 currently documented Codex policies: `never`, `on-request`, and `untrusted`.
 Pear passes it through the Agents-MCP and CLI runtimes where the official Codex
 surfaces expose that setting directly. For the SDK path, install `openai-codex`
 in the worker environment and set
-`PEAR_WORKER_AGENT_RUNTIME = "codex-sdk"`.
+`ARMADA_WORKER_AGENT_RUNTIME = "codex-sdk"`.
 Pear records first-class database worker run rows for trigger message IDs,
 tracking queued, running, done, and failed states so duplicate embedded-bot
 queue deliveries do not create duplicate worker posts for the same request.
-`GET /json/pear/config` and `GET /api/v1/pear/config` report whether embedded
+`GET /json/armada/config` and `GET /api/v1/armada/config` report whether embedded
 bots are enabled and which active Pear embedded bot identity is selected for the
 realm, including all matching Pear bot identities. The payload also includes
 `setup_steps`, `worker_agent_runtime`, `worker_runtime_ready`,
@@ -258,7 +258,7 @@ executable for `codex-exec`. Runtime login is reported as a first-class setup
 method: `codex-exec` and `codex-sdk` use Codex CLI login in the worker
 environment, while `codex-agents-mcp` also needs `OPENAI_API_KEY` or
 `OPENAI_ADMIN_KEY` for the Agents SDK orchestrator. Administrators can use
-`POST /json/pear/config` or `POST /api/v1/pear/config` to provision the default
+`POST /json/armada/config` or `POST /api/v1/armada/config` to provision the default
 Pear embedded bot identity through Zulip's standard bot creation path or to
 select one existing Pear bot with `selected_bot_user_id`. The organization bot
 settings page surfaces the same setup flow so administrators can provision and

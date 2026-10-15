@@ -256,6 +256,11 @@ def run() -> None:
         description="The palette files are what tools/armada/palette.py writes, and pass its gates",
     )
     linter_config.external_linter(
+        "armada-artifact-contract",
+        ["tools/armada/artifact_contract.py", "--check"],
+        description="The artifact contract's copies are what tools/armada/artifact_contract.py writes",
+    )
+    linter_config.external_linter(
         "thirdparty",
         ["tools/check-thirdparty"],
         description="Check docs/THIRDPARTY copyright file syntax",

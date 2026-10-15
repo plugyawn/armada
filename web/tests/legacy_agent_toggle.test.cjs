@@ -13,10 +13,10 @@ mock_esm("../src/compose_recipient", {
     },
 });
 
-const compose_pear = zrequire("legacy_agent_toggle");
+const legacy_agent_toggle = zrequire("legacy_agent_toggle");
 
 run_test("leaving Pear mode restores the canonical compose placeholder", () => {
     placeholder_refreshes = 0;
-    compose_pear.clear();
+    legacy_agent_toggle.clear();
     assert.equal(placeholder_refreshes, 1);
 });

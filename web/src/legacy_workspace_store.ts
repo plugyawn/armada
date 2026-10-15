@@ -1,28 +1,28 @@
-export type PearWorkspaceEditorMode = "rich" | "source";
+export type ArmadaWorkspaceEditorMode = "rich" | "source";
 
-export type PearWorkspaceRichEligibility = "source_only" | "supported" | "unchecked";
+export type ArmadaWorkspaceRichEligibility = "source_only" | "supported" | "unchecked";
 
-export type PearWorkspaceDocumentState = "clean" | "conflict" | "dirty" | "error" | "saving";
+export type ArmadaWorkspaceDocumentState = "clean" | "conflict" | "dirty" | "error" | "saving";
 
-export type PearWorkspaceDocumentAuthority = "current" | "detached" | "stale";
+export type ArmadaWorkspaceDocumentAuthority = "current" | "detached" | "stale";
 
-export type PearWorkspaceSourceSelection = {
+export type ArmadaWorkspaceSourceSelection = {
     anchor: number;
     head: number;
 };
 
-export type PearWorkspaceRichSelection = {
+export type ArmadaWorkspaceRichSelection = {
     anchor: number;
     head: number;
 };
 
-export type PearWorkspaceSerialization = {
+export type ArmadaWorkspaceSerialization = {
     state: "error" | "idle" | "scheduled" | "serializing";
     requestedRevision: number | undefined;
     error: string | undefined;
 };
 
-export type PearWorkspaceSaveSnapshot = {
+export type ArmadaWorkspaceSaveSnapshot = {
     workspaceId: string;
     workspaceRevision: number;
     entryId: string;
@@ -33,14 +33,14 @@ export type PearWorkspaceSaveSnapshot = {
     text: string;
 };
 
-export type PearWorkspaceConflict = {
+export type ArmadaWorkspaceConflict = {
     remoteText: string;
     remoteVersion: string;
     remoteEntryId: string;
     remoteWorkspaceRevision: number;
 };
 
-export type PearWorkspaceDocumentSession = {
+export type ArmadaWorkspaceDocumentSession = {
     entryId: string;
     path: string;
     requestGeneration: number;
@@ -48,28 +48,28 @@ export type PearWorkspaceDocumentSession = {
     maxBytes: number;
     savedText: string;
     currentText: string;
-    editorMode: PearWorkspaceEditorMode;
-    richModeEligibility: PearWorkspaceRichEligibility;
+    editorMode: ArmadaWorkspaceEditorMode;
+    richModeEligibility: ArmadaWorkspaceRichEligibility;
     serializedRevision: number;
-    serialization: PearWorkspaceSerialization;
-    state: PearWorkspaceDocumentState;
+    serialization: ArmadaWorkspaceSerialization;
+    state: ArmadaWorkspaceDocumentState;
     editRevision: number;
     acknowledgedRevision: number;
-    saveInFlight: PearWorkspaceSaveSnapshot | undefined;
-    conflict: PearWorkspaceConflict | undefined;
+    saveInFlight: ArmadaWorkspaceSaveSnapshot | undefined;
+    conflict: ArmadaWorkspaceConflict | undefined;
     error: string | undefined;
-    authority: PearWorkspaceDocumentAuthority;
+    authority: ArmadaWorkspaceDocumentAuthority;
     sourceView: {
-        selection: PearWorkspaceSourceSelection;
+        selection: ArmadaWorkspaceSourceSelection;
         scrollTop: number;
     };
     richView: {
-        selection: PearWorkspaceRichSelection | undefined;
+        selection: ArmadaWorkspaceRichSelection | undefined;
         scrollTop: number;
     };
 };
 
-export type PearWorkspaceState = {
+export type ArmadaWorkspaceState = {
     workspaceId: string;
     workspaceRevision: number;
     requestGeneration: number;
@@ -81,24 +81,24 @@ export type PearWorkspaceState = {
               requestGeneration: number;
           }
         | undefined;
-    documents: Map<string, PearWorkspaceDocumentSession>;
-    markdownModePreference: PearWorkspaceEditorMode;
+    documents: Map<string, ArmadaWorkspaceDocumentSession>;
+    markdownModePreference: ArmadaWorkspaceEditorMode;
 };
 
-export type PearWorkspaceStoreState = {
+export type ArmadaWorkspaceStoreState = {
     activeWorkspaceId: string | undefined;
-    workspaces: Map<string, PearWorkspaceState>;
+    workspaces: Map<string, ArmadaWorkspaceState>;
     ignoredStaleResponses: number;
 };
 
-export type PearWorkspaceDocumentIdentity = {
+export type ArmadaWorkspaceDocumentIdentity = {
     workspaceId: string;
     entryId: string;
     path: string;
     requestGeneration: number;
 };
 
-export type PearWorkspaceStoreAction =
+export type ArmadaWorkspaceStoreAction =
     | {
           type: "activate_workspace";
           workspaceId: string;
@@ -110,7 +110,7 @@ export type PearWorkspaceStoreAction =
           entryId: string;
           path: string;
       }
-    | ({type: "deactivate_document"} & PearWorkspaceDocumentIdentity)
+    | ({type: "deactivate_document"} & ArmadaWorkspaceDocumentIdentity)
     | {
           type: "advance_workspace_revision";
           workspaceId: string;
@@ -124,13 +124,13 @@ export type PearWorkspaceStoreAction =
           newVersion: string;
           remoteText: string;
           workspaceRevision: number;
-      } & PearWorkspaceDocumentIdentity)
-    | ({type: "detach_document"} & PearWorkspaceDocumentIdentity)
-    | ({type: "discard_changes"} & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "detach_document"} & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "discard_changes"} & ArmadaWorkspaceDocumentIdentity)
     | {
           type: "set_workspace_mode_preference";
           workspaceId: string;
-          mode: PearWorkspaceEditorMode;
+          mode: ArmadaWorkspaceEditorMode;
       }
     | ({
           type: "document_loaded";
@@ -138,58 +138,58 @@ export type PearWorkspaceStoreAction =
           baseVersion: string;
           maxBytes: number;
           text: string;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "set_editor_mode";
-          mode: PearWorkspaceEditorMode;
-      } & PearWorkspaceDocumentIdentity)
+          mode: ArmadaWorkspaceEditorMode;
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "set_rich_eligibility";
           editRevision: number;
-          eligibility: Exclude<PearWorkspaceRichEligibility, "unchecked">;
-      } & PearWorkspaceDocumentIdentity)
-    | ({type: "source_changed"} & PearWorkspaceDocumentIdentity)
+          eligibility: Exclude<ArmadaWorkspaceRichEligibility, "unchecked">;
+      } & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "source_changed"} & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "source_flushed";
           editRevision: number;
           text: string;
-      } & PearWorkspaceDocumentIdentity)
-    | ({type: "rich_edited"} & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "rich_edited"} & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "rich_recovered";
           editRevision: number;
           text: string;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "serialization_requested";
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "serialization_started";
           editRevision: number;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "serialization_succeeded";
           editRevision: number;
           text: string;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "serialization_failed";
           editRevision: number;
           error: string;
-      } & PearWorkspaceDocumentIdentity)
-    | ({type: "save_started"} & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "save_started"} & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "save_succeeded";
           editRevision: number;
           newEntryId: string;
           newVersion: string;
           workspaceRevision: number;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "save_failed";
           editRevision: number;
           error: string;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "save_conflicted";
           editRevision: number;
@@ -197,20 +197,20 @@ export type PearWorkspaceStoreAction =
           remoteVersion: string;
           remoteEntryId: string;
           remoteWorkspaceRevision: number;
-      } & PearWorkspaceDocumentIdentity)
-    | ({type: "conflict_reload" | "conflict_overwrite"} & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
+    | ({type: "conflict_reload" | "conflict_overwrite"} & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "source_view_changed";
-          selection: PearWorkspaceSourceSelection;
+          selection: ArmadaWorkspaceSourceSelection;
           scrollTop: number;
-      } & PearWorkspaceDocumentIdentity)
+      } & ArmadaWorkspaceDocumentIdentity)
     | ({
           type: "rich_view_changed";
-          selection?: PearWorkspaceRichSelection;
+          selection?: ArmadaWorkspaceRichSelection;
           scrollTop: number;
-      } & PearWorkspaceDocumentIdentity);
+      } & ArmadaWorkspaceDocumentIdentity);
 
-export function create_pear_workspace_store(): PearWorkspaceStoreState {
+export function create_armada_workspace_store(): ArmadaWorkspaceStoreState {
     return {
         activeWorkspaceId: undefined,
         workspaces: new Map(),
@@ -218,17 +218,17 @@ export function create_pear_workspace_store(): PearWorkspaceStoreState {
     };
 }
 
-export function get_pear_workspace(
-    state: PearWorkspaceStoreState,
+export function get_armada_workspace(
+    state: ArmadaWorkspaceStoreState,
     workspace_id: string,
-): PearWorkspaceState | undefined {
+): ArmadaWorkspaceState | undefined {
     return state.workspaces.get(workspace_id);
 }
 
-export function get_pear_workspace_document(
-    state: PearWorkspaceStoreState,
-    identity: PearWorkspaceDocumentIdentity,
-): PearWorkspaceDocumentSession | undefined {
+export function get_armada_workspace_document(
+    state: ArmadaWorkspaceStoreState,
+    identity: ArmadaWorkspaceDocumentIdentity,
+): ArmadaWorkspaceDocumentSession | undefined {
     const document = state.workspaces.get(identity.workspaceId)?.documents.get(identity.entryId);
     if (
         document?.requestGeneration !== identity.requestGeneration ||
@@ -240,20 +240,20 @@ export function get_pear_workspace_document(
 }
 
 function with_workspace(
-    state: PearWorkspaceStoreState,
-    workspace: PearWorkspaceState,
-): PearWorkspaceStoreState {
+    state: ArmadaWorkspaceStoreState,
+    workspace: ArmadaWorkspaceState,
+): ArmadaWorkspaceStoreState {
     const workspaces = new Map(state.workspaces);
     workspaces.set(workspace.workspaceId, workspace);
     return {...state, workspaces};
 }
 
 function with_document(
-    state: PearWorkspaceStoreState,
-    workspace: PearWorkspaceState,
-    document: PearWorkspaceDocumentSession,
+    state: ArmadaWorkspaceStoreState,
+    workspace: ArmadaWorkspaceState,
+    document: ArmadaWorkspaceDocumentSession,
     previous_entry_id: string = document.entryId,
-): PearWorkspaceStoreState {
+): ArmadaWorkspaceStoreState {
     const documents = new Map(workspace.documents);
     if (previous_entry_id !== document.entryId) {
         documents.delete(previous_entry_id);
@@ -262,14 +262,14 @@ function with_document(
     return with_workspace(state, {...workspace, documents});
 }
 
-function ignore_stale_response(state: PearWorkspaceStoreState): PearWorkspaceStoreState {
+function ignore_stale_response(state: ArmadaWorkspaceStoreState): ArmadaWorkspaceStoreState {
     return {...state, ignoredStaleResponses: state.ignoredStaleResponses + 1};
 }
 
 function matching_document(
-    state: PearWorkspaceStoreState,
-    identity: PearWorkspaceDocumentIdentity,
-): {workspace: PearWorkspaceState; document: PearWorkspaceDocumentSession} | undefined {
+    state: ArmadaWorkspaceStoreState,
+    identity: ArmadaWorkspaceDocumentIdentity,
+): {workspace: ArmadaWorkspaceState; document: ArmadaWorkspaceDocumentSession} | undefined {
     const workspace = state.workspaces.get(identity.workspaceId);
     const document = workspace?.documents.get(identity.entryId);
     if (
@@ -283,9 +283,9 @@ function matching_document(
 }
 
 function matching_active_document(
-    state: PearWorkspaceStoreState,
-    identity: PearWorkspaceDocumentIdentity,
-): {workspace: PearWorkspaceState; document: PearWorkspaceDocumentSession} | undefined {
+    state: ArmadaWorkspaceStoreState,
+    identity: ArmadaWorkspaceDocumentIdentity,
+): {workspace: ArmadaWorkspaceState; document: ArmadaWorkspaceDocumentSession} | undefined {
     const match = matching_document(state, identity);
     if (
         match === undefined ||
@@ -298,8 +298,8 @@ function matching_active_document(
 }
 
 function document_state_after_change(
-    document: PearWorkspaceDocumentSession,
-): PearWorkspaceDocumentState {
+    document: ArmadaWorkspaceDocumentSession,
+): ArmadaWorkspaceDocumentState {
     if (document.serialization.state === "error") {
         return "error";
     }
@@ -313,8 +313,8 @@ function document_state_after_change(
 }
 
 function acknowledge_noop_edit(
-    document: PearWorkspaceDocumentSession,
-): PearWorkspaceDocumentSession {
+    document: ArmadaWorkspaceDocumentSession,
+): ArmadaWorkspaceDocumentSession {
     if (
         document.saveInFlight === undefined &&
         document.serialization.state === "idle" &&
@@ -332,7 +332,7 @@ function acknowledge_noop_edit(
 }
 
 function save_callback_matches(
-    document: PearWorkspaceDocumentSession,
+    document: ArmadaWorkspaceDocumentSession,
     action: {
         requestGeneration: number;
         editRevision: number;
@@ -344,10 +344,10 @@ function save_callback_matches(
     );
 }
 
-export function reduce_pear_workspace_store(
-    state: PearWorkspaceStoreState,
-    action: PearWorkspaceStoreAction,
-): PearWorkspaceStoreState {
+export function reduce_armada_workspace_store(
+    state: ArmadaWorkspaceStoreState,
+    action: ArmadaWorkspaceStoreAction,
+): ArmadaWorkspaceStoreState {
     if (action.type === "activate_workspace") {
         let next_state = state;
         if (
@@ -364,7 +364,7 @@ export function reduce_pear_workspace_store(
             }
         }
         const existing = next_state.workspaces.get(action.workspaceId);
-        const workspace: PearWorkspaceState =
+        const workspace: ArmadaWorkspaceState =
             existing === undefined
                 ? {
                       workspaceId: action.workspaceId,
@@ -439,7 +439,7 @@ export function reduce_pear_workspace_store(
                             : current_entry_ids.has(entry_id)
                               ? "current"
                               : "stale",
-                } satisfies PearWorkspaceDocumentSession,
+                } satisfies ArmadaWorkspaceDocumentSession,
             ]),
         );
         return with_workspace(state, {
@@ -475,7 +475,7 @@ export function reduce_pear_workspace_store(
         if (existing !== undefined && existing.state !== "clean") {
             return ignore_stale_response(state);
         }
-        const document: PearWorkspaceDocumentSession = {
+        const document: ArmadaWorkspaceDocumentSession = {
             entryId: action.entryId,
             path: action.path,
             requestGeneration: action.requestGeneration,
@@ -511,7 +511,7 @@ export function reduce_pear_workspace_store(
         );
     }
 
-    const identity: PearWorkspaceDocumentIdentity = action;
+    const identity: ArmadaWorkspaceDocumentIdentity = action;
     const active_match = matching_active_document(state, identity);
     const any_match = matching_document(state, identity);
 
@@ -542,7 +542,7 @@ export function reduce_pear_workspace_store(
         }
         const remote_changed = action.remoteText !== document.savedText;
         const has_local_changes = document.currentText !== document.savedText;
-        const next_document: PearWorkspaceDocumentSession = {
+        const next_document: ArmadaWorkspaceDocumentSession = {
             ...document,
             entryId: action.newEntryId,
             path: action.newPath,
@@ -650,7 +650,7 @@ export function reduce_pear_workspace_store(
             return ignore_stale_response(state);
         }
         const edit_revision = document.editRevision + 1;
-        const next_document: PearWorkspaceDocumentSession = {
+        const next_document: ArmadaWorkspaceDocumentSession = {
             ...document,
             editRevision: edit_revision,
             serialization: {
@@ -693,7 +693,7 @@ export function reduce_pear_workspace_store(
             return ignore_stale_response(state);
         }
         const edit_revision = document.editRevision + 1;
-        const next_document: PearWorkspaceDocumentSession = {
+        const next_document: ArmadaWorkspaceDocumentSession = {
             ...document,
             editRevision: edit_revision,
             serialization: {
@@ -731,7 +731,7 @@ export function reduce_pear_workspace_store(
         if (document.serializedRevision === document.editRevision) {
             return state;
         }
-        const next_document: PearWorkspaceDocumentSession = {
+        const next_document: ArmadaWorkspaceDocumentSession = {
             ...document,
             serialization: {
                 state: "scheduled",
@@ -837,7 +837,7 @@ export function reduce_pear_workspace_store(
         ) {
             return state;
         }
-        const snapshot: PearWorkspaceSaveSnapshot = {
+        const snapshot: ArmadaWorkspaceSaveSnapshot = {
             workspaceId: workspace.workspaceId,
             workspaceRevision: workspace.workspaceRevision,
             entryId: document.entryId,
@@ -877,7 +877,7 @@ export function reduce_pear_workspace_store(
                     ? cached
                     : cached.authority === "detached"
                       ? cached
-                      : ({...cached, authority: "stale"} satisfies PearWorkspaceDocumentSession),
+                      : ({...cached, authority: "stale"} satisfies ArmadaWorkspaceDocumentSession),
             ]),
         );
         return with_document(

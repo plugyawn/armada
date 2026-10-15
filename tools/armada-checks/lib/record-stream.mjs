@@ -5,7 +5,7 @@
 // A run is what the server sends while an agent answers: today, an
 // `update_message` event every 200 ms carrying the whole text so far and
 // the server's rendering of it (zerver/lib/armada.py,
-// PEAR_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS). The text is
+// ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS). The text is
 // fixtures/stream-source.md, repeated until it is long enough; each prefix
 // is rendered by the running development server, so the HTML is exactly
 // what the server would have put in the event. The words-per-second rate

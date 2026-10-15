@@ -14,7 +14,7 @@ from zerver.actions.default_streams import (
     do_remove_streams_from_default_stream_group,
 )
 from zerver.actions.message_send import maybe_send_channel_events_notice
-from zerver.lib.armada_worker import maybe_refactor_pear_stream_workspaces_on_rename
+from zerver.lib.armada_worker import maybe_refactor_armada_stream_workspaces_on_rename
 from zerver.lib.cache import (
     cache_delete_many,
     cache_set,
@@ -1499,7 +1499,7 @@ def do_rename_stream(stream: Stream, new_name: str, user_profile: UserProfile) -
     old_name = stream.name
     stream.name = new_name
     stream.save(update_fields=["name"])
-    pear_context_refactor_message = maybe_refactor_pear_stream_workspaces_on_rename(
+    armada_context_refactor_message = maybe_refactor_armada_stream_workspaces_on_rename(
         user_profile,
         old_stream_name=old_name,
         new_stream_name=new_name,
@@ -1557,11 +1557,11 @@ def do_rename_stream(stream: Stream, new_name: str, user_profile: UserProfile) -
             ),
             archived_channel_notice=stream.deactivated,
         )
-        if pear_context_refactor_message is not None:
+        if armada_context_refactor_message is not None:
             maybe_send_channel_events_notice(
                 sender,
                 stream,
-                pear_context_refactor_message,
+                armada_context_refactor_message,
                 archived_channel_notice=stream.deactivated,
             )
 

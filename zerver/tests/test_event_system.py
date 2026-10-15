@@ -17,7 +17,7 @@ from zerver.actions.message_send import check_send_message
 from zerver.actions.presence import do_update_user_presence
 from zerver.actions.streams import do_change_stream_folder
 from zerver.actions.user_settings import do_change_avatar_fields, do_change_user_setting
-from zerver.lib.armada import PEAR_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
 from zerver.lib.event_schema import check_web_reload_client_event
 from zerver.lib.events import fetch_initial_state_data, post_process_state
 from zerver.lib.exceptions import AccessDeniedError
@@ -732,14 +732,14 @@ class FetchInitialStateDataTest(ZulipTestCase):
         result = fetch_initial_state_data(user_profile, realm=user_profile.realm)
         self.assertGreater(len(result["realm_bots"]), 2)
 
-    def test_pear_bot_user_ids(self) -> None:
+    def test_armada_bot_user_ids(self) -> None:
         user_profile = self.example_user("hamlet")
-        pear_bot = self.create_test_bot(
+        armada_bot = self.create_test_bot(
             "pear",
             user_profile,
             full_name="Pear",
             bot_type=UserProfile.EMBEDDED_BOT,
-            service_name=PEAR_EMBEDDED_BOT_SERVICE,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
             config_data=orjson.dumps({}).decode(),
         )
         self.create_test_bot(
@@ -753,7 +753,7 @@ class FetchInitialStateDataTest(ZulipTestCase):
 
         result = fetch_initial_state_data(user_profile, realm=user_profile.realm)
 
-        self.assertEqual(result["pear_bot_user_ids"], [pear_bot.id])
+        self.assertEqual(result["agent_user_ids"], [armada_bot.id])
 
     def test_max_message_id_with_no_history(self) -> None:
         user_profile = self.example_user("aaron")
@@ -1327,12 +1327,12 @@ class ClientDescriptorsTest(ZulipTestCase):
 
 
 class ReloadWebClientsTest(ZulipTestCase):
-    @override_settings(DEVELOPMENT=False, PEAR_WORKER_AGENT_RUNTIME="disabled")
+    @override_settings(DEVELOPMENT=False, ARMADA_WORKER_AGENT_RUNTIME="disabled")
     def test_standard_production_restarts_stagger_client_reloads(self) -> None:
         self.assertFalse(reload_clients_immediately_after_restart())
 
-    @override_settings(DEVELOPMENT=False, PEAR_WORKER_AGENT_RUNTIME="codex-app-server")
-    def test_pear_restarts_reload_clients_immediately(self) -> None:
+    @override_settings(DEVELOPMENT=False, ARMADA_WORKER_AGENT_RUNTIME="codex-app-server")
+    def test_armada_restarts_reload_clients_immediately(self) -> None:
         self.assertTrue(reload_clients_immediately_after_restart())
 
     def test_web_reload_clients(self) -> None:

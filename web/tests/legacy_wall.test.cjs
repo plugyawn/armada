@@ -22,7 +22,7 @@ for (const [name, value] of Object.entries({
 const $ = jQueryFactory(window);
 mock_jquery($);
 
-const pear_wall = zrequire("legacy_wall");
+const legacy_wall = zrequire("legacy_wall");
 
 let monitor_version = 1;
 const monitor = () => ({
@@ -41,22 +41,22 @@ const monitor = () => ({
 run_test("unchanged monitor versions skip artifact serialization, validation, and remount", () => {
     document.body.innerHTML = `
         <div id="wall">
-            <section class="pear-wall-block" data-monitor-id="7">
-                <div data-pear-artifact-host></div>
+            <section class="legacy-wall-block" data-monitor-id="7">
+                <div data-legacy-artifact-host></div>
             </section>
         </div>`;
     const $wall = $(document.querySelector("#wall"));
     let parses = 0;
     let mounts = 0;
     const module = {
-        parse_pear_artifact(raw) {
+        parse_armada_artifact(raw) {
             parses += 1;
             return JSON.parse(raw);
         },
-        mount_pear_artifact($host, document_value) {
+        mount_armada_artifact($host, document_value) {
             mounts += 1;
             const artifact = document.createElement("article");
-            artifact.className = "pear-artifact";
+            artifact.className = "legacy-artifact";
             artifact.dataset.lifecycle = "ready";
             artifact.textContent = document_value.blocks[0].body;
             $host.empty();
@@ -73,20 +73,20 @@ run_test("unchanged monitor versions skip artifact serialization, validation, an
         return native_stringify(value, ...args);
     };
     try {
-        pear_wall.render_artifacts($wall, [monitor()], module);
+        legacy_wall.render_artifacts($wall, [monitor()], module);
         assert.equal(parses, 1);
         assert.equal(artifact_serializations, 1);
         assert.equal(mounts, 1);
-        assert.equal($wall.find(".pear-artifact").text(), "Build is healthy.");
+        assert.equal($wall.find(".legacy-artifact").text(), "Build is healthy.");
 
         artifact_serializations = 0;
-        pear_wall.render_artifacts($wall, [monitor()], module);
+        legacy_wall.render_artifacts($wall, [monitor()], module);
         assert.equal(parses, 1);
         assert.equal(artifact_serializations, 0);
         assert.equal(mounts, 1);
 
         monitor_version += 1;
-        pear_wall.render_artifacts($wall, [monitor()], module);
+        legacy_wall.render_artifacts($wall, [monitor()], module);
         assert.equal(parses, 2);
         assert.equal(artifact_serializations, 1);
         assert.equal(mounts, 2);

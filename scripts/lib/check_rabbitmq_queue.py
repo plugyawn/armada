@@ -14,6 +14,8 @@ sys.path.append(ZULIP_PATH)
 from scripts.lib.zulip_tools import atomic_nagios_write, get_config, get_config_file
 
 normal_queues = [
+    "armada_worker",
+    "armada_worker_1",
     "deferred_work",
     "deferred_email_senders",
     "digest_emails",
@@ -24,15 +26,13 @@ normal_queues = [
     "missedmessage_emails",
     "missedmessage_mobile_notifications",
     "outgoing_webhooks",
-    "pear_worker",
-    "pear_worker_1",
     "thumbnail",
     "user_activity",
     "user_activity_interval",
 ]
 
-PEAR_WORKER_QUEUE_NAMES = ("pear_worker", "pear_worker_1")
-PEAR_WORKER_STATS_FILES = ("pear_worker-0.stats", "pear_worker-1.stats")
+ARMADA_WORKER_QUEUE_NAMES = ("armada_worker", "armada_worker_1")
+ARMADA_WORKER_STATS_FILES = ("armada_worker-0.stats", "armada_worker-1.stats")
 
 mobile_notification_shards = int(
     get_config(get_config_file(), "application_server", "mobile_notification_shards", "1")
@@ -75,7 +75,7 @@ CRITICAL_SECONDS_TO_CLEAR: defaultdict[str, int] = defaultdict(
 
 def aggregate_parallel_queue_stats(slot_stats: list[dict[str, Any]]) -> dict[str, Any]:
     """Combine process-level stats into one conservative pool capacity view."""
-    if len(slot_stats) != len(PEAR_WORKER_STATS_FILES) or any(not stats for stats in slot_stats):
+    if len(slot_stats) != len(ARMADA_WORKER_STATS_FILES) or any(not stats for stats in slot_stats):
         return {}
     consume_times = [
         stats["recent_average_consume_time"]
@@ -98,8 +98,8 @@ def aggregate_parallel_queue_stats(slot_stats: list[dict[str, Any]]) -> dict[str
 
 
 def queue_statistics_filenames(queue_name: str) -> tuple[str, ...]:
-    if queue_name in PEAR_WORKER_QUEUE_NAMES:
-        return PEAR_WORKER_STATS_FILES
+    if queue_name in ARMADA_WORKER_QUEUE_NAMES:
+        return ARMADA_WORKER_STATS_FILES
     return (f"{queue_name}.stats",)
 
 
@@ -157,20 +157,20 @@ def analyze_queue_stats(
     return dict(status=OK, name=queue_name, message="")
 
 
-def pear_worker_health_results(
+def armada_worker_health_results(
     slot_stats: list[dict[str, Any]], queue_counts: dict[str, int], now: int | None = None
 ) -> list[dict[str, Any]]:
     """Check pool topology and each slot independently."""
     now = int(time.time()) if now is None else now
     results: list[dict[str, Any]] = []
-    for queue in PEAR_WORKER_QUEUE_NAMES:
+    for queue in ARMADA_WORKER_QUEUE_NAMES:
         consumers = queue_counts.get(queue, 0)
-        if consumers != len(PEAR_WORKER_STATS_FILES):
+        if consumers != len(ARMADA_WORKER_STATS_FILES):
             results.append(
                 dict(
                     status=CRITICAL,
                     name=queue,
-                    message=f"expected {len(PEAR_WORKER_STATS_FILES)} consumers, found {consumers}",
+                    message=f"expected {len(ARMADA_WORKER_STATS_FILES)} consumers, found {consumers}",
                 )
             )
     for index, stats in enumerate(slot_stats):
@@ -178,17 +178,17 @@ def pear_worker_health_results(
             results.append(
                 dict(
                     status=CRITICAL,
-                    name=PEAR_WORKER_STATS_FILES[index],
+                    name=ARMADA_WORKER_STATS_FILES[index],
                     message="missing or invalid stats data",
                 )
             )
         elif now - stats["update_time"] > 180 and any(
-            queue_counts.get(queue, 0) > 0 for queue in PEAR_WORKER_QUEUE_NAMES
+            queue_counts.get(queue, 0) > 0 for queue in ARMADA_WORKER_QUEUE_NAMES
         ):
             results.append(
                 dict(
                     status=CRITICAL,
-                    name=PEAR_WORKER_STATS_FILES[index],
+                    name=ARMADA_WORKER_STATS_FILES[index],
                     message=f"worker slot appears stale, last update {stats['update_time']}",
                 )
             )
@@ -258,15 +258,15 @@ def check_rabbitmq_queues() -> None:
         check_queues += [f"user_activity_shard{d}" for d in range(1, user_activity_shards + 1)]
 
     queues_to_check = set(check_queues).intersection(set(queues_with_consumers))
-    pear_slot_stats: list[dict[str, Any]] = []
-    for filename in PEAR_WORKER_STATS_FILES:
+    armada_slot_stats: list[dict[str, Any]] = []
+    for filename in ARMADA_WORKER_STATS_FILES:
         file_path = os.path.join(queue_stats_dir, filename)
         stats: dict[str, Any] = {}
         if os.path.exists(file_path):
             with open(file_path) as f, suppress(json.decoder.JSONDecodeError):
                 stats = json.load(f)
-        pear_slot_stats.append(stats)
-    results = pear_worker_health_results(pear_slot_stats, queue_counts_rabbitmqctl)
+        armada_slot_stats.append(stats)
+    results = armada_worker_health_results(armada_slot_stats, queue_counts_rabbitmqctl)
     for queue in queues_to_check:
         stats_files = queue_statistics_filenames(queue)
         loaded_stats = []
@@ -282,7 +282,7 @@ def check_rabbitmq_queues() -> None:
                     loaded_stats.append({})
         queue_stats[queue] = (
             aggregate_parallel_queue_stats(loaded_stats)
-            if queue in PEAR_WORKER_QUEUE_NAMES
+            if queue in ARMADA_WORKER_QUEUE_NAMES
             else loaded_stats[0]
         )
 

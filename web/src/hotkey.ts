@@ -978,7 +978,7 @@ function process_hotkey(e: JQuery.KeyDownEvent, hotkey: Hotkey): boolean {
     }
 
     if (event_name === "print") {
-        const quick_open_event = new Event("pear:workspace-quick-open", {cancelable: true});
+        const quick_open_event = new Event("armada:workspace-quick-open", {cancelable: true});
         const dispatched = document.dispatchEvent?.(quick_open_event);
         if (dispatched !== undefined && !dispatched) {
             return true;

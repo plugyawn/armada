@@ -2,7 +2,7 @@ import $ from "jquery";
 
 import {$t} from "./i18n.ts";
 import {create_sigil, display_name_for_testing} from "./legacy_agent_sigil.ts";
-import * as pear_run_state from "./legacy_run_state.ts";
+import * as legacy_run_state from "./legacy_run_state.ts";
 import * as message_thread_hooks from "./message_thread_hooks.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as right_sidebar_tabs from "./right_sidebar_tabs.ts";
@@ -22,12 +22,12 @@ let initialized = false;
 const landed_turn_ids = new Set<number>();
 
 type RosterEntry = {
-    agent: pear_run_state.PearAgentThread;
-    run: pear_run_state.PearRunLiveView;
+    agent: legacy_run_state.ArmadaAgentThread;
+    run: legacy_run_state.ArmadaRunLiveView;
 };
 
 type TurnGroup = {
-    run: pear_run_state.PearRunLiveView;
+    run: legacy_run_state.ArmadaRunLiveView;
     entries: RosterEntry[];
 };
 
@@ -35,7 +35,7 @@ function noop_enhance(_root: HTMLElement): void {
     return;
 }
 
-function run_is_live(run: pear_run_state.PearRunLiveView): boolean {
+function run_is_live(run: legacy_run_state.ArmadaRunLiveView): boolean {
     return ["active", "busy", "running", "working", "starting", "queued"].includes(
         run.status.trim().toLowerCase(),
     );
@@ -60,7 +60,7 @@ function groups_for_current_context(): TurnGroup[] {
     }
     const groups: TurnGroup[] = [];
     const query = roster_filter_query;
-    for (const run of pear_run_state.runs_for_context(stream, topic)) {
+    for (const run of legacy_run_state.runs_for_context(stream, topic)) {
         const entries = (run.agents ?? [])
             .map((agent) => ({agent, run}))
             .filter((entry) => entry_matches_filter(entry, query));
@@ -114,7 +114,7 @@ function format_duration(duration_seconds: number | null | undefined): string | 
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
-export function turn_header_text_for_testing(run: pear_run_state.PearRunLiveView): string {
+export function turn_header_text_for_testing(run: legacy_run_state.ArmadaRunLiveView): string {
     const parts = [
         format_duration(run.usage?.duration_seconds),
         run.tool_count !== undefined
@@ -138,9 +138,9 @@ function create_turn_header(group: TurnGroup): HTMLElement {
     const {run} = group;
     const header = document.createElement("button");
     header.type = "button";
-    header.className = "pear-agent-roster-turn";
+    header.className = "legacy-agent-roster-turn";
     if (run_is_live(run)) {
-        header.classList.add("pear-agent-roster-turn-live");
+        header.classList.add("legacy-agent-roster-turn-live");
     }
     header.textContent = turn_header_text_for_testing(run);
     header.setAttribute("aria-label", $t({defaultMessage: "Open this turn in the thread pane"}));
@@ -161,25 +161,25 @@ function create_entry_row(entry: RosterEntry, index: number): HTMLElement {
     const {agent, run} = entry;
     const row = document.createElement("button");
     row.type = "button";
-    row.className = "pear-agent-roster-row";
+    row.className = "legacy-agent-roster-row";
     const name = display_name_for_testing(agent, index);
     row.setAttribute("aria-label", $t({defaultMessage: "Open {name} in the thread pane"}, {name}));
 
     row.append(create_sigil(agent));
 
     const text = document.createElement("span");
-    text.className = "pear-agent-roster-text";
+    text.className = "legacy-agent-roster-text";
     const title = document.createElement("span");
-    title.className = "pear-agent-roster-name";
+    title.className = "legacy-agent-roster-name";
     title.textContent = name;
     if (agent.role?.trim()) {
         const role = document.createElement("span");
-        role.className = "pear-agent-roster-role";
+        role.className = "legacy-agent-roster-role";
         role.textContent = `[${agent.role.trim()}]`;
         title.append(" ", role);
     }
     const activity = document.createElement("span");
-    activity.className = "pear-agent-roster-activity";
+    activity.className = "legacy-agent-roster-activity";
     const current_activity = agent.current_activity?.trim();
     activity.textContent =
         current_activity !== undefined && current_activity !== "" ? current_activity : agent.status;
@@ -200,7 +200,7 @@ function create_entry_row(entry: RosterEntry, index: number): HTMLElement {
 }
 
 export function render(): void {
-    const host = document.querySelector<HTMLElement>("#pear-agent-roster");
+    const host = document.querySelector<HTMLElement>("#legacy-agent-roster");
     if (host === null) {
         return;
     }
@@ -217,7 +217,7 @@ export function render(): void {
     host.replaceChildren();
     if (groups.length === 0) {
         const empty = document.createElement("div");
-        empty.className = "pear-agent-roster-empty";
+        empty.className = "legacy-agent-roster-empty";
         empty.textContent =
             roster_filter_query === ""
                 ? $t({
@@ -228,7 +228,7 @@ export function render(): void {
         return;
     }
     const list = document.createElement("div");
-    list.className = "pear-agent-roster-list";
+    list.className = "legacy-agent-roster-list";
     list.setAttribute("role", "list");
     for (const group of groups) {
         const header = create_turn_header(group);
@@ -249,7 +249,7 @@ function maybe_land_on_live_turn(): void {
     if (stream === undefined || topic === undefined) {
         return;
     }
-    const live_turn = pear_run_state
+    const live_turn = legacy_run_state
         .runs_for_context(stream, topic)
         .find((run) => run_is_live(run) && (run.agents ?? []).length > 0);
     if (
@@ -266,7 +266,7 @@ function maybe_land_on_live_turn(): void {
     message_thread_hooks.open_thread(
         live_turn.result_message_id,
         message_thread_hooks.HUMAN_THREAD_KEY,
-        document.querySelector<HTMLElement>("#pear-agent-roster") ?? document.body,
+        document.querySelector<HTMLElement>("#legacy-agent-roster") ?? document.body,
         noop_enhance,
     );
 }
@@ -276,7 +276,7 @@ export function initialize(): void {
         return;
     }
     initialized = true;
-    pear_run_state.on_run_state_changed(() => {
+    legacy_run_state.on_run_state_changed(() => {
         if (right_sidebar_tabs.current() === "agents") {
             render();
         } else {

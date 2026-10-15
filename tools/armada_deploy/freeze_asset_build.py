@@ -226,7 +226,7 @@ def _copy_directory_contents(
 def freeze_asset_build(source_root: Path, destination_parent: Path) -> Path:
     source_root_fd = _open_directory(source_root)
     destination_parent_fd = _open_directory(destination_parent)
-    destination = Path(tempfile.mkdtemp(prefix="pear-frozen-assets.", dir=destination_parent))
+    destination = Path(tempfile.mkdtemp(prefix="armada-frozen-assets.", dir=destination_parent))
     os.chmod(destination, 0o700)
     complete = False
     try:

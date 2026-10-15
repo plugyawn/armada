@@ -2,30 +2,86 @@
 # code name leaves the server, the old interface and the tools. The modules
 # it named are renamed (armada_* on the server, legacy_* in the old
 # interface); these Zulip files only follow them.
+kept puppet/zulip/manifests/profile/rabbitmq.pp  # sets the consumer-timeout policy of the agent's armada_* queues
+kept scripts/lib/check_rabbitmq_queue.py  # the agent's queues and stats files are armada_*
 kept tools/run-dev  # runs the deploy directory's production_assets.py by its new path
-kept web/src/compose_recipient.ts  # imports the renamed modules by their new paths
-kept web/src/compose_setup.ts  # imports the renamed modules by their new paths
-kept web/src/popover_menus_data.ts  # imports the renamed modules by their new paths
-kept web/src/sidebar_ui.ts  # imports the renamed modules by their new paths
-kept web/src/submessage.ts  # imports the renamed modules by their new paths
-kept web/src/tippyjs.ts  # a comment names the old theme sheet by its new name
-kept web/src/topic_list.ts  # imports the renamed modules by their new paths
-kept web/src/topic_list_data.ts  # imports the renamed modules by their new paths
+kept web/src/compose_recipient.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/compose_setup.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/message_actions_popover.ts  # follows the renamed modules, classes and wire names
+kept web/src/message_report.ts  # follows the renamed modules, classes and wire names
+kept web/src/message_store.ts  # follows the renamed modules, classes and wire names
+kept web/src/popover_menus.ts  # follows the renamed modules, classes and wire names
+kept web/src/popover_menus_data.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/settings_bots.ts  # follows the renamed modules, classes and wire names
+kept web/src/sidebar_ui.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/state_data.ts  # follows the renamed modules, classes and wire names
+kept web/src/stream_create.ts  # follows the renamed modules, classes and wire names
+kept web/src/stream_list.ts  # follows the renamed modules, classes and wire names
+kept web/src/submessage.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/tippyjs.ts  # a comment names the old theme sheet by its new name; the tooltip animation is "armada"
+kept web/src/topic_list.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/topic_list_data.ts  # follows the renamed modules: their paths, armada_* names and wire names
+kept web/src/typing_events.ts  # follows the renamed modules, classes and wire names
+kept web/styles/app_components.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/banners.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/blueslip.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/buttons.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/inbox.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/input_pill.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/inputs.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/left_sidebar.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/modal.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/popovers.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/progress_bar.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/recent_view.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/right_sidebar.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/search.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/settings.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/subscriptions.css  # the old interface's classes and attributes are legacy-*
+kept web/styles/tooltips.css  # the old interface's classes and attributes are legacy-*
+kept web/templates/compose.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/compose_control_buttons.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/message_body.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/message_controls.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/popovers/message_actions_popover.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/right_sidebar.hbs  # the old interface's classes and attributes are legacy-*
 kept web/templates/settings/bot_list_admin.hbs  # includes the renamed settings partial
+kept web/templates/single_message.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/stream_sidebar_row.hbs  # the old interface's classes and attributes are legacy-*
+kept web/templates/topic_list_item.hbs  # the old interface's classes and attributes are legacy-*
+kept web/tests/message_events.test.cjs  # follows the renamed modules, classes and wire names
+kept web/tests/message_store.test.cjs  # follows the renamed modules, classes and wire names
 kept web/tests/popover_menus_data.test.cjs  # requires the renamed module
-kept zerver/actions/message_edit.py  # imports the renamed modules by their new paths
-kept zerver/actions/message_send.py  # imports the renamed modules by their new paths
-kept zerver/actions/streams.py  # imports the renamed modules by their new paths
-kept zerver/lib/bot_lib.py  # imports the renamed modules by their new paths
-kept zerver/lib/events.py  # imports the renamed modules by their new paths
-kept zerver/lib/message_cache.py  # imports the renamed modules by their new paths
+kept web/tests/stream_list.test.cjs  # follows the renamed modules, classes and wire names
+kept web/tests/submessage.test.cjs  # follows the renamed modules, classes and wire names
+kept web/tests/topic_list_data.test.cjs  # follows the renamed modules, classes and wire names
+kept web/tests/typing_events.test.cjs  # follows the renamed modules, classes and wire names
+kept zerver/actions/message_edit.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/actions/message_send.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/actions/streams.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/apps.py  # registers the check that refuses the agent's settings under their old names
+kept zerver/checks.py  # the check that refuses the agent's settings under their old names
+kept zerver/lib/bot_config.py  # the agent's embedded bot service is named armada
+kept zerver/lib/bot_lib.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/lib/event_schema.py  # the agent's events are agent_run and workspace_changed
+kept zerver/lib/event_types.py  # the agent's events are agent_run and workspace_changed
+kept zerver/lib/events.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/lib/integrations.py  # the agent's embedded bot service is named armada
+kept zerver/lib/message.py  # the message field is is_agent_message
+kept zerver/lib/message_cache.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/models/__init__.py  # exports the agent's models by their plain nouns (AgentRun, Repository, Workspace, ...)
 kept zerver/models/bots.py  # the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
-kept zerver/tests/test_event_system.py  # imports the renamed modules by their new paths
-kept zerver/tests/test_events.py  # imports the renamed modules by their new paths
-kept zerver/tests/test_message_dict.py  # imports the renamed modules by their new paths
-kept zerver/tests/test_service_bot_system.py  # imports the renamed modules by their new paths, and the agent's models by their plain nouns
-kept zerver/tests/test_submessage.py  # imports the renamed modules by their new paths
-kept zerver/views/submessage.py  # imports the renamed modules by their new paths
-kept zerver/views/users.py  # imports the renamed modules by their new paths
-kept zerver/worker/embedded_bots.py  # imports the renamed modules by their new paths
+kept zerver/openapi/zulip.yaml  # documents the message field is_agent_message (API changelog ZF-092e84)
+kept zerver/tests/test_checks.py  # tests the check that refuses the agent's settings under their old names
+kept zerver/tests/test_event_system.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/tests/test_events.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/tests/test_home.py  # the register keys are agent_user_ids and repository_stream_ids
+kept zerver/tests/test_message_dict.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/tests/test_queue.py  # the agent's queues are armada_*
+kept zerver/tests/test_service_bot_system.py  # follows the renamed modules: their paths, armada_* names and wire names, and the agent's models by their plain nouns
+kept zerver/tests/test_submessage.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/tornado/event_queue.py  # the agent's events are agent_run and workspace_changed
+kept zerver/views/message_send.py  # the send parameter is agent_followup
+kept zerver/views/submessage.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/views/users.py  # follows the renamed modules: their paths, armada_* names and wire names
+kept zerver/worker/embedded_bots.py  # follows the renamed modules: their paths, armada_* names and wire names

@@ -45,9 +45,9 @@ function descriptor(revision = 1, capabilities = {}) {
     return {
         uuid: "workspace-files",
         display_root: "Scratch workspace",
-        stream: "pear",
+        stream: "armada",
         topic: "scratch",
-        branch: "pear-main",
+        branch: "armada-main",
         head: "abcdef1234567890",
         dirty: false,
         dirty_count: 0,
@@ -100,7 +100,7 @@ function harness(copy_text = async () => {}) {
             record.aborted = true;
         },
     });
-    const controller = workspace_files.create_pear_workspace_files({
+    const controller = workspace_files.create_armada_workspace_files({
         menuButton: menu_button,
         menu,
         dialogLayer: dialog_layer,

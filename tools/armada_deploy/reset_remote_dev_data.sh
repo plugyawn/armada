@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=tools/armada_deploy/deploy_common.sh
 source "$SCRIPT_DIR/deploy_common.sh"
-DEFAULT_STATE_PATH="$REPO_ROOT/output/pear-staging/server.json"
+DEFAULT_STATE_PATH="$REPO_ROOT/output/armada-staging/server.json"
 STATE_PATH="$DEFAULT_STATE_PATH"
 YES=false
 
@@ -64,7 +64,7 @@ fi
 # it lives in an untracked file so the repository carries no personal
 # identities. Copy armada_roster.example.py and fill in your deployment's
 # accounts.
-ROSTER_PATH="${PEAR_DEPLOY_ROSTER:-$SCRIPT_DIR/pear_roster.local.py}"
+ROSTER_PATH="${ARMADA_DEPLOY_ROSTER:-$SCRIPT_DIR/armada_roster.local.py}"
 
 eval "$(
     python3 - "$STATE_PATH" <<'PY'
@@ -83,7 +83,7 @@ PY
 )"
 
 ssh_root() {
-    ssh -F "$SSH_CONFIG" pear-staging-root "$@"
+    ssh -F "$SSH_CONFIG" armada-staging-root "$@"
 }
 
 if [[ "$YES" != true ]]; then
@@ -101,7 +101,7 @@ Roster: $ROSTER_STATUS
 
 This command will delete hosted dev conversation history, Pear worker runs,
 workspace runtime state, sessions, drafts, scheduled messages, extra generated users,
-all topic worktrees and project caches under /srv/pear-workspaces, and the
+all topic worktrees and project caches under /srv/armada-workspaces, and the
 per-topic isolation OS users.
 Re-run with --yes to reset the remote dev data.
 EOF
@@ -110,15 +110,15 @@ fi
 
 if [[ ! -f "$ROSTER_PATH" ]]; then
     echo "Missing demo-user roster: $ROSTER_PATH" >&2
-    echo "Copy tools/armada_deploy/armada_roster.example.py to pear_roster.local.py" >&2
+    echo "Copy tools/armada_deploy/armada_roster.example.py to armada_roster.local.py" >&2
     echo "and fill in this deployment's account names and emails." >&2
     exit 1
 fi
 
 LOCAL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
-REMOTE_TRUSTED_RUNTIME="$(stage_remote_pear_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
+REMOTE_TRUSTED_RUNTIME="$(stage_remote_armada_deploy_bundle "$REPO_ROOT" "$LOCAL_SHA")"
 cleanup_trusted_runtime() {
-    remove_remote_pear_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
+    remove_remote_armada_deploy_bundle "$REMOTE_TRUSTED_RUNTIME" >/dev/null 2>&1 || true
 }
 trap cleanup_trusted_runtime EXIT
 
@@ -128,7 +128,7 @@ ssh_root python3 "$REMOTE_TRUSTED_RUNTIME/tools/armada_deploy/runtime_config.py"
     --fqdn "$FQDN"
 
 echo "Stopping Pear/Zulip services..."
-ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"
+ssh_root "systemctl stop ${ARMADA_DEPLOY_SERVICES[*]}"
 
 # Topic worktrees must not survive the database reset: workdir slugs are
 # deterministic per (realm, stream, topic), so a recreated same-name topic
@@ -137,18 +137,18 @@ ssh_root "systemctl stop ${PEAR_DEPLOY_SERVICES[*]}"
 # live under the same root. The per-topic isolation OS users are recreated
 # on demand by the isolation helper, so they go too.
 echo "Removing Pear topic worktrees, project caches, and isolation users..."
-ssh_root 'rm -rf /srv/pear-workspaces/* || true'
-ssh_root "getent passwd | awk -F: '/^pear-[0-9a-f]{24}:/ {print \$1}' | xargs -r -n1 userdel || true"
+ssh_root 'rm -rf /srv/armada-workspaces/* || true'
+ssh_root "getent passwd | awk -F: '/^armada-[0-9a-f]{24}:/ {print \$1}' | xargs -r -n1 userdel || true"
 
 echo "Resetting the Zulip dev database and creating quiet demo data..."
 {
-    printf 'PEAR_ROSTER_B64=%q\n' "$(base64 <"$ROSTER_PATH" | tr -d '\n')"
+    printf 'ARMADA_ROSTER_B64=%q\n' "$(base64 <"$ROSTER_PATH" | tr -d '\n')"
     cat <<'REMOTE'
 set -euo pipefail
-PEAR_ROSTER_PATH=$(mktemp /tmp/pear-roster.XXXXXX.py)
-printf '%s' "$PEAR_ROSTER_B64" | base64 -d >"$PEAR_ROSTER_PATH"
-export PEAR_ROSTER_PATH
-trap 'rm -f "$PEAR_ROSTER_PATH"' EXIT
+ARMADA_ROSTER_PATH=$(mktemp /tmp/armada-roster.XXXXXX.py)
+printf '%s' "$ARMADA_ROSTER_B64" | base64 -d >"$ARMADA_ROSTER_PATH"
+export ARMADA_ROSTER_PATH
+trap 'rm -f "$ARMADA_ROSTER_PATH"' EXIT
 MANAGE=(/home/zulipdev/zulip/.venv/bin/python3 /home/zulipdev/zulip/manage.py)
 
 PGHOST=localhost PGUSER=zulip ./scripts/setup/terminate-psql-sessions zulip zulip_base
@@ -188,7 +188,7 @@ from zerver.models.bots import AgentRun, Service
 from zerver.models.scheduled_jobs import ScheduledMessage
 from zerver.models.user_topics import UserTopic
 from zerver.models.users import get_user_by_delivery_email
-from zerver.views.armada import build_pear_config_for_user, post_pear_config_backend
+from zerver.views.armada import build_armada_config_for_user, post_armada_config_backend
 
 realm = Realm.objects.get(string_id="zulip")
 
@@ -206,7 +206,7 @@ realm.save(update_fields=["first_visible_message_id"])
 import os
 
 roster_namespace = {"UserProfile": UserProfile}
-with open(os.environ["PEAR_ROSTER_PATH"]) as roster_file:
+with open(os.environ["ARMADA_ROSTER_PATH"]) as roster_file:
     exec(roster_file.read(), roster_namespace)
 users = roster_namespace["users"]
 
@@ -233,15 +233,15 @@ owner_email = next(
     new_email for _, _, new_email, role, _ in users if role == UserProfile.ROLE_REALM_OWNER
 )
 owner = UserProfile.objects.get(realm=realm, delivery_email=owner_email)
-request = RequestFactory().post("/json/pear/config")
+request = RequestFactory().post("/json/armada/config")
 request.user = owner
-response = post_pear_config_backend(request, owner)
+response = post_armada_config_backend(request, owner)
 if response.status_code != 200:
     raise SystemExit(f"Pear config failed with HTTP {response.status_code}: {response.content!r}")
 
 Session.objects.all().delete()
 
-config = build_pear_config_for_user(owner)
+config = build_armada_config_for_user(owner)
 print(
     {
         "messages": Message.objects.count(),
@@ -250,7 +250,7 @@ print(
             .order_by("delivery_email")
             .values("id", "delivery_email", "full_name", "role")
         ),
-        "pear": {
+        "armada": {
             "configured": config["configured"],
             "enabled": config["enabled"],
             "bot_user_id": config["bot_user_id"],
@@ -259,8 +259,8 @@ print(
             "runtime_ready": config["worker_runtime_ready"],
             "auth_ready": config["worker_runtime_auth_ready"],
         },
-        "pear_services": list(
-            Service.objects.filter(name="pear", user_profile__realm=realm).values(
+        "armada_services": list(
+            Service.objects.filter(name="armada", user_profile__realm=realm).values(
                 "id",
                 "name",
                 "user_profile_id",
@@ -270,11 +270,11 @@ print(
 )
 PY
 REMOTE
-} | ssh -F "$SSH_CONFIG" pear-staging-root \
-    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/pear.env && set +a && bash -s'"
+} | ssh -F "$SSH_CONFIG" armada-staging-root \
+    "sudo -Hu zulipdev bash -lc 'cd /home/zulipdev/zulip && set -a && . /home/zulipdev/armada.env && set +a && bash -s'"
 
 echo "Starting services..."
-ssh_root "systemctl daemon-reload && systemctl restart caddy ${PEAR_DEPLOY_SERVICES[*]}"
+ssh_root "systemctl daemon-reload && systemctl restart caddy ${ARMADA_DEPLOY_SERVICES[*]}"
 
 echo "Done. Verify with:"
 echo "  tools/armada_deploy/verify_remote.sh $STATE_PATH"

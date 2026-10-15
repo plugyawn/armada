@@ -1,4 +1,4 @@
-type PearRunForActiveMessage = {
+type ArmadaRunForActiveMessage = {
     id: number;
     snapshot_sequence?: number | undefined;
     status: string;
@@ -7,9 +7,9 @@ type PearRunForActiveMessage = {
     stream?: string | undefined;
     topic?: string | undefined;
     current_activity?: string | undefined;
-    plan?: PearRunPlanStep[] | null | undefined;
+    plan?: ArmadaRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
-    agents?: PearAgentThread[] | undefined;
+    agents?: ArmadaAgentThread[] | undefined;
     tool_count?: number | undefined;
     date_created?: number | undefined;
     date_updated?: number | undefined;
@@ -30,17 +30,17 @@ type PearRunForActiveMessage = {
         | undefined;
 };
 
-export type PearRunOperation = {
+export type ArmadaRunOperation = {
     kind: string;
     label: string;
 };
 
-export type PearRunPlanStep = {
+export type ArmadaRunPlanStep = {
     step: string;
     status: string;
 };
 
-export type PearAgentThread = {
+export type ArmadaAgentThread = {
     thread_id: string;
     nickname?: string | null | undefined;
     role?: string | null | undefined;
@@ -49,13 +49,13 @@ export type PearAgentThread = {
     current_activity?: string | undefined;
 };
 
-export type PearAgentThreadDelta = {
+export type ArmadaAgentThreadDelta = {
     thread_id: string;
     status?: string | undefined;
     current_activity?: string | undefined;
 };
 
-export type PearRunLiveView = {
+export type ArmadaRunLiveView = {
     id: number;
     snapshot_sequence?: number | undefined;
     status: string;
@@ -63,9 +63,9 @@ export type PearRunLiveView = {
     stream?: string | undefined;
     topic?: string | undefined;
     current_activity?: string | undefined;
-    plan?: PearRunPlanStep[] | null | undefined;
+    plan?: ArmadaRunPlanStep[] | null | undefined;
     overview?: string | null | undefined;
-    agents?: PearAgentThread[] | undefined;
+    agents?: ArmadaAgentThread[] | undefined;
     has_visible_assistant_text?: boolean | undefined;
     live_updated_at?: number | undefined;
     trace_available?: boolean | undefined;
@@ -81,7 +81,7 @@ export type PearRunLiveView = {
         | undefined;
 };
 
-export type PearRunPushEvent = {
+export type ArmadaRunPushEvent = {
     version: 1;
     sequence: number;
     run_id: number;
@@ -92,7 +92,7 @@ export type PearRunPushEvent = {
     topic: string;
     current_activity: string;
     tool_count: number;
-    plan: PearRunPlanStep[] | null;
+    plan: ArmadaRunPlanStep[] | null;
     overview: string | null;
     has_visible_assistant_text: boolean | null;
     usage: {
@@ -108,18 +108,18 @@ export type PearRunPushEvent = {
     run_date_created: number;
     date_created: number;
     agent_thread_id?: string | null | undefined;
-    agent?: PearAgentThreadDelta | null | undefined;
-    agents?: PearAgentThread[] | null | undefined;
+    agent?: ArmadaAgentThreadDelta | null | undefined;
+    agents?: ArmadaAgentThread[] | null | undefined;
 };
 
-type PearRunStateListener = (run: PearRunLiveView, event?: PearRunPushEvent) => void;
+type ArmadaRunStateListener = (run: ArmadaRunLiveView, event?: ArmadaRunPushEvent) => void;
 
-type PearActiveResultMessageChange = {
+type ArmadaActiveResultMessageChange = {
     removed_message_ids: number[];
     footer_changed_message_ids?: number[];
 };
 
-export type PearRunFooter = {
+export type ArmadaRunFooter = {
     status: string;
     duration_seconds: number | null;
     total_tokens: number | null;
@@ -137,7 +137,7 @@ const active_run_topic_listeners = new Set<() => void>();
 
 // Completed runs' stats, keyed by result message, for the run footer.
 // Cumulative across topic switches because footers are historical facts.
-const settled_run_footers = new Map<number, PearRunFooter>();
+const settled_run_footers = new Map<number, ArmadaRunFooter>();
 // Overview copy is step-bound and can be cleared when Codex advances its
 // plan. Retain only the last non-empty server-authored line so a settled run
 // can close with useful context without inventing client copy.
@@ -147,21 +147,21 @@ const ambient_run_ids_by_result_message = new Map<number, number>();
 const active_run_started_at = new Map<number, number>();
 // A long engine operation (compaction, …) currently animating in the
 // active run's footer, keyed by result message.
-const active_run_operations = new Map<number, PearRunOperation>();
-const run_views_by_id = new Map<number, PearRunLiveView>();
+const active_run_operations = new Map<number, ArmadaRunOperation>();
+const run_views_by_id = new Map<number, ArmadaRunLiveView>();
 const run_ids_by_result_message = new Map<number, number>();
 const latest_sequence_by_run_id = new Map<number, number>();
-const run_state_listeners = new Set<PearRunStateListener>();
+const run_state_listeners = new Set<ArmadaRunStateListener>();
 const active_result_message_change_listeners = new Set<
-    (change: PearActiveResultMessageChange) => void
+    (change: ArmadaActiveResultMessageChange) => void
 >();
-export const PEAR_LIVENESS_MARKERS_CHANGED_EVENT = "pear:liveness-markers-changed";
+export const ARMADA_LIVENESS_MARKERS_CHANGED_EVENT = "armada:liveness-markers-changed";
 
 export function notify_liveness_markers_changed(): void {
     if (typeof document === "undefined" || typeof document.dispatchEvent !== "function") {
         return;
     }
-    document.dispatchEvent(new Event(PEAR_LIVENESS_MARKERS_CHANGED_EVENT));
+    document.dispatchEvent(new Event(ARMADA_LIVENESS_MARKERS_CHANGED_EVENT));
 }
 function is_active_status(status: string): boolean {
     return status === "queued" || status === "running";
@@ -171,7 +171,7 @@ function is_settled_status(status: string): boolean {
     return status === "done" || status === "failed" || status === "cancelled";
 }
 
-function footer_from_run(run: PearRunForActiveMessage): PearRunFooter {
+function footer_from_run(run: ArmadaRunForActiveMessage): ArmadaRunFooter {
     return {
         status: run.status,
         duration_seconds: run.usage?.duration_seconds ?? null,
@@ -188,7 +188,7 @@ function remember_overview(run_id: number, overview: string | null | undefined):
     }
 }
 
-function footers_equal(left: PearRunFooter | undefined, right: PearRunFooter): boolean {
+function footers_equal(left: ArmadaRunFooter | undefined, right: ArmadaRunFooter): boolean {
     return (
         left?.status === right.status &&
         left.duration_seconds === right.duration_seconds &&
@@ -249,7 +249,7 @@ function remove_active_result_message_from_contexts(message_id: number): void {
 }
 
 function notify_active_result_message_change_listeners(
-    change: PearActiveResultMessageChange,
+    change: ArmadaActiveResultMessageChange,
 ): void {
     for (const listener of active_result_message_change_listeners) {
         listener(change);
@@ -257,7 +257,7 @@ function notify_active_result_message_change_listeners(
 }
 
 export function set_active_run_result_messages(
-    runs: PearRunForActiveMessage[],
+    runs: ArmadaRunForActiveMessage[],
     options: {force_reconcile?: boolean; stream?: string; topic?: string} = {},
 ): void {
     const next_active_result_message_ids = new Set<number>();
@@ -340,13 +340,13 @@ export function set_active_run_result_messages(
     });
 }
 
-export function remember_runs(runs: PearRunForActiveMessage[]): void {
+export function remember_runs(runs: ArmadaRunForActiveMessage[]): void {
     for (const run of runs) {
         const latest_event_sequence = latest_sequence_by_run_id.get(run.id) ?? 0;
         const snapshot_is_current =
             latest_event_sequence === 0 ||
             (run.snapshot_sequence !== undefined && run.snapshot_sequence >= latest_event_sequence);
-        const hydrated_view: PearRunLiveView = {
+        const hydrated_view: ArmadaRunLiveView = {
             id: run.id,
             snapshot_sequence: run.snapshot_sequence,
             status: run.status,
@@ -382,7 +382,7 @@ export function remember_runs(runs: PearRunForActiveMessage[]): void {
         // Volatile worker state and durable run events have independent
         // clocks.  A newer push must not prevent the next authoritative live
         // snapshot from revealing the first real assistant text.
-        const view: PearRunLiveView = {
+        const view: ArmadaRunLiveView = {
             // The event watermark, not date_updated, establishes durable
             // ordering. A current snapshot contains the complete derived
             // agent graph even when heartbeat time predates the last event.
@@ -432,10 +432,10 @@ export function event_is_latest(run_id: number, sequence: number): boolean {
 }
 
 function agents_after_event(
-    previous: PearAgentThread[] | undefined,
-    agents: PearAgentThread[] | null | undefined,
-    delta: PearAgentThreadDelta | null | undefined,
-): PearAgentThread[] | undefined {
+    previous: ArmadaAgentThread[] | undefined,
+    agents: ArmadaAgentThread[] | null | undefined,
+    delta: ArmadaAgentThreadDelta | null | undefined,
+): ArmadaAgentThread[] | undefined {
     if (agents !== undefined && agents !== null) {
         return agents;
     }
@@ -452,7 +452,7 @@ function agents_after_event(
         if (agent_index !== index) {
             return agent;
         }
-        const merged: PearAgentThread = {
+        const merged: ArmadaAgentThread = {
             ...agent,
             status: delta.status ?? agent.status,
             current_activity: delta.current_activity ?? agent.current_activity,
@@ -461,7 +461,7 @@ function agents_after_event(
     });
 }
 
-export function apply_pear_run_event(event: PearRunPushEvent): void {
+export function apply_armada_run_event(event: ArmadaRunPushEvent): void {
     if (
         event.version !== 1 ||
         event.sequence <= (latest_sequence_by_run_id.get(event.run_id) ?? 0)
@@ -470,7 +470,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
     }
     latest_sequence_by_run_id.set(event.run_id, event.sequence);
     const previous = run_views_by_id.get(event.run_id);
-    const view: PearRunLiveView = {
+    const view: ArmadaRunLiveView = {
         ...previous,
         id: event.run_id,
         status: event.status,
@@ -559,7 +559,7 @@ export function apply_pear_run_event(event: PearRunPushEvent): void {
     }
 }
 
-export function get_run_view(message_id: number | undefined): PearRunLiveView | undefined {
+export function get_run_view(message_id: number | undefined): ArmadaRunLiveView | undefined {
     if (message_id === undefined) {
         return undefined;
     }
@@ -567,11 +567,11 @@ export function get_run_view(message_id: number | undefined): PearRunLiveView | 
     return run_id === undefined ? undefined : run_views_by_id.get(run_id);
 }
 
-export function get_run_view_by_id(run_id: number): PearRunLiveView | undefined {
+export function get_run_view_by_id(run_id: number): ArmadaRunLiveView | undefined {
     return run_views_by_id.get(run_id);
 }
 
-export function runs_for_context(stream: string, topic: string): PearRunLiveView[] {
+export function runs_for_context(stream: string, topic: string): ArmadaRunLiveView[] {
     // All known run views in one stream+topic context (the sidebar agent
     // roster reads this), newest first by creation date.
     const stream_key = stream.toLowerCase();
@@ -585,7 +585,7 @@ export function runs_for_context(stream: string, topic: string): PearRunLiveView
         .toSorted((a, b) => (b.date_created ?? 0) - (a.date_created ?? 0));
 }
 
-export function on_run_state_changed(listener: PearRunStateListener): () => void {
+export function on_run_state_changed(listener: ArmadaRunStateListener): () => void {
     run_state_listeners.add(listener);
     return () => run_state_listeners.delete(listener);
 }
@@ -626,7 +626,7 @@ export function on_active_run_topic_changed(listener: () => void): () => void {
 
 export function get_active_run_operation(
     message_id: number | undefined,
-): PearRunOperation | undefined {
+): ArmadaRunOperation | undefined {
     return message_id === undefined ? undefined : active_run_operations.get(message_id);
 }
 
@@ -637,7 +637,7 @@ export function get_active_run_started_at(message_id: number | undefined): numbe
     return active_run_started_at.get(message_id);
 }
 
-export function get_run_footer(message_id: number | undefined): PearRunFooter | undefined {
+export function get_run_footer(message_id: number | undefined): ArmadaRunFooter | undefined {
     if (message_id === undefined) {
         return undefined;
     }
@@ -652,7 +652,7 @@ export function get_ambient_run_id(message_id: number | undefined): number | und
 }
 
 export function on_active_run_result_messages_changed(
-    listener: (change: PearActiveResultMessageChange) => void,
+    listener: (change: ArmadaActiveResultMessageChange) => void,
 ): () => void {
     active_result_message_change_listeners.add(listener);
     return () => active_result_message_change_listeners.delete(listener);

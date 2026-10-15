@@ -862,7 +862,7 @@ function build_stream_sidebar_li(sub: StreamSubscription, for_modal = false): JQ
             sub.stream_id,
         ),
         is_empty_topic_only_channel: stream_data.is_empty_topic_only_channel(sub.stream_id),
-        has_pear_project: state_data.stream_has_pear_project(sub.stream_id),
+        has_armada_project: state_data.stream_has_armada_project(sub.stream_id),
         for_modal,
     };
     const $list_item = $(render_stream_sidebar_row(args));

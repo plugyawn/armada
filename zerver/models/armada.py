@@ -2,6 +2,7 @@ from django.db import models
 from django.db.models import CASCADE
 from django.utils.timezone import now as timezone_now
 
+from zerver.models.messages import Attachment
 from zerver.models.realms import Realm
 from zerver.models.users import UserProfile
 
@@ -92,6 +93,10 @@ class Post(models.Model):
     drafted_by_agent = models.BooleanField(default=False)
     date_created = models.DateTimeField(default=timezone_now)
     date_updated = models.DateTimeField(default=timezone_now)
+    # The uploads its content links to, claimed as a message claims
+    # its own: whoever may read the post may read them, and they are
+    # not unclaimed while it holds them.
+    attachments = models.ManyToManyField(Attachment, related_name="armada_posts")
 
     class Meta:
         indexes = [

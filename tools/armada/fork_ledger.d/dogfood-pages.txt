@@ -1,0 +1,7 @@
+# Dogfood fix: a pages post claims the uploads it links to, as a
+# message does (zerver/lib/armada_pages.py), so that its readers may
+# open them, the cleanup keeps them and the export carries them.
+kept zerver/actions/uploads.py  # an edited message's detached uploads leave out those a pages post claims
+kept zerver/lib/attachments.py  # a pages post's readers may read its uploads; a post's uploads are not unclaimed
+kept zerver/lib/markdown/__init__.py  # link upload paths are collected for any rendering, so a pages post sees its own
+kept zerver/tests/test_upload.py  # a refused file costs one more query, the check for a pages post that claims it

@@ -1,19 +1,29 @@
+import os
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from io import StringIO
 from typing import Any
 from unittest import mock
 
 import time_machine
+from django.conf import settings
+from django.utils.timezone import now as timezone_now
 
+from zerver.actions.message_delete import do_delete_messages
+from zerver.actions.uploads import do_delete_old_unclaimed_attachments
 from zerver.lib.armada_pages import draft_post, list_pages, read_page, read_post, update_bio
 from zerver.lib.event_schema import check_armada_post_event
 from zerver.lib.exceptions import JsonableError, MarkdownRenderingError
-from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.markdown import markdown_convert
+from zerver.lib.retention import clean_archived_data, delete_expired_attachments
+from zerver.lib.streams import render_stream_description
+from zerver.lib.test_classes import UploadSerializeMixin, ZulipTestCase
 from zerver.lib.users import get_user_ids_who_can_access_user
-from zerver.models import Post, UserProfile
+from zerver.models import Attachment, Message, Post, UserProfile
+from zerver.models.realms import get_realm
 
 
-class PagesTest(ZulipTestCase):
+class PagesTest(UploadSerializeMixin, ZulipTestCase):
     """Personal pages and their posts (zerver/lib/armada_pages.py)."""
 
     def write(self, user: UserProfile, title: str, content: str, **extra: Any) -> int:
@@ -36,6 +46,30 @@ class PagesTest(ZulipTestCase):
             # The queue gives each event its id on the way out.
             check_armada_post_event("events[0]", {**event["event"], "id": 0})
         return [(event["event"]["op"], set(event["users"])) for event in events]
+
+    def upload(self, user: UserProfile, *, weeks_ago: int = 0) -> Attachment:
+        self.login_user(user)
+        file = StringIO("zulip!")
+        file.name = "notes.txt"
+        with time_machine.travel(timezone_now() - timedelta(weeks=weeks_ago), tick=False):
+            result = self.client_post("/json/user_uploads", {"file": file})
+        url = self.assert_json_success(result)["url"]
+        return Attachment.objects.get(path_id=url.removeprefix("/user_uploads/"))
+
+    def link(self, attachment: Attachment) -> str:
+        return f"[{attachment.file_name}](/user_uploads/{attachment.path_id})"
+
+    def reads(self, viewer: UserProfile, attachment: Attachment) -> bool:
+        self.login_user(viewer)
+        response = self.client_get(f"/user_uploads/{attachment.path_id}")
+        if response.status_code == 403:
+            return False
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.getvalue(), b"zulip!")
+        return True
+
+    def claims(self, post_id: int) -> set[str]:
+        return set(Post.objects.get(id=post_id).attachments.values_list("path_id", flat=True))
 
     def test_a_post_is_markdown_rendered_as_messages_are(self) -> None:
         hamlet = self.example_user("hamlet")
@@ -283,3 +317,178 @@ class PagesTest(ZulipTestCase):
         self.assertIn("<li>pages</li>", full["rendered"])
         with self.assertRaisesRegex(JsonableError, "No such post."):
             read_post(self.example_user("cordelia"), post.id)
+
+    def test_any_rendering_collects_its_upload_links(self) -> None:
+        # The renderer collects the upload a link names whatever it
+        # renders, not only a message, so that a post sees its own; a
+        # channel description, which claims nothing, renders as before.
+        realm = get_realm("zulip")
+        path_id = f"{realm.id}/ff/notes.txt"
+        description = (
+            f"[here](http://{realm.host}/user_uploads/{path_id}), [there](/user_uploads/{path_id})"
+        )
+        self.assertEqual(
+            render_stream_description(description, realm),
+            f'<p><a href="user_uploads/{path_id}">here</a>, <a href="/user_uploads/{path_id}">there</a></p>',
+        )
+        rendering = markdown_convert(description, message_realm=realm, no_previews=True)
+        self.assertEqual(rendering.potential_attachment_path_ids, [path_id, path_id])
+
+    def test_a_posts_readers_read_its_uploads(self) -> None:
+        # Polonius is a guest who cannot see Othello.
+        self.set_up_db_for_testing_user_access()
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        othello = self.example_user("othello")
+        polonius = self.example_user("polonius")
+
+        shown = self.upload(hamlet)
+        shown_post = self.write(hamlet, "Shown", f"Look: {self.link(shown)}")
+        self.assertEqual(self.claims(shown_post), {shown.path_id})
+        self.assertTrue(self.reads(cordelia, shown))
+        self.assertTrue(self.reads(polonius, shown))
+
+        hidden = self.upload(othello)
+        self.write(othello, "Hidden", self.link(hidden))
+        self.assertTrue(self.reads(cordelia, hidden))
+        self.assertFalse(self.reads(polonius, hidden))
+
+        # A draft's uploads are its author's alone, until it is published.
+        drafted = self.upload(hamlet)
+        draft_id = self.write(hamlet, "Draft", self.link(drafted), draft="true")
+        self.assertEqual(self.claims(draft_id), {drafted.path_id})
+        self.assertTrue(self.reads(hamlet, drafted))
+        self.assertFalse(self.reads(cordelia, drafted))
+        self.login_user(hamlet)
+        self.assert_json_success(
+            self.client_patch(f"/json/armada/posts/{draft_id}", {"draft": "false"})
+        )
+        self.assertTrue(self.reads(cordelia, drafted))
+        self.login_user(hamlet)
+        self.assert_json_success(
+            self.client_patch(f"/json/armada/posts/{draft_id}", {"draft": "true"})
+        )
+        self.assertFalse(self.reads(cordelia, drafted))
+
+        # An upload also sent to a private channel: the message does
+        # not open it to Cordelia, the post does.
+        self.make_stream("private", invite_only=True)
+        self.subscribe(hamlet, "private")
+        in_both = self.upload(hamlet)
+        self.send_stream_message(hamlet, "private", self.link(in_both))
+        self.assertFalse(self.reads(cordelia, in_both))
+        self.write(hamlet, "Both", self.link(in_both))
+        self.assertTrue(self.reads(cordelia, in_both))
+
+    def test_naming_an_upload_does_not_claim_it(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        othello = self.example_user("othello")
+
+        # Hamlet's upload in no post, and his upload in a draft: Cordelia
+        # may read neither, so her post that names them claims neither.
+        unposted = self.upload(hamlet)
+        drafted = self.upload(hamlet)
+        self.write(hamlet, "Draft", self.link(drafted), draft="true")
+        with self.assertLogs(level="WARNING") as logs:
+            post_id = self.write(
+                cordelia, "Borrowed", f"{self.link(unposted)} {self.link(drafted)}"
+            )
+        self.assertEqual(
+            logs.output,
+            [
+                f"WARNING:root:User {cordelia.id} tried to claim upload {path_id} in post {post_id}, but lacks permission"
+                for path_id in sorted([unposted.path_id, drafted.path_id])
+            ],
+        )
+        self.assertEqual(self.claims(post_id), set())
+        for attachment in (unposted, drafted):
+            self.assertFalse(self.reads(cordelia, attachment))
+            self.assertFalse(self.reads(othello, attachment))
+
+        # Editing the post to name them again changes nothing.
+        self.login_user(cordelia)
+        with self.assertLogs(level="WARNING"):
+            result = self.client_patch(
+                f"/json/armada/posts/{post_id}", {"content": f"Again: {self.link(unposted)}"}
+            )
+        self.assert_json_success(result)
+        self.assertEqual(self.claims(post_id), set())
+        self.assertFalse(self.reads(othello, unposted))
+
+        # An upload she may read is hers to show, as in a message.
+        shared = self.upload(hamlet)
+        self.send_personal_message(hamlet, cordelia, self.link(shared))
+        self.assertFalse(self.reads(othello, shared))
+        shown_post = self.write(cordelia, "Shown", self.link(shared))
+        self.assertEqual(self.claims(shown_post), {shared.path_id})
+        self.assertTrue(self.reads(othello, shared))
+
+    def test_an_edit_releases_the_uploads_it_drops(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        first = self.upload(hamlet)
+        second = self.upload(hamlet)
+        post_id = self.write(hamlet, "Post", self.link(first))
+        self.assertEqual(self.claims(post_id), {first.path_id})
+
+        self.login_user(hamlet)
+        self.assert_json_success(
+            self.client_patch(f"/json/armada/posts/{post_id}", {"content": self.link(second)})
+        )
+        self.assertEqual(self.claims(post_id), {second.path_id})
+        self.assertFalse(self.reads(cordelia, first))
+        self.assertTrue(self.reads(cordelia, second))
+
+        # An edit that leaves the content alone leaves the claims alone.
+        self.login_user(hamlet)
+        self.assert_json_success(
+            self.client_patch(f"/json/armada/posts/{post_id}", {"title": "Renamed"})
+        )
+        self.assertEqual(self.claims(post_id), {second.path_id})
+
+        # Deleting the post releases everything it held.
+        self.login_user(hamlet)
+        self.assert_json_success(self.client_delete(f"/json/armada/posts/{post_id}"))
+        self.assertFalse(Attachment.objects.get(id=second.id).armada_posts.exists())
+        self.assertFalse(self.reads(cordelia, second))
+
+    def test_a_posts_uploads_are_not_unclaimed(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        kept = self.upload(hamlet, weeks_ago=2)
+        released = self.upload(hamlet, weeks_ago=2)
+        post_id = self.write(hamlet, "Post", f"{self.link(kept)} {self.link(released)}")
+        self.login_user(hamlet)
+        self.assert_json_success(
+            self.client_patch(f"/json/armada/posts/{post_id}", {"content": self.link(kept)})
+        )
+
+        def stored(attachment: Attachment) -> bool:
+            assert settings.LOCAL_FILES_DIR
+            on_disk = os.path.isfile(os.path.join(settings.LOCAL_FILES_DIR, attachment.path_id))
+            self.assertEqual(Attachment.objects.filter(id=attachment.id).exists(), on_disk)
+            return on_disk
+
+        do_delete_old_unclaimed_attachments(1)
+        self.assertTrue(stored(kept))
+        self.assertFalse(stored(released))
+
+        # A message that shared the post's upload is deleted, and its
+        # archive purged, without taking the upload from the post.
+        self.subscribe(hamlet, "Denmark")
+        message_id = self.send_stream_message(hamlet, "Denmark", self.link(kept))
+        do_delete_messages(hamlet.realm, [Message.objects.get(id=message_id)], acting_user=None)
+        delete_expired_attachments(hamlet.realm)
+        with self.settings(ARCHIVED_DATA_VACUUMING_DELAY_DAYS=0):
+            clean_archived_data()
+        do_delete_old_unclaimed_attachments(1)
+        self.assertTrue(stored(kept))
+        self.assertEqual(self.claims(post_id), {kept.path_id})
+        self.assertTrue(self.reads(cordelia, kept))
+
+        # Dropping it from an edited message does not offer to delete it.
+        message_id = self.send_stream_message(hamlet, "Denmark", self.link(kept))
+        self.login_user(hamlet)
+        result = self.client_patch(f"/json/messages/{message_id}", {"content": "Gone."})
+        self.assertEqual(self.assert_json_success(result)["detached_uploads"], [])

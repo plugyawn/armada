@@ -7,6 +7,7 @@ from django.db.models import Exists, OuterRef, QuerySet
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
+from zerver.lib.armada_pages import may_read_upload_in_a_post
 from zerver.lib.exceptions import JsonableError, RateLimitedError
 from zerver.lib.streams import is_user_in_groups_granting_content_access
 from zerver.lib.upload import delete_message_attachment
@@ -195,8 +196,11 @@ def validate_attachment_request(
             message_channel_ids.add(message.recipient.type_id)
 
     if len(message_channel_ids) == 0:
-        # If only DMs are relevant, return early here.
-        return False, attachment
+        # If only DMs are relevant, return early here. Armada: the
+        # readers of a post on someone's page that claims the upload
+        # may read it too; asked last, so a message's readers pay
+        # nothing for it.
+        return may_read_upload_in_a_post(user_profile, attachment), attachment
 
     # The remaining code path is slow but should only be relevant
     # rarely: Users trying to view an attachment that was shared with
@@ -227,7 +231,7 @@ def validate_attachment_request(
             elif channel.id in usermessages_channel_ids:
                 return True, attachment
 
-    return False, attachment
+    return may_read_upload_in_a_post(user_profile, attachment), attachment
 
 
 def get_old_unclaimed_attachments(
@@ -236,8 +240,8 @@ def get_old_unclaimed_attachments(
     """
     The logic in this function is fairly tricky. The essence is that
     a file should be cleaned up if and only if it not referenced by any
-    Message, ScheduledMessage or ArchivedMessage. The way to find that out is through the
-    Attachment and ArchivedAttachment tables.
+    Message, ScheduledMessage, ArchivedMessage or Armada page's Post. The way to find
+    that out is through the Attachment and ArchivedAttachment tables.
     The queries are complicated by the fact that an uploaded file
     may have either only an Attachment row, only an ArchivedAttachment row,
     or both - depending on whether some, all or none of the messages
@@ -246,7 +250,7 @@ def get_old_unclaimed_attachments(
     delta_weeks_ago = timezone_now() - timedelta(weeks=weeks_ago)
 
     # The Attachment vs ArchivedAttachment queries are asymmetric because only
-    # Attachment has the scheduled_messages relation.
+    # Attachment has the scheduled_messages and armada_posts relations.
     old_attachments = (
         Attachment.objects.alias(
             has_other_messages=Exists(
@@ -256,6 +260,7 @@ def get_old_unclaimed_attachments(
         .filter(
             messages=None,
             scheduled_messages=None,
+            armada_posts=None,
             create_time__lt=delta_weeks_ago,
             has_other_messages=False,
         )
@@ -265,7 +270,7 @@ def get_old_unclaimed_attachments(
         ArchivedAttachment.objects.alias(
             has_other_messages=Exists(
                 Attachment.objects.filter(id=OuterRef("id")).exclude(
-                    messages=None, scheduled_messages=None
+                    messages=None, scheduled_messages=None, armada_posts=None
                 )
             )
         )

@@ -15,18 +15,25 @@ is. Each change to a post is pushed as an armada_post event: to the
 author always, and to everyone else who can see the author while the
 post is published (an add when it appears to them, a remove when it
 leaves).
+
+Uploads. A post claims the uploads its content links to, as a message
+does (zerver/actions/uploads.py): whoever may read the post may read
+them (zerver/lib/attachments.py asks may_read_upload_in_a_post), and
+they are not unclaimed while it holds them.
 """
 
+import logging
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, Literal
 
 from django.db import transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, QuerySet
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
 from zerver.lib.exceptions import JsonableError, MarkdownRenderingError, ResourceNotFoundError
-from zerver.lib.markdown import markdown_convert
+from zerver.lib.markdown import MessageRenderingResult, markdown_convert
 from zerver.lib.users import (
     access_user_by_id,
     check_can_access_user,
@@ -34,7 +41,7 @@ from zerver.lib.users import (
     get_accessible_user_ids,
     get_user_ids_who_can_access_user,
 )
-from zerver.models import Page, Post, UserProfile
+from zerver.models import Attachment, Page, Post, UserProfile
 from zerver.tornado.django_api import send_event_on_commit
 
 
@@ -133,31 +140,83 @@ def read_page(viewer: UserProfile, user: UserProfile) -> dict[str, Any]:
     }
 
 
+def first_readable_post(viewer: UserProfile, posts: QuerySet[Post]) -> Post | None:
+    """The first of the posts the viewer may read: a published post by
+    someone they can see, or a draft of their own. Reading a post and
+    reading the uploads it shows both ask this."""
+    for post in posts.filter(visible_posts(viewer), realm_id=viewer.realm_id).select_related(
+        "author"
+    ):
+        if check_can_access_user(post.author, viewer, realm=viewer.realm):
+            return post
+    return None
+
+
 def access_post(viewer: UserProfile, post_id: int) -> Post:
     """The post, if the viewer may read it; one error for a post that is
     not there and one they may not see, so a draft's existence does not
     leak."""
-    post = (
-        Post.objects.filter(visible_posts(viewer), id=post_id, realm_id=viewer.realm_id)
-        .select_related("author")
-        .first()
-    )
-    if post is None or not check_can_access_user(post.author, viewer):
+    post = first_readable_post(viewer, Post.objects.filter(id=post_id))
+    if post is None:
         raise ResourceNotFoundError(_("No such post."))
     return post
+
+
+def may_read_upload_in_a_post(viewer: UserProfile, attachment: Attachment) -> bool:
+    """Whether the viewer may read a post that claims the upload, and so
+    the upload, as a message's readers may read its uploads."""
+    claiming_posts = attachment.armada_posts.defer("content", "rendered_content")
+    return first_readable_post(viewer, claiming_posts) is not None
 
 
 def read_post(viewer: UserProfile, post_id: int) -> dict[str, Any]:
     return post_in_full(access_post(viewer, post_id))
 
 
-def render_post(author: UserProfile, content: str) -> str:
+def render_post(author: UserProfile, content: str) -> MessageRenderingResult:
     try:
         return markdown_convert(
             content, message_realm=author.realm, no_previews=True, acting_user=author
-        ).rendered_content
+        )
     except MarkdownRenderingError:
         raise JsonableError(_("Unable to render the post."))
+
+
+def claim_post_uploads(post: Post, path_ids: Iterable[str]) -> None:
+    """Makes the post's claims the uploads its content links to, as
+    check_attachment_reference_change does for an edited message: a
+    link the content dropped releases its upload, and a new one claims
+    its upload only if the author may read it already, so that naming
+    someone else's file in a post never opens it to the post's
+    readers."""
+    linked = set(path_ids)
+    held = set(post.attachments.values_list("path_id", flat=True))
+    released = held - linked
+    if released:
+        post.attachments.remove(
+            *Attachment.objects.filter(path_id__in=released).select_for_update(no_key=True)
+        )
+    # Imported here: zerver.lib.attachments imports this module, for
+    # may_read_upload_in_a_post.
+    from zerver.lib.attachments import validate_attachment_request
+
+    claimed = []
+    for path_id in sorted(linked - held):
+        may_read, attachment = validate_attachment_request(post.author, path_id)
+        if not may_read:
+            # A link that only looks like an upload, or an upload the
+            # author may not read; as for a message, either suggests a
+            # client bug, so it is logged.
+            logging.warning(
+                "User %s tried to claim upload %s in post %s, but lacks permission",
+                post.author_id,
+                path_id,
+                post.id,
+            )
+            continue
+        assert attachment is not None
+        claimed.append(attachment)
+    post.attachments.add(*claimed)
 
 
 def check_title(title: str) -> str:
@@ -225,17 +284,18 @@ def create_post(
     check_can_write(author)
     title = check_title(title)
     content = check_content(content)
-    rendered_content = render_post(author, content)
+    rendering = render_post(author, content)
     with transaction.atomic(savepoint=False):
         post = Post.objects.create(
             realm_id=author.realm_id,
             author=author,
             title=title,
             content=content,
-            rendered_content=rendered_content,
+            rendered_content=rendering.rendered_content,
             draft=draft,
             drafted_by_agent=drafted_by_agent,
         )
+        claim_post_uploads(post, rendering.potential_attachment_path_ids)
         push_post_change(post, "add", was_published=False)
     return post
 
@@ -260,19 +320,20 @@ def update_post(
 ) -> None:
     if title is not None:
         title = check_title(title)
-    rendered_content = None
+    rendering = None
     if content is not None:
         content = check_content(content)
-        rendered_content = render_post(author, content)
+        rendering = render_post(author, content)
     with transaction.atomic(savepoint=False):
         post = lock_own_post(author, post_id)
         if post is not None:
             was_published = not post.draft
             if title is not None:
                 post.title = title
-            if content is not None and rendered_content is not None:
+            if content is not None and rendering is not None:
                 post.content = content
-                post.rendered_content = rendered_content
+                post.rendered_content = rendering.rendered_content
+                claim_post_uploads(post, rendering.potential_attachment_path_ids)
             if draft is not None:
                 post.draft = draft
             post.date_updated = timezone_now()

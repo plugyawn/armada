@@ -188,6 +188,7 @@ ALL_ZULIP_TABLES = {
     "zerver_page",
     "zerver_partner",
     "zerver_post",
+    "zerver_post_attachments",
     "zerver_preregistrationrealm",
     "zerver_preregistrationuser",
     "zerver_preregistrationuser_streams",
@@ -324,6 +325,9 @@ NON_EXPORTED_TABLES = {
     "zerver_repository",
     "zerver_workspace",
     "zerver_workspaceentrymutationreceipt",
+    # Which uploads each pages post claims; the uploads that only a
+    # post claims are left out with them.
+    "zerver_post_attachments",
 }
 
 IMPLICIT_TABLES = {
@@ -1347,6 +1351,8 @@ def add_user_profile_child_configs(user_profile_config: Config) -> None:
         # its author's consent.
         limit_to_consenting_users=False,
         custom_process_results=custom_process_post,
+        # Its claims on uploads are not exported (NON_EXPORTED_TABLES).
+        exclude=["attachments"],
     )
 
     Config(

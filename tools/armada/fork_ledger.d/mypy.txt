@@ -2,4 +2,4 @@
 # already changed, so that tools/run-mypy reports nothing.
 kept zerver/lib/narrow.py  # the thread anchor's values query is annotated
 kept zerver/lib/queue.py  # the priority consumer's callback is a typed function
-kept zerver/lib/retention.py  # the deleted replies' root ids are cast to list[int]
+kept zerver/lib/retention.py  # the deleted replies' root ids are cast to list[int]; an upload a pages post claims keeps its Attachment when its last message is archived (dogfood-pages)

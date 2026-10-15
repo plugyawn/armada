@@ -1103,9 +1103,11 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
         if len(found_urls) > 0:
             self.zmd.zulip_rendering_result.has_link = True
 
-        if self.zmd.zulip_message:
-            for url in unique_urls:
-                maybe_add_attachment_path_id(url, self.zmd)
+        # Armada: collected for any rendering, not only a message's,
+        # because a post on someone's page claims its uploads as a
+        # message does (zerver/lib/armada_pages.py).
+        for url in unique_urls:
+            maybe_add_attachment_path_id(url, self.zmd)
 
         if len(found_urls) == 0:
             return

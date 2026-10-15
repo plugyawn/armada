@@ -566,6 +566,7 @@ def delete_expired_attachments(realm: Realm) -> None:
     (num_deleted, _deletions) = Attachment.objects.filter(
         messages__isnull=True,
         scheduled_messages__isnull=True,
+        armada_posts__isnull=True,
         realm_id=realm.id,
         id__in=ArchivedAttachment.objects.filter(realm_id=realm.id),
     ).delete()
@@ -750,7 +751,10 @@ def move_messages_to_archive(
             messages__id__in=archived_aggregate_ids
         ).distinct()
         Attachment.objects.filter(
-            messages__isnull=True, scheduled_messages__isnull=True, id__in=archived_attachments
+            messages__isnull=True,
+            scheduled_messages__isnull=True,
+            armada_posts__isnull=True,
+            id__in=archived_attachments,
         ).delete()
 
     if message_ids and count == 0:

@@ -132,7 +132,7 @@ def check_attachment_reference_change(
 
     sender = message.sender
     detached_attachments_query = Attachment.objects.filter(
-        path_id__in=to_remove, messages__isnull=True, owner=sender
+        path_id__in=to_remove, messages__isnull=True, armada_posts__isnull=True, owner=sender
     )
     detached_attachments = [attachment.to_dict() for attachment in detached_attachments_query]
 

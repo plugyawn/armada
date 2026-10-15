@@ -952,8 +952,9 @@ class FileUploadTest(UploadSerializeMixin, ZulipTestCase):
 
         def assert_cannot_access_file(user: UserProfile) -> None:
             self.login_user(user)
-            # It takes a few extra queries to verify lack of access with shared history.
-            with self.assert_database_query_count(10):
+            # It takes a few extra queries to verify lack of access with shared history,
+            # and one to check for an Armada pages post that claims the file.
+            with self.assert_database_query_count(11):
                 response = self.client_get(url)
             self.assertEqual(response.status_code, 403)
             self.assert_in_response("You are not authorized to view this file.", response)
@@ -994,7 +995,8 @@ class FileUploadTest(UploadSerializeMixin, ZulipTestCase):
 
         user = self.example_user("aaron")
         self.login_user(user)
-        with self.assert_database_query_count(10):
+        # One query is to check for an Armada pages post that claims the file.
+        with self.assert_database_query_count(11):
             response = self.client_get(url)
             self.assertEqual(response.status_code, 403)
             self.assert_in_response("You are not authorized to view this file.", response)

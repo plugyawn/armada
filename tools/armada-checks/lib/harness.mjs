@@ -420,6 +420,10 @@ export class CheckContext {
         const point = await this.page.evaluate(() => window.__ac.center("alertBanner"));
         if (point) {
             await this.page.mouse.click(point.x, point.y);
+            // The banner's close button sits where the feed's sticky
+            // header lands once the banner is gone; a pointer left
+            // there opens its tooltip and every check pays for it.
+            await this.page.mouse.move(0, 0);
             await sleep(150);
         }
     }

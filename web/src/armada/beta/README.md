@@ -19,7 +19,8 @@ Delete it when the rebuild's conversation lands.
   `sv.html`); Onix has no face. With no pack, or a partner with no icon, faces are initials and nothing else changes.
 - The page is ES modules, one for each part of it (below), wired by `host.js`. Reads and writes go to `/json/` with
   the session cookie and the page's CSRF token.
-- `beta.css`: what real data needs beyond the kit. Tokens only.
+- `beta.css`: what real data needs beyond the kit. Tokens only. `feed.css`: the same for the conversation's parts (the
+  feed's modules), so that the feed's rules do not interleave with everyone else's.
 
 ## Modules and owners
 

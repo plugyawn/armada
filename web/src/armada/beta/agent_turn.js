@@ -7,6 +7,7 @@ import {feed, lane} from "./frame.js";
 import {loadPics, partEl, partsOf, tpl} from "./parts.js";
 import {dist, drawLane, edge, finish, grown, hugAll, hush, pin, sectionOf, syncJump, toHug} from "./feed.js";
 import {runOfMsg} from "./runs.js";
+import {drawTurnPlan} from "./checklist.js";
 import {drawReactions} from "./reactions.js";
 import {drawLab} from "./lab.js";
 
@@ -21,7 +22,7 @@ const msgLive = (c, m) => { if (m.local) return true; const r = runOfMsg(c, m.id
    not change when the run settles, under the words or under anything said after them. */
 function syncOnix(cl, m) {
   const c = msgIndex.get(m.id) || state.P, live = msgLive(c, m), r = runOfMsg(c, m.id); let head = $(".head:not(.gone)", cl);
-  cl.classList.toggle("live", live);
+  cl.classList.toggle("live", live); drawTurnPlan(cl, r);
   if (live) { const ans = $$(":scope > .ans", cl).pop() || cl.appendChild(placeholderAns(m)); let p = tailOf(ans); if (!p) { p = el("p"); p._src = ""; ans.append(p); }
     if (!head) { head = el("span", "head", wk(true)); p.append(head); } else if (head.parentNode !== p) p.append(head); else if (head.nextSibling && !(head.nextSibling.classList && head.nextSibling.classList.contains("rca"))) p.append(head);
     head.classList.toggle("first", !p.textContent.trim()); }
@@ -47,7 +48,11 @@ function drawFooter(cl, live, r) { const old = $(":scope > .line.foot", cl), htm
   if (!html) return null;
   if (old) { if (old._sig !== html) { old.innerHTML = html; old._sig = html; } return old; }
   const f = el("div", "line foot", html); f._sig = html; const tl = $(":scope > .tl", cl), lastPart = $$(":scope > [data-part]", cl).pop(); if (tl) tl.before(f); else if (lastPart) lastPart.after(f); else cl.append(f); cl.classList.add("run"); return f; }
-function drawFooters() { for (const cl of $$(".cl.onix[data-mid]", lane)) { const m = state.P.byId.get(+cl.dataset.mid) || state.P.byId.get(cl.dataset.mid); if (m) syncOnix(cl, m); } }
+/* the place's runs have been read: every turn takes its footer and its checklist. They land above what is in view, where
+   the browser's scroll anchoring would move the scroll position under a pinned feed and unpin it; a pinned feed is
+   pinned again in the same task, so its end stays its end. */
+function drawFooters() { for (const cl of $$(".cl.onix[data-mid]", lane)) { const m = state.P.byId.get(+cl.dataset.mid) || state.P.byId.get(cl.dataset.mid); if (m) syncOnix(cl, m); }
+  if (state.pinned && state.tab === "Chat") pin(); }
 /* the server edits Onix's message as it writes. The new rendering is followed into the same elements: a paragraph that
    grew gets only its new words (they arrive on the ink's fade); a paragraph that changed is rewritten in place; parts
    that are new are added after the last. The row is never replaced. */
@@ -56,7 +61,7 @@ function morphOnix(cl, m) {
   let wrote = false, lastEl = null;
   parts.forEach((p, i) => { const old = ex[i];
     if (old && old.dataset.part === p.t) { lastEl = old; if (old._src === p.html) return; wrote = true; if (p.t === "ans") morphAns(old, p.html, head); else { old.innerHTML = p.html; loadPics(old); } old._src = p.html; return; }
-    const e = partEl(p, m); wrote = true; if (old) { if (head && old.contains(head)) head.remove(); old.replaceWith(e); } else if (lastEl) lastEl.after(e); else { const anchor = $(":scope > .who", cl) || $(":scope > .sigil", cl); anchor ? anchor.after(e) : cl.prepend(e); } lastEl = e; if (!M.reduced()) M.appear(e, 0.45); });
+    const e = partEl(p, m); wrote = true; if (old) { if (head && old.contains(head)) head.remove(); old.replaceWith(e); } else if (lastEl) lastEl.after(e); else { const anchor = $(":scope > .plan", cl) || $(":scope > .who", cl) || $(":scope > .sigil", cl); anchor ? anchor.after(e) : cl.prepend(e); } lastEl = e; if (!M.reduced()) M.appear(e, 0.45); });
   ex.slice(parts.length).forEach((x) => { if (head && x.contains(head)) head.remove(); x.remove(); });
   return wrote;
 }

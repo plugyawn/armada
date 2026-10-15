@@ -1,0 +1,13 @@
+/* INTERIM BETA (README.md): what the conversation's parts need beyond the kit (the feed's modules). Tokens only. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* the run's checklist in its turn (checklist.js, drawTurnPlan): at the text edge of Onix's words, at their measure; its
+   rows are the column's rows, 28 high with the mark in a 20 px cell; its heading is a label, with the count at its end */
+.cl.onix > .plan { padding-left: var(--pad-x); max-width: calc(var(--prose) + var(--pad-x)); }
+.cl.onix > .who + .plan { margin-top: var(--gap-same); }   /* two labels, Onix and Checklist, stand apart: 8 between them as in the design */
+.plan > .ph { display: flex; align-items: center; justify-content: space-between; height: 16px; margin-bottom: var(--gap-same); font: var(--t-label); color: var(--ink-2); }
+.plan > .ph > .pc { font: var(--t-caption); font-variant-numeric: tabular-nums; }
+.plan > .chk { font: var(--t-text); }
+.chk > li.failed > .mk.sm { color: var(--failure); }
+
+}   /* @layer zulip.armada-beta */

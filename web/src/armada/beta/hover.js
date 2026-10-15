@@ -50,7 +50,7 @@ function overShow(t) { if (!t || !t.isConnected) return; if (overAt === t && !ov
   const mine = (msgOf(t) || {}).sender_id === state.ME; $('[data-act="more"]', over).hidden = false; void mine;
   if (up) { M.fade(over, 1); M.flip(over, before, "touch"); } else { M.fade(over, 1); M.release(over, {y: T["pane-rise"] || 4}, "touch"); } }
 function overHide() { clearTimeout(overTimer); overWant = null; if (!over || over.inert) return; over.inert = true; overAt = null; M.fade(over, 0); }
-const plainText = (t) => { const x = t.cloneNode(true); $$(".rcs, .rca, .over, .head, time, .who, .sigil, .face, .tl, .thr-in, .line", x).forEach((y) => y.remove()); return x.textContent.trim(); };
+const plainText = (t) => { const x = t.cloneNode(true); $$(".rcs, .rca, .over, .head, time, .who, .sigil, .face, .plan, .tl, .thr-in, .line", x).forEach((y) => y.remove()); return x.textContent.trim(); };
 function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from the keyboard, focus stays on the control: the field is not where I was */
   if (name === "react") { react(m, {emoji_name: "+1", emoji_code: "1f44d", reaction_type: "unicode_emoji"}); if (!kbd) ready(); }
   else if (name === "thread") { overHide(); openThread(m.thread_root_message_id || m.id, false, {focus: true}); }

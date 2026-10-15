@@ -4,7 +4,7 @@ import shutil
 import uuid
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
@@ -26,7 +26,7 @@ from zerver.actions.custom_profile_fields import try_add_realm_custom_profile_fi
 from zerver.actions.muted_users import do_mute_user
 from zerver.actions.navigation_views import do_add_navigation_view
 from zerver.actions.presence import do_update_user_presence
-from zerver.actions.reactions import check_add_reaction
+from zerver.actions.reactions import check_add_reaction, do_add_reaction
 from zerver.actions.realm_emoji import check_add_realm_emoji
 from zerver.actions.realm_icon import do_change_icon_source
 from zerver.actions.realm_logo import do_change_logo_source
@@ -92,6 +92,7 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Partner,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -1608,6 +1609,28 @@ class RealmImportExportTest(ExportFile):
         # Verify strange invariant for Reaction/RealmEmoji.
         self.assertEqual(reaction.emoji_code, str(realm_emoji.id))
 
+        # data to test import of partners: hamlet's experience has counted
+        # everything before his newest message, and the first reaction to it.
+        partner_message_id = self.send_stream_message(hamlet, "Verona", "a partner's message")
+        partner_message = Message.objects.get(id=partner_message_id)
+        do_add_reaction(othello, partner_message, "tada", "1f389", Reaction.UNICODE_EMOJI)
+        do_add_reaction(cordelia, partner_message, "tada", "1f389", Reaction.UNICODE_EMOJI)
+        Partner.objects.create(
+            user_profile=hamlet,
+            realm=original_realm,
+            species="4",
+            chosen="4",
+            chosen_at=timezone_now(),
+            xp=300,
+            day=date(2026, 10, 15),
+            message_watermark=partner_message_id - 1,
+            reaction_watermark=Reaction.objects.get(
+                message=partner_message, user_profile=othello
+            ).id,
+        )
+        # A partner whose experience was never counted counts from the start.
+        Partner.objects.create(user_profile=othello, realm=original_realm)
+
         # data to test import of onboaring step
         OnboardingStep.objects.filter(user=sample_user).delete()
         OnboardingStep.objects.create(
@@ -2225,6 +2248,30 @@ class RealmImportExportTest(ExportFile):
                 )
             )
             return onboarding_steps
+
+        @getter
+        def get_partners(r: Realm) -> set[tuple[object, ...]]:
+            # A watermark is compared by what it marks: how many of the
+            # person's messages, and of the reactions to them, are past it.
+            return {
+                (
+                    partner.user_profile.full_name,
+                    partner.species,
+                    partner.xp,
+                    partner.day,
+                    Message.objects.filter(
+                        realm=r,
+                        sender_id=partner.user_profile_id,
+                        id__gt=partner.message_watermark,
+                    ).count(),
+                    Reaction.objects.filter(
+                        message__realm=r,
+                        message__sender_id=partner.user_profile_id,
+                        id__gt=partner.reaction_watermark,
+                    ).count(),
+                )
+                for partner in Partner.objects.filter(realm=r).select_related("user_profile")
+            }
 
         @getter
         def get_navigation_views(r: Realm) -> set[str]:
@@ -3760,6 +3807,16 @@ class SingleUserExportTest(ExportFile):
         @checker
         def zerver_onboardingstep(records: list[Record]) -> None:
             self.assertEqual(records[-1]["onboarding_step"], "topics")
+
+        Partner.objects.create(user_profile=cordelia, realm=realm, species="7", xp=12)
+        Partner.objects.create(user_profile=othello, realm=realm, species="4")
+
+        @checker
+        def zerver_partner(records: list[Record]) -> None:
+            (rec,) = records
+            self.assertEqual(
+                (rec["user_profile"], rec["species"], rec["xp"]), (cordelia.id, "7", 12)
+            )
 
         """
         The zerver_realmauditlog checker basically assumes that

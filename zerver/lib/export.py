@@ -66,6 +66,7 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Partner,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -181,6 +182,7 @@ ALL_ZULIP_TABLES = {
     "zerver_navigationview",
     "zerver_onboardingstep",
     "zerver_onboardingusermessage",
+    "zerver_partner",
     "zerver_preregistrationrealm",
     "zerver_preregistrationuser",
     "zerver_preregistrationuser_streams",
@@ -1220,6 +1222,15 @@ def custom_process_subscription_in_realm_config(
         yield subscription_dict
 
 
+def custom_process_partner(partners: Iterable[Record], context: Context) -> Iterator[Record]:
+    """A partner's open day is a date, which the export writes as an ISO
+    date; Django reads it back as one."""
+    for partner in partners:
+        if partner["day"] is not None:
+            partner = {**partner, "day": partner["day"].isoformat()}
+        yield partner
+
+
 def add_user_profile_child_configs(user_profile_config: Config) -> None:
     """
     We add tables here that are keyed by user, and for which
@@ -1274,6 +1285,16 @@ def add_user_profile_child_configs(user_profile_config: Config) -> None:
         normal_parent=user_profile_config,
         include_rows="user_id__in",
         limit_to_consenting_users=True,
+    )
+
+    Config(
+        table="zerver_partner",
+        model=Partner,
+        normal_parent=user_profile_config,
+        include_rows="user_profile_id__in",
+        # A person's partner is shown to everyone who can see them.
+        limit_to_consenting_users=False,
+        custom_process_results=custom_process_partner,
     )
 
     Config(

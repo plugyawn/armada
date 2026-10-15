@@ -1,5 +1,6 @@
 from zerver.models import lookups as lookups
 from zerver.models.alert_words import AlertWord as AlertWord
+from zerver.models.armada import Partner as Partner
 from zerver.models.bots import AgentMonitor as AgentMonitor
 from zerver.models.bots import AgentRun as AgentRun
 from zerver.models.bots import AgentRunEvent as AgentRunEvent

@@ -8,13 +8,13 @@ web/sprites/licensed/), and tools/armada/sprites.py writes species.json
 there. Without it the feature is off: nobody can choose, and faces stay
 initials.
 
-Storage, for now. Until a Partner model arrives with its own migration
-(the package after the rename), each person's row is JSON in a
-BotStorageData row under the agent's bot, key "partner:<user_id>" (the
-study's interim, section 4).
-Only this module writes those rows, always under a lock on the agent's
-bot row, so two people cannot take one evolution line and two folds of
-one person cannot count the same message twice.
+Storage. Each person's row is a Partner (zerver/models/armada.py),
+which only this module writes. The code works on the row as a dict
+(new_row's keys, with times as Unix timestamps and the day as an ISO
+date), read and written at the edges. A write holds the person's row
+locked for its transaction, so two folds of one person cannot count the
+same message twice; a choice also holds the agent's bot row, so two
+people cannot take one evolution line.
 
 Experience. fold_partner_xp brings a row up to date from what the server
 already has: my messages, my runs that ended, reactions others put on my
@@ -43,9 +43,8 @@ from zerver.lib.users import (
     check_user_can_access_all_users,
     get_accessible_user_ids,
 )
-from zerver.models import AgentRun, BotStorageData, Message, Reaction, UserProfile
+from zerver.models import AgentRun, Message, Partner, Reaction, UserProfile
 
-PARTNER_KEY_PREFIX = "partner:"
 # A person's experience is folded at most this often; a fold asked for
 # sooner returns the row as it stands.
 PARTNER_FOLD_SECONDS = 30
@@ -189,35 +188,58 @@ def new_row() -> dict[str, Any]:
     }
 
 
-def get_rows(agent: UserProfile) -> dict[int, dict[str, Any]]:
-    rows = {}
-    for key, value in BotStorageData.objects.filter(
-        bot_profile=agent, key__startswith=PARTNER_KEY_PREFIX
-    ).values_list("key", "value"):
-        rows[int(key.removeprefix(PARTNER_KEY_PREFIX))] = {**new_row(), **json.loads(value)}
-    return rows
+# The row's times, kept as Unix timestamps in the dict.
+PARTNER_TIMES = ("chosen_at", "evolved_at", "runs_watermark", "folded_at")
 
 
-def get_row(agent: UserProfile, user_id: int) -> dict[str, Any]:
-    value = (
-        BotStorageData.objects.filter(bot_profile=agent, key=f"{PARTNER_KEY_PREFIX}{user_id}")
-        .values_list("value", flat=True)
-        .first()
+def row_of(partner: Partner) -> dict[str, Any]:
+    row = {key: getattr(partner, key) for key in new_row()}
+    for key in PARTNER_TIMES:
+        if row[key] is not None:
+            row[key] = row[key].timestamp()
+    if row["day"] is not None:
+        row["day"] = row["day"].isoformat()
+    return row
+
+
+def columns_of(row: dict[str, Any]) -> dict[str, Any]:
+    columns = dict(row)
+    for key in PARTNER_TIMES:
+        if columns[key] is not None:
+            columns[key] = datetime.fromtimestamp(columns[key], tz=timezone.utc)
+    if columns["day"] is not None:
+        columns["day"] = date.fromisoformat(columns["day"])
+    return columns
+
+
+def get_rows(realm_id: int) -> dict[int, dict[str, Any]]:
+    return {
+        partner.user_profile_id: row_of(partner)
+        for partner in Partner.objects.filter(realm_id=realm_id)
+    }
+
+
+def get_row(user: UserProfile) -> dict[str, Any]:
+    partner = Partner.objects.filter(user_profile=user).first()
+    return row_of(partner) if partner is not None else new_row()
+
+
+def save_row(user: UserProfile, row: dict[str, Any]) -> None:
+    Partner.objects.update_or_create(
+        user_profile=user, defaults={"realm_id": user.realm_id, **columns_of(row)}
     )
-    return {**new_row(), **json.loads(value)} if value is not None else new_row()
 
 
-def save_row(agent: UserProfile, user_id: int, row: dict[str, Any]) -> None:
-    BotStorageData.objects.update_or_create(
-        bot_profile=agent,
-        key=f"{PARTNER_KEY_PREFIX}{user_id}",
-        defaults={"value": json.dumps(row, sort_keys=True)},
-    )
+def lock_row(user: UserProfile) -> dict[str, Any]:
+    """My row, held for the transaction: every write to it reads it this
+    way first."""
+    Partner.objects.get_or_create(user_profile=user, defaults={"realm_id": user.realm_id})
+    return row_of(Partner.objects.select_for_update(no_key=True).get(user_profile=user))
 
 
-def lock_partners(agent: UserProfile) -> None:
-    """Every write to partner rows holds this lock (the agent's bot row) for
-    its transaction."""
+def lock_lines(agent: UserProfile) -> None:
+    """A choice holds this lock (the agent's bot row) for its transaction,
+    so that two people cannot take one evolution line."""
     UserProfile.objects.select_for_update(no_key=True).filter(id=agent.id).first()
 
 
@@ -429,13 +451,13 @@ def partners_state(user: UserProfile, *, fold: bool = True) -> dict[str, Any]:
     if pack is None or agent is None:
         return {"on": False}
     now = timezone_now()
-    with transaction.atomic(savepoint=False):
-        lock_partners(agent)
-        rows = get_rows(agent)
-        mine = rows.get(user.id, new_row())
-        if fold and fold_partner_xp(user, mine, now):
-            save_row(agent, user.id, mine)
-            rows[user.id] = mine
+    if fold:
+        with transaction.atomic(savepoint=False):
+            mine = lock_row(user)
+            if fold_partner_xp(user, mine, now):
+                save_row(user, mine)
+    rows = get_rows(user.realm_id)
+    mine = rows.get(user.id, new_row())
     shown = set(
         UserProfile.objects.filter(
             realm_id=user.realm_id, is_active=True, id__in=list(rows)
@@ -487,8 +509,8 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
     # transaction may be the request's outermost one.
     taken_by: UserProfile | None = None
     with transaction.atomic(savepoint=False):
-        lock_partners(agent)
-        rows = get_rows(agent)
+        lock_lines(agent)
+        rows = get_rows(user.realm_id)
         holders = {
             user_id
             for user_id, row in rows.items()
@@ -507,8 +529,8 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
             for holder_id in holders:
                 freed = rows[holder_id]
                 freed.update(species=None, chosen=None, shiny=False, held=False)
-                save_row(agent, holder_id, freed)
-            mine = rows.get(user.id, new_row())
+                save_row(people[holder_id], freed)
+            mine = lock_row(user)
             fold_partner_xp(user, mine, now)
             arrived, shiny = arrival(pack, species, mine["xp"], picks)
             mine.update(
@@ -521,7 +543,7 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
                 evolved_at=None,
                 evolved_kind=None,
             )
-            save_row(agent, user.id, mine)
+            save_row(user, mine)
     if taken_by is not None:
         if not check_can_access_user(taken_by, user):
             raise JsonableError(_("Someone else has this line."))
@@ -530,24 +552,22 @@ def choose_partner(user: UserProfile, species: str, picks: list[str]) -> None:
 
 def put_off_choice(user: UserProfile) -> None:
     """Later: the picker does not open by itself again, on any machine."""
-    _pack, agent = require_pack_and_agent(user)
+    require_pack_and_agent(user)
     with transaction.atomic(savepoint=False):
-        lock_partners(agent)
-        mine = get_row(agent, user.id)
+        mine = lock_row(user)
         mine["later"] = True
-        save_row(agent, user.id, mine)
+        save_row(user, mine)
 
 
 def evolve_partner(user: UserProfile, into: str | None, hold: bool) -> None:
     """Take the change the level allows (into one of its choices), or hold
     the partner as it is (Stop in the moment). A held partner is not
     offered the moment again; Evolve on the card takes the change later."""
-    pack, agent = require_pack_and_agent(user)
+    pack, _agent = require_pack_and_agent(user)
     now = timezone_now()
     error = None
     with transaction.atomic(savepoint=False):
-        lock_partners(agent)
-        mine = get_row(agent, user.id)
+        mine = lock_row(user)
         fold_partner_xp(user, mine, now)
         change = ready_change(pack, mine)
         if change is None:
@@ -560,6 +580,6 @@ def evolve_partner(user: UserProfile, into: str | None, hold: bool) -> None:
             mine.update(shiny=True, held=False, evolved_at=now.timestamp(), evolved_kind="shiny")
         else:
             mine.update(species=into, held=False, evolved_at=now.timestamp(), evolved_kind="evolve")
-        save_row(agent, user.id, mine)
+        save_row(user, mine)
     if error is not None:
         raise JsonableError(error)

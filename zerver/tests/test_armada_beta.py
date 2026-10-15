@@ -1,5 +1,6 @@
 # INTERIM BETA: deleted with zerver/views/armada_beta.py and
 # web/src/armada/beta/ when the rebuild's conversation lands.
+import importlib
 import json
 import os
 import struct
@@ -13,6 +14,7 @@ from unittest import mock
 
 import orjson
 import time_machine
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.db import connection
 from django.test import override_settings
@@ -27,7 +29,6 @@ from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
-    PARTNER_KEY_PREFIX,
     armada_sprite_dir,
     choose_partner,
     get_row,
@@ -41,7 +42,7 @@ from zerver.lib.rate_limiter import RateLimitedUser
 from zerver.lib.templates import font_preloads
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
-from zerver.models import AgentRun, BotStorageData, Message, Reaction, UserProfile
+from zerver.models import AgentRun, BotStorageData, Message, Partner, Reaction, UserProfile
 from zerver.models.bots import Service
 from zerver.views.armada_beta import live_run_ids_for_user
 
@@ -398,9 +399,9 @@ class PartnerTest(ZulipTestCase):
         return self.client_post("/json/armada/partner", {"species": species_id, **extra})
 
     def set_xp(self, user: UserProfile, xp: int) -> None:
-        row = get_row(self.agent, user.id)
+        row = get_row(user)
         row.update(xp=xp, folded_at=timezone_now().timestamp())
-        save_row(self.agent, user.id, row)
+        save_row(user, row)
 
     def send_at(self, user: UserProfile, moment: datetime, n: int = 1) -> list[int]:
         ids = [self.send_stream_message(user, "Verona", f"message {i}") for i in range(n)]
@@ -493,7 +494,7 @@ class PartnerTest(ZulipTestCase):
         do_deactivate_user(othello, acting_user=None)
         self.assertNotIn(str(othello.id), self.partners(cordelia)["partners"])
         self.assert_json_success(self.choose(cordelia, "1"))
-        self.assertIsNone(get_row(self.agent, othello.id)["species"])
+        self.assertIsNone(get_row(othello)["species"])
 
         # Bots have no partners.
         with self.assertRaisesRegex(JsonableError, "Bots do not have partners."):
@@ -721,10 +722,100 @@ class PartnerTest(ZulipTestCase):
         self.assertEqual(self.partners(cordelia)["partners"][str(cordelia.id)]["species"], "1")
         self.assertEqual(self.client_get("/beta/sprites/made/1.png").status_code, 404)
 
-    def test_rows_live_under_the_agents_bot(self) -> None:
+    def test_rows_are_partners_in_the_realm(self) -> None:
         cordelia = self.example_user("cordelia")
-        self.assert_json_success(self.choose(cordelia, "1"))
-        row = BotStorageData.objects.get(
-            bot_profile=self.agent, key=f"{PARTNER_KEY_PREFIX}{cordelia.id}"
+        moment = datetime(2026, 10, 14, 12, 30, 15, 123456, tzinfo=timezone.utc)
+        with time_machine.travel(moment, tick=False):
+            self.assert_json_success(self.choose(cordelia, "1"))
+        partner = Partner.objects.get(user_profile=cordelia)
+        self.assertEqual(
+            (partner.realm_id, partner.chosen, partner.species), (self.realm.id, "1", "1")
         )
-        self.assertEqual(json.loads(row.value)["chosen"], "1")
+        # Times keep their microseconds through the row's timestamps.
+        self.assertEqual(partner.chosen_at, moment)
+        self.assertEqual(get_row(cordelia)["chosen_at"], moment.timestamp())
+        # Someone with no row has the empty one.
+        self.assertIsNone(get_row(self.example_user("hamlet"))["species"])
+
+    def test_the_migration_moves_rows_out_of_bot_storage_and_back(self) -> None:
+        # zerver/migrations/0813_partner.py, run on today's models: the rows
+        # the interim kept as JSON under the agent's bot become partners,
+        # and the reverse puts them back.
+        migration = importlib.import_module("zerver.migrations.0813_partner")
+        cordelia = self.example_user("cordelia")
+        hamlet = self.example_user("hamlet")
+        other_bot = self.example_user("default_bot")
+        old_agent = do_create_user(
+            "armada-old-agent-bot@zulip.testserver",
+            None,
+            self.realm,
+            "Old agent",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            bot_owner=self.example_user("iago"),
+            acting_user=None,
+        )
+        Service.objects.create(name="armada", user_profile=old_agent, base_url="", token="")
+        invalidate_armada_selected_bot_cache(self.realm.id)
+        stored = {
+            **get_row(cordelia),
+            "species": "2",
+            "chosen": "1",
+            "xp": 1100,
+            "day": "2026-10-14",
+            "chosen_at": 1760000000.5,
+            "runs_watermark": 1760400000.25,
+        }
+        # A row written before a key existed reads as that key's default.
+        del stored["held"]
+        BotStorageData.objects.bulk_create(
+            [
+                BotStorageData(
+                    bot_profile=self.agent,
+                    key=f"partner:{cordelia.id}",
+                    value=json.dumps(stored),
+                ),
+                # A person deleted since keeps nothing.
+                BotStorageData(bot_profile=self.agent, key="partner:999999", value="{}"),
+                BotStorageData(bot_profile=self.agent, key="other", value="kept"),
+                # Another bot's keys are its own, whatever they look like.
+                BotStorageData(bot_profile=other_bot, key="partner:notes", value="not JSON"),
+                # An agent bot the realm used before keeps an older row.
+                BotStorageData(
+                    bot_profile=old_agent,
+                    key=f"partner:{cordelia.id}",
+                    value=json.dumps({**stored, "species": "1", "xp": 900}),
+                ),
+            ]
+        )
+        migration.move_partners_to_their_table(django_apps, connection.schema_editor())
+        self.assertEqual(
+            set(BotStorageData.objects.values_list("bot_profile_id", "key")),
+            {(self.agent.id, "other"), (other_bot.id, "partner:notes")},
+        )
+        moved = get_row(cordelia)
+        self.assertEqual(moved, {**stored, "held": False})
+        self.assertEqual(Partner.objects.get(user_profile=cordelia).realm_id, self.realm.id)
+
+        save_row(hamlet, {**get_row(hamlet), "species": "20", "chosen": "20"})
+        migration.move_partners_back_to_bot_storage(django_apps, connection.schema_editor())
+        back = {
+            row.key: json.loads(row.value)
+            for row in BotStorageData.objects.filter(key__startswith="partner:").exclude(
+                bot_profile=other_bot
+            )
+        }
+        self.assertEqual(set(back), {f"partner:{cordelia.id}", f"partner:{hamlet.id}"})
+        self.assertEqual(back[f"partner:{cordelia.id}"], moved)
+        self.assertEqual(back[f"partner:{hamlet.id}"]["species"], "20")
+        self.assertEqual(
+            set(
+                BotStorageData.objects.filter(key__startswith="partner:").values_list(
+                    "bot_profile_id", flat=True
+                )
+            ),
+            {self.agent.id, other_bot.id},
+        )
+        self.assertEqual(
+            BotStorageData.objects.filter(bot_profile=other_bot).values_list("value", flat=True)[0],
+            "not JSON",
+        )

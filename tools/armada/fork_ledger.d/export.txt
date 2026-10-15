@@ -1,3 +1,5 @@
 # Armada's tables in Zulip's realm export and import: which are exported,
 # and how each comes back on import.
 kept zerver/lib/export.py  # declares Armada's tables, and how each is exported
+kept zerver/lib/import_realm.py  # imports Armada's exported tables
+kept zerver/tests/test_import_export.py  # Armada's tables in the export and the import

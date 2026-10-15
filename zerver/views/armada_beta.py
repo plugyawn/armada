@@ -175,8 +175,7 @@ def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
 
 # Partners (zerver/lib/partner.py), as the beta reads and changes them.
 # The routes are the r4 partner study's (/json/armada/partner...); they
-# are intentionally undocumented while partners live in the interim
-# bot-storage rows, and move with the Partner model.
+# are intentionally undocumented, like the beta's other armada/ routes.
 
 
 @typed_endpoint_without_parameters

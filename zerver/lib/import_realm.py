@@ -1,3 +1,4 @@
+import bisect
 import collections
 import logging
 import os
@@ -93,6 +94,7 @@ from zerver.models import (
     NavigationView,
     OnboardingStep,
     OnboardingUserMessage,
+    Partner,
     Reaction,
     Realm,
     RealmAuditLog,
@@ -192,6 +194,7 @@ ID_MAP: dict[str, dict[int, int]] = {
     "realmuserdefault": {},
     "scheduledmessage": {},
     "onboardingusermessage": {},
+    "partner": {},
     "savedsnippet": {},
     "channelfolder": {},
     "navigationview": {},
@@ -665,6 +668,23 @@ def fix_message_edit_history(
         )
 
         message["edit_history"] = orjson.dumps(edit_history).decode()
+
+
+def fix_partner_watermarks(data: ImportedTableData) -> None:
+    """A partner's watermarks are the newest message and reaction its
+    experience has counted (zerver/lib/partner.py). Each becomes the new
+    id of the newest imported row at or below it: ids are allocated in
+    the order of the old ones, so what was counted stays counted, and
+    what was not is counted by the next fold."""
+    for field, related_table in [
+        ("message_watermark", "message"),
+        ("reaction_watermark", "reaction"),
+    ]:
+        id_map = ID_MAP[related_table]
+        old_ids = sorted(id_map)
+        for partner in data["zerver_partner"]:
+            position = bisect.bisect_right(old_ids, partner[field])
+            partner[field] = id_map[old_ids[position - 1]] if position else 0
 
 
 def fix_realm_emoji_author(data: ImportedTableData, default_author_id: int) -> None:
@@ -2065,6 +2085,16 @@ def do_import_realm(
         re_map_foreign_keys(data, "zerver_submessage", "sender", related_table="user_profile")
         update_model_ids(SubMessage, data, "submessage")
         bulk_import_model(data, SubMessage)
+
+    # A partner's watermarks name messages and reactions, so partners
+    # come after both.
+    if "zerver_partner" in data:
+        fix_datetime_fields(data, "zerver_partner")
+        re_map_foreign_keys(data, "zerver_partner", "user_profile", related_table="user_profile")
+        re_map_foreign_keys(data, "zerver_partner", "realm", related_table="realm")
+        fix_partner_watermarks(data)
+        update_model_ids(Partner, data, "partner")
+        bulk_import_model(data, Partner)
 
     # Similarly, we need to recalculate the first_message_id for stream objects.
     update_first_message_id_query = SQL(

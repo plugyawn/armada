@@ -432,8 +432,7 @@ v1_api_and_json_patterns = [
     rest_path("drafts/<int:draft_id>", PATCH=edit_draft, DELETE=delete_draft),
     # navigation_views -> zerver.views.navigation_views
     rest_path("navigation_views", GET=get_navigation_views, POST=add_navigation_view),
-    # INTERIM BETA: partners, in the interim bot-storage rows
-    # (zerver/lib/partner.py); they move with the Partner model.
+    # INTERIM BETA: partners (zerver/lib/partner.py).
     rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),
     rest_path("armada/partner", POST=(post_armada_partner, {"intentionally_undocumented"})),
     rest_path(

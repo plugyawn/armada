@@ -9,10 +9,8 @@ from unittest import TestCase, mock
 
 from typing_extensions import override
 
-ARMADA_FILES = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "puppet/armada/files",
-)
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ARMADA_FILES = os.path.join(ROOT_DIR, "puppet/armada/files")
 
 
 def load_script(name: str) -> ModuleType:
@@ -76,6 +74,7 @@ class OpsCheckTests(TestCase):
         self.addCleanup(self.directory.cleanup)
         state_file = os.path.join(self.directory.name, "state.json")
         self.status = {"disk": ops_check.OK, "codex-login": ops_check.OK}
+        self.real_checks = list(ops_check.CHECKS)
         self.codex_runs = 0
 
         def disk() -> object:
@@ -86,12 +85,14 @@ class OpsCheckTests(TestCase):
             return ops_check.Result(self.status["codex-login"], "Logged in", "codex-login")
 
         self.posts: list[tuple[str, str, str]] = []
+        self.runbooks: list[str] = []
         self.post_fails = False
 
         def post(check: str, result: object, previous: str) -> None:
             if self.post_fails:
                 raise OSError("the server is down")
             self.posts.append((check, result.status, previous))  # type: ignore[attr-defined]
+            self.runbooks.append(result.runbook)  # type: ignore[attr-defined]
 
         for patch in (
             mock.patch.object(ops_check, "STATE_FILE", state_file),
@@ -151,6 +152,18 @@ class OpsCheckTests(TestCase):
             ops_check.main()
         self.assertEqual(self.posts, [("disk", ops_check.WARN, ops_check.OK)])
         self.assertEqual(self.codex_runs, 1)
+
+    def test_every_check_names_a_runbook_section(self) -> None:
+        with open(os.path.join(ROOT_DIR, "docs/armada/operations.md")) as f:
+            sections = {line.removeprefix("### ").strip() for line in f if line.startswith("### ")}
+
+        def broken() -> object:
+            raise ValueError("unexpected output")
+
+        with mock.patch.dict(ops_check.CHECKS, dict.fromkeys(self.real_checks, broken), clear=True):
+            ops_check.main()
+        self.assertEqual([check for check, _, _ in self.posts], self.real_checks)
+        self.assertLessEqual(set(self.runbooks), sections)
 
     def test_disk_thresholds(self) -> None:
         usage = mock.Mock(total=100, used=85)

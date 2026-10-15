@@ -52,6 +52,8 @@ ORDER = {OK: 0, WARN: 1, CRITICAL: 2}
 # A check that is slow or costs a process start runs at most this often;
 # between runs its last result stands.
 CACHED_SECONDS = {"codex-login": 600, "updates": 3600}
+# The runbook section of each check whose name is not a section itself.
+RUNBOOK_SECTIONS = {"health": "processes", "updates": "patching"}
 
 
 @dataclass
@@ -361,7 +363,8 @@ def evaluate(name: str, entry: dict[str, object], now: float) -> tuple[Result, f
     try:
         return CHECKS[name](), now
     except Exception as error:  # A broken check must not hide the others.
-        return Result(WARN, f"the check itself failed: {type(error).__name__}: {error}", name), now
+        detail = f"the check itself failed: {type(error).__name__}: {error}"
+        return Result(WARN, detail, RUNBOOK_SECTIONS.get(name, name)), now
 
 
 def main() -> int:

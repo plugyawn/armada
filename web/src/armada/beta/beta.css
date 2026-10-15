@@ -323,11 +323,14 @@ main > .pane[data-pane="Partner"] { overflow-y: auto; scrollbar-width: none; }
 
 /* ---------- mentions, links to places, replies (mentions.js) ----------
    A mention is a pill: the name on a light fill of the words' own colour, so it reads on any bubble. A mention of me, or of
-   everyone, is in my colour. A silent mention (the name in a reply's quote) is the name alone. */
-.mention, .cz .tx .pill:not(.chip) { padding: 0 3px; margin: 0 1px; border-radius: var(--r-mark); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; white-space: nowrap; }
+   everyone, is in my colour. A silent mention (the name in a reply's quote) is the name alone. The fill is the pill's edge:
+   it has no margin, so a full stop or a comma stands against it as against a letter. Two pills still never touch: the server
+   renders a mention only after a space, a quote, a bracket or a slash (zerver/lib/mention.py), and the field puts a space
+   after every pill it inserts. */
+.mention, .cz .tx .pill:not(.chip) { padding: 0 2px; border-radius: var(--r-mark); background: color-mix(in srgb, currentColor 12%, transparent); font-weight: 500; white-space: nowrap; }
 .mention.you, .cz .tx .pill.you { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-text); }
 .cl.me .b .mention.you { color: inherit; background: color-mix(in srgb, currentColor 22%, transparent); }
-.mention.silent { padding: 0; margin: 0; background: none; }
+.mention.silent { padding: 0; background: none; }
 .cz .tx .pill { cursor: default; user-select: all; }
 .cz .tx .pill[data-seed]::before { content: attr(data-label); }   /* the switch's pill: its name is drawn, not typed, so the field stays empty */
 /* a link to a repository or a worktree is a chip; pressed, it opens the worktree here */

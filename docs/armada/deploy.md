@@ -1072,43 +1072,12 @@ the `npm install` line of 6.2 and a new version number.
 
 ## Back up
 
-_Stock Zulip, untested here._ Zulip's backup holds the database, uploaded
-files and `/etc/zulip` (settings and secrets). It runs as `zulip`, so write
-it to a directory `zulip` owns:
-
-```bash
-install -d -o zulip -g zulip -m 0700 /home/zulip/backups
-su zulip -c '/home/zulip/deployments/current/manage.py backup --output=/home/zulip/backups/armada-$(date +%F).tar.gz'
-```
-
-Armada keeps two more things outside it (as root):
-
-- **The repositories and worktrees** (`ARMADA_TOPIC_WORKDIR_ROOT`): every
-  agent's uncommitted work and every topic branch that was not pushed.
-  Back it up with the database, while no run is going:
-  `tar -C /srv/armada -czf /home/zulip/backups/armada-worktrees-$(date +%F).tar.gz worktrees`.
-- **The agent's Codex state** (`/home/zulip/.codex`, without `auth.json`):
-  the conversation history Codex resumes a topic from.
-  `tar -C /home/zulip --exclude=.codex/auth.json -czf /home/zulip/backups/armada-codex-$(date +%F).tar.gz .codex`.
-  Leave the login out of backups; after a restore, sign in again (6.3). The
-  session transcripts hold whatever agents read, secrets included
-  ([Security](#security)): keep this archive as carefully as the secrets.
-
-Store backups off the machine (for the Mac's VM: `limactl copy` them out to
-an encrypted disk); they hold the secrets in `/etc/zulip`. To restore on a
-new server: install from the same tarball (step 3, with the same PostgreSQL
-version), then, as root,
-`/home/zulip/deployments/current/scripts/setup/restore-backup BACKUP.tar.gz`
-(`docs/production/export-and-import.md`); untar the two archives back in
-place and give them to `zulip` (user ids differ between machines):
-
-```bash
-tar -C /srv/armada -xzf armada-worktrees-DATE.tar.gz && chown -R zulip:zulip /srv/armada
-tar -C /home/zulip -xzf armada-codex-DATE.tar.gz && chown -R zulip:zulip /home/zulip/.codex
-```
-
-Then do section 6 again (6.4's directory already exists, and the install
-has set 6.6's policy on the new RabbitMQ).
+Backups, the restore drill and monitoring are in
+`operations.md`: the database streams to object storage
+with Zulip's wal-g support, and the files (worktrees and uploads among
+them) go there hourly with restic, both turned on by `puppet/armada/`.
+The Codex login is never backed up; after a restore a person signs in
+again (6.3).
 
 ## Sizing
 

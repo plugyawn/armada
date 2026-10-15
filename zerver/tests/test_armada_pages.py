@@ -1,11 +1,13 @@
 import os
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
+from importlib import import_module
 from io import StringIO
 from typing import Any
 from unittest import mock
 
 import time_machine
+from django.apps import apps
 from django.conf import settings
 from django.utils.timezone import now as timezone_now
 
@@ -492,3 +494,42 @@ class PagesTest(UploadSerializeMixin, ZulipTestCase):
         self.login_user(hamlet)
         result = self.client_patch(f"/json/messages/{message_id}", {"content": "Gone."})
         self.assertEqual(self.assert_json_success(result)["detached_uploads"], [])
+
+    def test_posts_from_before_claims_claim_their_authors_uploads(self) -> None:
+        # Migrations are not in the coverage report; the backfill is
+        # tested here on the shapes a post's links take.
+        backfill = import_module("zerver.migrations.0817_claim_uploads_of_existing_posts")
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        own = self.upload(hamlet)
+        linked_in_full = self.upload(hamlet)
+        theirs = self.upload(cordelia)
+        # Posts as they were written before posts claimed their uploads.
+        old_post = Post.objects.create(
+            realm_id=hamlet.realm_id,
+            author=hamlet,
+            title="Old",
+            content=(
+                f"{self.link(own)}, http://{hamlet.realm.host}/user_uploads/{linked_in_full.path_id}"
+                f" and {self.link(theirs)}"
+            ),
+            rendered_content="",
+        )
+        plain_post = Post.objects.create(
+            realm_id=hamlet.realm_id,
+            author=hamlet,
+            title="Plain",
+            content="Words.",
+            rendered_content="",
+        )
+
+        # Run again, the backfill changes nothing; it uses no schema
+        # editor.
+        for _ in range(2):
+            backfill.claim_uploads_of_existing_posts(apps, None)
+            self.assertEqual(self.claims(old_post.id), {own.path_id, linked_in_full.path_id})
+            self.assertEqual(self.claims(plain_post.id), set())
+        # Only the author's own uploads: Cordelia's waits for an edit,
+        # which checks whether Hamlet may read it.
+        self.assertTrue(self.reads(self.example_user("othello"), own))
+        self.assertFalse(self.reads(self.example_user("othello"), theirs))

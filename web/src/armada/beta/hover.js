@@ -17,8 +17,10 @@ import {drawRunState} from "./band.js";
 import {openCard} from "./partner_card.js";
 
 /* ---------- the message's controls: the hover overlay, its menu, edit and delete ----------
-   One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or on
-   Onix's first line. It waits for the pointer to rest, travels between messages while it is up, never sits in flow. */
+   One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or at the
+   top right of Onix's words. It waits for the pointer to rest, travels between messages while it is up, never sits in
+   flow. Onix's row is as wide as the lane but its words are not: only its words and blocks bring the overlay up, never
+   the empty width beside them (statement 27). */
 let dialogOpen = false, menu = null, editing = null;
 const OVER = {react: "React", thread: "Reply in thread", copy: "Copy text", more: "More"};
 let over = null, overAt = null, overTimer = 0, overWant = null, px_ = 0, py_ = 0;
@@ -26,7 +28,8 @@ const msgOf = (t) => { const n = t && t.closest("[data-mid]"); if (!n) return nu
 function buildOver() {
   over = el("span", "over", Object.keys(OVER).map((n) => `<button class="c" aria-label="${OVER[n]}" data-act="${n}" data-tip="${OVER[n]}">${ic(n)}</button>`).join("")); host(over); over.inert = true;
   feed.addEventListener("pointermove", (e) => { if (menu) return; if (e.target.closest && e.target.closest(".rcs, .cz, .blk.ask")) return;
-    const t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl.onix")); if (!t || !msgOf(t)) { if (!e.target.closest(".over")) { clearTimeout(overTimer); overWant = null; } return; }
+    let t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl.onix")); if (t && t !== overAt && t.matches(".cl.onix") && !onWords(t, e.clientX, e.clientY)) t = null;
+    if (!t || !msgOf(t)) { if (!e.target.closest(".over")) { clearTimeout(overTimer); overWant = null; } return; }
     if (t === overAt && !over.inert) return; if (!over.inert) { overShow(t); return; }
     if (t === overWant && Math.hypot(e.clientX - px_, e.clientY - py_) < 40) return; overWant = t; px_ = e.clientX; py_ = e.clientY; clearTimeout(overTimer); overTimer = setTimeout(() => { if (overWant === t) overShow(t); }, 120); }, {passive: true});
   feed.addEventListener("pointerleave", () => { if (!menu) overHide(); });
@@ -39,8 +42,25 @@ function buildOver() {
     const r = n.getBoundingClientRect(), fr = feed.getBoundingClientRect(), up = fr.top + 48 - r.top, down = r.bottom - (fr.bottom - 72); if (up > 0) feed.scrollTop -= up; else if (down > 0) feed.scrollTop += Math.min(down, r.top - fr.top - 48); });
   lane.addEventListener("focusin", (e) => { const t = e.target; if (t.dataset && t.dataset.door) { door = t; overShow(t); } });
   lane.addEventListener("focusout", (e) => { if (!overAt || menu) return; const to = e.relatedTarget; if (to && (overAt.contains(to) || over.contains(to) || (to.dataset && to.dataset.door))) return; overHide(); });
-  new MutationObserver(() => { if (!syncDoor.due) { syncDoor.due = true; queueMicrotask(syncDoor); } }).observe(lane, {childList: true, subtree: true});
+  new ResizeObserver(() => wordsVer++).observe(lane); document.fonts.addEventListener("loadingdone", () => wordsVer++);   /* the lane, not the window: hiding the nav widens it too, and the words wrap again */
+  new MutationObserver(() => { wordsVer++; if (overAt && !over.inert && overAt.matches(".cl.onix") && !placeOver.due) { placeOver.due = true; requestAnimationFrame(placeOver); }   /* Onix's words grew under the overlay: it moves with their corner */
+    if (!syncDoor.due) { syncDoor.due = true; queueMicrotask(syncDoor); } }).observe(lane, {childList: true, subtree: true});
 }
+/* where Onix's words are, in its row's own coordinates: each part measured to its ink (a paragraph, a heading or a list is as
+   wide as its longest line; a block is its box). Read once until the lane next changes, so a pointer that moves reads one
+   rectangle, the row's. */
+let wordsVer = 0;
+function wordsOf(cl) { if (cl._words && cl._words.v === wordsVer) return cl._words;
+  const base = cl.getBoundingClientRect(), range = document.createRange(), rects = [];
+  const add = (r) => { if (r.width || r.height) rects.push({l: r.left - base.left, t: r.top - base.top, r: r.right - base.left, b: r.bottom - base.top}); };
+  for (const part of $$(":scope > [data-part]", cl)) { if (!part.classList.contains("ans")) { add(part.getBoundingClientRect()); continue; }
+    for (const c of part.children) { range.selectNodeContents(c); add(range.getBoundingClientRect()); } }
+  const head = $(".head:not(.gone) > .mk", cl); if (head) add(head.getBoundingClientRect());   /* the working mark rides the words' last line */
+  const box = rects.length ? {l: Math.min(...rects.map((x) => x.l)), t: Math.min(...rects.map((x) => x.t)), r: Math.max(...rects.map((x) => x.r)), b: Math.max(...rects.map((x) => x.b))} : null;
+  return (cl._words = {v: wordsVer, rects, box}); }
+/* a pointer is on the words within a few pixels of a line's ink, so it does not fall off between two lines or at a word's end */
+function onWords(cl, x, y) { const base = cl.getBoundingClientRect(), px = x - base.left, py = y - base.top;
+  return wordsOf(cl).rects.some((r) => px >= r.l - 8 && px <= r.r + 8 && py >= r.t - 4 && py <= r.b + 4); }
 let door = null;
 const doors = () => $$(".bl > .b, .cl.onix[data-mid]", lane).filter((t) => !t.closest(".cz"));
 function syncDoor() { syncDoor.due = false; const all = doors(); if (!door || !door.isConnected || !all.includes(door)) door = all[all.length - 1] || null;
@@ -48,7 +68,13 @@ function syncDoor() { syncDoor.due = false; const all = doors(); if (!door || !d
   if (door && !door.dataset.door) { door.tabIndex = 0; door.dataset.door = "1"; } }
 function overShow(t) { if (!t || !t.isConnected) return; if (overAt === t && !over.inert) return; const up = !over.inert && over.isConnected, before = up && over.getBoundingClientRect(); overAt = t; (t.matches(".b") ? t.parentElement : t).append(over); over.inert = false;   /* a bubble's overlay stands in its row, past its time and reactions (beta.css) */
   const mine = (msgOf(t) || {}).sender_id === state.ME; $('[data-act="more"]', over).hidden = false; void mine;
+  placeOver();
   if (up) { M.fade(over, 1); M.flip(over, before, "touch"); } else { M.fade(over, 1); M.release(over, {y: T["pane-rise"] || 4}, "touch"); } }
+/* on Onix's words: beside the top right of the words, or at the row's end when the words reach it (a block does); on a
+   bubble, where the stylesheet puts it */
+function placeOver() { placeOver.due = false; const t = overAt; if (!t || !over.isConnected) return; const box = t.matches(".cl.onix") && wordsOf(t).box;
+  if (box) { over.style.left = Math.round(Math.max(0, Math.min(box.r + 6, t.getBoundingClientRect().width - over.offsetWidth))) + "px"; over.style.top = Math.round(box.t - 6) + "px"; over.style.right = "auto"; }
+  else over.style.left = over.style.top = over.style.right = ""; }
 function overHide() { clearTimeout(overTimer); overWant = null; if (!over || over.inert) return; over.inert = true; overAt = null; M.fade(over, 0); }
 const plainText = (t) => { const x = t.cloneNode(true); $$(".rcs, .rca, .over, .head, time, .who, .sigil, .face, .plan, .tl, .thr-in, .line", x).forEach((y) => y.remove()); return x.textContent.trim(); };
 function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from the keyboard, focus stays on the control: the field is not where I was */

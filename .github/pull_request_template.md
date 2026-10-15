@@ -1,45 +1,60 @@
-<!-- Describe your pull request here.-->
+<!-- Armada's pull request is the package's report (docs/armada/process.md).
+Keep every heading; write "None." under one that does not apply. -->
 
-Fixes: <!-- Issue link, or clear description.-->
+## Package
 
-**How changes were tested:**
+<!-- The plan's package id and name, and the branch, for example "F6 · The feed, pkg/F6-feed". -->
 
-<!-- If the PR makes UI changes, you must include screenshots.
-Detailed guide: https://zulip.readthedocs.io/en/latest/contributing/presenting-visual-changes.html
--->
+Fixes: #
 
-**Screenshots and screen captures:**
+## Why
 
-<details>
-<summary>Self-review checklist</summary>
+<!-- What a person gains, or what was wrong, in a few sentences. Not a list of files. -->
 
-<!-- Prior to submitting a PR, follow our step-by-step guide to review your own code:
-https://zulip.readthedocs.io/en/latest/contributing/code-reviewing.html#how-to-review-code -->
+## Acceptance
 
-<!-- Once you create the PR, check off all the steps below that you have completed.
-If any of these steps are not relevant or not completed, leave them unchecked.-->
+<!-- One row per acceptance criterion of the package. "Command" is what anyone can
+run again; "Evidence" links the CI job, the artifact or the picture that shows it. -->
 
-- [ ] [Self-reviewed](https://zulip.readthedocs.io/en/latest/contributing/code-reviewing.html#how-to-review-code) the changes for clarity and maintainability
-      (variable names, code reuse, readability, etc.).
-- [ ] Followed the [AI use policy](https://zulip.readthedocs.io/en/latest/contributing/contributing.html#ai-use-policy-and-guidelines).
+| Criterion | Command | Result | Evidence |
+| --------- | ------- | ------ | -------- |
+|           |         |        |          |
 
-Communicate decisions, questions, and potential concerns.
+## Pictures
 
-- [ ] Explains differences from previous plans (e.g., issue description).
-- [ ] Highlights technical choices and bugs encountered.
-- [ ] Calls out remaining decisions and concerns.
-- [ ] Automated tests verify logic where appropriate.
+<!-- Before and after, beside the design's still, for anything a person sees.
+Pictures that show licensed sprites or fonts go to the private repository, linked here. -->
 
-Individual commits are ready for review (see [commit discipline](https://zulip.readthedocs.io/en/latest/contributing/commit-discipline.html)).
+## Not done
 
-- [ ] Each commit is a coherent idea.
-- [ ] Commit message(s) explain reasoning and motivation for changes.
+<!-- What the package left undone, and why. -->
 
-Completed manual review and testing of the following:
+## Needs the user
 
-- [ ] Visual appearance of the changes.
-- [ ] Responsiveness and internationalization.
-- [ ] Strings and tooltips.
-- [ ] End-to-end functionality of buttons, interactions and flows.
-- [ ] Corner cases, error conditions, and easily imagined bugs.
-</details>
+<!-- Product questions (P-n) and permission-list items: dependencies, downloads,
+provisioning, migrations that rewrite data, history rewrites, secrets, settings.
+Each also puts the `needs-user` label on this pull request. -->
+
+## For the team
+
+<!-- One or two lines for the release notes, in words a teammate uses. -->
+
+## Plan changes
+
+<!-- Any change to the plan, a contract or a decision this package makes, with the
+document it changes in this pull request. -->
+
+## Self-review
+
+- [ ] Each commit is a minimal coherent idea, passes on its own, and has a message
+      that explains why (CLAUDE.md, "Commit Discipline"); no fixup commit is left.
+- [ ] Every changed file is in the package's owns list, and every Zulip file it
+      changes has its line in `tools/armada/fork_ledger.d/`.
+- [ ] Tests cover the change: node tests, backend tests, or the `arm check`
+      assertions it names, each run three times with identical statuses.
+- [ ] What a person sees was checked at 1920, 1440 and 1100 px, in light and dark
+      where colour can change, with the keyboard, and in every state.
+- [ ] Every string a person reads is tagged for translation.
+- [ ] No secret, licensed font or sprite is committed; access control and XSS
+      were reviewed.
+- [ ] Documentation in `docs/armada/` says what changed in Armada's behaviour.

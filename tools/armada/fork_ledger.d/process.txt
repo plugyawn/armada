@@ -7,4 +7,5 @@ deleted .github/workflows/zulip-ci.yml  # Zulip's distribution on five systems; 
 deleted .github/workflows/zulip-cloud-deploy.yaml  # Zulip Cloud's deploy notices
 kept .github/workflows/codeql-analysis.yml  # scans Armada's trunk and its pull requests
 kept .github/workflows/production-suite.yml  # runs on release tags only
+kept .github/pull_request_template.md  # the package's report: acceptance, pictures, needs the user
 kept zerver/lib/test_runner.py  # records a failing subtest under its test, so --rerun and CI's known-failure list see it

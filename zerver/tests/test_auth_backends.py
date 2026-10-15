@@ -415,7 +415,8 @@ class AuthBackendTest(ZulipTestCase):
         self.assert_in_response(realm.description, result)
         assert realm.name is not None
         self.assert_in_response(realm.name, result)
-        self.assert_in_response("Log in to Zulip", result)
+        self.assert_in_response("<title>Log in | Armada</title>", result)
+        self.assert_in_response("Log in to Armada", result)
 
         data = dict(
             description=orjson.dumps("New realm description").decode(),
@@ -6279,7 +6280,9 @@ class GoogleAuthBackendTest(SocialAuthBase):
         # Without the invite link, we can't create an account due to invite_required
         result = self.get_log_into_subdomain(data)
         self.assertEqual(result.status_code, 200)
-        self.assert_in_success_response(["Sign up for Zulip"], result)
+        self.assert_in_success_response(
+            ["<title>Sign up | Armada</title>", "Sign up for Armada"], result
+        )
 
         # Now confirm an invitation link works
         referrer = self.example_user("hamlet")

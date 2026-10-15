@@ -21,10 +21,10 @@ import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, onReadReceipts, openInfo, RECEIPTS, toggleInfo} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
-import {onDelete, onFlags, onMessage, onReaction, onRun, onTyping, onUpdate, onWorkspaceChanged} from "./events.js";
+import {onDelete, onFlags, onMessage, onReaction, onRealm, onRun, onTyping, onUpdate, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
 import {pickEntry, setTab} from "./views.js";
-import {buildOver, closeMenu, confirmDelete, editing, endEdit, menu, msgOf, over, overAt, startEdit} from "./hover.js";
+import {buildOver, closeMenu, confirmDelete, editing, editLast, endEdit, menu, msgOf, over, overAt, startEdit} from "./hover.js";
 import {closePicker, focusPop, pop, togglePicker} from "./model_picker.js";
 import {pal, palette} from "./palette.js";
 import {drawHome, drawHomeRow, fetchMentions, HOME, scanAll} from "./home.js";
@@ -40,7 +40,7 @@ import {onPost, wirePages} from "./pages.js";
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
-on("armada_post", onPost);
+on("armada_post", onPost); on("realm", onRealm);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -80,7 +80,7 @@ async function boot() {
       if (e.key === "Escape" && tx.textContent) { e.preventDefault(); e.stopPropagation(); tx.textContent = ""; tx.dispatchEvent(new Event("input")); return; } }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); if (!(state.place && state.place.kind === "partner")) go.classList.remove("armed"); return; }
     if (e.key === "Escape" && editing) { e.preventDefault(); e.stopPropagation(); endEdit(); return; }
-    if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop) { const m = state.P && state.P.msgs.filter((x) => x.sender_id === state.ME && typeof x.id === "number" && !x.thread_root_message_id).pop(); if (m) { e.preventDefault(); startEdit(m); } } });   /* Up in an empty field (the switch's pill alone is empty) edits my last message */
+    if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop && editLast()) e.preventDefault(); });   /* Up in an empty field (the switch's pill alone is empty) edits my last message, while the realm lets me */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
   const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick]";

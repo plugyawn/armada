@@ -27,8 +27,8 @@ const link = createLink({
   random: Math.random,
   hidden: () => document.hidden,
   online: () => navigator.onLine !== false,
-  registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post"], apply_markdown: true, client_gravatar: false,
+  registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream", "realm"],
+    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm"], apply_markdown: true, client_gravatar: false,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}}),
   onRegister: applyRegister,
   onEvent: handle,
@@ -55,6 +55,7 @@ function applyRegister(r) {
   state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {};
   people.clear(); for (const u of [...(r.realm_users || []), ...(r.cross_realm_bots || [])]) people.set(u.user_id, {id: u.user_id, name: u.full_name, email: u.email, bot: u.is_bot, active: u.is_active !== false});
   armadaBots.clear(); (r.agent_user_ids || []).forEach((i) => armadaBots.add(i)); state.muted = new Set((r.muted_users || []).map((u) => u.id));
+  state.realm = {allowEdit: r.realm_allow_message_editing !== false, editLimit: r.realm_message_content_edit_limit_seconds ?? null};   /* the realm bundle ("realm" above): its rules for editing */
   streams.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);
   repoStreams.clear(); (r.repository_stream_ids || []).forEach((i) => streams.has(i) && repoStreams.add(i));
   state.dms = (r.recent_private_conversations || []).slice(0, 12);

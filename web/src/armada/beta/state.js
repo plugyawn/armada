@@ -14,6 +14,7 @@ const state = {
   ME: 0, meName: "", queue: null, lastEvent: -1, skew: 0,
   dms: [], presences: {}, place: null, P: null, tab: "Chat", localSeq: 0, agentMention: "@**Onix**",
   runtimeCfg: null,                                        /* the server's runtime settings, from armada/runs: the service tier is server-wide */
+  realm: {allowEdit: true, editLimit: null},               /* the realm's rules for editing a message's words (register, then the realm event); null: no limit */
   muted: new Set(),                                        /* the people I muted: receipts do not count them */
   hd: null,                                                /* the header, drawn again whole when what it says changes */
   pinned: true, lastSet: 0,                                /* the feed: whether it keeps to its end, and where it was last scrolled to */

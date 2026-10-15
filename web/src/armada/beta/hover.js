@@ -2,8 +2,9 @@
 
 import {$, $$, clamp, el, press, T} from "./util.js";
 import {msgIndex, state} from "./state.js";
+import {now} from "./time.js";
 import {api} from "./connection.js";
-import {feed, go, lane, main, tx} from "./frame.js";
+import {feed, go, lane, main, sh, tx} from "./frame.js";
 import {isOnix} from "./faces.js";
 import {echoHTML} from "./parts.js";
 import {note, ready, syncField} from "./composer.js";
@@ -82,10 +83,11 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
   else if (name === "thread") { overHide(); openThread(m.thread_root_message_id || m.id, false, {focus: true}); }
   else if (name === "copy") { try { navigator.clipboard.writeText(plainText(t.matches(".b") ? t : t)).catch(() => {}); } catch (e) {} M.say(btn, "Copied", 1200); if (!kbd) ready(); }
   else if (name === "more") openMenu(m, btn); }
-/* More: what can be done to this message. Any sent one can be replied to; mine can be edited and deleted; any can be linked or copied. */
+/* More: what can be done to this message. Any sent one can be replied to; mine can be edited while the realm allows it, and deleted;
+   any can be linked or copied. */
 function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME && typeof m.id === "number", items = [];
   if (typeof m.id === "number") items.push(["reply", "Reply", "R"]);
-  if (mine && !isOnix(m.sender_id)) items.push(["edit", "Edit", "E"], ["delete", "Delete", ""]);
+  if (canEdit(m)) items.push(["edit", "Edit", "E"]); if (mine && !isOnix(m.sender_id)) items.push(["delete", "Delete", ""]);
   items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
   if (m.sender_id > 0 && m.sender_id !== state.ME && !isOnix(m.sender_id)) items.push(["card", "Card", ""]);   /* the sender's card, which a face opens to the pointer */
   menu = el("div", "menu raised float", items.map(([k, label, key]) => `<button class="mi" data-mi="${k}" tabindex="-1">${label}<span class="k">${key}</span></button>`).join("")); menu.setAttribute("role", "menu");
@@ -101,20 +103,38 @@ function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME &
   M.release(menu, {y: -(T["pane-rise"] || 4)}, "touch"); }
 function closeMenu() { if (!menu) return; const x = menu; menu = null; x.inert = true; M.leave(x, () => x.remove()); }
 /* editing my message: its words go back to the field, Return saves them into the same message, Esc gives the draft up */
-async function startEdit(m) { if (!m || m.sender_id !== state.ME || typeof m.id !== "number") return; if (editing) endEdit();
+/* whether the realm lets me change this message's words now, by the server's own rule (validate_user_can_edit_message):
+   editing is on, the message is mine, and it is inside the limit when there is one. An administrator gets no more time
+   than anyone. `grace` is the seconds Zulip's own client allows Up past the limit (5), for a key pressed as it passes. */
+function canEdit(m, grace = 0) { const {allowEdit, editLimit} = state.realm;
+  return !!m && typeof m.id === "number" && m.sender_id === state.ME && !isOnix(m.sender_id) && allowEdit && (editLimit == null || now() / 1000 - m.timestamp < editLimit + grace); }
+/* Up in an empty field: my latest message here, while I may still edit it; true when it opened */
+function editLast() { const m = state.P && state.P.msgs.filter((x) => x.sender_id === state.ME && typeof x.id === "number" && !x.thread_root_message_id).pop();
+  if (!canEdit(m, 5)) return false; startEdit(m); return true; }
+async function startEdit(m) { if (!canEdit(m, 5)) return; if (editing) endEdit();
   let raw; try { raw = (await api("GET", `messages/${m.id}`, {apply_markdown: false})).message.content; } catch (e) { note(e.message); return; }
-  /* the draft (with its pills) is kept as it was, and comes back when the edit ends; the message's mentions come back as pills */
-  /* a reply's quote goes to the strip above the field, not into it as Zulip's markup */
-  const split = splitQuoteWire(raw);
+  state.threadTx = null; openEdit(m, raw); ready(); caretAtEnd(); }
+/* the draft (with its pills) is kept as it was, and comes back when the edit ends; the message's mentions come back as pills;
+   a reply's quote goes to the strip above the field, not into it as Zulip's markup */
+function openEdit(m, raw) { const split = splitQuoteWire(raw);
   editing = {m, was: [...tx.childNodes], reply: holdReply(split && split.quote)}; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.add("unsent"));
-  state.threadTx = null; fillFromWire(tx, split ? split.rest : raw); syncField(); go.classList.add("armed"); drawRunState(); ready();
-  if (document.activeElement === tx) { const s = getSelection(); s.selectAllChildren(tx); s.collapseToEnd(); } }   /* written after its words, as Up promises */
+  fillFromWire(tx, split ? split.rest : raw); syncField(); go.classList.add("armed"); drawRunState(); }
+/* written after its words, as Up promises */
+function caretAtEnd() { if (document.activeElement !== tx) return; const s = getSelection(); s.selectAllChildren(tx); s.collapseToEnd(); }
 function endEdit() { if (!editing) return; const {m, was, reply} = editing; editing = null; $$(`[data-mid="${m.id}"] .b`, lane).forEach((b) => b.classList.remove("unsent")); tx.replaceChildren(...was); restoreReply(reply); syncField(); go.classList.toggle("armed", !fieldEmpty(tx)); drawRunState(); }
-/* `text` is the field's wire text (send.js), mentions in Zulip's syntax where they were written */
+/* `text` is the field's wire text (send.js), mentions in Zulip's syntax where they were written. The message shows its new
+   words at once. A save the server refuses, or cannot be asked, puts back what the message last saved (its words and its
+   Edited mark), says why, and gives my words back to the field as the same edit, to save again or to copy; whatever the
+   field held by then is kept as an edit's draft is. With another edit in the field by then, my words join that edit's
+   draft and come back when it ends. */
 async function saveEdit(text, at) { const {m} = editing; if (!text) { endEdit(); confirmDelete(m); return; }
-  const raw = takeReply() + text, c = msgIndex.get(m.id) || state.P;
-  tx.textContent = ""; editing.was = []; endEdit(); m.content = echoHTML(raw); m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
-  try { await api("PATCH", `messages/${m.id}`, {content: raw}); } catch (e) { note(e.message); } }
+  const raw = takeReply() + text, c = msgIndex.get(m.id) || state.P, saved = {content: m.content, edited: m.edited}, shown = echoHTML(raw);
+  endEdit(); m.content = shown; m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
+  try { await api("PATCH", `messages/${m.id}`, {content: raw}); }
+  catch (e) { if (m.content === shown) { m.content = saved.content; m.edited = saved.edited; updateMessage(c, m); }   /* unless the server's own event has written it since */
+    if (editing) { const held = el("div"); fillFromWire(held, (editing.was.length ? " " : "") + raw); editing.was.push(...held.childNodes); }
+    else { openEdit(m, raw); caretAtEnd(); }
+    note("Not saved: " + e.message); M.refuse(sh); S.play("nope"); } }
 /* deleting cannot be undone, so it asks once, in a dialog; the server's event takes the message away */
 function confirmDelete(m) { if (dialogOpen) return; dialogOpen = true; const d = el("div", "dlg raised float", `<p style="font:var(--t-strong)">Delete this message?</p><p style="color:var(--ink-2);margin-top:var(--s-2)">It is removed for everyone, and cannot be brought back.</p><div class="btns"><button class="btn" data-no>Cancel</button><button class="go" data-yes>Delete</button></div>`); d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
   d.style.cssText = "position:absolute;left:calc(50% - 200px);top:160px"; main.append(d); host(d); M.release(d, {y: -(T["pane-rise"] || 4)}, "touch");
@@ -123,5 +143,5 @@ function confirmDelete(m) { if (dialogOpen) return; dialogOpen = true; const d =
   const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); (document.activeElement === $("[data-no]", d) ? close : yes)(); } else if (e.key === "Tab") { e.preventDefault(); const b = $$("button", d), i = b.indexOf(document.activeElement); b[(i + 1) % b.length].focus(); } };
   addEventListener("keydown", key, true); press(d, "[data-no]", close); press(d, "[data-yes]", yes); $("[data-no]", d).focus(); }   /* it stands on Cancel: Return alone never deletes */
 
-export {buildOver, closeMenu, confirmDelete, dialogOpen, editing, endEdit, menu, msgOf, over, overAt, overHide,
-  saveEdit, startEdit};
+export {buildOver, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
+  overHide, saveEdit, startEdit};

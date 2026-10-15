@@ -4256,6 +4256,63 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         with self.assertRaisesRegex(ArmadaWorkerLeaseLostError, "lost attempt 1"):
             store.cancel_requested(bot_handler, 1964)
 
+    def test_steering_events_carry_their_authors_in_one_query(self) -> None:
+        owner = self.example_user("hamlet")
+        iago = self.example_user("iago")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+        run = AgentRun.objects.create(
+            realm=owner.realm,
+            bot_profile=armada_bot,
+            requesting_user=owner,
+            trigger_message_id=960,
+            stream_name="Verona",
+            topic_name="authors",
+            status=AgentRun.RUNNING,
+        )
+        store = ArmadaDatabaseWorkerRunStore()
+
+        def steer(sender: UserProfile | None, instruction: str) -> AgentRunEvent:
+            message_id = (
+                self.send_stream_message(sender, "Verona", instruction, topic_name="authors")
+                if sender is not None
+                else 999999
+            )
+            return AgentRunEvent.objects.create(
+                run=run,
+                event_type="steering",
+                summary=instruction,
+                payload={"instruction": instruction, "message_id": message_id},
+            )
+
+        first = steer(owner, "keep the patch small")
+        # The run, its steering events, and their messages with senders.
+        with self.assert_database_query_count(3):
+            self.assert_length(store.steering_events_after(bot_handler, 960, after_event_id=0), 1)
+        second = steer(iago, "and add a test")
+        # A steer whose message is gone keeps its words, with no name.
+        third = steer(None, "and update the docs")
+        with self.assert_database_query_count(3):
+            pending = store.steering_events_after(bot_handler, 960, after_event_id=0)
+
+        self.assertEqual(
+            [
+                (event["event_id"], event.get("sender_full_name"), event["instruction"])
+                for event in pending
+            ],
+            [
+                (first.id, owner.full_name, "keep the patch small"),
+                (second.id, iago.full_name, "and add a test"),
+                (third.id, None, "and update the docs"),
+            ],
+        )
+
     def test_unclaimed_control_store_keeps_preclaim_paths_unfenced(self) -> None:
         owner = self.example_user("hamlet")
         armada_bot = self.create_test_bot(

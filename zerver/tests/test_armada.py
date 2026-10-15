@@ -4,7 +4,9 @@
 
 import json
 import queue
+import random
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from subprocess import Popen
 from tempfile import TemporaryDirectory
@@ -6661,6 +6663,343 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(sent_replies[0][0], message)
         return [response for _message, response in sent_replies]
+
+
+class ArmadaScriptedAppServer:
+    """A Codex app-server that answers turn/start and turn/steer as a real
+    one does, with each steer's fate chosen by the test: accepted into the
+    live turn, or refused because the turn ended under it (the race a
+    steer sent at a turn's end runs).
+
+    A turn ends once every steer the test has made visible is delivered,
+    so the worker's own loop has to carry anything left over."""
+
+    def __init__(
+        self,
+        *,
+        accept_steer: Callable[[], bool],
+        visible_steer_ids: Callable[[], list[str]],
+    ) -> None:
+        self.accept_steer = accept_steer
+        self.visible_steer_ids = visible_steer_ids
+        self.output: queue.Queue[str | None] = queue.Queue()
+        self.stdin = self
+        self.stdout = iter(self.output.get, None)
+        # Each input Codex took, in order: (clientUserMessageId, text).
+        self.turn_starts: list[tuple[str | None, str]] = []
+        self.accepted_steers: list[tuple[str | None, str]] = []
+        self.refused_steers: list[str | None] = []
+        # Every input after the run's first, in the order Codex took it.
+        self.deliveries: list[tuple[str | None, str]] = []
+        self.turn_id: str | None = None
+        self.completed_turns = 0
+
+    def delivered_ids(self) -> list[str | None]:
+        return [client_user_message_id for client_user_message_id, _text in self.deliveries]
+
+    def emit(self, message: dict[str, object]) -> None:
+        self.output.put(json.dumps(message) + "\n")
+
+    def end_turn_if_nothing_is_left(self) -> None:
+        delivered = set(self.delivered_ids())
+        if any(steer_id not in delivered for steer_id in self.visible_steer_ids()):
+            return
+        assert self.turn_id is not None
+        self.emit(
+            {
+                "method": "turn/completed",
+                "params": {"threadId": "thread-app", "turn": {"id": self.turn_id}},
+            }
+        )
+        self.turn_id = None
+        self.completed_turns += 1
+
+    def write(self, value: str) -> int:
+        message = json.loads(value)
+        if "id" not in message or "method" not in message:
+            return len(value)
+        request_id = message["id"]
+        method = message["method"]
+        params = message.get("params", {})
+        if method == "turn/start":
+            self.turn_id = f"turn-{len(self.turn_starts) + 1}"
+            turn_input = (params.get("clientUserMessageId"), params["input"][0]["text"])
+            if self.turn_starts:
+                self.deliveries.append(turn_input)
+            self.turn_starts.append(turn_input)
+            self.emit({"id": request_id, "result": {"turn": {"id": self.turn_id}}})
+            self.emit(
+                {
+                    "method": "item/started",
+                    "params": {
+                        "threadId": "thread-app",
+                        "turnId": self.turn_id,
+                        "item": {
+                            "id": f"cmd-{self.turn_id}",
+                            "type": "commandExecution",
+                            "command": "pytest",
+                            "status": "inProgress",
+                        },
+                    },
+                }
+            )
+            self.end_turn_if_nothing_is_left()
+        elif method == "turn/steer":
+            if self.turn_id == params["expectedTurnId"] and self.accept_steer():
+                steer_input = (params.get("clientUserMessageId"), params["input"][0]["text"])
+                self.accepted_steers.append(steer_input)
+                self.deliveries.append(steer_input)
+                self.emit({"id": request_id, "result": {"turnId": self.turn_id}})
+                self.end_turn_if_nothing_is_left()
+            else:
+                if self.turn_id is not None:
+                    self.emit(
+                        {
+                            "method": "turn/completed",
+                            "params": {"threadId": "thread-app", "turn": {"id": self.turn_id}},
+                        }
+                    )
+                    self.turn_id = None
+                    self.completed_turns += 1
+                self.refused_steers.append(params.get("clientUserMessageId"))
+                self.emit(
+                    {
+                        "id": request_id,
+                        "error": {"code": -32600, "message": "no active turn to steer"},
+                    }
+                )
+        elif method in {"thread/start", "thread/resume"}:
+            self.emit({"id": request_id, "result": {"thread": {"id": "thread-app"}}})
+        elif method == "thread/list":
+            self.emit({"id": request_id, "result": {"data": []}})
+        else:
+            self.emit({"id": request_id, "result": {}})
+        return len(value)
+
+    def flush(self) -> None:
+        pass
+
+    def poll(self) -> None:
+        return None
+
+    def terminate(self) -> None:
+        self.output.put(None)
+
+    def wait(self, timeout: float | None = None) -> int:
+        return 0
+
+
+class ArmadaSteerDeliveryTest(TestCase):
+    """Every message addressed to the agent during a run reaches exactly
+    one turn's input, in order, under its author's name, through the
+    real app-server runner and the worker's turn loop."""
+
+    def run_steered_turn(
+        self,
+        steering_events: list[ArmadaPendingSteeringEvent],
+        *,
+        accept_steer: Callable[[], bool],
+        visible: Callable[
+            [ArmadaPendingSteeringEvent, ArmadaScriptedAppServer, ArmadaCodexAppServerToolRunner],
+            bool,
+        ],
+    ) -> ArmadaScriptedAppServer:
+        servers: list[ArmadaScriptedAppServer] = []
+
+        def visible_events() -> list[ArmadaPendingSteeringEvent]:
+            return [event for event in steering_events if visible(event, servers[0], runner)]
+
+        def fake_popen(command: list[str], **kwargs: object) -> Popen[str]:
+            server = ArmadaScriptedAppServer(
+                accept_steer=accept_steer,
+                visible_steer_ids=lambda: [str(event["message_id"]) for event in visible_events()],
+            )
+            servers.append(server)
+            return cast(Popen[str], server)
+
+        class SteeringRunStore(FakeArmadaWorkerRunStore):
+            def steering_events_after(
+                self,
+                bot_handler: object,
+                message_id: int,
+                *,
+                after_event_id: int,
+            ) -> list[ArmadaPendingSteeringEvent]:
+                return [event for event in visible_events() if event["event_id"] > after_event_id]
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> None:
+                raise AssertionError("progress message should be edited in place")
+
+            def update_message(self, message: dict[str, object]) -> None:
+                pass
+
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="danger-full-access",
+            approval_policy="never",
+            # A worker that stops steering fails the test instead of
+            # hanging it: the scripted server only ends a turn once
+            # every visible steer is delivered.
+            timeout_seconds=5,
+            output_limit=200,
+            popen_command=fake_popen,
+        )
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix fix the checkout test", False)],
+        )
+        try:
+            make_test_armada_handler(
+                worker_runtime=ArmadaWorkerRuntime(runner),
+                worker_run_store=SteeringRunStore(),
+            ).run_worker_turn(
+                {
+                    "id": 205,
+                    "type": "stream",
+                    "display_recipient": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
+                    "content": "@Onix fix the checkout test",
+                },
+                FakeBotHandler(),
+                content="@Onix fix the checkout test",
+                active_session=active_session,
+                message_id=205,
+                stream=ARMADA_DEFAULT_STREAM,
+                topic=ARMADA_DEFAULT_TOPIC,
+                post_started_progress=True,
+                progress_message_id=501,
+            )
+        finally:
+            runner.close()
+        [server] = servers
+        self.assertEqual(server.turn_starts[0][0], "205")
+        return server
+
+    def assert_each_steer_delivered_once(
+        self,
+        server: ArmadaScriptedAppServer,
+        steering_events: list[ArmadaPendingSteeringEvent],
+    ) -> None:
+        self.assertEqual(
+            server.delivered_ids(),
+            [str(event["message_id"]) for event in steering_events],
+        )
+        delivered_text = dict(server.deliveries)
+        for event in steering_events:
+            self.assertIn(
+                f"{event.get('sender_full_name')}: {event['instruction']}",
+                delivered_text[str(event["message_id"])],
+            )
+
+    def test_steer_racing_the_end_of_a_turn_reaches_the_next_turn(self) -> None:
+        steering_events: list[ArmadaPendingSteeringEvent] = [
+            {
+                "event_id": 1,
+                "message_id": 301,
+                "instruction": "keep the patch small",
+                "sender_full_name": "Iago",
+            }
+        ]
+
+        server = self.run_steered_turn(
+            steering_events, accept_steer=lambda: False, visible=lambda event, server, runner: True
+        )
+
+        # Codex ended the turn under the steer and refused it; the
+        # worker started the next turn with it instead of losing it.
+        self.assertEqual(server.refused_steers, ["301"])
+        self.assertEqual(server.accepted_steers, [])
+        self.assertEqual([turn[0] for turn in server.turn_starts], ["205", "301"])
+        self.assert_each_steer_delivered_once(server, steering_events)
+
+    def test_steer_recorded_after_the_turns_last_event_reaches_the_next_turn(self) -> None:
+        steering_events: list[ArmadaPendingSteeringEvent] = [
+            {
+                "event_id": 1,
+                "message_id": 301,
+                "instruction": "keep the patch small",
+                "sender_full_name": "Iago",
+            }
+        ]
+
+        # The steer is recorded once the runner has handed the finished
+        # turn back to the worker: only the worker's own loop can see it.
+        server = self.run_steered_turn(
+            steering_events,
+            accept_steer=lambda: True,
+            visible=lambda event, server, runner: (
+                server.completed_turns >= 1 and not runner.main_turn_lock.locked()
+            ),
+        )
+
+        self.assertEqual(server.refused_steers, [])
+        self.assertEqual([turn[0] for turn in server.turn_starts], ["205", "301"])
+        self.assert_each_steer_delivered_once(server, steering_events)
+
+    def test_six_steers_all_arrive_once_in_order_with_their_authors(self) -> None:
+        steering_events: list[ArmadaPendingSteeringEvent] = [
+            {
+                "event_id": index,
+                "message_id": 300 + index,
+                "instruction": f"step {index}",
+                "sender_full_name": "Iago" if index % 2 else "Cordelia, Lear's daughter",
+            }
+            for index in range(1, 7)
+        ]
+        # Codex takes three steers, refuses the fourth as the turn ends,
+        # and takes the last two into the turn that the fourth starts.
+        decisions = iter([True, True, True, False, True, True])
+
+        server = self.run_steered_turn(
+            steering_events,
+            accept_steer=lambda: next(decisions),
+            visible=lambda event, server, runner: True,
+        )
+
+        self.assertEqual(server.refused_steers, ["304"])
+        self.assertEqual([turn[0] for turn in server.turn_starts], ["205", "304"])
+        self.assert_each_steer_delivered_once(server, steering_events)
+
+    def test_steers_arrive_once_in_order_under_any_refusals(self) -> None:
+        for seed in range(12):
+            with self.subTest(seed=seed):
+                self.run_seeded_steers(random.Random(seed))
+
+    def run_seeded_steers(self, rng: random.Random) -> None:
+        steering_events: list[ArmadaPendingSteeringEvent] = [
+            {
+                "event_id": index,
+                "message_id": 300 + index,
+                "instruction": f"step {index}",
+                "sender_full_name": rng.choice(["Iago", "Cordelia", "Hamlet"]),
+            }
+            for index in range(1, 7)
+        ]
+        # A steer is recorded during the first turn, or after it ended,
+        # in commit order; one recorded after the run ended is a new run.
+        arrival_turns = sorted(rng.randrange(2) for _event in steering_events)
+        arrival_turn = {
+            event["event_id"]: turn
+            for event, turn in zip(steering_events, arrival_turns, strict=True)
+        }
+
+        def visible(
+            event: ArmadaPendingSteeringEvent,
+            server: ArmadaScriptedAppServer,
+            runner: ArmadaCodexAppServerToolRunner,
+        ) -> bool:
+            return server.completed_turns >= arrival_turn[event["event_id"]]
+
+        server = self.run_steered_turn(
+            steering_events, accept_steer=lambda: rng.random() < 0.6, visible=visible
+        )
+
+        self.assert_each_steer_delivered_once(server, steering_events)
 
 
 class ArmadaAppServerProtocolCitizenTest(TestCase):

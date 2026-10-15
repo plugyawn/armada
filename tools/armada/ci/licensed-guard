@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Fail if git tracks a licensed file.
+#
+# Söhne is Klim's and the Pokémon sprites are Nintendo / Game Freak's;
+# the repository is public, so neither is ever committed. Their
+# directories hold only what .gitignore lets through: each README and
+# the Gen 9 file list. A font file of Klim's anywhere else in the tree
+# fails too.
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+
+allowed='web/fonts/licensed/README.md
+web/sprites/licensed/README.md
+web/sprites/licensed/smogon-gen9.txt'
+
+extra="$(
+    comm -23 <(git ls-files -- web/fonts/licensed web/sprites/licensed | sort) <(sort <<<"$allowed")
+    git ls-files -- '*.woff' '*.woff2' '*.otf' '*.ttf' | grep -iE 's(oe|ö|o)hne' || true
+)"
+if [ -n "$extra" ]; then
+    printf >&2 'licensed-guard: git tracks licensed files; remove them with git rm --cached:\n%s\n' "$extra"
+    exit 1
+fi
+echo "licensed-guard: no licensed file is tracked"

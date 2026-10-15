@@ -506,6 +506,38 @@ def do_update_embedded_data(
     send_event_on_commit(user_profile.realm, event, list(map(user_info, filtered_ums)))
 
 
+def _rendering_only_mention_notification_data(
+    message: Message, prior_mention_user_ids: set[int]
+) -> dict[str, Any]:
+    """What Tornado needs to notify the people a bot's live message
+    newly mentions. The agent writes its answer into one message as it
+    works, through rendering-only updates, and a mention it makes there
+    must notify like a mention in a new message."""
+    info = get_recipient_info(
+        realm_id=message.realm_id,
+        recipient=message.recipient,
+        sender_id=message.sender_id,
+        stream_topic=StreamTopicTarget(
+            stream_id=message.recipient.type_id, topic_name=message.topic_name()
+        ),
+        possible_topic_wildcard_mention=False,
+        possible_stream_wildcard_mention=False,
+    )
+    return {
+        "notify_mentions_acting_user_id": message.sender_id,
+        # Tornado reads a missing stream name as a direct message.
+        "stream_name": get_stream_by_id_in_realm(message.recipient.type_id, message.realm).name,
+        "online_push_user_ids": list(info.online_push_user_ids),
+        "dm_mention_push_disabled_user_ids": list(info.dm_mention_push_disabled_user_ids),
+        "dm_mention_email_disabled_user_ids": list(info.dm_mention_email_disabled_user_ids),
+        "muted_sender_user_ids": list(info.muted_sender_user_ids),
+        "prior_mention_user_ids": list(prior_mention_user_ids),
+        "presence_idle_user_ids": filter_presence_idle_user_ids(info.active_user_ids),
+        "all_bot_user_ids": list(info.all_bot_user_ids),
+        "push_device_registered_user_ids": list(info.push_device_registered_user_ids),
+    }
+
+
 def _check_update_message_rendering_only(
     user_profile: UserProfile,
     message_id: int,
@@ -561,6 +593,14 @@ def _check_update_message_rendering_only(
     for group_id in rendering_result.mentions_user_group_ids:
         members = mention_data.get_group_members(group_id)
         rendering_result.mentions_user_ids.update(members)
+    # The agent's live message is updated many times a run; only an
+    # update that mentions someone can notify anyone (below), so only
+    # it pays for the query.
+    prior_mention_user_ids = (
+        get_mentions_for_message_updates(message)
+        if message.is_channel_message and rendering_result.mentions_user_ids
+        else set()
+    )
     update_user_message_flags(rendering_result, ums, topic_participant_user_ids)
 
     message.content = content
@@ -579,6 +619,8 @@ def _check_update_message_rendering_only(
         "rendered_content": message.rendered_content,
         "rendering_only": True,
     }
+    if message.is_channel_message and rendering_result.mentions_user_ids - prior_mention_user_ids:
+        event.update(_rendering_only_mention_notification_data(message, prior_mention_user_ids))
     users_to_notify = event_recipient_ids_for_action_on_messages(
         [message.id], message.is_channel_message
     )

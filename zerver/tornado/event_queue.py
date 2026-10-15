@@ -1521,6 +1521,10 @@ def process_message_update_event(
     stream_name = event_template.get("stream_name")
     message_id = event_template["message_id"]
     rendering_only_update = event_template["rendering_only"]
+    # A rendering-only update is not an edit, but a bot's live message
+    # (the agent's answer, written as it works) still notifies the
+    # people it newly mentions; such updates name the bot here.
+    notify_mentions_acting_user_id = event_template.pop("notify_mentions_acting_user_id", None)
 
     # TODO/compatibility: We need to set `push_device_registered_user_ids` to None
     # for update_message events prior to the introduction of `push_device_registered_user_ids`
@@ -1543,13 +1547,18 @@ def process_message_update_event(
         # Events where `rendering_only_update` is True come from the
         # do_update_embedded_data code path, and represent rendering
         # previews; there should be no real content changes.
-        # Therefore, we know only events where `rendering_only_update`
-        # is False possibly send notifications.
-        if not rendering_only_update:
+        # Therefore, only events where `rendering_only_update` is
+        # False possibly send notifications, apart from a bot's live
+        # message newly mentioning someone (see above).
+        if not rendering_only_update or notify_mentions_acting_user_id is not None:
             # The user we'll get here will be the sender if the message's
             # content was edited, and the editor for topic edits. That's
             # the correct "acting_user" for both cases.
-            acting_user_id = event_template["user_id"]
+            acting_user_id = (
+                event_template["user_id"]
+                if not rendering_only_update
+                else notify_mentions_acting_user_id
+            )
 
             flags: Collection[str] = user_event["flags"]
             user_notifications_data = UserMessageNotificationsData.from_user_id_sets(

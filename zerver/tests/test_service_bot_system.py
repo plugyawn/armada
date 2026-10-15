@@ -856,6 +856,39 @@ class TestServiceBotConfigHandler(ZulipTestCase):
         self.assertEqual(message.content, "after")
         self.assertEqual(message.rendered_content, "<p>after</p>")
 
+    def test_rendering_only_update_notifies_people_it_newly_mentions(self) -> None:
+        """The agent writes its answer into one live message; a mention
+        it adds there is a real mention, notified once."""
+        cordelia = self.example_user("cordelia")
+        self.subscribe(self.bot_profile, "Verona")
+        self.subscribe(cordelia, "Verona")
+        result = self.bot_handler.send_message(
+            message={"type": "stream", "to": "Verona", "topic": "work", "content": "· Working"}
+        )
+
+        def update(content: str) -> list[int]:
+            with (
+                mock.patch("zerver.tornado.event_queue.maybe_enqueue_notifications") as enqueue,
+                self.captureOnCommitCallbacks(execute=True),
+            ):
+                self.bot_handler.update_message(
+                    {"message_id": result["id"], "content": content, "rendering_only": True}
+                )
+            return [
+                call.kwargs["user_notifications_data"].user_id
+                for call in enqueue.call_args_list
+                if call.kwargs["user_notifications_data"].mention_email_notify
+            ]
+
+        self.assertEqual(update("Looking into it"), [])
+        self.assertEqual(update("@**Cordelia, Lear's daughter** can you review?"), [cordelia.id])
+        self.assertTrue(
+            UserMessage.objects.get(
+                user_profile=cordelia, message_id=result["id"]
+            ).flags.mentioned.is_set
+        )
+        self.assertEqual(update("@**Cordelia, Lear's daughter** can you review this?"), [])
+
 
 ParamT = ParamSpec("ParamT")
 

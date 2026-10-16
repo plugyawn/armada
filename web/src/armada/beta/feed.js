@@ -78,7 +78,7 @@ function appendMessage(c, m, o = {}) {
   let cl = c.lastElementChild;
   const join = kind !== "onix" && cl && cl.classList.contains("cl") && +cl.dataset.sid === m.sender_id && !cl.dataset.closed && m.timestamp - +cl.dataset.ts < 600 && !cl.classList.contains("onix");
   if (!join) cl = newSection(c, m, kind, o);
-  cl.dataset.ts = m.timestamp;
+  cl.dataset.ts = m.timestamp; (msgIndex.get(m.id) || state.P).rows.set(m.id, cl);
   const parts = partsOf(m).map((p) => partEl(p, m)); cl.append(...parts); const evo = evoCaption(m); if (evo) cl.append(evo);
   if (kind === "onix") { cl.dataset.mid = m.id; if (!parts.length) cl.append(placeholderAns(m)); syncOnix(cl, m); }
   if (kind === "onix" && m.submessages && m.submessages.length) cl.append(el("div", "note nw", 'This answer carries an artifact, which the beta does not draw yet.'));
@@ -97,7 +97,7 @@ function hugAll() { if (!toHug.size) return; const bs = []; for (const cl of toH
   bs.forEach((b, i) => { if (want[i] && b.offsetHeight !== want[i].h) b.style.width = ""; }); }
 const hush = (root) => $$(".rc, .rt, [data-thread], .tl .lk, .line .lk, .bl > .lk", root).forEach((b) => (b.tabIndex = -1));
 function drawLane(o = {}) {
-  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; stillLane(); lane.textContent = ""; lane._day = null;
+  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; stillLane(); lane.textContent = ""; lane._day = null; c.rows.clear();
   const set = unread.get(state.place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null;
   if (c.loaded && !c.oldest) lane.append(el("div", "more-up", c.loading ? "Loading earlier messages" : "Scroll up for earlier messages"));
   const list = c.msgs.filter((m) => !m.thread_root_message_id);
@@ -108,7 +108,9 @@ function drawLane(o = {}) {
   if (o.keep) { feed.scrollTop = y0 + (feed.scrollHeight - h0); state.lastSet = feed.scrollTop; } else if (state.pinned) pin();
   edge(); syncJump();
 }
-function sectionOf(id, root = lane) { const n = root.querySelector(`[data-mid="${id}"]`); return n ? n.closest(".cl") : null; }
+/* a message's turn in the place in view, from the place's own map (appendMessage keeps it): no search of the lane. A turn
+   that has left the lane (a thread closed under it) is forgotten when it is asked for. */
+function sectionOf(id) { const c = state.P, cl = c && c.rows && c.rows.get(id); if (!cl) return null; if (lane.contains(cl)) return cl; c.rows.delete(id); return null; }
 
 export {appendMessage, dist, drawLane, edge, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin, releaseRows,
   sectionOf, show, syncJump, toHug};

@@ -24,10 +24,10 @@ async function transmit(c, m, ph) {
   catch (e) { if (!m.pending) { watchRun(); return; }   /* its own event adopted it first: it arrived, only the answer to the POST was lost */
     m.pending = false; m.failed = e.net ? true : e.message; if (ph) dropLocal(c, ph); if (c === state.P) { const cl = sectionOf(m.id); if (cl) { $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.add("unsent")); failMark(cl, m); M.refuse($$(`.bl[data-mid="${m.id}"] .b`, cl).pop() || cl); } drawTicks(m.id); } S.play("fail"); }
 }
-function dropLocal(c, x) { c.byId.delete(x.id); msgIndex.delete(x.id); c.msgs = c.msgs.filter((y) => y !== x); if (c !== state.P) return; const cl = sectionOf(x.id); if (cl) M.leave(cl, () => { const y = feed.scrollTop; cl.remove(); feed.scrollTop = y; }); }
+function dropLocal(c, x) { c.byId.delete(x.id); msgIndex.delete(x.id); c.msgs = c.msgs.filter((y) => y !== x); if (c !== state.P) return; const cl = sectionOf(x.id); c.rows.delete(x.id); if (cl) M.leave(cl, () => { const y = feed.scrollTop; cl.remove(); feed.scrollTop = y; }); }
 /* the server's copy of what I sent: my row takes its id. Nothing on screen changes unless the server rendered it differently. */
 function adopt(c, m, id, server) {
-  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); if (c === state.P) $$(`[data-mid="${old}"]`, lane).forEach((n) => (n.dataset.mid = id)); if (c === state.P) $$(".cl", lane).forEach((n) => { if (n.dataset.mid === String(old)) n.dataset.mid = id; }); if (c === state.P) $$(`.rt[data-info="${old}"]`, lane).forEach((n) => (n.dataset.info = id)); }
+  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); const cl = c.rows.get(old); if (cl) { c.rows.delete(old); c.rows.set(id, cl); for (const n of [cl, ...cl.querySelectorAll(`[data-mid="${old}"]`)]) if (n.dataset.mid === String(old)) n.dataset.mid = id; cl.querySelectorAll(`.rt[data-info="${old}"]`).forEach((n) => (n.dataset.info = id)); } }
   /* a send whose answer was lost was marked Not sent; its own event says it arrived, so the mark and its Retry go */
   if (m.failed && c === state.P) { const cl = sectionOf(id); if (cl) clearFailMark(cl, id); }
   m.local = false; m.pending = false; m.failed = false;

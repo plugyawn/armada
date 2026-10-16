@@ -148,14 +148,22 @@ set_global(
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
 );
 
-// The stand-in server answers every request with success and nothing in it.
+// The stand-in server answers every request with success and nothing in
+// it; a message sent is given the next id.
 const requests = [];
+let next_id = 9000;
 set_global("fetch", async (url, init = {}) => {
-    requests.push({method: init.method ?? "GET", url: url.split("?")[0]});
+    const method = init.method ?? "GET";
+    requests.push({method, url: url.split("?")[0]});
+    const sent = {};
+    if (method === "POST" && url.split("?")[0] === "/json/messages") {
+        sent.id = next_id;
+        next_id += 1;
+    }
     return {
         ok: true,
         status: 200,
-        json: async () => ({result: "success", msg: "", messages: [], found_oldest: true}),
+        json: async () => ({result: "success", msg: "", messages: [], found_oldest: true, ...sent}),
     };
 });
 
@@ -197,6 +205,7 @@ const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const feed_js = zrequire("armada/beta/feed.js");
 const events = zrequire("armada/beta/events.js");
+const send = zrequire("armada/beta/send.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -296,4 +305,66 @@ run_test("a row that joins a move under way takes the move's place in it", () =>
     assert.ok(moved.every((r) => r.y === 2 * ROW));
     assert.ok(moved.some((r) => r.add === ROW));
     assert.ok(moved.some((r) => r.add === 2 * ROW));
+});
+
+// The searches of the whole lane a piece of work makes.
+function lane_searches(work) {
+    const count = {n: 0};
+    for (const name of ["querySelector", "querySelectorAll", "getElementsByClassName"]) {
+        const own = lane[name];
+        lane[name] = (...args) => {
+            count.n += 1;
+            return own.apply(lane, args);
+        };
+    }
+    try {
+        work();
+    } finally {
+        for (const name of ["querySelector", "querySelectorAll", "getElementsByClassName"]) {
+            Reflect.deleteProperty(lane, name);
+        }
+    }
+    return count.n;
+}
+const turn_of = (id) => lane.querySelector(`[data-mid="${id}"]`).closest(".cl");
+const thumbs = (id) => ({
+    type: "reaction",
+    op: "add",
+    message_id: id,
+    user_id: IAGO,
+    emoji_name: "+1",
+    emoji_code: "1f44d",
+    reaction_type: "unicode_emoji",
+});
+
+run_test("an event finds its message's turn without a search of the lane", () => {
+    open_with("rows", forty(300));
+    // A search of the lane is counted, so that none counted means none made.
+    assert.equal(
+        lane_searches(() => lane.querySelector(".cl")),
+        1,
+    );
+    assert.equal(
+        lane_searches(() => events.onReaction(thumbs(320))),
+        0,
+    );
+    assert.match(turn_of(320).textContent, /\u{1F44D}/u);
+});
+
+run_test("a message I send keeps its turn when the server's copy takes its place", () => {
+    find(".tx").textContent = "on its way";
+    send.send({at: 0});
+    const mine = beta_state.state.P.msgs.at(-1);
+    const turn = turn_of(mine.id);
+    const id = next_id;
+    // The server's own event names the local id.
+    events.onMessage({
+        message: {...message(id, ME, "rows", 400), content: "<p>on its way</p>"},
+        local_message_id: mine.id,
+        flags: ["read"],
+    });
+    assert.equal(mine.id, id);
+    assert.equal(turn_of(id), turn);
+    events.onReaction(thumbs(id));
+    assert.match(turn.textContent, /\u{1F44D}/u);
 });

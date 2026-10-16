@@ -1,8 +1,11 @@
-"""The agent runtime's processes: which program an app-server runs, and how it stops."""
+"""The agent runtime's processes and threads: which program an app-server
+runs, how it stops, and how the monitor tick thread survives a dropped
+database connection."""
 
 import os
 import platform
 import stat
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +13,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
+from django.db import connection
+from django.db.utils import InterfaceError
 from typing_extensions import override
 
 from zerver.lib import armada_agent
@@ -19,6 +24,8 @@ from zerver.lib.armada_agent import (
     armada_codex_executable,
     armada_process_group_exists,
 )
+from zerver.lib.armada_monitor import armada_run_due_monitor_ticks
+from zerver.worker.armada_monitor_worker import run_armada_monitor_tick_pass
 
 # A Codex stand-in that answers every request. With "wedged" in its file
 # name it also ignores SIGTERM and stdin's end, and starts a child that
@@ -224,3 +231,55 @@ class ArmadaCodexExecutableTest(TestCase):
             native.chmod(0o755)
             self.assertEqual(armada_codex_executable(str(native)), (str(native), ()))
             self.assertEqual(armada_codex_executable("no-such-codex"), ("no-such-codex", ()))
+
+
+class ArmadaMonitorTickConnectionTest(TestCase):
+    """The monitor tick thread outlives a dropped database connection. On
+    the hosted beta one drop failed every pass, every 5 seconds, until the
+    worker was restarted."""
+
+    def run_on_own_thread(self, work: Callable[[], None]) -> None:
+        # The tick loop runs on its own thread, with its own connection.
+        failures: list[BaseException] = []
+
+        def run() -> None:
+            try:
+                work()
+            except BaseException as error:  # nocoverage
+                failures.append(error)
+            finally:
+                connection.close()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        thread.join(timeout=30)
+        self.assertFalse(thread.is_alive())
+        if failures:  # nocoverage
+            raise failures[0]
+
+    def drop_connection(self) -> None:
+        # What a Postgres restart leaves behind: Django still holds the
+        # connection object, but its socket is gone.
+        connection.ensure_connection()
+        raw_connection = connection.connection
+        assert raw_connection is not None
+        raw_connection.close()
+
+    def test_a_pass_after_the_drop_runs_on_a_new_connection(self) -> None:
+        def work() -> None:
+            run_armada_monitor_tick_pass()
+            self.drop_connection()
+            self.assertEqual(run_armada_monitor_tick_pass(), 0)
+
+        self.run_on_own_thread(work)
+
+    def test_the_pass_after_a_failed_one_recovers(self) -> None:
+        def work() -> None:
+            self.drop_connection()
+            # The pass that met the drop failed and left the connection
+            # marked broken; the next one must not fail too.
+            with self.assertRaises(InterfaceError):
+                armada_run_due_monitor_ticks()
+            self.assertEqual(run_armada_monitor_tick_pass(), 0)
+
+        self.run_on_own_thread(work)

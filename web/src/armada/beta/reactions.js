@@ -5,7 +5,6 @@ import {msgIndex, state} from "./state.js";
 import {api} from "./connection.js";
 import {note} from "./composer.js";
 import {hush, sectionOf, shown, stale} from "./feed.js";
-import {refreshPartners} from "./partners.js";
 
 /* ----- reactions ----- */
 function chipsOf(m) { const by = new Map(); for (const r of m.reactions || []) { const k = r.reaction_type + ":" + r.emoji_code; let g = by.get(k); if (!g) by.set(k, (g = {r, n: 0, mine: false})); g.n++; if (r.user_id === state.ME) g.mine = true; } return [...by.values()]; }
@@ -35,7 +34,7 @@ function applyReaction(c, m, ev, mine) {
 async function react(m, r) {   /* my reaction: it lands in this frame; the server is told; if it refuses, it is taken back */
   if (typeof m.id !== "number") return; const has = (m.reactions || []).some((x) => x.user_id === state.ME && x.emoji_code === r.emoji_code && x.reaction_type === r.reaction_type);
   const ev = {op: has ? "remove" : "add", user_id: state.ME, emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}; applyReaction(state.P, m, ev, true);
-  try { await api(has ? "DELETE" : "POST", `messages/${m.id}/reactions`, {emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}); refreshPartners({fold: true, wait: 2000}); }
+  try { await api(has ? "DELETE" : "POST", `messages/${m.id}/reactions`, {emoji_name: r.emoji_name, emoji_code: r.emoji_code, reaction_type: r.reaction_type}); }
   catch (e) { applyReaction(msgIndex.get(m.id) || state.P, m, {...ev, op: has ? "add" : "remove"}, false); note(e.message); }
 }
 

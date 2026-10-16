@@ -113,7 +113,7 @@ To delete the beta, remove all of these in one change:
 - this directory
 - `zerver/views/armada_beta.py`, `templates/zerver/armada_beta.html`, `zerver/tests/test_armada_beta.py`,
   `web/tests/armada/beta_*.test.cjs`
-- in `zproject/urls.py`, the import from `zerver.views.armada_beta`, the two `beta/` paths and the four
+- in `zproject/urls.py`, the import from `zerver.views.armada_beta`, the two `beta/` paths and the three
   `armada/partner...` routes, with their comments (`zerver/lib/partner.py` stays for the rebuild, which moves its rows into
   the Partner model)
 - in `web/webpack.assets.json`, the `"armada-beta"` entry

@@ -1404,6 +1404,35 @@ class ArmadaPartnerEvent(BaseEvent):
     partner: ArmadaPartner
 
 
+class ArmadaPartnerReady(BaseModel):
+    kind: Literal["evolve", "shiny"]
+    choices: list[str]
+
+
+class ArmadaPartnerMine(BaseModel):
+    species: str | None
+    chosen: str | None
+    shiny: bool
+    held: bool
+    later: bool
+    xp: int
+    level: int
+    level_xp: int
+    next_level_xp: int | None
+    active_days: int
+    today_xp: int
+    ready: ArmadaPartnerReady | None
+    evolved_at: float | None
+    evolved_kind: Literal["evolve", "shiny"] | None
+    evolve_levels: list[int]
+
+
+class ArmadaPartnerMeEvent(BaseEvent):
+    type: Literal["armada_partner"]
+    op: Literal["me"]
+    me: ArmadaPartnerMine
+
+
 class ArmadaPost(BaseModel):
     id: int
     user_id: int

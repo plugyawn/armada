@@ -19,7 +19,7 @@ import {card, drawCard, drawMeRow, momentDue} from "./partner_card.js";
    peep, centred on what it draws. It never catches the pointer. Still at rest; it hops under the pointer or focus, while
    its person types, when their message lands, and on my send. A species with no icon has no face: initials stand in. */
 const SPRITE_V = DATA.spriteVersion || "";
-let pack = null, partners = null, partnersAt = 0;
+let pack = null, partners = null;
 const OFFERED = [];                                        /* species ids the picker offers: first forms with an icon, Onix's line left out */
 const spritePath = (path) => "/beta/sprites/" + path.split("/").map(encodeURIComponent).join("/");
 const spriteSrc = (sid, shiny) => { const sp = pack && pack.species[sid] && pack.species[sid].sprite; return !sp ? "" : spritePath(shiny && sp.shiny ? sp.shiny : sp.regular); };
@@ -70,23 +70,22 @@ function hopOnce(face) { const img = face && face.querySelector && face.querySel
 
 async function loadPartners() { if (!SPRITE_V) return;
   try { const [p, st] = await Promise.all([fetch(`/beta/sprites/species.json?v=${encodeURIComponent(SPRITE_V)}`, {credentials: "same-origin", redirect: "error"}).then((r) => (r.ok ? r.json() : null)), api("GET", "armada/partners")]);
-    if (!p || !p.species || !st.on) return; pack = p; partners = st; partnersAt = performance.now();
+    if (!p || !p.species || !st.on) return; pack = p; partners = st;
     OFFERED.length = 0; for (const [sid, s] of Object.entries(pack.species)) if (s.first && s.sprite && s.sv && s.line !== agentLine()) OFFERED.push(sid);
     OFFERED.sort((a, b) => pack.species[a].num - pack.species[b].num || a.localeCompare(b, "en", {numeric: true})); }
   catch (e) { pack = null; partners = null; } }
-/* the team's partners come from the server as they change (the armada_partner event, contract C3); mine are folded after my
-   own send and reaction, which count */
-let partnerTimer = 0;
-async function fetchPartners(fold) { partnersAt = performance.now(); try { applyPartners(await api(fold ? "POST" : "GET", fold ? "armada/partner/fold" : "armada/partners")); } catch (e) {} }
-function refreshPartners(o = {}) { if (!pack) return; clearTimeout(partnerTimer); partnerTimer = setTimeout(() => {
-    if (!o.force && performance.now() - partnersAt < 30000) return; fetchPartners(o.fold); }, o.wait ?? 1500); }
+/* the team's partners come from the server as they change (the armada_partner event, contract C3) */
+async function fetchPartners() { try { applyPartners(await api("GET", "armada/partners")); } catch (e) {} }
 /* someone's partner changed. The server publishes it ahead of the message that caused an evolution, so the caption
-   "Evolved into X" is laid out with that message's bubble, never added under one already drawn. Mine carries what only I
-   see (experience, an evolution ready), so it is asked for in full. */
-function onPartner(ev) { if (!pack || !partners || ev.op !== "update") return; const {user_id: id, ...row} = ev.partner;
-  if (id === state.ME) { fetchPartners(false); return; }
+   "Evolved into X" is laid out with that message's bubble, never added under one already drawn. Mine, as the team sees it,
+   is asked for in full: a choice or an evolution made in another tab. What only I see (experience, an evolution ready)
+   comes with my own sends and the end of my runs, which fold it on the server ("me"), so nothing is asked after a send. */
+function onPartner(ev) { if (!pack || !partners) return;
+  if (ev.op === "me") { applyPartners({...partners, me: ev.me}); return; }
+  if (ev.op !== "update") return; const {user_id: id, ...row} = ev.partner;
+  if (id === state.ME) { fetchPartners(); return; }
   applyPartners({...partners, partners: {...partners.partners, [id]: row}}); }
-function applyPartners(st) { if (!st || !st.on || !pack) return; const was = partners; partners = st; partnersAt = performance.now();
+function applyPartners(st) { if (!st || !st.on || !pack) return; const was = partners; partners = st;
   if (!was) refreshFaces(); else { const who = new Set(), them = {...was.partners, ...st.partners};   /* the people whose partner changed: theirs are the only faces drawn again */
     for (const id of Object.keys(them)) if (JSON.stringify(was.partners[id]) !== JSON.stringify(st.partners[id])) who.add(+id);
     if (JSON.stringify(was.agent) !== JSON.stringify(st.agent)) for (const id of armadaBots) who.add(id);
@@ -113,5 +112,5 @@ function evoCaption(m) { if (typeof m.sender_id !== "number" || isOnix(m.sender_
   const e = el("div", "evo", `${faceOf(m.sender_id, "s18")}<span>${p.evolved_kind === "shiny" ? esc(`${speciesName(p.species)} turned shiny`) : esc(`Evolved into ${speciesName(p.species)}`)}</span>`); e.dataset.mid = m.id; return e; }
 
 export {agentLine, applyPartners, brokenSprites, evoCaption, fetchPartners, hopOnce, loadPartners, me_, OFFERED,
-  onPartner, pack, partnerOf, partners, pkBig, pkCell, pkFace, refreshPartners, speciesName, spriteSrc, svFace, svOf,
+  onPartner, pack, partnerOf, partners, pkBig, pkCell, pkFace, speciesName, spriteSrc, svFace, svOf,
   svPlace, svSrc, typeOf, withIcons};

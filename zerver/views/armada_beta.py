@@ -25,7 +25,6 @@ from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
     evolve_partner,
-    fold_partner,
     load_pack,
     partners_state,
     put_off_choice,
@@ -208,14 +207,6 @@ def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
 def get_armada_partners(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     """Every person's partner, the agent's, and mine in full, as stored;
     my experience is folded in the background when it is due."""
-    return json_success(request, data=partners_state(user_profile))
-
-
-@typed_endpoint_without_parameters
-def post_armada_partner_fold(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
-    """Count what I did since the last fold (at most once in 30 s); the
-    page asks after a send and a reaction of mine."""
-    fold_partner(user_profile)
     return json_success(request, data=partners_state(user_profile))
 
 

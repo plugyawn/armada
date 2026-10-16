@@ -18,7 +18,7 @@ import {drawSide} from "./column.js";
 import {setTab} from "./views.js";
 import {editing, saveEdit} from "./hover.js";
 import {drawHomeRow} from "./home.js";
-import {hopOnce, refreshPartners} from "./partners.js";
+import {hopOnce} from "./partners.js";
 import {choosePick} from "./partner_picker.js";
 import {drawLab} from "./lab.js";
 
@@ -51,7 +51,7 @@ function send(o = {}) {
   state.pinned = true; haltLane();
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); addMsg(c, m); const r = appendMessage(lane, m); if (o.text == null) { tx.textContent = ""; state.atts = []; drawAtts(); } syncField(); if (ph) { addMsg(c, ph); r.onix = appendMessage(lane, ph); } return r; }, "touch", {clamp: {y: 240}});
   const b = $$(".b", row.parts[row.parts.length - 1] || row.cl).pop(); if (b) M.appear(b, 0.6);   /* my bubble rises out of the field into its place with the conversation, one piece, on touch */
-  S.play(live && toOnix ? "steer" : "send", 0, at); hopOnce($(".row.me", nav)); refreshPartners({fold: true, wait: 2000});   /* my face hops once; what I sent counts, after the frame */
+  S.play(live && toOnix ? "steer" : "send", 0, at); hopOnce($(".row.me", nav));   /* my face hops once; what I sent counts on the server, which says so (partners.js, onPartner) */
   if (row.onix) { const g = $(".sigil", row.onix.cl), w = $(".head > .mk", row.onix.cl); if (w) M.land(w); if (g) M.appear(g); S.play("ack", 0.12, at); }
   if (ask && toOnix) { c.answering = false; answered(ask); marks.set(p.key, runMark(ask)); drawRunState(); drawAsks(); drawTrail(p.key); drawHomeRow(p.key); }   /* the answer is in: the band says Working again, its clock from now */
   seedField(); ready();

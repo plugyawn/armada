@@ -20,7 +20,9 @@ Pushes. A change to a partner as the team sees it (a choice, an
 evolution, a level crossed) goes to everyone who can see its person as
 an armada_partner event. A level crossed by a message is pushed in that
 message's transaction, ahead of the message's own event, so a page
-knows the partner's new state before it draws the message.
+knows the partner's new state before it draws the message. A send that
+changes the sender's own view (experience, an evolution ready) pushes
+that view to the sender alone (op "me"), so no page asks after a send.
 
 Experience. fold_partner_xp brings a row up to date from what the server
 already has: my messages, my runs that ended, reactions others put on my
@@ -499,9 +501,22 @@ def fold_partners_of_senders(senders: list[UserProfile]) -> None:
         user = people[partner.user_profile_id]
         row = row_of(partner)
         before = shown_view(pack, row)
+        mine_before = my_view(pack, row, now, user_zone(user))
         fold_partner_xp(user, row, now, every_time=True)
         Partner.objects.filter(id=partner.id).update(**columns_of(row))
         push_partner_change(pack, user, before, row)
+        push_my_partner(user, mine_before, my_view(pack, row, now, user_zone(user)))
+
+
+def push_my_partner(user: UserProfile, before: dict[str, Any], after: dict[str, Any]) -> None:
+    """Tell the person their own partner as only they see it (its
+    experience, today's share, an evolution ready) when a fold changed
+    it, when the commit lands: their pages keep their card from this
+    and ask nothing after a send."""
+    if after == before:
+        return
+    event = {"type": "armada_partner", "op": "me", "me": after}
+    send_event_on_commit(user.realm, event, [user.id])
 
 
 def my_view(

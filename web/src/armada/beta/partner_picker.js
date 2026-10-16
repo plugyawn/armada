@@ -99,7 +99,7 @@ async function choosePick() { if (!pickFree()) { M.refuse(sh); S.play("nope"); r
   catch (e) { note(e.message); if (e.status !== 400) return;
     /* refused (someone took the line first): the picker shows who has it now; a line the server still does not list as held
        (its holder is someone I cannot see) is drawn as taken by Someone, so Choose is not armed on it again */
-    const line = pack.species[sid].line; await fetchPartners(false); if (!takenLines().has(line)) { pick.refused.add(line); if (state.place && state.place.kind === "partner") { drawPicker(); drawSide(); } } } }
+    const line = pack.species[sid].line; await fetchPartners(); if (!takenLines().has(line)) { pick.refused.add(line); if (state.place && state.place.kind === "partner") { drawPicker(); drawSide(); } } } }
 async function putOff() { const me = me_(); if (me && !me.species && !me.later) { try { applyPartners(await api("POST", "armada/partner", {later: true})); } catch (e) { note(e.message); return; } } leavePicker(); }
 function leavePicker() { const back = pick.back && pick.back.kind !== "partner" ? pick.back : null; pick.q = ""; tx.textContent = ""; syncField(); openPlace(back || HOME); }
 /* changing later: the same place with my partner selected, under the switch that shows it */

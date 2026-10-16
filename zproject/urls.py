@@ -48,7 +48,6 @@ from zerver.views.armada_beta import (
     get_armada_partners,
     post_armada_partner,
     post_armada_partner_evolve,
-    post_armada_partner_fold,
 )
 from zerver.views.armada_pages import (
     delete_armada_post,
@@ -464,9 +463,6 @@ v1_api_and_json_patterns = [
     rest_path(
         "armada/partner/evolve",
         POST=(post_armada_partner_evolve, {"intentionally_undocumented"}),
-    ),
-    rest_path(
-        "armada/partner/fold", POST=(post_armada_partner_fold, {"intentionally_undocumented"})
     ),
     rest_path(
         "armada/read_receipts",

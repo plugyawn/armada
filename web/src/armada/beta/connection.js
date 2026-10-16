@@ -76,7 +76,7 @@ function resync() { resetStreams();
   for (const c of places.values()) { for (const m of c.msgs) if (!m.local) { if (msgIndex.get(m.id) === c) msgIndex.delete(m.id); forgetReceipts(m.id); }
     c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; c.park = null; c.drawn = false; c.dirty.clear(); c.rows.clear(); }
   if (state.place) openPlace(state.place, {force: true, keepHash: true});
-  fetchPartners(false); fetchMentions();
+  fetchPartners(); fetchMentions();
 }
 /* the queue, for as long as the session stands */
 function poll() { return link.run(); }

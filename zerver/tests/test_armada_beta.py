@@ -34,7 +34,7 @@ from zerver.actions.users import do_deactivate_user
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
-from zerver.lib.event_schema import check_armada_partner_event
+from zerver.lib.event_schema import check_armada_partner_event, check_armada_partner_me_event
 from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
@@ -727,13 +727,15 @@ class PartnerTest(ZulipTestCase):
                 emoji_code="1f389",
                 reaction_type="unicode_emoji",
             )
-            self.login_user(aaron)
             with CaptureQueriesContext(connection) as queries:
-                state = self.assert_json_success(self.client_post("/json/armada/partner/fold"))
+                fold_partner(aaron)
+            # Read before the request below, which resets the query log.
+            fold_queries = queries.captured_queries
+            state = self.partners(aaron)
         # The fold read only what was past the watermarks.
-        reads = [q["sql"] for q in queries.captured_queries if 'FROM "zerver_message"' in q["sql"]]
+        reads = [q["sql"] for q in fold_queries if 'FROM "zerver_message"' in q["sql"]]
         self.assertTrue(any('"zerver_message"."id" >' in sql for sql in reads), reads)
-        self.assertLess(len(queries.captured_queries), 30)
+        self.assertLess(len(fold_queries), 30)
         self.assertEqual(state["me"]["xp"], me["xp"] + 2)
         self.assertEqual(state["me"]["today_xp"], 29)
         # A day passes: today's experience starts again at nothing.
@@ -940,11 +942,18 @@ class PartnerTest(ZulipTestCase):
         self.assert_json_error(self.choose(polonius, "10"), "Someone else has this line.")
         self.assert_json_error(self.choose(polonius, "1"), "King Hamlet has this line.")
 
-    def partner_events(self, events: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-        found = [e for e in events if e["event"]["type"] == "armada_partner"]
+    def partner_events(
+        self, events: list[Mapping[str, Any]], op: str = "update"
+    ) -> list[Mapping[str, Any]]:
+        """The armada_partner events of one op: "update" (a partner as the
+        team sees it) or "me" (mine as only I see it)."""
+        found = [
+            e for e in events if e["event"]["type"] == "armada_partner" and e["event"]["op"] == op
+        ]
+        check = check_armada_partner_event if op == "update" else check_armada_partner_me_event
         for e in found:
             # The queue gives each event its id on the way out.
-            check_armada_partner_event("events[0]", {**e["event"], "id": 0})
+            check("events[0]", {**e["event"], "id": 0})
         return found
 
     def test_a_choice_and_an_evolution_are_pushed(self) -> None:
@@ -1003,29 +1012,49 @@ class PartnerTest(ZulipTestCase):
             )
             return self.assert_json_success(result)["id"]
 
-        # Her first message in a topic also follows it for her.
-        with self.capture_send_event_calls(expected_num_events=4) as events:
+        # Her first message in a topic also follows it for her. Her own
+        # view (experience, the evolution now ready) goes to her alone.
+        with self.capture_send_event_calls(expected_num_events=5) as events:
             message_id = send("over the line")
         self.assertEqual(
-            [e["event"]["type"] for e in events],
-            ["armada_partner", "muted_topics", "user_topic", "message"],
+            [(e["event"]["type"], e["event"].get("op")) for e in events],
+            [
+                ("armada_partner", "update"),
+                ("armada_partner", "me"),
+                ("muted_topics", None),
+                ("user_topic", None),
+                ("message", None),
+            ],
         )
         [pushed] = self.partner_events(events)
         self.assertEqual(
             (pushed["event"]["partner"]["level"], pushed["event"]["partner"]["may_change"]),
             (16, True),
         )
-        self.assertEqual(events[3]["event"]["message"], message_id)
+        [mine] = self.partner_events(events, "me")
+        self.assertEqual(mine["users"], [cordelia.id])
+        self.assertEqual((mine["event"]["me"]["xp"], mine["event"]["me"]["level"]), (1026, 16))
+        self.assertEqual(mine["event"]["me"]["ready"], {"kind": "evolve", "choices": ["11", "12"]})
+        self.assertEqual(events[4]["event"]["message"], message_id)
         row = get_row(cordelia)
         self.assertEqual((row["xp"], row["message_watermark"]), (1026, message_id))
 
-        # The next message counts, crosses nothing and pushes nothing; a
-        # fold soon after finds nothing new.
-        with self.capture_send_event_calls(expected_num_events=1) as events:
+        # The next message counts and crosses nothing: nothing for the
+        # team, and her own view as the page would fetch it.
+        with self.capture_send_event_calls(expected_num_events=2) as events:
             send("still level 16")
         self.assertEqual(self.partner_events(events), [])
+        [mine] = self.partner_events(events, "me")
         self.assertEqual(get_row(cordelia)["xp"], 1027)
-        self.assertEqual(self.partners(cordelia)["me"]["xp"], 1027)
+        self.assertEqual(mine["event"]["me"], self.partners(cordelia)["me"])
+
+        # Past the day's cap a message counts for nothing: nothing is pushed.
+        row = get_row(cordelia)
+        row["day_messages"] = settings.PARTNER_CAP_MESSAGES
+        save_row(cordelia, row)
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            send("over the cap")
+        self.assertEqual([e["event"]["type"] for e in events], ["message"])
 
     def test_sending_costs_a_query_only_with_a_pack(self) -> None:
         hamlet = self.example_user("hamlet")

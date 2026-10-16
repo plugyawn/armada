@@ -189,7 +189,9 @@ const ANSWERS = [
                   : {result: "success", messages: []},
     ],
 ];
+const fetched = [];
 set_global("fetch", async (url) => {
+    fetched.push(url);
     const answer = ANSWERS.find(([pattern]) => pattern.test(url));
     assert.ok(answer, `no stand-in answer for ${url}`);
     const body = answer[1](url);
@@ -545,4 +547,21 @@ run_test("Evolve on my own card gives focus back to what opened the card", async
     partners.applyPartners(PARTNERS);
     beta_state.state.threadTx = null;
     beta_state.state.place = null;
+});
+
+run_test("my own view comes with my send: my card says it, and nothing is asked", async () => {
+    card.openCard();
+    clock.tick(0);
+    fetched.length = 0;
+    partners.onPartner({
+        type: "armada_partner",
+        op: "me",
+        me: {...PARTNERS.me, xp: 1000, today_xp: 37},
+    });
+    await settle();
+    assert.equal(partners.me_().xp, 1000);
+    assert.match(document.querySelector(".pcard").textContent, /Today \+37\./);
+    assert.deepEqual(fetched, []);
+    card.closeCard();
+    partners.applyPartners(PARTNERS);
 });

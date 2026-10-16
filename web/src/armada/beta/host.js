@@ -31,7 +31,7 @@ import {buildOver, closeMenu, confirmDelete, editing, editLast, endEdit, menu, m
 import {closePicker, focusPop, pop, togglePicker} from "./model_picker.js";
 import {pal, palette} from "./palette.js";
 import {drawHome, drawHomeRow, fetchMentions, HOME, scanAll} from "./home.js";
-import {applyPartners, hopOnce, loadPartners, me_, onPartner, pack, partners, refreshPartners} from "./partners.js";
+import {applyPartners, hopOnce, loadPartners, me_, onPartner, pack, partners} from "./partners.js";
 import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPicker, PARTNER, pick, putOff,
   selectCell, selectMine} from "./partner_picker.js";
 import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
@@ -180,7 +180,7 @@ async function boot() {
   /* Home needs every worktree's runs and my unread mentions: asked once, after the first place is drawn, then kept by events */
   setTimeout(() => { scanAll(); if (!state.place || state.place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */
 }
-window.armadaBeta = {get partners() { return partners; }, get pack() { return !!pack; }, applyPartners, refreshPartners, openCard, openPicker, playMoment, get moment() { return moment; }, hopOnce, stats, get place() { return state.place; }, get pinned() { return state.pinned; }, get cache() { return state.P; }, openPlace: (k) => openPlace(placeFromKey(k)), tkey, dkey, streams, send, stop, setTab, marks, unread, runsSeen, palette, togglePicker, openThread, startEdit, confirmDelete, get verb() { return verb; }, get atts() { return state.atts; }, QUESTION_TIMEOUT, sweepAsks, handle, redraw: () => { if (state.place && state.place.kind !== "home") { drawRunState(true); drawAsks(); } drawNav(); drawHomeRow(); }};   /* for checks from a driver */
+window.armadaBeta = {get partners() { return partners; }, get pack() { return !!pack; }, applyPartners, openCard, openPicker, playMoment, get moment() { return moment; }, hopOnce, stats, get place() { return state.place; }, get pinned() { return state.pinned; }, get cache() { return state.P; }, openPlace: (k) => openPlace(placeFromKey(k)), tkey, dkey, streams, send, stop, setTab, marks, unread, runsSeen, palette, togglePicker, openThread, startEdit, confirmDelete, get verb() { return verb; }, get atts() { return state.atts; }, QUESTION_TIMEOUT, sweepAsks, handle, redraw: () => { if (state.place && state.place.kind !== "home") { drawRunState(true); drawAsks(); } drawNav(); drawHomeRow(); }};   /* for checks from a driver */
 document.addEventListener("DOMContentLoaded", boot);
 
 /* the seams (README.md): what a module built on this page relies on; it imports each from the module that holds it */

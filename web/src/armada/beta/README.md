@@ -133,5 +133,7 @@ To delete the beta, remove all of these in one change:
   (`ignoreFiles`), `.prettierignore` and `tools/linter_lib/exclude.py`
 - `tools/armada/fork_ledger.d/beta.txt` and the `beta/` lines in `docs/armada/architecture.md`
   ("Directories"), in `.claude/CLAUDE.md` ("Where the build is") and in `.claude/rules/fork-boundary.md`
+- in `tools/armada-checks/checks/size.mjs`, the beta's budget and its `beta-*` assertions, with their words in
+  `tools/armada-checks/README.md` (the `size` row and "Size budgets"): give them to the entry that serves `/` instead
 
 `git grep --untracked -n -e "INTERIM BETA" -e armada-beta -e armada_beta -e armada/beta` finds every one of them.

@@ -32,6 +32,7 @@ from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     armada_git_current_branch_name,
     armada_worker_sandbox_for_workdir,
+    armada_worker_workdir_for_topic,
     build_armada_workspace_context,
     ensure_armada_workspace_node,
 )
@@ -392,3 +393,36 @@ class ArmadaTurnProvisioningTest(ZulipTestCase):
             )
             store.update_metadata(bot_handler, 9877, current_activity="Ran tests.")
             self.assertEqual(armada_git_current_branch_name(Path(workdir)), "codex/experiment")
+
+    def test_a_monitor_tick_provisions_only_a_missing_worktree(self) -> None:
+        owner = self.example_user("hamlet")
+        bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(bot, ARMADA_DEFAULT_STREAM)
+
+        with (
+            TemporaryDirectory() as topic_root,
+            self.settings(ARMADA_TOPIC_WORKDIR_ROOT=topic_root),
+            patch("subprocess.run", wraps=subprocess.run) as spawn,
+        ):
+            workdir = armada_worker_workdir_for_topic(
+                bot, stream=ARMADA_DEFAULT_STREAM, topic="wall"
+            )
+            self.assertTrue(os.path.isdir(workdir))
+            self.assertGreater(self.git_spawns(spawn), 0)
+            spawn.reset_mock()
+
+            # Every later tick, every few seconds: one stat, no git.
+            for _tick in range(3):
+                self.assertEqual(
+                    armada_worker_workdir_for_topic(
+                        bot, stream=ARMADA_DEFAULT_STREAM, topic="wall"
+                    ),
+                    workdir,
+                )
+            self.assertEqual(self.git_spawns(spawn), 0)

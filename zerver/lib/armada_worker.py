@@ -2578,8 +2578,16 @@ def armada_worker_workdir_for_topic(
     stream: str,
     topic: str,
 ) -> str:
+    """The topic's worktree for what only reads or runs a command in it (a
+    monitor's tick, a run's label): provisioned when it is missing, for
+    one stat when it is there. A turn provisions its own."""
     if not stream:
         return armada_default_worker_workdir()
+    workdir = armada_worker_workdir_for_workspace(
+        armada_workspace_node_record(user_profile, stream=stream, topic=topic)
+    )
+    if os.path.isdir(workdir):
+        return workdir
     return armada_worker_workdir_for_workspace(
         ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
     )

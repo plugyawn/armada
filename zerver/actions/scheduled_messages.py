@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import prefetch_related_objects
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 from django.utils.translation import override as override_language
@@ -157,6 +158,8 @@ def do_schedule_messages(
                 scheduled_message.save(update_fields=["has_attachment"])
 
         if not skip_events:
+            # The events say which messages wait for an agent run.
+            prefetch_related_objects(scheduled_message_objects, "agent_run_wait")
             if delivery_type == ScheduledMessage.REMIND:
                 notify_new_reminder(sender, scheduled_message_objects)
             else:
@@ -280,6 +283,8 @@ def edit_scheduled_message(
         # message that waited for an agent run now waits for the time.
         scheduled_message_object.scheduled_timestamp = deliver_at
         AgentRunWait.objects.filter(scheduled_message=scheduled_message_object).delete()
+        # The wait read with the message is gone too.
+        scheduled_message_object.agent_run_wait = None
 
     # Update for most recent Client information.
     scheduled_message_object.sending_client = client

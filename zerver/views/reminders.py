@@ -1,13 +1,11 @@
 from django.http import HttpRequest, HttpResponse
-from django.utils.timezone import now as timezone_now
 from pydantic import Json, NonNegativeInt
 
 from zerver.actions.reminders import do_delete_reminder, schedule_reminder_for_message
-from zerver.lib.exceptions import DeliveryTimeNotInFutureError
+from zerver.lib.armada_later import check_delivery_condition
 from zerver.lib.reminders import access_reminder
 from zerver.lib.request import RequestNotes
 from zerver.lib.response import json_success
-from zerver.lib.timestamp import timestamp_to_datetime
 from zerver.lib.typed_endpoint import PathOnly, typed_endpoint
 from zerver.models import UserProfile
 
@@ -18,12 +16,13 @@ def create_reminders_message_backend(
     user_profile: UserProfile,
     *,
     message_id: Json[int],
-    scheduled_delivery_timestamp: Json[int],
+    scheduled_delivery_timestamp: Json[int] | None = None,
+    agent_run_id: Json[int] | None = None,
     note: str | None = None,
 ) -> HttpResponse:
-    deliver_at = timestamp_to_datetime(scheduled_delivery_timestamp)
-    if deliver_at <= timezone_now():
-        raise DeliveryTimeNotInFutureError
+    deliver_at, agent_run = check_delivery_condition(
+        user_profile, scheduled_delivery_timestamp, agent_run_id
+    )
 
     client = RequestNotes.get_notes(request).client
     assert client is not None
@@ -34,6 +33,7 @@ def create_reminders_message_backend(
         message_id,
         deliver_at,
         note=note or "",
+        agent_run=agent_run,
     )
     return json_success(request, data={"reminder_id": reminder_id})
 

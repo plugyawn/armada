@@ -3,7 +3,9 @@ from contextlib import contextmanager
 from datetime import timedelta
 from types import SimpleNamespace
 
-from django.db import transaction
+import orjson
+from django.db import connection, transaction
+from django.test.utils import CaptureQueriesContext
 from django.utils.timezone import now as timezone_now
 from typing_extensions import override
 
@@ -17,8 +19,18 @@ from zerver.actions.scheduled_messages import (
 from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE, ArmadaWorkerRunStatus
 from zerver.lib.armada_later import access_run_to_wait_for
 from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
+from zerver.lib.event_schema import (
+    check_reminder_add,
+    check_scheduled_message_add,
+    check_scheduled_message_update,
+)
 from zerver.lib.exceptions import JsonableError
+from zerver.lib.scheduled_messages import (
+    get_undelivered_reminders,
+    get_undelivered_scheduled_messages,
+)
 from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.models import Message, ScheduledMessage, UserProfile
 from zerver.models.bots import AgentRun, AgentRunWait
 from zerver.models.clients import get_client
@@ -329,3 +341,251 @@ class AgentRunWaitTest(ZulipTestCase):
             access_run_to_wait_for(self.example_user("cordelia"), hidden.id)
         with self.assertRaisesRegex(JsonableError, "Run not found."):
             access_run_to_wait_for(self.hamlet, hidden.id + 1000)
+
+
+class AgentRunWaitApiTest(ZulipTestCase):
+    """The API of Later and Send when: agent_run_id, given instead of
+    scheduled_delivery_timestamp to POST /scheduled_messages and
+    POST /reminders, and reported on their objects while they wait."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        self.hamlet = self.example_user("hamlet")
+        self.login_user(self.hamlet)
+        self.agent = self.create_test_bot(
+            "onix",
+            self.hamlet,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        trigger_message_id = self.send_stream_message(
+            self.hamlet, "Denmark", "run the tests", topic_name=TOPIC
+        )
+        self.run_ = AgentRun.objects.create(
+            realm=self.hamlet.realm,
+            bot_profile=self.agent,
+            requesting_user=self.hamlet,
+            trigger_message_id=trigger_message_id,
+            stream_name="Denmark",
+            topic_name=TOPIC,
+            status=AgentRun.RUNNING,
+        )
+        self.denmark = get_stream("Denmark", self.hamlet.realm)
+
+    def schedule(self, content: str, **condition: int) -> int:
+        result = self.client_post(
+            "/json/scheduled_messages",
+            {
+                "type": "stream",
+                "to": orjson.dumps(self.denmark.id).decode(),
+                "topic": TOPIC,
+                "content": content,
+                **{name: orjson.dumps(value).decode() for name, value in condition.items()},
+            },
+        )
+        return self.assert_json_success(result)["scheduled_message_id"]
+
+    def in_an_hour(self) -> int:
+        return datetime_to_timestamp(timezone_now() + timedelta(hours=1))
+
+    def cancel_run(self) -> None:
+        # The delivery that runs once the request commits logs each send.
+        with self.assertLogs(level="INFO"), self.captureOnCommitCallbacks(execute=True):
+            result = self.client_post(f"/json/armada/runs/{self.run_.id}/cancel")
+        self.assert_json_success(result)
+
+    def test_send_when_the_run_ends(self) -> None:
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            scheduled_message_id = self.schedule(
+                "after this lands, open the PR", agent_run_id=self.run_.id
+            )
+        # The queue gives each event its id on the way out.
+        check_scheduled_message_add("events[0]", {**events[0]["event"], "id": 0})
+        [added] = events[0]["event"]["scheduled_messages"]
+        self.assertEqual(added["scheduled_message_id"], scheduled_message_id)
+        self.assertEqual(added["agent_run_id"], self.run_.id)
+        self.assertEqual(
+            added["scheduled_delivery_timestamp"],
+            datetime_to_timestamp(AgentRunWait.WAITING_TIMESTAMP),
+        )
+
+        listed = self.assert_json_success(self.client_get("/json/scheduled_messages"))
+        self.assertEqual(
+            [
+                (m["scheduled_message_id"], m.get("agent_run_id"))
+                for m in listed["scheduled_messages"]
+            ],
+            [(scheduled_message_id, self.run_.id)],
+        )
+
+        # Stop pressed on the run: the message is sent, and is listed no more.
+        self.cancel_run()
+        scheduled_message = ScheduledMessage.objects.get(id=scheduled_message_id)
+        self.assertTrue(scheduled_message.delivered)
+        listed = self.assert_json_success(self.client_get("/json/scheduled_messages"))
+        self.assertEqual(listed["scheduled_messages"], [])
+
+    def test_a_time_scheduled_message_has_no_agent_run(self) -> None:
+        scheduled_message_id = self.schedule(
+            "at three", scheduled_delivery_timestamp=self.in_an_hour()
+        )
+
+        listed = self.assert_json_success(self.client_get("/json/scheduled_messages"))
+        [message] = listed["scheduled_messages"]
+        self.assertEqual(message["scheduled_message_id"], scheduled_message_id)
+        self.assertNotIn("agent_run_id", message)
+
+    def test_a_message_waits_for_a_time_or_a_run_not_both_nor_neither(self) -> None:
+        result = self.client_post(
+            "/json/scheduled_messages",
+            {
+                "type": "stream",
+                "to": orjson.dumps(self.denmark.id).decode(),
+                "topic": TOPIC,
+                "content": "when?",
+                "scheduled_delivery_timestamp": orjson.dumps(self.in_an_hour()).decode(),
+                "agent_run_id": orjson.dumps(self.run_.id).decode(),
+            },
+        )
+        self.assert_json_error(
+            result,
+            "Unsupported parameter combination: scheduled_delivery_timestamp, agent_run_id",
+        )
+        result = self.client_post(
+            "/json/scheduled_messages",
+            {
+                "type": "stream",
+                "to": orjson.dumps(self.denmark.id).decode(),
+                "topic": TOPIC,
+                "content": "when?",
+            },
+        )
+        self.assert_json_error(result, "Missing 'scheduled_delivery_timestamp' argument")
+        self.assertFalse(ScheduledMessage.objects.filter(content="when?").exists())
+
+    def test_only_a_live_run_i_can_see_is_waited_for(self) -> None:
+        self.run_.status = AgentRun.DONE
+        self.run_.save(update_fields=["status"])
+        result = self.client_post(
+            "/json/reminders",
+            {
+                "message_id": orjson.dumps(self.run_.trigger_message_id).decode(),
+                "agent_run_id": orjson.dumps(self.run_.id).decode(),
+            },
+        )
+        self.assert_json_error(result, "This run has already ended.")
+
+        self.login("cordelia")
+        result = self.client_post(
+            "/json/reminders",
+            {
+                "message_id": orjson.dumps(self.run_.trigger_message_id).decode(),
+                "agent_run_id": orjson.dumps(self.run_.id + 1000).decode(),
+            },
+        )
+        self.assert_json_error(result, "Run not found.")
+        self.assertFalse(
+            ScheduledMessage.objects.filter(delivery_type=ScheduledMessage.REMIND).exists()
+        )
+
+    def test_a_cancelled_message_is_never_sent(self) -> None:
+        scheduled_message_id = self.schedule("never mind", agent_run_id=self.run_.id)
+
+        result = self.client_delete(f"/json/scheduled_messages/{scheduled_message_id}")
+        self.assert_json_success(result)
+
+        self.assertFalse(AgentRunWait.objects.exists())
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assert_json_success(self.client_post(f"/json/armada/runs/{self.run_.id}/cancel"))
+        self.assertFalse(
+            Message.objects.filter(realm_id=self.hamlet.realm_id, content="never mind").exists()
+        )
+
+    def test_a_time_given_later_replaces_the_wait(self) -> None:
+        scheduled_message_id = self.schedule("at three", agent_run_id=self.run_.id)
+        at_three = self.in_an_hour()
+
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            result = self.client_patch(
+                f"/json/scheduled_messages/{scheduled_message_id}",
+                {"scheduled_delivery_timestamp": orjson.dumps(at_three).decode()},
+            )
+        self.assert_json_success(result)
+        check_scheduled_message_update("events[0]", {**events[0]["event"], "id": 0})
+        updated = events[0]["event"]["scheduled_message"]
+        self.assertNotIn("agent_run_id", updated)
+        self.assertEqual(updated["scheduled_delivery_timestamp"], at_three)
+        self.assertFalse(AgentRunWait.objects.exists())
+
+    def test_new_words_keep_the_wait(self) -> None:
+        scheduled_message_id = self.schedule("after this lands", agent_run_id=self.run_.id)
+
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            result = self.client_patch(
+                f"/json/scheduled_messages/{scheduled_message_id}",
+                {"content": "after this lands, open the PR"},
+            )
+        self.assert_json_success(result)
+        updated = events[0]["event"]["scheduled_message"]
+        self.assertEqual(updated["content"], "after this lands, open the PR")
+        self.assertEqual(updated["agent_run_id"], self.run_.id)
+
+    def test_a_reminder_waits_for_the_run(self) -> None:
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            result = self.client_post(
+                "/json/reminders",
+                {
+                    "message_id": orjson.dumps(self.run_.trigger_message_id).decode(),
+                    "agent_run_id": orjson.dumps(self.run_.id).decode(),
+                },
+            )
+        reminder_id = self.assert_json_success(result)["reminder_id"]
+        check_reminder_add("events[0]", {**events[0]["event"], "id": 0})
+        self.assertEqual(events[0]["event"]["reminders"][0]["agent_run_id"], self.run_.id)
+
+        listed = self.assert_json_success(self.client_get("/json/reminders"))
+        self.assertEqual(
+            [(r["reminder_id"], r["agent_run_id"]) for r in listed["reminders"]],
+            [(reminder_id, self.run_.id)],
+        )
+
+        self.cancel_run()
+        self.assertTrue(ScheduledMessage.objects.get(id=reminder_id).delivered)
+
+    def test_lists_read_the_waits_in_the_same_query(self) -> None:
+        """A waiting message costs the list no query that a timed one does not."""
+
+        def queries_to_list() -> tuple[int, int]:
+            with CaptureQueriesContext(connection) as messages:
+                get_undelivered_scheduled_messages(self.hamlet)
+            with CaptureQueriesContext(connection) as reminders:
+                get_undelivered_reminders(self.hamlet)
+            return len(messages), len(reminders)
+
+        def remind(**condition: int) -> None:
+            self.assert_json_success(
+                self.client_post(
+                    "/json/reminders",
+                    {
+                        "message_id": orjson.dumps(self.run_.trigger_message_id).decode(),
+                        **{name: orjson.dumps(value).decode() for name, value in condition.items()},
+                    },
+                )
+            )
+
+        self.schedule("timed", scheduled_delivery_timestamp=self.in_an_hour())
+        remind(scheduled_delivery_timestamp=self.in_an_hour())
+        one_timed = queries_to_list()
+        self.schedule("timed again", scheduled_delivery_timestamp=self.in_an_hour())
+        remind(scheduled_delivery_timestamp=self.in_an_hour())
+        two_timed = queries_to_list()
+        self.schedule("waiting", agent_run_id=self.run_.id)
+        remind(agent_run_id=self.run_.id)
+        two_timed_one_waiting = queries_to_list()
+
+        for kind in (0, 1):
+            cost_of_timed = two_timed[kind] - one_timed[kind]
+            cost_of_waiting = two_timed_one_waiting[kind] - two_timed[kind]
+            self.assertEqual(cost_of_waiting, cost_of_timed)

@@ -10,6 +10,7 @@ from zerver.actions.scheduled_messages import (
     delete_scheduled_message,
     edit_scheduled_message,
 )
+from zerver.lib.armada_later import check_delivery_condition
 from zerver.lib.exceptions import DeliveryTimeNotInFutureError, JsonableError
 from zerver.lib.recipient_parsing import extract_direct_message_recipient_ids, extract_stream_id
 from zerver.lib.request import RequestNotes
@@ -142,7 +143,8 @@ def create_scheduled_message_backend(
         Annotated[str, check_string_in_validator(Message.API_RECIPIENT_TYPES)],
         ApiParamConfig("type"),
     ],
-    scheduled_delivery_timestamp: Json[int],
+    scheduled_delivery_timestamp: Json[int] | None = None,
+    agent_run_id: Json[int] | None = None,
     topic_name: OptionalTopic = None,
 ) -> HttpResponse:
     recipient_type_name = req_type
@@ -157,9 +159,9 @@ def create_scheduled_message_backend(
         # message (created, schdeduled, drafts) objects/dicts.
         recipient_type_name = "stream"
 
-    deliver_at = timestamp_to_datetime(scheduled_delivery_timestamp)
-    if deliver_at <= timezone_now():
-        raise DeliveryTimeNotInFutureError
+    deliver_at, agent_run = check_delivery_condition(
+        user_profile, scheduled_delivery_timestamp, agent_run_id
+    )
 
     sender = user_profile
     client = RequestNotes.get_notes(request).client
@@ -181,5 +183,6 @@ def create_scheduled_message_backend(
         deliver_at,
         realm=user_profile.realm,
         read_by_sender=read_by_sender,
+        agent_run=agent_run,
     )
     return json_success(request, data={"scheduled_message_id": scheduled_message_id})

@@ -8125,9 +8125,13 @@ paths:
       tags: ["reminders"]
       summary: Create a message reminder
       description: |
-        Schedule a reminder to be sent to the current user at the specified time. The reminder will link the relevant message.
+        Schedule a reminder to be sent to the current user at the specified time,
+        or when an agent run ends. The reminder will link the relevant message.
 
-        **Changes**: New in Zulip 11.0 (feature level 381).
+        **Changes**: In Zulip 13.0 (feature level ZF-a20530), added the
+        `agent_run_id` parameter.
+
+        New in Zulip 11.0 (feature level 381).
       requestBody:
         required: true
         content:
@@ -8145,7 +8149,22 @@ paths:
                   description: |
                     The UNIX timestamp for when the reminder will be sent,
                     in UTC seconds.
+
+                    Required, unless `agent_run_id` is given instead.
+
+                    **Changes**: Before Zulip 13.0 (feature level ZF-a20530),
+                    this parameter was always required.
                   example: 5681662420
+                agent_run_id:
+                  type: integer
+                  description: |
+                    The ID of an agent run that has not ended yet. When given
+                    instead of `scheduled_delivery_timestamp`, the reminder is
+                    sent when the run first ends: done, failed or cancelled.
+                    The run must be one the current user can see.
+
+                    **Changes**: New in Zulip 13.0 (feature level ZF-a20530).
+                  example: 12
                 note:
                   type: string
                   description: |
@@ -8270,9 +8289,13 @@ paths:
       tags: ["scheduled_messages"]
       summary: Create a scheduled message
       description: |
-        Create a new [scheduled message](/help/schedule-a-message).
+        Create a new [scheduled message](/help/schedule-a-message), to be
+        sent at a time, or when an agent run ends.
 
-        **Changes**: In Zulip 7.0 (feature level 184), moved support for
+        **Changes**: In Zulip 13.0 (feature level ZF-a20530), added the
+        `agent_run_id` parameter.
+
+        In Zulip 7.0 (feature level 184), moved support for
         [editing a scheduled message](/api/update-scheduled-message) to a
         separate API endpoint, which removed the `scheduled_message_id`
         parameter from this endpoint.
@@ -8348,7 +8371,22 @@ paths:
                   description: |
                     The UNIX timestamp for when the message will be sent,
                     in UTC seconds.
+
+                    Required, unless `agent_run_id` is given instead.
+
+                    **Changes**: Before Zulip 13.0 (feature level ZF-a20530),
+                    this parameter was always required.
                   example: 3165826990
+                agent_run_id:
+                  type: integer
+                  description: |
+                    The ID of an agent run that has not ended yet. When given
+                    instead of `scheduled_delivery_timestamp`, the message is
+                    sent when the run first ends: done, failed or cancelled.
+                    The run must be one the current user can see.
+
+                    **Changes**: New in Zulip 13.0 (feature level ZF-a20530).
+                  example: 12
                 read_by_sender:
                   type: boolean
                   description: |
@@ -8362,11 +8400,12 @@ paths:
                 - type
                 - to
                 - content
-                - scheduled_delivery_timestamp
             encoding:
               to:
                 contentType: application/json
               scheduled_delivery_timestamp:
+                contentType: application/json
+              agent_run_id:
                 contentType: application/json
               read_by_sender:
                 contentType: application/json
@@ -8531,6 +8570,12 @@ paths:
                     with `"failed": true` in `scheduled_messages` objects; see
                     response description at
                     [`GET /scheduled_messages`](/api/get-scheduled-messages#response).
+
+                    A scheduled message that waits for an agent run (see
+                    `agent_run_id` in its object) waits for this time instead.
+
+                    **Changes**: In Zulip 13.0 (feature level ZF-a20530), scheduled
+                    messages that wait for an agent run were added.
                   example: 3165826990
             encoding:
               to:
@@ -29837,7 +29882,20 @@ components:
           description: |
             The UNIX timestamp for when the message will be sent
             by the server, in UTC seconds.
+
+            For a message that waits for an agent run (`agent_run_id`),
+            a placeholder far in the future, until the run ends.
           example: 1595479019
+        agent_run_id:
+          type: integer
+          description: |
+            Only present if the message waits for an agent run to end
+            instead of for a time.
+
+            The ID of the agent run. The message is sent when the run
+            first ends: done, failed or cancelled.
+
+            **Changes**: New in Zulip 13.0 (feature level ZF-a20530).
         failed:
           type: boolean
           description: |
@@ -29872,6 +29930,7 @@ components:
             content: {}
             rendered_content: {}
             scheduled_delivery_timestamp: {}
+            agent_run_id: {}
             failed: {}
     Reminder:
       type: object
@@ -29931,6 +29990,17 @@ components:
           type: integer
           description: |
             The ID of the message that the reminder is created for.
+        agent_run_id:
+          type: integer
+          description: |
+            Only present if the reminder waits for an agent run to end
+            instead of for a time; its `scheduled_delivery_timestamp` is
+            then a placeholder far in the future.
+
+            The ID of the agent run. The reminder is sent when the run
+            first ends: done, failed or cancelled.
+
+            **Changes**: New in Zulip 13.0 (feature level ZF-a20530).
       required:
         - reminder_id
         - type

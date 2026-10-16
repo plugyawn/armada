@@ -13,7 +13,7 @@ def access_scheduled_message(
     user_profile: UserProfile, scheduled_message_id: int
 ) -> ScheduledMessage:
     try:
-        return ScheduledMessage.objects.get(
+        return ScheduledMessage.objects.select_related("agent_run_wait").get(
             id=scheduled_message_id, sender=user_profile, delivery_type=ScheduledMessage.SEND_LATER
         )
     except ScheduledMessage.DoesNotExist:
@@ -23,14 +23,19 @@ def access_scheduled_message(
 def get_undelivered_scheduled_messages(
     user_profile: UserProfile,
 ) -> list[APIScheduledDirectMessageDict | APIScheduledStreamMessageDict]:
-    scheduled_messages = ScheduledMessage.objects.filter(
-        realm_id=user_profile.realm_id,
-        sender=user_profile,
-        # Notably, we don't require failed=False, since we will want
-        # to display those to users.
-        delivered=False,
-        delivery_type=ScheduledMessage.SEND_LATER,
-    ).order_by("scheduled_timestamp")
+    scheduled_messages = (
+        ScheduledMessage.objects.filter(
+            realm_id=user_profile.realm_id,
+            sender=user_profile,
+            # Notably, we don't require failed=False, since we will want
+            # to display those to users.
+            delivered=False,
+            delivery_type=ScheduledMessage.SEND_LATER,
+        )
+        # Whether each waits for an agent run (Armada's Send when).
+        .select_related("agent_run_wait")
+        .order_by("scheduled_timestamp")
+    )
     scheduled_message_dicts: list[APIScheduledDirectMessageDict | APIScheduledStreamMessageDict] = [
         scheduled_message.to_dict() for scheduled_message in scheduled_messages
     ]
@@ -40,14 +45,19 @@ def get_undelivered_scheduled_messages(
 def get_undelivered_reminders(
     user_profile: UserProfile,
 ) -> list[APIReminderDirectMessageDict]:
-    reminders = ScheduledMessage.objects.filter(
-        realm_id=user_profile.realm_id,
-        sender=user_profile,
-        # Notably, we don't require failed=False, since we will want
-        # to display those to users.
-        delivered=False,
-        delivery_type=ScheduledMessage.REMIND,
-    ).order_by("scheduled_timestamp")
+    reminders = (
+        ScheduledMessage.objects.filter(
+            realm_id=user_profile.realm_id,
+            sender=user_profile,
+            # Notably, we don't require failed=False, since we will want
+            # to display those to users.
+            delivered=False,
+            delivery_type=ScheduledMessage.REMIND,
+        )
+        # Whether each waits for an agent run (Armada's Later).
+        .select_related("agent_run_wait")
+        .order_by("scheduled_timestamp")
+    )
     reminder_dicts: list[APIReminderDirectMessageDict] = [
         reminder.to_reminder_dict() for reminder in reminders
     ]

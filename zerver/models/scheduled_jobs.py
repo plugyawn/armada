@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from django.conf import settings
 from django.db import models
@@ -126,6 +126,7 @@ class APIScheduledStreamMessageDict(TypedDict):
     topic: str
     scheduled_delivery_timestamp: int
     failed: bool
+    agent_run_id: NotRequired[int]
 
 
 class APIScheduledDirectMessageDict(TypedDict):
@@ -136,6 +137,7 @@ class APIScheduledDirectMessageDict(TypedDict):
     rendered_content: str
     scheduled_delivery_timestamp: int
     failed: bool
+    agent_run_id: NotRequired[int]
 
 
 class APIReminderDirectMessageDict(TypedDict):
@@ -147,6 +149,7 @@ class APIReminderDirectMessageDict(TypedDict):
     scheduled_delivery_timestamp: int
     failed: bool
     reminder_target_message_id: int
+    agent_run_id: NotRequired[int]
 
 
 class ScheduledMessage(models.Model):
@@ -228,14 +231,22 @@ class ScheduledMessage(models.Model):
     def is_channel_message(self) -> bool:
         return self.recipient.type == Recipient.STREAM
 
+    def waiting_for_agent_run_id(self) -> int | None:
+        # The agent run whose end this message waits for, instead of a
+        # time (Armada's AgentRunWait, zerver/lib/armada_later.py). Lists
+        # read it with select_related("agent_run_wait").
+        wait = getattr(self, "agent_run_wait", None)
+        return None if wait is None else wait.run_id
+
     def to_dict(self) -> APIScheduledStreamMessageDict | APIScheduledDirectMessageDict:
         recipient, recipient_type_str = get_recipient_ids(self.recipient, self.sender.id)
+        agent_run_id = self.waiting_for_agent_run_id()
 
         if recipient_type_str == "private":
             # The topic for direct messages should always be "\x07".
             assert self.topic_name() == Message.DM_TOPIC
 
-            return APIScheduledDirectMessageDict(
+            direct_message_dict = APIScheduledDirectMessageDict(
                 scheduled_message_id=self.id,
                 to=recipient,
                 type=recipient_type_str,
@@ -244,11 +255,14 @@ class ScheduledMessage(models.Model):
                 scheduled_delivery_timestamp=datetime_to_timestamp(self.scheduled_timestamp),
                 failed=self.failed,
             )
+            if agent_run_id is not None:
+                direct_message_dict["agent_run_id"] = agent_run_id
+            return direct_message_dict
 
         # The recipient for stream messages should always just be the unique stream ID.
         assert len(recipient) == 1
 
-        return APIScheduledStreamMessageDict(
+        stream_message_dict = APIScheduledStreamMessageDict(
             scheduled_message_id=self.id,
             to=recipient[0],
             type=recipient_type_str,
@@ -258,12 +272,15 @@ class ScheduledMessage(models.Model):
             scheduled_delivery_timestamp=datetime_to_timestamp(self.scheduled_timestamp),
             failed=self.failed,
         )
+        if agent_run_id is not None:
+            stream_message_dict["agent_run_id"] = agent_run_id
+        return stream_message_dict
 
     def to_reminder_dict(self) -> APIReminderDirectMessageDict:
         assert self.reminder_target_message_id is not None
         recipient, recipient_type_str = get_recipient_ids(self.recipient, self.sender.id)
         assert recipient_type_str == "private"
-        return APIReminderDirectMessageDict(
+        reminder_dict = APIReminderDirectMessageDict(
             reminder_id=self.id,
             to=recipient,
             type=recipient_type_str,
@@ -273,6 +290,10 @@ class ScheduledMessage(models.Model):
             failed=self.failed,
             reminder_target_message_id=self.reminder_target_message_id,
         )
+        agent_run_id = self.waiting_for_agent_run_id()
+        if agent_run_id is not None:
+            reminder_dict["agent_run_id"] = agent_run_id
+        return reminder_dict
 
 
 EMAIL_TYPES = {

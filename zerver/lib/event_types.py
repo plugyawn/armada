@@ -870,6 +870,7 @@ class ScheduledMessageFieldsCore(BaseModel):
     rendered_content: str
     scheduled_delivery_timestamp: int
     failed: bool
+    agent_run_id: int | None = None
 
 
 class ScheduledMessageFields(ScheduledMessageFieldsCore):
@@ -904,6 +905,7 @@ class ReminderFields(BaseModel):
     scheduled_delivery_timestamp: int
     failed: bool
     reminder_target_message_id: int
+    agent_run_id: int | None = None
 
 
 class RemindersAddEvent(BaseEvent):

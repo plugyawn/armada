@@ -5,7 +5,7 @@ import {expanded, marks, msgIndex, places, repoStreams, state, streams, topicsOf
 import {api} from "./connection.js";
 import {band, feed, lane, main, navFixed, panes} from "./frame.js";
 import {drawComposer, ready} from "./composer.js";
-import {drawLane, releaseRows} from "./feed.js";
+import {drawLane, releaseRows, showLane} from "./feed.js";
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
@@ -45,7 +45,7 @@ function placeFromNarrow(h) { const parts = h.slice(1).split("/"), dec = (s) => 
   const ch = term("channel", "stream"), topic = term("topic", "subject"), dm = term("dm", "pm-with");
   if (ch !== null && topic !== null) { const sid = parseInt(ch, 10); if (!streams.has(sid)) return null; const p = placeFromKey(tkey(sid, topic)); if (p) p.topic = (topicsOf.get(sid) || []).find((x) => x.name.toLowerCase() === topic.toLowerCase())?.name ?? topic; return p; }
   const ids = dm !== null && /^([\d,]+)/.exec(dm); return ids ? placeFromKey(dkey(ids[1].split(",").map(Number).filter((i) => i && i !== state.ME))) : null; }
-const cacheOf = (p) => { let c = places.get(p.key); if (!c) { c = {place: p, msgs: [], byId: new Map(), rows: new Map(), loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; places.set(p.key, c); } return c; };
+const cacheOf = (p) => { let c = places.get(p.key); if (!c) { c = {place: p, msgs: [], byId: new Map(), rows: new Map(), dirty: new Set(), park: null, drawn: false, loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; places.set(p.key, c); } return c; };
 const narrowOf = (p) => (p.kind === "topic" ? [{operator: "channel", operand: p.stream_id}, {operator: "topic", operand: p.topic}] : [{operator: "dm", operand: p.ids.length ? p.ids : [state.ME]}]);
 const placeOfMsg = (m) => (m.type === "stream" ? tkey(m.stream_id, m.subject ?? m.topic ?? "") : dkey((m.display_recipient || []).map((u) => u.id).filter((i) => i !== state.ME)));
 function addMsg(c, m) { if (c.byId.has(m.id)) return false; c.byId.set(m.id, m); msgIndex.set(m.id, c); let i = c.msgs.length; if (typeof m.id === "number") while (i > 0 && typeof c.msgs[i - 1].id === "number" && c.msgs[i - 1].id > m.id) i--; c.msgs.splice(i, 0, m); return true; }
@@ -72,7 +72,7 @@ async function openPlace(p, o = {}) {
   if (p.kind === "partner") { drawNav(); drawHeader(); drawRunState(true); drawPicker(); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#picker"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); ready(); return; }
   if (p.kind === "page") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#page"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); openPage(p); return; }
   if (p.kind === "home") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); drawHome(); if (prev && prev.key !== p.key) M.release($("#home"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); fetchMentions(); return; }
-  drawNav(); drawHeader(); drawLane(); drawRunState(true); drawSide(); drawTyping(); drawComposer();
+  drawNav(); drawHeader(); showLane(state.P); drawRunState(true); drawSide(); drawTyping(); drawComposer();
   if (prev && prev.key !== p.key) releaseRows(T["pane-rise"] || 4, "touch");
   ready();
   const c = state.P, fresh = !c.loaded;

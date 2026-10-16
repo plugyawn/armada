@@ -8,7 +8,7 @@ import {addMsg, dkey, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
-import {appendMessage, edge, ends, grown, pin, removeRow, sectionOf, show, syncJump} from "./feed.js";
+import {appendMessage, edge, ends, grown, pin, removeRow, sectionOf, show, shown, stale, syncJump} from "./feed.js";
 import {drawNav, drawTrail} from "./nav.js";
 import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, settleAsk} from "./runs.js";
 import {drawProg} from "./checklist.js";
@@ -40,8 +40,8 @@ function onMessage(ev) {
   if (isOnix(m.sender_id) && WORKING(m)) m.maybeLive = true;
   if (isOnix(m.sender_id)) { const ph = c.msgs.find((x) => x.local && x.onix); if (ph) { ph.maybeLive = true; adopt(c, ph, m.id, m); if (c === state.P) { const cl = sectionOf(m.id); if (cl) { cl.dataset.mid = m.id; syncOnix(cl, ph); } } return; } }
   c.typers.delete(m.sender_id); addMsg(c, m);
-  if (m.thread_root_message_id) { const root = c.byId.get(m.thread_root_message_id); if (root) { root.reply_summary = root.reply_summary || {reply_count: 0, participants: []}; root.reply_summary.reply_count = Math.max((root.reply_summary.reply_count || 0) + 1, repliesOf(c, root.id).length); if (c === state.P) { const cl = sectionOf(root.id); if (cl) grown(() => { drawThreadLine(cl, root); const box = $(`.thr-in[data-mid="${root.id}"]`, cl); if (box) threadAppend(box, m); }, "settle"); } } return; }
-  if (c !== state.P) return;
+  if (m.thread_root_message_id) { const root = c.byId.get(m.thread_root_message_id); if (root) { root.reply_summary = root.reply_summary || {reply_count: 0, participants: []}; root.reply_summary.reply_count = Math.max((root.reply_summary.reply_count || 0) + 1, repliesOf(c, root.id).length); if (shown(c)) { const cl = sectionOf(root.id); if (cl) grown(() => { drawThreadLine(cl, root); const box = $(`.thr-in[data-mid="${root.id}"]`, cl); if (box) threadAppend(box, m); }, "settle"); } else stale(c, root.id); } return; }
+  if (!shown(c)) return;   /* its row is written when its place is shown (catchUp) */
   drawTyping(); drawSide();
   if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
@@ -53,7 +53,7 @@ function onUpdate(ev, at) {
   if (ev.rendered_content == null) return;
   m.content = ev.rendered_content; if (!ev.rendering_only && ev.edit_timestamp) m.last_edit_timestamp = ev.edit_timestamp;   /* a person's edit, live: the turn says Edited (finish) */
   if (runWindow && runWindow.msg === m.id) runWindow.updates++;
-  updateMessage(c, m, at);
+  if (shown(c)) updateMessage(c, m, at); else stale(c, m.id);
 }
 function onRun(ev) {
   if (ev.status !== "queued" && ev.status !== "running") endRun(ev.run_id);   /* its streamed words: the saved message has them all */
@@ -70,7 +70,7 @@ function onRun(ev) {
   if (ev.agents) r.agents = ev.agents;
   if (live && (!runWindow || runWindow.run !== r.id)) runWindow = {run: r.id, msg: r.result_message_id, t0: performance.now(), events: 0, updates: 0};
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }
-  if (c !== state.P) return;
+  if (!shown(c)) { if (r.result_message_id) stale(c, r.result_message_id); return; }
   drawRunState(fresh); drawSide(); drawProg();
   if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
@@ -79,8 +79,9 @@ function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return;
 function onFlags(ev) { if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }
 /* a deleted message leaves its place's rows in place: the rest of the conversation is not drawn again */
 function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let here = false;
-  for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); forgetReceipts(id); c.msgs = c.msgs.filter((x) => x !== m); if (c !== state.P) continue;
-    removeRow(c, id); here = true; const root = m && m.thread_root_message_id && c.byId.get(m.thread_root_message_id), rc = root && sectionOf(root.id); if (rc) drawThreadLine(rc, root); }
+  for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); forgetReceipts(id); c.msgs = c.msgs.filter((x) => x !== m); removeRow(c, id);
+    const root = m && m.thread_root_message_id && c.byId.get(m.thread_root_message_id); if (!shown(c)) { if (root) stale(c, root.id); continue; }
+    here = true; const rc = root && sectionOf(root.id); if (rc) drawThreadLine(rc, root); }
   if (here) { ends(state.P); if (state.pinned) pin(); edge(); syncJump(); } }
 function onTyping(ev) { const key = ev.message_type === "stream" ? tkey(ev.stream_id, ev.topic || "") : dkey((ev.recipients || []).map((u) => u.user_id).filter((i) => i !== state.ME)), c = places.get(key), id = ev.sender.user_id; if (!c || id === state.ME || isOnix(id)) return;   /* Onix's own sign that it is working is its mark, not a typing bubble */
   clearTimeout(c.typers.get(id)); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === state.P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === state.P) drawTyping(); }

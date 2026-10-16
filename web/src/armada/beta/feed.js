@@ -1,16 +1,16 @@
-/* INTERIM BETA (README.md): the conversation: its scroll, its turns, the lane drawn. */
+/* INTERIM BETA (README.md): the conversation: its scroll, its turns, the lane drawn, kept while a place is left, moved. */
 
 import {$, $$, clamp, el, esc} from "./util.js";
 import {msgIndex, state, unread} from "./state.js";
-import {dayKey, dayLabel, hhmm} from "./time.js";
+import {dayKey, dayLabel, hhmm, now} from "./time.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {partEl, partsOf} from "./parts.js";
 import {drawReactions} from "./reactions.js";
 import {receiptButton, RECEIPTS, untick} from "./receipts.js";
-import {drawThreadLine, openThread} from "./threads.js";
-import {placeholderAns, syncOnix} from "./agent_turn.js";
-import {failMark} from "./send.js";
+import {drawThreadLine, openThread, repliesOf, threadAppend} from "./threads.js";
+import {placeholderAns, syncOnix, updateMessage} from "./agent_turn.js";
+import {clearFailMark, failMark} from "./send.js";
 import {evoCaption} from "./partners.js";
 
 const dist = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight;
@@ -97,7 +97,8 @@ function hugAll() { if (!toHug.size) return; const bs = []; for (const cl of toH
   bs.forEach((b, i) => { if (want[i] && b.offsetHeight !== want[i].h) b.style.width = ""; }); }
 const hush = (root) => $$(".rc, .rt, [data-thread], .tl .lk, .line .lk, .bl > .lk", root).forEach((b) => (b.tabIndex = -1));
 function drawLane(o = {}) {
-  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; stillLane(); lane.textContent = ""; lane._day = null; c.rows.clear();
+  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; stillLane(); lane.textContent = ""; lane._day = null; c.rows.clear(); c.dirty.clear();
+  if (owner && owner !== c) { owner.drawn = false; owner.rows.clear(); } owner = c; c.drawn = true; c.today = dayKey(now() / 1000); c.hugGen = hugGen;
   const set = unread.get(state.place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null;
   if (c.loaded && !c.oldest) lane.append(el("div", "more-up", c.loading ? "Loading earlier messages" : "Scroll up for earlier messages"));
   const list = c.msgs.filter((m) => !m.thread_root_message_id);
@@ -110,7 +111,7 @@ function drawLane(o = {}) {
 }
 /* a message's turn in the place in view, from the place's own map (appendMessage keeps it): no search of the lane. A turn
    that has left the lane (a thread closed under it) is forgotten when it is asked for. */
-function sectionOf(id) { const c = state.P, cl = c && c.rows && c.rows.get(id); if (!cl) return null; if (lane.contains(cl)) return cl; c.rows.delete(id); return null; }
+function sectionOf(id) { const c = state.P, cl = c && c.rows && c.rows.get(id); if (!cl) return null; if (lane.contains(cl)) return cl; if (c === owner) c.rows.delete(id); return null; }
 
 /* ---------- the conversation changed in place: rows added above or below, a message taken out ----------
    What is written keeps the shape drawLane gives the same messages (a turn is one speaker within ten minutes, a day line
@@ -163,16 +164,49 @@ function ends(c) { let up = $(":scope > .more-up", lane); const want = c.loaded 
 /* the place in view's rows and its messages agree again: messages that a page brought, or that arrived while its rows were
    not being written, are added (older ones above the first row, newer ones after the last); no row that is there is touched.
    keep: the rows in view stay where they are on screen (a page added above them). */
-function catchUp(c, o = {}) { if (c !== state.P) return;
+function catchUp(c, o = {}) { if (c !== state.P || c !== owner) return;
+  if (o.revisit) { $$(":scope > .unread", lane).forEach((x) => x.remove()); const today = dayKey(now() / 1000); if (c.today !== today) { for (const x of $$(":scope > .day", lane)) x.textContent = dayLabel(dayTs(+x.dataset.day)); c.today = today; } }   /* what was new last time is not now; "Today" may be yesterday */
   const h0 = o.keep ? feed.scrollHeight : 0, y0 = o.keep ? feed.scrollTop : 0, list = c.msgs.filter((m) => !m.thread_root_message_id); let first = -1, last = -1;
   list.forEach((m, i) => { if (c.rows.has(m.id)) { if (first < 0) first = i; last = i; } });
   if (first >= 0 && list.slice(first, last + 1).some((m) => !c.rows.has(m.id))) { drawLane({keep: o.keep}); return; }   /* a message between two written ones (never expected): drawn again whole */
   const set = unread.get(c.place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null, at = $(":scope > .unread", lane) ? null : firstUnread;
   if (first > 0) prepend(c, list.slice(0, first), at);
   const newer = first < 0 ? list : list.slice(last + 1); for (const m of newer) appendMessage(lane, m, {unreadAt: at});
+  for (const id of c.dirty) { const m = c.byId.get(id); if (m) refreshRow(c, m); } c.dirty.clear();
+  if (c.hugGen !== hugGen) { $$(".cl", lane).forEach((x) => toHug.add(x)); c.hugGen = hugGen; }   /* the lane's width or the faces changed while these rows were parked */
   ends(c); hugAll();
   if (o.keep) { feed.scrollTop = y0 + (feed.scrollHeight - h0); state.lastSet = feed.scrollTop; } else if (state.pinned) pin();
   edge(); syncJump(); }
 
+const dayTs = (k) => new Date(Math.floor(k / 10000), Math.floor(k / 100) % 100 - 1, k % 100, 12).getTime() / 1000;
+/* a row whose message changed while its place was not shown (an edit, a reaction, a reply in its thread, a send that
+   failed or arrived) is written again in place; its turn stays. Onix's turn is followed as the stream follows it. */
+function refreshRow(c, m) { const cl = c.rows.get(m.id); if (!cl || !lane.contains(cl)) return;
+  if (cl.classList.contains("onix")) { updateMessage(c, m); return; }
+  const old = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), parts = partsOf(m).map((p) => partEl(p, m)); if (old.length) { old[0].before(...parts); old.forEach((x) => x.remove()); } else cl.append(...parts);
+  if (m.failed) failMark(cl, m); else clearFailMark(cl, m.id); $$(`[data-mid="${m.id}"] .b`, cl).forEach((b) => b.classList.toggle("unsent", !!m.failed));
+  drawReactions(cl, m);
+  if (!m.thread_root_message_id) { drawThreadLine(cl, m); const box = $(`:scope > .thr-in[data-mid="${m.id}"]`, cl); if (box) for (const r of repliesOf(c, m.id)) if (!c.rows.has(r.id)) threadAppend(box, r); }   /* replies that came while away join an open thread */
+  finish(cl); hush(cl); toHug.add(cl); }
+
+/* ---------- the lane holds one place's rows; a place left keeps its own ----------
+   Leaving a place parks its rows, as they are, in a fragment of its cache; opening it again puts the same elements back and
+   catches them up (what arrived, what changed while away), so a revisit builds no row. While a place is not shown (another
+   is, or the page is hidden) its events change its messages and mark the rows they touch (c.dirty); nothing is written
+   or moved where no one can see it. */
+let owner = null;                                          /* the place whose rows the lane holds */
+let hugGen = 0;                                            /* a lane width or a face loaded: bubbles hugged before it are hugged again */
+const shown = (c) => !!c && c === state.P && c === owner && !document.hidden;
+/* a row of a place not shown changed: it is written again when its place is shown */
+function stale(c, id) { if (c && c.rows && c.rows.has(id)) c.dirty.add(id); }
+function park(c) { const r = document.createRange(); r.selectNodeContents(lane); const f = r.extractContents(); f._day = lane._day; lane._day = null; c.park = f;
+  if (state.threadTx && !lane.contains(state.threadTx)) state.threadTx = null; }
+/* the lane shows place c: its parked rows come back and catch up; a place never drawn is drawn whole */
+function showLane(c) { stillLane();
+  if (owner !== c) { if (owner) park(owner); owner = c; if (c.park) { lane.append(c.park); lane._day = c.park._day; c.park = null; } else c.drawn = false; }
+  if (!c.drawn) drawLane(); else catchUp(c, {revisit: true}); }
+/* every bubble hugs its words again: the lane's width changed, or the faces loaded */
+function rehug() { hugGen++; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); if (owner) owner.hugGen = hugGen; }
+
 export {appendMessage, catchUp, dist, drawLane, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
-  releaseRows, removeRow, sectionOf, show, syncJump, toHug};
+  rehug, releaseRows, removeRow, sectionOf, show, showLane, shown, stale, syncJump, toHug};

@@ -467,3 +467,66 @@ run_test("a deleted message leaves in place, and the turns either side join as d
     feed_js.drawLane();
     assert.equal(removed, shape(lane));
 });
+
+// The page's visibility, as the test sets it.
+let hidden = false;
+Object.defineProperty(document, "hidden", {configurable: true, get: () => hidden});
+// Every turn element made from here on is counted as it is made.
+let turns_built = 0;
+const own_create = document.createElement.bind(document);
+document.createElement = (tag, ...args) => {
+    if (tag === "section") {
+        turns_built += 1;
+    }
+    return own_create(tag, ...args);
+};
+
+run_test("a place left and opened again shows its own rows, and builds none", async () => {
+    open_with("kept", forty(3000));
+    const there = [...lane.querySelectorAll(".cl")];
+    await routing.openPlace(place_of("elsewhere"));
+    assert.ok(!there.some((t) => lane.contains(t)));
+    // While I am elsewhere, a message arrives there and a reaction lands on
+    // an older one: neither is written into a lane no one sees.
+    events.onMessage({message: message(3040, IAGO, "kept"), flags: ["read"]});
+    events.onReaction(thumbs(3010));
+    turns_built = 0;
+    await routing.openPlace(place_of("kept"));
+    // The same turns are back, and the one turn built is the new message's.
+    assert.ok(there.every((t) => lane.contains(t)));
+    assert.equal(turns_built, 1);
+    assert.ok(turn_of(3040));
+    assert.match(turn_of(3010).textContent, /\u{1F44D}/u);
+    // The lane reads as the same messages drawn whole.
+    const back = shape(lane);
+    feed_js.drawLane();
+    assert.equal(back, shape(lane));
+});
+
+run_test("a hidden page writes no rows, and writes them once when it is seen", () => {
+    const c = open_with("hidden", forty(3100));
+    const was = lane.innerHTML;
+    hidden = true;
+    events.onMessage({message: message(3140, IAGO, "hidden"), flags: ["read"]});
+    events.onReaction(thumbs(3120));
+    events.onDelete({message_ids: [3101]});
+    events.onUpdate({
+        message_id: 3130,
+        rendered_content: "<p>said again</p>",
+        edit_timestamp: T0 + 9000,
+    });
+    // The cache has it all; of the lane, only the deleted message's parts
+    // left (that is a removal, and reads no layout).
+    assert.ok(c.byId.has(3140));
+    assert.notEqual(lane.innerHTML, was);
+    assert.ok(!lane.textContent.includes("words of 3140"));
+    assert.ok(!lane.textContent.includes("said again"));
+    hidden = false;
+    feed_js.catchUp(c);
+    assert.match(turn_of(3140).textContent, /words of 3140/);
+    assert.match(turn_of(3130).textContent, /said again/);
+    assert.match(turn_of(3120).textContent, /\u{1F44D}/u);
+    const seen = shape(lane);
+    feed_js.drawLane();
+    assert.equal(seen, shape(lane));
+});

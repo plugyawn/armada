@@ -13,7 +13,7 @@ import {api, handle, on, onRestart, poll, register, session} from "./connection.
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
 import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, outline, panes, side, toBtn, tx} from "./frame.js";
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
-import {catchUp, dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, releaseRows, syncJump, toHug} from "./feed.js";
+import {catchUp, dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, rehug, releaseRows, syncJump, toHug} from "./feed.js";
 import {drawNav, loadTopics, navMore, subs, toggleStream} from "./nav.js";
 import {drawAsks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
 import {drawHeader} from "./header.js";
@@ -22,8 +22,10 @@ import {closeInfo, fetchReceipts, info, onReadReceipts, openInfo, RECEIPTS, togg
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
 import {onAgentStream} from "./agent_turn.js";
-import {onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged} from "./events.js";
+import {drawTyping, onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
+import {drawProg} from "./checklist.js";
+import {drawSide} from "./column.js";
 import {pickEntry, setTab} from "./views.js";
 import {buildOver, closeMenu, confirmDelete, editing, editLast, endEdit, menu, msgOf, over, overAt, startEdit} from "./hover.js";
 import {closePicker, focusPop, pop, togglePicker} from "./model_picker.js";
@@ -121,8 +123,8 @@ async function boot() {
     if (feed.scrollTop < 240 && state.P && state.P.loaded && !state.P.oldest && !state.P.loading) { const c = state.P; fetchMsgs(c, true).then(() => { if (state.P === c) catchUp(c, {keep: true}); }); const mu = $(".more-up", lane); if (mu) mu.textContent = "Loading earlier messages"; } }, {passive: true});
   navScroll.addEventListener("scroll", navMore, {passive: true}); new ResizeObserver(navMore).observe(navScroll);
   /* a wrapped bubble keeps hugging its words when the lane's width changes, and once the faces have loaded */
-  let laneW = 0; new ResizeObserver(() => { const w = lane.clientWidth; if (w === laneW) return; laneW = w; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); }).observe(lane);
-  document.fonts.ready.then(() => { $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); });
+  let laneW = 0; new ResizeObserver(() => { const w = lane.clientWidth; if (w === laneW) return; laneW = w; rehug(); }).observe(lane);
+  document.fonts.ready.then(rehug);
   feed.addEventListener("wheel", haltLane, {passive: true}); feed.addEventListener("touchstart", haltLane, {passive: true});
   band.el.addEventListener("wheel", (e) => { if (state.tab !== "Chat") return; haltLane(); feed.scrollTop += e.deltaY; }, {passive: true});
   new ResizeObserver(() => { if (state.tab === "Chat" && state.pinned) pin(); syncJump(); }).observe(feed);
@@ -153,7 +155,8 @@ async function boot() {
     if (!mod && !e.altKey && e.key.length === 1 && state.tab === "Chat" && document.activeElement !== tx && !(document.activeElement && document.activeElement.closest("#lab, input, textarea"))) ready(); });   /* a letter typed anywhere goes to the field */
   addEventListener("popstate", () => { const p = placeFromHash(); if (p) openPlace(p, {keepHash: true}); });
   addEventListener("hashchange", () => { const p = placeFromHash(); if (p && (!state.place || p.key !== state.place.key)) openPlace(p, {keepHash: true}); });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) return; if (state.P) markRead(state.P); });
+  /* seen again: what came while the page was hidden is written now, once (feed.js, shown) */
+  document.addEventListener("visibilitychange", () => { if (document.hidden || !state.P) return; if (state.place.kind === "topic" || state.place.kind === "dm") { catchUp(state.P); drawRunState(true); drawSide(); drawProg(); drawTyping(); } markRead(state.P); });
   setInterval(() => tick(false), 500);
   setInterval(sweepAsks, 5000);   /* a question past the server's wait stops reading as waiting, with no event to say so */
   setInterval(() => { if (state.P && state.P.ctx && state.hd) { state.hd._sig = ""; drawHeader(); } }, 60000);

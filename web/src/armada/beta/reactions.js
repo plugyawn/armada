@@ -4,7 +4,7 @@ import {$, $$, el, esc} from "./util.js";
 import {msgIndex, state} from "./state.js";
 import {api} from "./connection.js";
 import {note} from "./composer.js";
-import {hush, sectionOf} from "./feed.js";
+import {hush, sectionOf, shown, stale} from "./feed.js";
 import {refreshPartners} from "./partners.js";
 
 /* ----- reactions ----- */
@@ -24,7 +24,7 @@ function drawReactions(cl, m) {
 function applyReaction(c, m, ev, mine) {
   m.reactions = m.reactions || []; const i = m.reactions.findIndex((r) => r.user_id === ev.user_id && r.emoji_code === ev.emoji_code && r.reaction_type === ev.reaction_type);
   if (ev.op === "add") { if (i >= 0) return; m.reactions.push({user_id: ev.user_id, emoji_name: ev.emoji_name, emoji_code: ev.emoji_code, reaction_type: ev.reaction_type}); } else { if (i < 0) return; m.reactions.splice(i, 1); }
-  if (c !== state.P) return; const cl = sectionOf(m.id); if (!cl) return;
+  if (!shown(c)) { stale(c, m.id); return; } const cl = sectionOf(m.id); if (!cl) return;
   const timeEl = $(`.bl[data-mid="${m.id}"] > time`, cl), x0 = timeEl && M.rest(timeEl).left; const rcs = drawReactions(cl, m);
   const rc = rcs && $$(".rc", rcs).find((x) => x.dataset.code === ev.emoji_code);
   if (ev.op === "add" && rc) { if (mine) { const b = cl.classList.contains("onix") ? null : $(`.bl[data-mid="${m.id}"] .b`, cl); M.land($(".n", rc) ? $(".e", rc) : rc); M.burst(rc, emojiChar(ev)); S.play("react");

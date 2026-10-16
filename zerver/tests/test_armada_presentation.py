@@ -14,6 +14,7 @@ from zerver.lib.armada_presentation import (
     build_armada_presentation_input,
     parse_armada_presentation_output,
 )
+from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_worker import (
     ARMADA_PRESENTATION_CADENCE_SECONDS,
     ARMADA_PRESENTATION_QUEUE_NAME,
@@ -136,7 +137,7 @@ class ArmadaPresentationTest(ZulipTestCase):
 
     def test_worker_publishes_overview_only_for_active_run_with_real_plan(self) -> None:
         run = self.create_run()
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -145,7 +146,7 @@ class ArmadaPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = AgentRunEvent.objects.create(
+        source_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -168,7 +169,7 @@ class ArmadaPresentationTest(ZulipTestCase):
                 json.loads(presentation_request["input_text"])["recent_events"],
                 [{"kind": "command", "text": "Reading four files"}],
             )
-            repeated_source_event = AgentRunEvent.objects.create(
+            repeated_source_event = record_agent_run_event(
                 run=run,
                 event_type="transcript",
                 summary="Read files again",
@@ -184,7 +185,7 @@ class ArmadaPresentationTest(ZulipTestCase):
 
     def test_worker_drops_overview_if_plan_advances_during_request(self) -> None:
         run = self.create_run()
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -193,7 +194,7 @@ class ArmadaPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = AgentRunEvent.objects.create(
+        source_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -205,7 +206,7 @@ class ArmadaPresentationTest(ZulipTestCase):
         worker.client.api_key = "test-key"
 
         def advance_plan(**kwargs: object) -> str:
-            AgentRunEvent.objects.create(
+            record_agent_run_event(
                 run=run,
                 event_type="transcript",
                 summary="Plan updated",
@@ -225,7 +226,7 @@ class ArmadaPresentationTest(ZulipTestCase):
 
     def test_worker_drops_overview_if_run_finishes_during_request(self) -> None:
         run = self.create_run()
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -234,7 +235,7 @@ class ArmadaPresentationTest(ZulipTestCase):
                 "metadata": {"steps": [{"step": "Inspect", "status": "in_progress"}]},
             },
         )
-        source_event = AgentRunEvent.objects.create(
+        source_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -258,7 +259,7 @@ class ArmadaPresentationTest(ZulipTestCase):
 
     def test_worker_does_not_call_gemini_without_a_plan(self) -> None:
         run = self.create_run()
-        source_event = AgentRunEvent.objects.create(
+        source_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Read files",

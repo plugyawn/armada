@@ -3,30 +3,13 @@ import time
 from collections import OrderedDict
 from typing import Any
 
-from zerver.lib.armada_agent_threads import (
-    armada_agent_delta_from_event,
-    serialize_armada_agent_threads,
-)
+from zerver.lib.armada_agent_threads import armada_agent_delta_from_event
+from zerver.lib.armada_run_card import armada_run_plan_from_payload
 from zerver.lib.message import event_recipient_ids_for_action_on_messages
 from zerver.lib.stream_subscription import get_user_ids_for_streams
 from zerver.models import Message, Stream
 from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
 from zerver.tornado.django_api import send_event_on_commit
-
-
-def _armada_run_plan(payload: dict[str, Any]) -> list[dict[str, str]] | None:
-    if payload.get("kind") != "plan":
-        return None
-    metadata = payload.get("metadata")
-    steps = metadata.get("steps") if isinstance(metadata, dict) else None
-    if not isinstance(steps, list):
-        return None
-    plan = [
-        {"step": str(step["step"]), "status": str(step.get("status", "pending"))}
-        for step in steps
-        if isinstance(step, dict) and step.get("step")
-    ]
-    return plan or None
 
 
 def _armada_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | None:
@@ -126,8 +109,9 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     if not isinstance(metadata, dict):
         metadata = {}
     agent_thread_id = metadata.get("codex_thread_id") if run_event.event_type == "agent" else None
+    # The run's card already holds the sub-agents as of this event.
     agents = (
-        serialize_armada_agent_threads(run)
+        run.card.get("agents", [])
         if run_event.event_type == "agent" and _armada_agent_event_needs_snapshot(payload)
         else None
     )
@@ -146,7 +130,7 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
         "summary": run_event.summary,
         "current_activity": run.current_activity,
         "tool_count": run.tool_count,
-        "plan": _armada_run_plan(payload),
+        "plan": armada_run_plan_from_payload(payload),
         "overview": overview if isinstance(overview, str) else None,
         "has_visible_assistant_text": (
             True if run_event.event_type == "assistant_visible" else None

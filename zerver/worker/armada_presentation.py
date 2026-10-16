@@ -14,8 +14,9 @@ from zerver.lib.armada_presentation import (
     build_armada_presentation_input,
     request_armada_presentation_overview,
 )
+from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_worker import ARMADA_PRESENTATION_QUEUE_NAME, armada_run_is_attended
-from zerver.models.bots import AgentRun, AgentRunEvent
+from zerver.models.bots import AgentRun
 from zerver.worker.base import QueueProcessingWorker, assign_queue
 
 logger = logging.getLogger(__name__)
@@ -95,9 +96,9 @@ class ArmadaPresentationWorker(QueueProcessingWorker):
             latest_plan = armada_presentation_plan(run)
             if latest_plan is None or armada_presentation_current_step(latest_plan) != current_step:
                 return
-            presentation_event = AgentRunEvent.objects.create(
-                run=run,
-                event_type="presentation",
+            presentation_event = record_agent_run_event(
+                run,
+                "presentation",
                 summary=overview,
                 payload={
                     "overview": overview,

@@ -1240,7 +1240,21 @@ def write_armada_live_run_state(
 
 
 def get_armada_live_run_state(trigger_message_id: int) -> ArmadaLiveRunState | None:
-    state = cache.get(armada_live_run_cache_key(trigger_message_id))
+    return armada_live_run_state_from_cache(cache.get(armada_live_run_cache_key(trigger_message_id)))
+
+
+def get_armada_live_run_states(trigger_message_ids: list[int]) -> dict[int, ArmadaLiveRunState]:
+    """The live states of these runs, read in one round trip."""
+    keys = {armada_live_run_cache_key(message_id): message_id for message_id in trigger_message_ids}
+    states: dict[int, ArmadaLiveRunState] = {}
+    for key, value in cache.get_many(list(keys)).items():
+        state = armada_live_run_state_from_cache(value)
+        if state is not None:
+            states[keys[key]] = state
+    return states
+
+
+def armada_live_run_state_from_cache(state: object) -> ArmadaLiveRunState | None:
     if not isinstance(state, dict):
         return None
     status = state.get("status")

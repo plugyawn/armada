@@ -96,6 +96,10 @@ rules:
         - zerver/migrations/0387_reupload_realmemoji_again.py
         - zerver/migrations/0443_userpresence_new_table_schema.py
         - zerver/migrations/0493_rename_userhotspot_to_onboardingstep.py
+        # Builds each run's card with the code that records it
+        # (zerver/lib/armada_run_card.py), which reads only columns no
+        # later migration changes.
+        - zerver/migrations/0820_agentrun_card.py
         - pgroonga/migrations/0002_html_escape_subject.py
 
   - id: use-addindexconcurrently

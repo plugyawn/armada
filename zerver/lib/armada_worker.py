@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import F, Q
+from django.db.models import Q
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
@@ -54,6 +54,7 @@ from zerver.lib.armada_agent import (
     ArmadaGeminiInteractionsAddressingIntentClassifier,
     ArmadaProcessIsolation,
 )
+from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_skills import reconcile_armada_codex_skills
 from zerver.lib.context_managers import lockfile
 from zerver.lib.exceptions import JsonableError
@@ -4095,18 +4096,7 @@ class ArmadaDatabaseWorkerRunStore:
                 )
                 assert fenced_run is not None
                 run = fenced_run
-            run_event = AgentRunEvent.objects.create(
-                run=run,
-                event_type=event_type,
-                summary=summary,
-                payload=payload,
-            )
-            event_tool_count = payload.get("tool_count")
-            if event_type == "tool_results" and isinstance(event_tool_count, int):
-                AgentRun.objects.filter(id=run.id).update(
-                    tool_count=F("tool_count") + event_tool_count
-                )
-                run.tool_count += event_tool_count
+            run_event = record_agent_run_event(run, event_type, summary=summary, payload=payload)
             if event_type == "tool_results" and run.workspace_node_id is not None:
                 # The tools may have changed the worktree.
                 from zerver.lib.armada_workspace_git import request_workspace_git_refresh

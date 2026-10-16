@@ -5,8 +5,10 @@ pays many times a minute, so that a change that adds a query to one of
 them has to change a number here.
 """
 
+from typing import Any
 from unittest.mock import patch
 
+import orjson
 from django.db import connection
 from typing_extensions import override
 
@@ -21,6 +23,7 @@ from zerver.lib.armada import (
     ARMADA_DEFAULT_TOPIC,
     ARMADA_EMBEDDED_BOT_SERVICE,
 )
+from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import queries_captured
 from zerver.models import UserProfile
@@ -167,3 +170,51 @@ class ArmadaRequestCostTest(ZulipTestCase):
         for plan in self.plans_of(sql, "zerver_agentrun"):
             self.assertIn("zerver_agentrun_topic", plan)
             self.assertNotIn("Seq Scan on zerver_agentrun", plan)
+
+    def record_events(self, run: AgentRun, count: int) -> None:
+        for index in range(count):
+            record_agent_run_event(
+                run,
+                "transcript",
+                summary="Reading",
+                payload={"kind": "command", "title": f"Command {index}"},
+            )
+        record_agent_run_event(
+            run,
+            "usage",
+            summary="Usage",
+            payload={"usage": {"input_tokens": 100 + count, "output_tokens": 5}},
+        )
+
+    def test_run_list_reads_runs_not_their_events(self) -> None:
+        """A topic's run list costs the same however many events its runs
+        streamed, and asking for runs by id checks each channel once."""
+        runs = [self.make_run(status=AgentRun.DONE) for _ in range(5)]
+        for run in runs:
+            self.record_events(run, 3)
+        self.login_user(self.owner)
+        topic = {"stream": ARMADA_DEFAULT_STREAM, "topic": ARMADA_DEFAULT_TOPIC}
+
+        def list_runs(params: dict[str, str]) -> list[dict[str, Any]]:
+            result = self.client_get("/json/armada/runs", params, intentionally_undocumented=True)
+            return self.assert_json_success(result)["armada_runs"]
+
+        # The session, me and my client; the channel, my subscription, the
+        # worktree and the runs.
+        with self.assert_database_query_count(7):
+            listed = list_runs(topic)
+        self.assertEqual(
+            [run["snapshot_sequence"] for run in listed],
+            [AgentRun.objects.get(id=run["id"]).last_event_id for run in listed],
+        )
+        for run in runs:
+            self.record_events(run, 40)
+        with self.assert_database_query_count(7):
+            listed = list_runs(topic)
+        self.assertEqual({run["usage"]["input_tokens"] for run in listed}, {140})
+
+        by_id = {"run_ids": orjson.dumps([run.id for run in runs]).decode()}
+        # The session, me and my client; the runs, and the channel and my
+        # subscription once for all five.
+        with self.assert_database_query_count(6):
+            self.assert_length(list_runs(by_id), 5)

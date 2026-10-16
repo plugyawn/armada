@@ -149,6 +149,10 @@ class AgentRun(models.Model):
     error = models.TextField(null=True)
     attempts = models.PositiveSmallIntegerField(default=0)
     tool_count = models.PositiveIntegerField(default=0)
+    # The newest event's id, and what the run's card shows of its events
+    # (zerver/lib/armada_run_card.py), kept as the events are written.
+    last_event_id = models.IntegerField(null=True)
+    card = models.JSONField(default=dict)
     heartbeat_at = models.DateTimeField(null=True)
     cancel_requested_at = models.DateTimeField(null=True)
     date_created = models.DateTimeField(default=timezone_now, db_index=True)

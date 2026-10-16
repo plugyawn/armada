@@ -1,0 +1,3 @@
+# The performance audit's server request paths: no subprocess, lock or
+# scan of a run's events on the reads a topic open makes.
+kept tools/semgrep-py.yml  # 0820_agentrun_card builds run cards with the code that records them

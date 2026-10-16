@@ -1,6 +1,5 @@
 import json
 import subprocess
-from collections.abc import Sequence
 from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
@@ -8,8 +7,7 @@ from typing import Annotated, Any, cast
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import F, Max, Q, Window
-from django.db.models.functions import RowNumber
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.middleware.csrf import get_token
 from django.utils.timezone import now as timezone_now
@@ -32,24 +30,20 @@ from zerver.lib.armada import (
     ARMADA_SELECTED_BOT_CONFIG_VALUE,
     ArmadaConfigPayload,
     ArmadaEmbeddedBotHandler,
-    ArmadaTokenUsage,
-    armada_normalize_token_usage,
-    armada_token_usage_summary,
+    ArmadaLiveRunState,
     armada_topic_scope,
     build_armada_active_session_summary,
     build_armada_active_session_summary_from_messages,
     build_armada_config_payload,
     get_armada_live_run_state,
+    get_armada_live_run_states,
     get_armada_session_payload,
     is_armada_task_request_message,
     normalize_armada_response_policy,
     normalize_armada_visible_markdown,
     trim_armada_text,
 )
-from zerver.lib.armada_agent_threads import (
-    load_armada_agent_thread_events,
-    serialize_armada_agent_threads,
-)
+from zerver.lib.armada_agent_threads import serialize_armada_agent_threads
 from zerver.lib.armada_background_read import ArmadaBackgroundRead
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.armada_monitor import (
@@ -62,7 +56,7 @@ from zerver.lib.armada_monitor import (
     build_armada_monitor_contract,
     serialize_armada_monitor,
 )
-from zerver.lib.armada_presentation import armada_presentation_current_step
+from zerver.lib.armada_run_card import record_agent_run_event, serialize_armada_run_card
 from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     ArmadaQueueWorkerDispatcher,
@@ -650,202 +644,26 @@ def serialize_armada_worker_run_event(event: AgentRunEvent) -> dict[str, object]
     }
 
 
-def armada_usage_from_event_payload(payload: object) -> ArmadaTokenUsage | None:
-    if not isinstance(payload, dict):
-        return None
-    usage = armada_normalize_token_usage(payload.get("usage"))
-    if usage is not None:
-        return usage
-    metadata = payload.get("metadata")
-    if isinstance(metadata, dict):
-        usage = armada_normalize_token_usage(metadata.get("usage"))
-        if usage is not None:
-            return usage
-    return armada_normalize_token_usage(payload)
-
-
-def armada_worker_run_summary_events(
-    runs: Sequence[AgentRun],
-) -> dict[int, list[AgentRunEvent]]:
-    """Load bounded run-card state without issuing per-run queries.
-
-    Run-list hydration must not issue per-run event queries. Detail
-    serialization can still use the model managers when no batch was supplied.
-    """
-    events_by_run_id: dict[int, list[AgentRunEvent]] = {run.id: [] for run in runs}
-    if not events_by_run_id:
-        return events_by_run_id
-    newest_usage_candidates = (
-        AgentRunEvent.objects.filter(
-            run_id__in=events_by_run_id,
-            event_type__in=("usage", "transcript"),
-        )
-        .annotate(
-            summary_rank=Window(
-                expression=RowNumber(),
-                partition_by=(F("run_id"),),
-                order_by=(F("date_created").desc(), F("id").desc()),
-            )
-        )
-        .filter(summary_rank__lte=20)
-        .only("id", "run_id", "event_type", "payload", "date_created")
-    )
-    newest_display_candidates = (
-        AgentRunEvent.objects.filter(run_id__in=events_by_run_id)
-        .filter(Q(event_type="presentation") | Q(event_type="transcript", payload__kind="plan"))
-        .annotate(
-            summary_rank=Window(
-                expression=RowNumber(),
-                partition_by=(F("run_id"), F("event_type")),
-                order_by=(F("date_created").desc(), F("id").desc()),
-            )
-        )
-        .filter(summary_rank=1)
-        .only("id", "run_id", "event_type", "payload", "date_created")
-    )
-    agent_candidates = load_armada_agent_thread_events(events_by_run_id)
-    unique_events: dict[int, AgentRunEvent] = {}
-    for event in [
-        *newest_usage_candidates,
-        *newest_display_candidates,
-        *agent_candidates,
-    ]:
-        unique_events[event.id] = event
-    for event in sorted(
-        unique_events.values(),
-        key=lambda candidate: (candidate.run_id, candidate.date_created, candidate.id),
-        reverse=True,
-    ):
-        events_by_run_id[event.run_id].append(event)
-    return events_by_run_id
-
-
-def serialize_armada_worker_run_usage(
-    run: AgentRun,
-    summary_events: list[AgentRunEvent] | None = None,
-) -> dict[str, object] | None:
-    # The newest usage-bearing event wins, but the run's final events
-    # are usually usage-less transcript markers ("Codex turn
-    # completed."), so scan back a bounded window instead of trusting
-    # the single latest event.
-    usage: ArmadaTokenUsage | None = None
-    event = None
-    candidates = (
-        [event for event in summary_events if event.event_type in {"usage", "transcript"}][:20]
-        if summary_events is not None
-        else run.events.filter(Q(event_type="usage") | Q(event_type="transcript")).order_by(
-            "-date_created", "-id"
-        )[:20]
-    )
-    for candidate in candidates:
-        usage = armada_usage_from_event_payload(candidate.payload)
-        if usage is not None:
-            event = candidate
-            break
-    if usage is None:
-        return None
-    duration_seconds = None
-    if run.date_finished is not None:
-        duration_seconds = round((run.date_finished - run.date_created).total_seconds(), 1)
-    elif run.status in {AgentRun.QUEUED, AgentRun.RUNNING}:
-        duration_seconds = round((timezone_now() - run.date_created).total_seconds(), 1)
-    return {
-        **usage,
-        "summary": armada_token_usage_summary(usage),
-        "duration_seconds": duration_seconds,
-        "event_id": event.id if event is not None else None,
-    }
-
-
-def serialize_armada_worker_run_plan(
-    run: AgentRun,
-    summary_events: list[AgentRunEvent] | None = None,
-) -> list[dict[str, str]] | None:
-    """The run's latest plan_update, for the rail's pinned plan card.
-
-    Plan events carry the whole checklist (full-state replacement, the
-    codex update_plan contract), so the newest one wins; bounded scan
-    like the usage lookup.
-    """
-    events = (
-        [event for event in summary_events if event.event_type == "transcript"]
-        if summary_events is not None
-        else run.events.filter(event_type="transcript", payload__kind="plan").order_by(
-            "-date_created", "-id"
-        )[:1]
-    )
-    for event in events:
-        payload = event.payload
-        if not isinstance(payload, dict) or payload.get("kind") != "plan":
-            continue
-        metadata = payload.get("metadata")
-        raw_steps = metadata.get("steps") if isinstance(metadata, dict) else None
-        if not isinstance(raw_steps, list):
-            continue
-        steps = [
-            {"step": str(step["step"]), "status": str(step.get("status", "pending"))}
-            for step in raw_steps
-            if isinstance(step, dict) and step.get("step")
-        ]
-        if steps:
-            return steps
-    return None
-
-
-def serialize_armada_worker_run_tool_count(
-    run: AgentRun,
-    summary_events: list[AgentRunEvent] | None = None,
-) -> int:
-    # The worker records one tool_results event per turn segment, each
-    # carrying that segment's tool_count; the run's total is their sum.
-    if summary_events is not None:
-        return run.tool_count
-    tool_count = 0
-    for payload in run.events.filter(event_type="tool_results").values_list("payload", flat=True):
-        if isinstance(payload, dict) and isinstance(payload.get("tool_count"), int):
-            tool_count += payload["tool_count"]
-    return tool_count
-
-
-def serialize_armada_worker_run_overview(
-    run: AgentRun,
-    summary_events: list[AgentRunEvent] | None = None,
-    *,
-    plan: list[dict[str, str]] | None = None,
-) -> str | None:
-    if plan is None:
-        plan = serialize_armada_worker_run_plan(run, summary_events)
-    if plan is None:
-        return None
-    current_step = armada_presentation_current_step(plan)
-    events = (
-        [event for event in summary_events if event.event_type == "presentation"]
-        if summary_events is not None
-        else run.events.filter(event_type="presentation").order_by("-date_created", "-id")[:1]
-    )
-    for event in events:
-        payload = event.payload
-        overview = payload.get("overview") if isinstance(payload, dict) else None
-        overview_step = payload.get("current_step") if isinstance(payload, dict) else None
-        if isinstance(overview, str) and overview.strip() and overview_step == current_step:
-            return trim_armada_text(" ".join(overview.split()), limit=72)
-    return None
-
-
 def serialize_armada_worker_run(
     run: AgentRun,
     *,
     include_events: bool = False,
-    summary_events: list[AgentRunEvent] | None = None,
+    include_snapshot_sequence: bool = False,
+    live_state: ArmadaLiveRunState | None = None,
 ) -> dict[str, object]:
-    plan = serialize_armada_worker_run_plan(run, summary_events)
-    live_state = get_armada_live_run_state(run.trigger_message_id)
+    """A run as the run list and the run's own endpoints send it. Its card
+    (usage, plan, overview, sub-agents) is read from the run's row; only
+    include_events reads its events. A list passes the run's live state,
+    read with the others in one round trip."""
+    if live_state is None:
+        live_state = get_armada_live_run_state(run.trigger_message_id)
     if (
         run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}
         and live_state is not None
         and live_state["status"] in {AgentRun.QUEUED, AgentRun.RUNNING}
     ):
         live_state = None
+    card = serialize_armada_run_card(run)
     payload: dict[str, object] = {
         "id": run.id,
         "trigger_message_id": run.trigger_message_id,
@@ -878,16 +696,17 @@ def serialize_armada_worker_run(
         "requesting_user_full_name": run.requesting_user.full_name
         if run.requesting_user is not None
         else None,
-        "usage": serialize_armada_worker_run_usage(run, summary_events),
-        "tool_count": serialize_armada_worker_run_tool_count(run, summary_events),
-        "plan": plan,
-        "overview": serialize_armada_worker_run_overview(run, summary_events, plan=plan),
+        "usage": card["usage"],
+        "tool_count": card["tool_count"],
+        "plan": card["plan"],
+        "overview": card["overview"],
         "live": live_state,
-        "agents": serialize_armada_agent_threads(run, summary_events),
+        "agents": card["agents"],
     }
-    snapshot_sequence = getattr(run, "snapshot_sequence", None)
-    if isinstance(snapshot_sequence, int):
-        payload["snapshot_sequence"] = snapshot_sequence
+    # The run's newest event when this row was read: a page that has
+    # applied a newer agent_run push keeps that over this answer.
+    if include_snapshot_sequence and run.last_event_id is not None:
+        payload["snapshot_sequence"] = run.last_event_id
     if include_events:
         payload["events"] = [
             serialize_armada_worker_run_event(event)
@@ -899,7 +718,12 @@ def serialize_armada_worker_run(
 def check_can_access_armada_worker_run(
     user_profile: UserProfile,
     run: AgentRun,
+    *,
+    accessible_streams: set[str] | None = None,
 ) -> None:
+    """Raises unless this person may see the run. accessible_streams holds
+    the channels already checked for this person, by upper-cased name, so
+    that runs of one channel cost one check."""
     if run.realm_id != user_profile.realm_id:
         raise JsonableError(_("Run not found."))
     if run.session_kind == AgentRun.SIDE:
@@ -911,7 +735,11 @@ def check_can_access_armada_worker_run(
         if run.workspace_node is not None and run.workspace_node.stream_name
         else run.stream_name
     )
+    if accessible_streams is not None and stream_name.upper() in accessible_streams:
+        return
     access_stream_by_name(user_profile, stream_name)
+    if accessible_streams is not None:
+        accessible_streams.add(stream_name.upper())
 
 
 def get_visible_armada_worker_run(
@@ -942,7 +770,6 @@ def get_visible_armada_worker_runs_by_id(
 
     runs = list(
         AgentRun.objects.select_related(
-            "bot_profile",
             "requesting_user",
             "workspace_node",
         ).filter(id__in=normalized_run_ids, realm=user_profile.realm)
@@ -950,8 +777,11 @@ def get_visible_armada_worker_runs_by_id(
     runs_by_id = {run.id: run for run in runs}
     if len(runs_by_id) != len(normalized_run_ids):
         raise JsonableError(_("Run not found."))
+    accessible_streams: set[str] = set()
     for run in runs_by_id.values():
-        check_can_access_armada_worker_run(user_profile, run)
+        check_can_access_armada_worker_run(
+            user_profile, run, accessible_streams=accessible_streams
+        )
     return list(runs_by_id.values())
 
 
@@ -1487,7 +1317,7 @@ def get_armada_runs_backend(
         if workspace_node.stream_name:
             access_stream_by_name(user_profile, workspace_node.stream_name)
         topic_runs = list(
-            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("requesting_user")
             .filter(realm=user_profile.realm, workspace_node=workspace_node)
             .order_by("-date_created", "-id")[:ARMADA_RUN_LIST_LIMIT]
         )
@@ -1511,7 +1341,7 @@ def get_armada_runs_backend(
                 workspace_node=workspace_node,
             )
         topic_runs = list(
-            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("requesting_user")
             .filter(realm=user_profile.realm)
             .filter(
                 shared_run_filter
@@ -1528,7 +1358,7 @@ def get_armada_runs_backend(
         topic_runs = []
     else:
         topic_runs = list(
-            AgentRun.objects.select_related("bot_profile", "requesting_user", "workspace_node")
+            AgentRun.objects.select_related("requesting_user")
             .filter(
                 realm=user_profile.realm,
                 session_kind=AgentRun.SIDE,
@@ -1537,24 +1367,12 @@ def get_armada_runs_backend(
             .order_by("-date_created", "-id")[:ARMADA_RUN_LIST_LIMIT]
         )
 
-    runs_by_id = {run.id: run for run in [*topic_runs, *requested_runs]}
-    # Refetch the selected rows with their latest event id in one SQL
-    # snapshot. This is the authoritative watermark used by the browser to
-    # reject an older HTTP response after a newer push event has landed.
-    snapshot_runs_by_id = {
-        run.id: run
-        for run in AgentRun.objects.select_related(
-            "bot_profile", "requesting_user", "workspace_node"
-        )
-        .filter(id__in=runs_by_id)
-        .annotate(snapshot_sequence=Max("events__id"))
-    }
     runs = sorted(
-        snapshot_runs_by_id.values(),
+        {run.id: run for run in [*topic_runs, *requested_runs]}.values(),
         key=lambda run: (run.date_created, run.id),
         reverse=True,
     )
-    summary_events_by_run_id = armada_worker_run_summary_events(runs)
+    live_states = get_armada_live_run_states([run.trigger_message_id for run in runs])
     topic_context = None
     if bool(include_context) and stream_name is not None and topic_name is not None:
         topic_context = serialize_armada_workspace_context(
@@ -1576,7 +1394,8 @@ def get_armada_runs_backend(
                 serialize_armada_worker_run(
                     run,
                     include_events=bool(include_events),
-                    summary_events=summary_events_by_run_id[run.id],
+                    include_snapshot_sequence=True,
+                    live_state=live_states.get(run.trigger_message_id),
                 )
                 for run in runs
             ],
@@ -1888,9 +1707,9 @@ def update_armada_run_control_event(
             run.date_updated = timezone_now()
             run.save(update_fields=["current_activity", "date_updated"])
         if record_control_event:
-            run_event = AgentRunEvent.objects.create(
-                run=run,
-                event_type=event_type,
+            run_event = record_agent_run_event(
+                run,
+                event_type,
                 summary=summary,
                 payload={"user_id": user_profile.id},
             )
@@ -1935,9 +1754,9 @@ def post_armada_run_not_for_agent_backend(
         run = AgentRun.objects.select_for_update().get(id=visible_run.id)
         feedback_exists = run.events.filter(event_type="routing_feedback").exists()
         if not feedback_exists:
-            AgentRunEvent.objects.create(
-                run=run,
-                event_type="routing_feedback",
+            record_agent_run_event(
+                run,
+                "routing_feedback",
                 summary=f"Not for {ARMADA_AGENT_NAME}.",
                 payload={
                     "label": "false_positive",
@@ -2051,9 +1870,9 @@ def _dispatch_armada_monitor_run(
             armada_bot.user_profile, stream=stream_name, topic=topic_name
         ),
     )
-    AgentRunEvent.objects.create(
-        run=run,
-        event_type="queued",
+    record_agent_run_event(
+        run,
+        "queued",
         summary="Queued monitor setup.",
         payload={"monitor_id": monitor.id, "ask": trim_armada_text(monitor.ask, limit=500)},
     )

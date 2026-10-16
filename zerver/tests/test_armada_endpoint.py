@@ -50,6 +50,7 @@ from zerver.lib.armada import (
     write_armada_live_run_state,
 )
 from zerver.lib.armada_agent import ArmadaCodexAppServerToolRunner, ArmadaProcessIsolation
+from zerver.lib.armada_agent_threads import serialize_armada_agent_threads
 from zerver.lib.armada_background_read import ArmadaBackgroundRead
 from zerver.lib.armada_gate import (
     armada_selected_bot_cache_key,
@@ -68,6 +69,7 @@ from zerver.lib.armada_monitor import (
     armada_monitor_spec_relative_path,
     armada_validate_monitor_spec,
 )
+from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     ArmadaQueueWorkerDispatcher,
@@ -125,7 +127,6 @@ from zerver.views.armada import (
     ARMADA_MODEL_CATALOG_CACHE_SECONDS,
     armada_codex_login,
     armada_model_catalog,
-    armada_worker_run_summary_events,
     armada_worker_runtime_auth_status,
     build_armada_runtime_config_payload,
     ensure_armada_configured_bot,
@@ -240,7 +241,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             current_activity="Running tests",
             tool_count=2,
         )
-        run_event = AgentRunEvent.objects.create(
+        run_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan updated",
@@ -274,7 +275,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         run.codex_thread_id = "root-thread"
         run.save(update_fields=["codex_thread_id"])
-        agent_event = AgentRunEvent.objects.create(
+        agent_event = record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Started Scout",
@@ -312,26 +313,26 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         self.assertNotIn("agent", agent_push)
 
-        activity_event = AgentRunEvent.objects.create(
-            run=run,
-            event_type="agent",
-            summary="Inspect files",
-            payload={
-                "kind": "command",
-                "title": "Inspect files",
-                "metadata": {
-                    "codex_method": "item/completed",
-                    "codex_thread_id": "child-thread",
-                    "parent_thread_id": "root-thread",
+        # A child's activity updates the card's sub-agents in place,
+        # without rebuilding the graph from the run's events.
+        with patch("zerver.lib.armada_run_card.serialize_armada_agent_threads") as serialize_agents:
+            activity_event = record_agent_run_event(
+                run=run,
+                event_type="agent",
+                summary="Inspect files",
+                payload={
+                    "kind": "command",
+                    "title": "Inspect files",
+                    "metadata": {
+                        "codex_method": "item/completed",
+                        "codex_thread_id": "child-thread",
+                        "parent_thread_id": "root-thread",
+                    },
                 },
-            },
-        )
-        with (
-            patch("zerver.actions.armada.send_event_on_commit") as send_activity_event,
-            patch("zerver.actions.armada.serialize_armada_agent_threads") as serialize_agents,
-        ):
-            send_armada_run_event(run, activity_event)
+            )
         serialize_agents.assert_not_called()
+        with patch("zerver.actions.armada.send_event_on_commit") as send_activity_event:
+            send_armada_run_event(run, activity_event)
 
         activity_push = send_activity_event.call_args.args[1]
         check_armada_run_event("event", {**activity_push, "id": 4})
@@ -345,27 +346,26 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         self.assertNotIn("agents", activity_push)
 
-        turn_event = AgentRunEvent.objects.create(
-            run=run,
-            event_type="agent",
-            summary="Agent turn started",
-            payload={
-                "kind": "agent",
-                "title": "Agent turn started",
-                "metadata": {
-                    "codex_method": "turn/started",
-                    "codex_thread_id": "child-thread",
-                    "codex_turn_id": "child-turn",
-                    "parent_thread_id": "root-thread",
+        # So does the start of a child's turn.
+        with patch("zerver.lib.armada_run_card.serialize_armada_agent_threads") as serialize_agents:
+            turn_event = record_agent_run_event(
+                run=run,
+                event_type="agent",
+                summary="Agent turn started",
+                payload={
+                    "kind": "agent",
+                    "title": "Agent turn started",
+                    "metadata": {
+                        "codex_method": "turn/started",
+                        "codex_thread_id": "child-thread",
+                        "codex_turn_id": "child-turn",
+                        "parent_thread_id": "root-thread",
+                    },
                 },
-            },
-        )
-        with (
-            patch("zerver.actions.armada.send_event_on_commit") as send_turn_event,
-            patch("zerver.actions.armada.serialize_armada_agent_threads") as serialize_agents,
-        ):
-            send_armada_run_event(run, turn_event)
+            )
         serialize_agents.assert_not_called()
+        with patch("zerver.actions.armada.send_event_on_commit") as send_turn_event:
+            send_armada_run_event(run, turn_event)
 
         turn_push = send_turn_event.call_args.args[1]
         self.assertNotIn("agents", turn_push)
@@ -766,7 +766,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             model="gpt-5.5",
             workdir="/workspace",
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="usage",
             summary="Token usage: 80/100 cached (80.0%); 4 output; 2 reasoning.",
@@ -809,7 +809,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         # the serializer must scan back to the usage-bearing event
         # rather than trust the single latest one (a live regression:
         # every run reported usage=None once "turn completed" landed).
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Codex turn completed.",
@@ -824,19 +824,19 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         # The run footer sums tool_count across the per-segment
         # tool_results events; malformed payloads are skipped.
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="tool_results",
             summary="Ran 2 tools",
             payload={"tool_count": 2, "tool_results": []},
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="tool_results",
             summary="Ran 3 tools",
             payload={"tool_count": 3, "tool_results": []},
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="tool_results",
             summary="Malformed",
@@ -846,7 +846,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
         # The rail's plan card takes the newest plan_update; the scan
         # must skip past newer non-plan transcript events.
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan",
@@ -861,7 +861,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Codex turn completed.",
@@ -876,7 +876,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 {"step": "Verify", "status": "pending"},
             ],
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="presentation",
             summary="Committing focused fix",
@@ -886,7 +886,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             },
         )
         self.assertEqual(serialize_armada_worker_run(run)["overview"], "Committing focused fix")
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Plan advanced",
@@ -934,7 +934,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(serialized_run["status"], AgentRun.DONE)
         self.assertIsNone(serialized_run["live"])
 
-    def test_run_summary_events_are_batched_for_polling(self) -> None:
+    def test_run_cards_are_serialized_without_reading_events(self) -> None:
         user = self.example_user("hamlet")
         armada_bot = self.create_test_bot(
             "onix",
@@ -955,12 +955,12 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             for index in range(5)
         ]
         for index, run in enumerate(runs):
-            AgentRunEvent.objects.create(
+            record_agent_run_event(
                 run=run,
                 event_type="usage",
                 payload={"usage": {"input_tokens": index + 1, "total_tokens": index + 1}},
             )
-            AgentRunEvent.objects.create(
+            record_agent_run_event(
                 run=run,
                 event_type="transcript",
                 payload={
@@ -968,7 +968,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     "metadata": {"steps": [{"step": f"Step {index}", "status": "in_progress"}]},
                 },
             )
-            AgentRunEvent.objects.create(
+            record_agent_run_event(
                 run=run,
                 event_type="presentation",
                 payload={
@@ -977,15 +977,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             )
 
-        # Usage, display state, and the bounded child-session lookup are one
-        # fixed batch each. With no child sessions, no reducer query is needed.
-        with self.assert_database_query_count(3):
-            events_by_run_id = armada_worker_run_summary_events(runs)
+        # Each run's card is on its row: serializing reads no event.
         with self.assert_database_query_count(0):
-            serialized = [
-                serialize_armada_worker_run(run, summary_events=events_by_run_id[run.id])
-                for run in runs
-            ]
+            serialized = [serialize_armada_worker_run(run) for run in runs]
 
         self.assertEqual([item["tool_count"] for item in serialized], [2, 3, 4, 5, 6])
         self.assertEqual(
@@ -1018,7 +1012,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             ("quiet-child", "  Quiet\nScout  "),
             ("noisy-child", "Builder"),
         ):
-            AgentRunEvent.objects.create(
+            record_agent_run_event(
                 run=run,
                 event_type="agent",
                 summary=f"Started {nickname}",
@@ -1037,7 +1031,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     },
                 },
             )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Quiet child failed",
@@ -1052,33 +1046,27 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.bulk_create(
-            [
-                AgentRunEvent(
-                    run=run,
-                    event_type="agent",
-                    summary=f"Noisy activity {index}",
-                    payload={
-                        "kind": "command",
-                        "title": f"Noisy activity {index}",
-                        "metadata": {
-                            "codex_method": "item/completed",
-                            "codex_thread_id": "noisy-child",
-                        },
+        for index in range(70):
+            record_agent_run_event(
+                run=run,
+                event_type="agent",
+                summary=f"Noisy activity {index}",
+                payload={
+                    "kind": "command",
+                    "title": f"Noisy activity {index}",
+                    "metadata": {
+                        "codex_method": "item/completed",
+                        "codex_thread_id": "noisy-child",
                     },
-                )
-                for index in range(70)
-            ]
-        )
+                },
+            )
 
-        # The fourth query is one latest lifecycle/activity reducer row per
-        # native child, not a global tail that a noisy sibling can monopolize.
-        with self.assert_database_query_count(4):
-            events_by_run_id = armada_worker_run_summary_events([run])
+        # A noisy sibling never pushes another child's last lifecycle event
+        # out of the card, and the card is what the events rebuild.
         with self.assert_database_query_count(0):
-            agents = serialize_armada_worker_run(run, summary_events=events_by_run_id[run.id])[
-                "agents"
-            ]
+            agents = serialize_armada_worker_run(run)["agents"]
+        self.assertEqual(agents, serialize_armada_agent_threads(run))
+        self.assertEqual(AgentRun.objects.get(id=run.id).card, run.card)
         assert isinstance(agents, list)
         [quiet, noisy] = agents
 
@@ -1163,13 +1151,13 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.RUNNING,
         )
-        first_event = AgentRunEvent.objects.create(
+        first_event = record_agent_run_event(
             run=run,
             event_type="running",
             summary="Started.",
             payload={},
         )
-        latest_event = AgentRunEvent.objects.create(
+        latest_event = record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Working.",
@@ -4231,7 +4219,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 if sender is not None
                 else 999999
             )
-            return AgentRunEvent.objects.create(
+            return record_agent_run_event(
                 run=run,
                 event_type="steering",
                 summary=instruction,
@@ -4282,7 +4270,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             attempts=7,
             cancel_requested_at=cancelled_at,
         )
-        steering_event = AgentRunEvent.objects.create(
+        steering_event = record_agent_run_event(
             run=run,
             event_type="steering",
             summary="Continue carefully",
@@ -5007,13 +4995,13 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             status=AgentRun.RUNNING,
             codex_thread_id="root-thread",
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Hidden reasoning",
             payload={"kind": "reasoning", "body": "private chain of thought"},
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Reading files",
@@ -5025,7 +5013,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "status": "running",
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Read files",
@@ -5036,13 +5024,13 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 "status": "done",
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="transcript",
             summary="Codex",
             payload={"kind": "assistant", "body": "I’m checking the relevant files."},
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Codex thread child-thread",
@@ -5063,7 +5051,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Hidden child reasoning",
@@ -5077,7 +5065,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Inspect child files",
@@ -5093,7 +5081,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Child result",
@@ -5108,7 +5096,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 },
             },
         )
-        AgentRunEvent.objects.create(
+        record_agent_run_event(
             run=run,
             event_type="agent",
             summary="Codex runtime error.",

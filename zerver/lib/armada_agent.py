@@ -40,6 +40,12 @@ from zerver.lib.armada_artifact import (
     canonicalize_armada_artifact,
 )
 from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_TOOL_SPEC
+from zerver.lib.armada_message_tools import (
+    ARMADA_MESSAGE_TOOL_NAMES,
+    ArmadaToolTurn,
+    answer_armada_message_tool,
+    armada_message_tool_specs,
+)
 from zerver.lib.armada_page_tools import (
     ARMADA_PAGE_TOOL_NAMES,
     ARMADA_PAGE_TOOL_SPECS,
@@ -456,7 +462,7 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
 def armada_codex_dynamic_tools() -> list[dict[str, Any]]:
     """The tools Armada offers a new Codex thread (answered in
     answer_for_server_request)."""
-    return [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS]
+    return [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS, *armada_message_tool_specs()]
 
 
 def armada_codex_thread_version() -> str:
@@ -1527,8 +1533,11 @@ class ArmadaAppServerTurnContext:
     user_input_provider: ArmadaUserInputProvider | None
     is_main: bool
     turn_id: str | None = None
-    # The person whose message started the turn: the page tools act as them.
+    # The person whose message started the turn: the page and message
+    # tools act as them.
     requesting_user_id: int | None = None
+    # The message the turn's run answers, which names the run.
+    trigger_message_id: int | None = None
     messages: queue.Queue[object] = field(default_factory=queue.Queue)
     pending_artifacts: list[str] = field(default_factory=list)
 
@@ -2195,7 +2204,7 @@ class ArmadaCodexAppServerToolRunner:
             callback(contextualized_event)
         return True
 
-    def answer_page_tool_call(
+    def answer_armada_tool_call(
         self,
         params: dict[str, Any],
         *,
@@ -2203,11 +2212,26 @@ class ArmadaCodexAppServerToolRunner:
     ) -> tuple[dict[str, Any], None, ArmadaWorkerTranscriptEvent]:
         tool_name = str(params["tool"])
         call_id = params.get("callId")
-        answer = answer_armada_page_tool(
-            turn_context.requesting_user_id if turn_context is not None else None,
-            tool_name,
-            params.get("arguments"),
-        )
+        requesting_user_id = turn_context.requesting_user_id if turn_context is not None else None
+        if tool_name in ARMADA_PAGE_TOOL_NAMES:
+            answer = answer_armada_page_tool(requesting_user_id, tool_name, params.get("arguments"))
+        else:
+            answer = answer_armada_message_tool(
+                ArmadaToolTurn(
+                    requesting_user_id=requesting_user_id,
+                    trigger_message_id=(
+                        turn_context.trigger_message_id if turn_context is not None else None
+                    ),
+                    workdir=self.workdir,
+                    isolation_username=(
+                        self.process_isolation.username
+                        if self.process_isolation is not None
+                        else None
+                    ),
+                ),
+                tool_name,
+                params.get("arguments"),
+            )
         return (
             {
                 "success": answer["success"],
@@ -2301,10 +2325,10 @@ class ArmadaCodexAppServerToolRunner:
             )
         if (
             method == "item/tool/call"
-            and params.get("tool") in ARMADA_PAGE_TOOL_NAMES
+            and params.get("tool") in ARMADA_PAGE_TOOL_NAMES | ARMADA_MESSAGE_TOOL_NAMES
             and params.get("namespace") in {None, ""}
         ):
-            return self.answer_page_tool_call(params, turn_context=turn_context)
+            return self.answer_armada_tool_call(params, turn_context=turn_context)
         if method == "item/tool/call":
             tool_name = params.get("tool")
             call_id = params.get("callId")
@@ -2654,6 +2678,7 @@ class ArmadaCodexAppServerToolRunner:
                 user_input_provider=user_input_provider,
                 is_main=False,
                 requesting_user_id=active_session.get("requesting_user_id"),
+                trigger_message_id=active_session.get("current_trigger_message_id"),
             )
             self.register_turn_context(side_context)
         assert side_context is not None
@@ -3163,6 +3188,7 @@ class ArmadaCodexAppServerToolRunner:
                 user_input_provider=user_input_provider,
                 is_main=True,
                 requesting_user_id=active_session.get("requesting_user_id"),
+                trigger_message_id=active_session.get("current_trigger_message_id"),
             )
             self.register_turn_context(turn_context)
             try:

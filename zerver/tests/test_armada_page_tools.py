@@ -174,7 +174,13 @@ class PageToolCallsTest(ZulipTestCase):
         params = self.make_runner().thread_params()
         self.assertEqual(
             [tool["name"] for tool in params["dynamicTools"]],
-            ["armada_artifact", "armada_page_read", "armada_page_draft"],
+            [
+                "armada_artifact",
+                "armada_page_read",
+                "armada_page_draft",
+                "armada_post",
+                "armada_read",
+            ],
         )
 
     def test_a_call_is_answered_as_the_person_who_started_the_turn(self) -> None:

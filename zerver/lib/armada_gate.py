@@ -64,6 +64,15 @@ def get_selected_armada_bot_user_id_for_realm(realm_id: int) -> int | None:
     return selected_bot_user_id
 
 
+def is_armada_agent(user_profile: UserProfile) -> bool:
+    """Whether user_profile is its realm's agent.  Only an embedded bot
+    can be, so no one else costs a cache lookup."""
+    return (
+        user_profile.bot_type == UserProfile.EMBEDDED_BOT
+        and get_selected_armada_bot_user_id_for_realm(user_profile.realm_id) == user_profile.id
+    )
+
+
 def armada_followup_topic_context_allows_candidate(
     *,
     realm_id: int,

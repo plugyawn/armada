@@ -15,7 +15,9 @@ from typing_extensions import override
 from urllib3.exceptions import ProtocolError
 from urllib3.response import HTTPResponse
 
+from zerver.actions.create_user import do_create_user
 from zerver.actions.message_delete import do_delete_messages
+from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.cache import cache_delete, cache_get, preview_url_cache_key
 from zerver.lib.camo import get_camo_url
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
@@ -34,6 +36,8 @@ from zerver.lib.url_preview.parsers import GenericParser, OpenGraphParser
 from zerver.lib.url_preview.preview import get_link_embed_data
 from zerver.lib.url_preview.types import UrlEmbedData, UrlOEmbedData
 from zerver.models import Message, Realm, UserMessage, UserProfile
+from zerver.models.bots import Service
+from zerver.models.realms import get_realm
 from zerver.worker.embed_links import FetchLinksEmbedData
 
 
@@ -717,6 +721,39 @@ class PreviewTestCase(ZulipTestCase):
         # bot sending the message and not some other reason.
         msg = self._send_message_with_test_org_url(sender=self.example_user("prospero"))
         self.assertIn(embedded_link, msg.rendered_content)
+
+    def test_agent_posts_get_link_embed_data(self) -> None:
+        # The agent is a bot whose posts read like a person's: they get
+        # the same previews.
+        realm = get_realm("zulip")
+        agent = do_create_user(
+            "armada-agent-bot@zulip.testserver",
+            None,
+            realm,
+            "Agent",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            bot_owner=self.example_user("iago"),
+            acting_user=None,
+        )
+        Service.objects.create(name="armada", user_profile=agent, base_url="", token="")
+        invalidate_armada_selected_bot_cache(realm.id)
+        self.addCleanup(invalidate_armada_selected_bot_cache, realm.id)
+        msg = self._send_message_with_test_org_url(sender=agent)
+        self.assertIn(
+            '<a href="http://test.org/" title="The Rock">The Rock</a>', msg.rendered_content
+        )
+
+        # Another embedded bot's links stay unpreviewed.
+        other = do_create_user(
+            "other-embedded-bot@zulip.testserver",
+            None,
+            realm,
+            "Other",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            bot_owner=self.example_user("iago"),
+            acting_user=None,
+        )
+        self._send_message_with_test_org_url(sender=other, queue_should_run=False)
 
     @override_settings(CAMO_URI="")
     def test_inline_url_embed_preview(self) -> None:

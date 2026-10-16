@@ -35,6 +35,7 @@ from tlds import tld_set
 from typing_extensions import NotRequired, Self, override
 
 from zerver.lib import mention
+from zerver.lib.armada_gate import is_armada_agent
 from zerver.lib.camo import get_camo_url
 from zerver.lib.emoji import EMOTICON_RE, codepoint_to_name, name_to_codepoint, translate_emoticons
 from zerver.lib.emoji_utils import emoji_to_hex_codepoint, unqualify_emoji
@@ -2815,7 +2816,10 @@ def render_message_markdown(
         realm = message.get_realm()
 
     sender = message.sender
-    sent_by_bot = sender.is_bot
+    # Links sent by bots are not previewed (their messages are mostly
+    # integrations'), except the agent's: its posts read like a
+    # person's, and get the same previews.
+    sent_by_bot = sender.is_bot and not is_armada_agent(sender)
     translate_emoticons = sender.translate_emoticons
 
     rendering_result = markdown_convert(

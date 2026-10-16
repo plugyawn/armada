@@ -2691,6 +2691,35 @@ class ArmadaSessionDefaultsTest(TestCase):
             "a direct follow-up",
         )
 
+    def test_codex_prompt_names_the_request_message(self) -> None:
+        # The agent can only reply in the request's thread, or link it, if
+        # it knows the request's id.
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(20, "a new human observation", False, "berry")],
+            current_trigger_message_id=21,
+        )
+        prompt = build_armada_codex_turn_prompt(active_session, "update me in a new thread")
+        self.assertIn(
+            f"Zulip topic: {ARMADA_DEFAULT_TOPIC}\nRequest message: #21\n",
+            prompt,
+        )
+
+        active_session["latest_codex_thread_id"] = "thread-existing"
+        self.assertEqual(
+            build_armada_codex_turn_prompt(active_session, "continue from that observation"),
+            "New Zulip messages since your previous turn:\n"
+            "- #20 berry (human): a new human observation\n\n"
+            "Current request (#21):\ncontinue from that observation",
+        )
+        active_session["recent_messages"] = []
+        self.assertEqual(
+            build_armada_codex_turn_prompt(active_session, "a direct follow-up"),
+            "Current request (#21):\na direct follow-up",
+        )
+
     def test_codex_prompt_labels_bounded_referenced_conversations(self) -> None:
         referenced_threads: list[ArmadaReferencedThread] = [
             {

@@ -499,17 +499,26 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
     referenced_context_lines = format_armada_referenced_threads(
         active_session.get("referenced_threads", [])
     )
+    # The request's id, in the transcript's #id form, so the agent can
+    # point at it: reply in its thread, or link it.
+    request_message_id = active_session.get("current_trigger_message_id")
     if active_session.get("latest_codex_thread_id"):
+        request_lines = (
+            [f"Current request (#{request_message_id}):", task_text]
+            if request_message_id is not None
+            else ["Current request:", task_text]
+        )
         if not recent_transcript_lines:
-            return "\n".join([task_text, *referenced_context_lines])
+            if request_message_id is None:
+                return "\n".join([task_text, *referenced_context_lines])
+            return "\n".join([*request_lines, *referenced_context_lines])
         return "\n".join(
             [
                 "New Zulip messages since your previous turn:",
                 *recent_transcript_lines,
                 *referenced_context_lines,
                 "",
-                "Current request:",
-                task_text,
+                *request_lines,
             ]
         )
 
@@ -543,6 +552,11 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
             f"Task: {task_text}",
             f"Zulip stream: {active_session['stream']}",
             f"Zulip topic: {active_session['topic']}",
+            *(
+                [f"Request message: #{request_message_id}"]
+                if request_message_id is not None
+                else []
+            ),
             f"Session state: {active_session['state']}",
             "",
             "Workspace context:",

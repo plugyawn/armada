@@ -622,6 +622,20 @@ Quota: the runs spend the signed-in account's Codex allowance. On 14
 October the dev VM's account reported its weekly window 100% used (resetting
 20 October), with runs drawing on its credit balance.
 
+### Staying signed in
+
+People stay signed in until they log out: there is no "stay logged in"
+choice, and none is needed. A session lasts `SESSION_COOKIE_AGE`, a year by
+default, from the last time it was saved, and the first request of a
+signed-in session each day saves it again
+(`zerver/lib/armada_sessions.py`), so its end moves a year on and the
+browser gets the cookie again. Someone who uses Armada at least once a year
+is never logged out; a session left unused for a year ends. The renewal is
+one write a day for each session in use, never one per request, and never
+from Tornado's long polls. Leave `SESSION_COOKIE_AGE` and
+`SESSION_EXPIRE_AT_BROWSER_CLOSE` unset in `/etc/zulip/settings.py`;
+setting either changes this. Tested by `zerver.tests.test_armada_sessions`.
+
 ## 5. Create the organization and the accounts
 
 _Stock Zulip, untested here._ Real sign-in is Zulip's: email and password by
@@ -1028,6 +1042,11 @@ the `npm install` line of 6.2 and a new version number.
 
 ### Upgrade notes
 
+- **17 October 2026: sessions last until people log out.** Nothing to do,
+  unless `/etc/zulip/settings.py` sets `SESSION_COOKIE_AGE` (it then keeps
+  that age; remove the line to get the year, [Staying signed
+  in](#staying-signed-in)). A session that is still valid at the upgrade
+  is renewed for a year on its first request after it.
 - **17 October 2026: the number of agent slots is a setting.** Nothing to
   do: without `[armada] worker_slots`, a server keeps two slots, with the
   same program, queue and log names. To run more at once, set it after the

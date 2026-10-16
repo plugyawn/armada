@@ -1016,8 +1016,10 @@ ARMADA_WORKER_CODEX_MEMORIES = False
 ## Controls whether session cookies expire when the browser closes
 # SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-## Session cookie expiry in seconds after the last page load
-# SESSION_COOKIE_AGE = 60 * 60 * 24 * 7 * 2  # 2 weeks
+## Session cookie expiry in seconds. A signed-in session is renewed
+## once a day while it is used, so people stay logged in until they log
+## out or stop using Armada for this long.
+# SESSION_COOKIE_AGE = 60 * 60 * 24 * 365  # a year
 
 ## Password strength requirements; learn about configuration at
 ## https://zulip.readthedocs.io/en/latest/production/securing-your-zulip-server.html.

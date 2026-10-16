@@ -256,7 +256,9 @@ PASSWORD_MAX_LENGTH = 100
 PASSWORD_MIN_GUESSES = 10000
 
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
-SESSION_COOKIE_AGE = 60 * 60 * 24 * 7 * 2  # 2 weeks
+# A year from the last time the session was saved, which a signed-in
+# session is once a day while it is used (zerver/lib/armada_sessions.py).
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 365
 
 ZULIP_SERVICES_URL: str | None = "https://push.zulipchat.com"
 ZULIP_SERVICE_PUSH_NOTIFICATIONS = False

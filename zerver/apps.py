@@ -63,6 +63,9 @@ class ZerverConfig(AppConfig):
         # in any case, this is an intentionally unused import.
         import zerver.signals  # noqa: F401
 
+        # The same, for the receiver that stamps a session at sign-in.
+        from zerver.lib import armada_sessions  # noqa: F401
+
         if settings.POST_MIGRATION_CACHE_FLUSHING:
             post_migrate.connect(flush_cache, sender=self)
 

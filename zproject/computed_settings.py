@@ -244,6 +244,9 @@ MIDDLEWARE = [
     "zerver.middleware.SetRemoteAddrFromRealIpHeader",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Renews a signed-in session once a day while it is used; after
+    # SessionMiddleware, so that its response phase runs before the save.
+    "zerver.lib.armada_sessions.RenewSessionMiddleware",
     # Important: All middleware before LogRequests should be
     # inexpensive, because any time spent in that middleware will not
     # be counted in the LogRequests instrumentation of how time was

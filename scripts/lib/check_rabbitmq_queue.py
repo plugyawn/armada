@@ -158,13 +158,16 @@ def analyze_queue_stats(
 
 
 def armada_worker_health_results(
-    slot_stats: list[dict[str, Any]], queue_counts: dict[str, int], now: int | None = None
+    slot_stats: list[dict[str, Any]],
+    queue_messages: dict[str, int],
+    queue_consumers: dict[str, int],
+    now: int | None = None,
 ) -> list[dict[str, Any]]:
     """Check pool topology and each slot independently."""
     now = int(time.time()) if now is None else now
     results: list[dict[str, Any]] = []
     for queue in ARMADA_WORKER_QUEUE_NAMES:
-        consumers = queue_counts.get(queue, 0)
+        consumers = queue_consumers.get(queue, 0)
         if consumers != len(ARMADA_WORKER_STATS_FILES):
             results.append(
                 dict(
@@ -183,7 +186,7 @@ def armada_worker_health_results(
                 )
             )
         elif now - stats["update_time"] > 180 and any(
-            queue_counts.get(queue, 0) > 0 for queue in ARMADA_WORKER_QUEUE_NAMES
+            queue_messages.get(queue, 0) > 0 for queue in ARMADA_WORKER_QUEUE_NAMES
         ):
             results.append(
                 dict(
@@ -227,6 +230,7 @@ def check_rabbitmq_queues() -> None:
         text=True,
     )
     queue_counts_rabbitmqctl = {}
+    queue_consumers_rabbitmqctl = {}
     queues_with_consumers = []
     for line in list_queues_output.split("\n"):
         line = line.strip()
@@ -236,6 +240,7 @@ def check_rabbitmq_queues() -> None:
             count = int(m.group(2))
             consumers = int(m.group(3))
             queue_counts_rabbitmqctl[queue] = count
+            queue_consumers_rabbitmqctl[queue] = consumers
             if consumers > 0 and not queue.startswith("notify_tornado"):
                 queues_with_consumers.append(queue)
 
@@ -266,7 +271,9 @@ def check_rabbitmq_queues() -> None:
             with open(file_path) as f, suppress(json.decoder.JSONDecodeError):
                 stats = json.load(f)
         armada_slot_stats.append(stats)
-    results = armada_worker_health_results(armada_slot_stats, queue_counts_rabbitmqctl)
+    results = armada_worker_health_results(
+        armada_slot_stats, queue_counts_rabbitmqctl, queue_consumers_rabbitmqctl
+    )
     for queue in queues_to_check:
         stats_files = queue_statistics_filenames(queue)
         loaded_stats: list[dict[str, Any]] = []

@@ -2,7 +2,9 @@ import shutil
 import subprocess
 import tempfile
 import threading
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -115,11 +117,15 @@ from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
+    ARMADA_MODEL_CATALOG_CACHE_SECONDS,
+    ArmadaModelCatalogCache,
     armada_worker_run_summary_events,
     armada_workspace_isolation_username,
     build_armada_git_context,
+    build_armada_runtime_config_payload,
     ensure_armada_configured_bot,
     extract_armada_codex_model_catalog,
+    refresh_armada_model_catalog,
     serialize_armada_worker_run,
     serialize_armada_workspace_context,
     update_armada_run_control_event,
@@ -6241,6 +6247,164 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertFalse(active_session["is_paused"])
         self.assertEqual(active_session["worker_state"], "ready")
         self.assertTrue(active_session["worker_can_run"])
+
+
+def codex_debug_models_output(slugs: list[str]) -> str:
+    models = [
+        {"slug": slug, "visibility": "list", "priority": priority}
+        for priority, slug in enumerate(slugs)
+    ]
+    return orjson.dumps({"models": models}).decode()
+
+
+class HeldCodexDebugModels:
+    """Stands in for subprocess.run running `codex debug models`: it notes
+    the thread that ran it, and answers only once released."""
+
+    def __init__(self, answer: str | Exception) -> None:
+        self.answer = answer
+        self.release = threading.Event()
+        self.callers: list[str] = []
+
+    def __call__(self, command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        self.callers.append(threading.current_thread().name)
+        self.release.wait(timeout=10)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return subprocess.CompletedProcess(command, 0, stdout=self.answer)
+
+
+class ArmadaModelCatalogTest(ZulipTestCase):
+    @contextmanager
+    def codex_on_path(
+        self, cache: ArmadaModelCatalogCache, codex: HeldCodexDebugModels
+    ) -> Iterator[None]:
+        self.addCleanup(codex.release.set)
+        with (
+            patch("zerver.views.armada.armada_model_catalog_cache", cache),
+            patch("zerver.views.armada.which", return_value="/usr/local/bin/codex"),
+            patch("zerver.views.armada.subprocess.run", side_effect=codex),
+            self.settings(
+                ARMADA_WORKER_MODEL="gpt-6-astra",
+                ARMADA_WORKER_MODEL_CHOICES=["gpt-6-astra", "gpt-6-sol"],
+            ),
+        ):
+            yield
+
+    def served_models(self) -> list[str]:
+        return cast(list[str], build_armada_runtime_config_payload()["model_choices"])
+
+    def finish_refresh(self, cache: ArmadaModelCatalogCache, codex: HeldCodexDebugModels) -> None:
+        refresh = cache.refresh
+        assert refresh is not None
+        codex.release.set()
+        refresh.join(timeout=10)
+        self.assertFalse(refresh.is_alive())
+        self.assertIsNone(cache.refresh)
+
+    def test_stale_catalog_is_served_while_codex_is_asked_in_the_background(self) -> None:
+        user = self.example_user("hamlet")
+        self.subscribe(user, ARMADA_DEFAULT_STREAM)
+        self.login_user(user)
+        cache = ArmadaModelCatalogCache(
+            catalog=extract_armada_codex_model_catalog(
+                orjson.loads(codex_debug_models_output(["gpt-old"]))
+            ),
+            checked_at=time.monotonic() - ARMADA_MODEL_CATALOG_CACHE_SECONDS,
+        )
+        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+
+        def served_by_runs_endpoint() -> list[str]:
+            result = self.client_get(
+                f"/json{ARMADA_RUNS_ENDPOINT}",
+                {"stream": ARMADA_DEFAULT_STREAM, "topic": ARMADA_DEFAULT_TOPIC},
+                intentionally_undocumented=True,
+            )
+            return self.assert_json_success(result)["runtime_config"]["model_choices"]
+
+        with self.codex_on_path(cache, codex):
+            # Codex answers only once released, after this response.
+            self.assertEqual(served_by_runs_endpoint(), ["gpt-old", "gpt-6-astra", "gpt-6-sol"])
+            self.finish_refresh(cache, codex)
+            self.assertEqual(codex.callers, ["armada-model-catalog"])
+
+            self.assertEqual(served_by_runs_endpoint(), ["gpt-new", "gpt-6-astra", "gpt-6-sol"])
+            self.assertIsNone(cache.refresh)
+        self.assertEqual(codex.callers, ["armada-model-catalog"])
+
+    def test_cold_start_serves_the_configured_models(self) -> None:
+        cache = ArmadaModelCatalogCache()
+        codex = HeldCodexDebugModels(
+            codex_debug_models_output(["gpt-6-sol", "gpt-6-astra", "gpt-new"])
+        )
+        with self.codex_on_path(cache, codex):
+            self.assertEqual(self.served_models(), ["gpt-6-astra", "gpt-6-sol"])
+            self.finish_refresh(cache, codex)
+            self.assertEqual(self.served_models(), ["gpt-6-sol", "gpt-6-astra", "gpt-new"])
+
+    def test_only_one_refresh_runs_at_a_time(self) -> None:
+        cache = ArmadaModelCatalogCache()
+        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        with self.codex_on_path(cache, codex):
+            self.served_models()
+            refresh = cache.refresh
+            self.assertIsNotNone(refresh)
+            # As if this refresh outlasted the five minutes: the requests
+            # that find the catalog stale again start no second one.
+            cache.checked_at = None
+            self.served_models()
+            self.served_models()
+            self.assertIs(cache.refresh, refresh)
+            self.finish_refresh(cache, codex)
+        self.assertEqual(codex.callers, ["armada-model-catalog"])
+
+    def test_failed_refresh_keeps_the_catalog_and_logs_once(self) -> None:
+        # The refresh thread's body runs here, in the test's own thread,
+        # where test-backend's coverage can see it; checked_at keeps the
+        # requests below from starting refreshes of their own.
+        cache = ArmadaModelCatalogCache(checked_at=time.monotonic())
+        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        codex.release.set()
+        warning = "Could not refresh Codex's model catalog; keeping the last one"
+        with self.codex_on_path(cache, codex):
+            refresh_armada_model_catalog(cache)
+
+            failure = subprocess.CalledProcessError(1, ["codex", "debug", "models"])
+            codex.answer = failure
+            with self.assertLogs("zerver.views.armada", level="WARNING") as logs:
+                refresh_armada_model_catalog(cache)
+            self.assertEqual([record.getMessage() for record in logs.records], [warning])
+            exc_info = logs.records[0].exc_info
+            assert exc_info is not None
+            self.assertIs(exc_info[1], failure)
+            self.assertEqual(self.served_models(), ["gpt-new", "gpt-6-astra", "gpt-6-sol"])
+
+            # Still failing, now by listing no models: kept, and not logged again.
+            codex.answer = codex_debug_models_output([])
+            with self.assertNoLogs("zerver.views.armada"):
+                refresh_armada_model_catalog(cache)
+            self.assertEqual(self.served_models(), ["gpt-new", "gpt-6-astra", "gpt-6-sol"])
+
+            # A refresh that succeeds ends the run; the next failure is logged.
+            codex.answer = codex_debug_models_output(["gpt-newer"])
+            refresh_armada_model_catalog(cache)
+            codex.answer = subprocess.TimeoutExpired(["codex", "debug", "models"], 5)
+            with self.assertLogs("zerver.views.armada", level="WARNING") as logs:
+                refresh_armada_model_catalog(cache)
+            self.assertEqual([record.getMessage() for record in logs.records], [warning])
+            self.assertEqual(self.served_models(), ["gpt-newer", "gpt-6-astra", "gpt-6-sol"])
+
+    def test_no_refresh_without_codex(self) -> None:
+        cache = ArmadaModelCatalogCache()
+        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        with (
+            self.codex_on_path(cache, codex),
+            patch("zerver.views.armada.which", return_value=None),
+        ):
+            self.assertEqual(self.served_models(), ["gpt-6-astra", "gpt-6-sol"])
+            self.assertIsNone(cache.refresh)
+            self.assertIsNotNone(cache.checked_at)
+        self.assertEqual(codex.callers, [])
 
 
 class ArmadaWorkspacePathTest(ZulipTestCase):

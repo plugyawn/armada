@@ -1,7 +1,10 @@
 import json
+import logging
 import subprocess
+import threading
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
@@ -117,7 +120,24 @@ ARMADA_RUN_TRACE_MAX_LIMIT = 100
 ARMADA_MODEL_SLUG_LIMIT = 100
 ARMADA_MODEL_CATALOG_CACHE_SECONDS = 300
 
-armada_model_catalog_cache: tuple[float, list[dict[str, object]]] | None = None
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ArmadaModelCatalogCache:
+    # Codex's catalog from the last refresh that succeeded; empty until one has.
+    catalog: list[dict[str, object]] = field(default_factory=list)
+    # When the last refresh started (time.monotonic()), or when one was
+    # skipped because there is no Codex to ask.
+    checked_at: float | None = None
+    # The refresh running now, if any; at most one runs in a process.
+    refresh: threading.Thread | None = None
+    # Whether the last refresh failed, so that a run of failures logs once.
+    failing: bool = False
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+armada_model_catalog_cache = ArmadaModelCatalogCache()
 
 
 def armada_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
@@ -360,36 +380,71 @@ def fallback_armada_model_catalog(model_choices: list[str]) -> list[dict[str, ob
     ]
 
 
+def read_armada_codex_model_catalog() -> list[dict[str, object]]:
+    completed = subprocess.run(
+        [settings.ARMADA_WORKER_CODEX_BIN, "debug", "models"],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        timeout=5,
+    )
+    catalog = extract_armada_codex_model_catalog(json.loads(completed.stdout))
+    if not catalog:
+        raise ValueError("codex debug models listed no models")
+    return catalog
+
+
+def refresh_armada_model_catalog(cache: ArmadaModelCatalogCache) -> None:
+    """Runs in the thread that build_armada_codex_model_catalog starts.
+    A refresh that fails keeps the last catalog; only the first of a run
+    of failures is logged, so that a broken Codex is not logged every
+    five minutes in every process."""
+    catalog: list[dict[str, object]] = []
+    error: Exception | None = None
+    try:
+        catalog = read_armada_codex_model_catalog()
+    except Exception as exception:
+        error = exception
+    with cache.lock:
+        cache.refresh = None
+        first_failure = error is not None and not cache.failing
+        cache.failing = error is not None
+        if error is None:
+            cache.catalog = catalog
+    if first_failure:
+        logger.warning(
+            "Could not refresh Codex's model catalog; keeping the last one", exc_info=error
+        )
+
+
 def build_armada_codex_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
-    global armada_model_catalog_cache
-    now = time.monotonic()
-    if (
-        armada_model_catalog_cache is not None
-        and now - armada_model_catalog_cache[0] < ARMADA_MODEL_CATALOG_CACHE_SECONDS
-    ):
-        catalog = [dict(entry) for entry in armada_model_catalog_cache[1]]
-    else:
-        try:
-            completed = subprocess.run(
-                [settings.ARMADA_WORKER_CODEX_BIN, "debug", "models"],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=5,
-            )
-        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-            catalog = []
-        else:
-            catalog = []
-            if completed.returncode == 0:
-                try:
-                    catalog = extract_armada_codex_model_catalog(json.loads(completed.stdout))
-                except json.JSONDecodeError:
-                    catalog = []
-        if not catalog:
-            catalog = fallback_armada_model_catalog([])
-        armada_model_catalog_cache = (now, [dict(entry) for entry in catalog])
+    """Codex's model catalog as last read, followed by the configured
+    models it lacks; before the first read, only the configured models.
+
+    Asking Codex takes up to a second, so no request waits for it: a
+    request that finds the catalog stale starts a refresh in a
+    background thread and is answered with what is there now."""
+    cache = armada_model_catalog_cache
+    with cache.lock:
+        catalog = [dict(entry) for entry in cache.catalog]
+        now = time.monotonic()
+        if cache.refresh is None and (
+            cache.checked_at is None or now - cache.checked_at >= ARMADA_MODEL_CATALOG_CACHE_SECONDS
+        ):
+            cache.checked_at = now
+            if which(settings.ARMADA_WORKER_CODEX_BIN) is not None:
+                refresh = threading.Thread(
+                    target=refresh_armada_model_catalog,
+                    args=(cache,),
+                    name="armada-model-catalog",
+                    daemon=True,
+                )
+                # Recorded once started, so that a thread that cannot
+                # start blocks no later refresh; the thread clears it only
+                # after this lock is released.
+                refresh.start()
+                cache.refresh = refresh
 
     slugs = {str(entry["slug"]) for entry in catalog}
     for entry in fallback_armada_model_catalog(model_choices):

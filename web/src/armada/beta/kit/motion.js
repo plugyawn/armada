@@ -175,20 +175,24 @@
   const shake = (e) => reduced() ? null : e.animate({transform: ["translateX(0)", "translateX(-3px)", "translateX(3px)", "translateX(-2px)", "translateX(0)"]}, {duration: T.shake * SLOW, easing: "linear", composite: "add"});
 
   /* ---------- the focus ring: one object. It arrives from 3 px out; between neighbours it travels ---------- */
-  let ringEl, ringAt = null, ringFor = null, ringLoop = 0, kbd = false;
+  let ringEl, ringAt = null, ringFor = null, ringDue = 0, kbd = false;
   const ringBox = (target) => { const r = rest(target), g = 2; return {x: r.left - g, y: r.top - g, w: r.width + 2 * g, h: r.height + 2 * g}; };
   const ringPlace = (to, target) => { const rad = parseFloat(getComputedStyle(target).borderTopLeftRadius) || 0; ringEl.style.width = to.w + "px"; ringEl.style.height = to.h + "px"; ringEl.style.translate = `${to.x}px ${to.y}px`; ringEl.style.borderRadius = Math.min(rad + 2, to.h / 2) + "px"; };
-  /* while the ring shows it is re-placed whenever its control's resting place changes: a scroll, a resize, a layout write. A spring on the control or above it is not a change of place. */
-  function ringFollow() { cancelAnimationFrame(ringLoop); if (!ringFor) return; ringLoop = requestAnimationFrame(() => { if (!ringFor) return;
+  /* while the ring shows it is re-placed when its control's resting place may have changed: a scroll, a resize, the control's
+     own size, the page's elements or words changing, a picture or a typeface loading, a transition ending. One frame for each
+     burst of them, and none at rest. A spring on the control or above it is not a change of place. */
+  function ringSoon() { if (!ringFor || ringDue) return; ringDue = requestAnimationFrame(() => { ringDue = 0; if (!ringFor) return;
     if (!ringFor.isConnected || ringFor.closest("[hidden], [inert]")) { ring(null); return; }
-    const to = ringBox(ringFor), a = ringAt; if (Math.abs(to.x - a.x) > 0.25 || Math.abs(to.y - a.y) > 0.25 || Math.abs(to.w - a.w) > 0.25 || Math.abs(to.h - a.h) > 0.25) { ringPlace(to, ringFor); ringAt = to; }
-    ringFollow(); }); }
+    const to = ringBox(ringFor), a = ringAt; if (Math.abs(to.x - a.x) > 0.25 || Math.abs(to.y - a.y) > 0.25 || Math.abs(to.w - a.w) > 0.25 || Math.abs(to.h - a.h) > 0.25) { ringPlace(to, ringFor); ringAt = to; } }); }
+  const ringMoved = new MutationObserver(ringSoon), ringSized = new ResizeObserver(ringSoon);
   function ring(target) {
     if (!ringEl) { ringEl = document.createElement("i"); ringEl.id = "m-ring"; document.body.append(ringEl); }
-    if (!target) { ringAt = null; ringFor = null; cancelAnimationFrame(ringLoop); fade(ringEl, 0); return; }
+    if (ringFor && ringFor !== target) ringSized.unobserve(ringFor);
+    if (!target) { ringAt = null; ringFor = null; cancelAnimationFrame(ringDue); ringDue = 0; ringMoved.disconnect(); fade(ringEl, 0); return; }
     const to = ringBox(target), was = ringAt;
     ringPlace(to, target);
-    ringAt = to; ringFor = target; ringFollow(); fade(ringEl, 1);
+    if (!ringFor) ringMoved.observe(document.body, {childList: true, subtree: true, attributes: true, characterData: true});
+    ringAt = to; ringFor = target; ringSized.observe(target); fade(ringEl, 1);
     const near = was && Math.hypot(was.x + was.w / 2 - to.x - to.w / 2, was.y + was.h / 2 - to.y - to.h / 2) <= T["ring-near"];
     if (near) release(ringEl, {x: was.x - to.x, y: was.y - to.y, sx: was.w / to.w - 1, sy: was.h / to.h - 1}, "touch");
     else { halt(ringEl); release(ringEl, {x: -3, y: -3, sx: 6 / to.w, sy: 6 / to.h}, "touch"); }
@@ -225,6 +229,8 @@
     root.addEventListener("focusout", (e) => { if (!e.relatedTarget) ring(null); });
     root.addEventListener("pointerover", (e) => { const t = e.target.closest && e.target.closest("[data-tip]"); tip(t || null); });
     addEventListener("blur", () => { ring(null); tip(null); });
+    for (const t of ["scroll", "load", "transitionend", "animationend"]) root.addEventListener(t, ringSoon, {capture: true, passive: true});
+    addEventListener("resize", ringSoon); if (document.fonts) document.fonts.addEventListener("loadingdone", ringSoon);
   }
 
   window.M = {SLOW, T, SPR, now, after, reduced, stretch, release, current, halt, rest, flip, fade, appear, leave, hold, thumb, figure, cells, swap, cross, grow, fly, carry, flying, land, kick, squash, burst, shake, refuse, ring, tip, say, warm, wire,

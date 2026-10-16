@@ -846,12 +846,12 @@
         "owner": "F2"
     },
     "weight/dom-nodes": {
-        "measured": 1866,
+        "measured": 1869,
         "unit": "",
         "threshold": "<= 900",
-        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 1,695 elements on the short worktree topic on 13 October, most of them hidden overlays and sidebars rendered at startup. The count moves by a few elements with what the sidebars hold (1,645 alone, 1,647 in a full run), so the ceiling is the audit's 1,695. F5 (2026-10-14): the frame inlines the glyph and mark sprite once in the page (PLAN.md F5; 216 elements in templates/zerver/app/armada_sprite.svg), so the ceiling is 1,866, measured in F5's full run.",
+        "audit": "New in F2 (2026-10-14). var/armada-overhaul/maps/lean-weight.md, Runtime weight: 1,695 elements on the short worktree topic on 13 October, most of them hidden overlays and sidebars rendered at startup. The count moves by a few elements with what the sidebars hold (1,645 alone, 1,647 in a full run), so the ceiling is the audit's 1,695. F5 (2026-10-14): the frame inlines the glyph and mark sprite once in the page (PLAN.md F5; 216 elements in templates/zerver/app/armada_sprite.svg), so the ceiling is 1,866, measured in F5's full run. The checks' own user (armada_checks_user, 2026-10-15) is a twelfth person in the dev realm and a row in every buddy list; with it the page measures 1,869 in all three of the sprint's final runs (var/armada-overhaul/build/sprint/final-checks-2.md), so the ceiling is 1,869.",
         "since": "2026-10-14",
-        "max": 1866,
+        "max": 1869,
         "owner": "F2"
     }
 }

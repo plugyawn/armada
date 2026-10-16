@@ -1,0 +1,24 @@
+/* INTERIM BETA (README.md): New, from the nav's "+" (channels.js). Tokens only, as beta.css.
+   A raised surface under the "+" (the nav's top row is 52; the "+" ends at 42), its left edge on the nav's 8 px inset and
+   as wide as another person's card (264), so it covers the nav and none of the conversation. Its text edge is 16 in, and
+   what has a fill is outdented to stand 8 in: the fields, the selected choice and Create. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+.chn { position: fixed; z-index: 20; left: var(--s-2); top: 48px; width: 264px; border-radius: var(--r-pop); padding: var(--s-2) var(--s-4); font: var(--t-text); }
+.chn .chn-h { font: var(--t-strong); height: var(--h-m); display: flex; align-items: center; }
+/* a field is a well of the first fill at rest; holding the caret it is raised, with the focused field's edge */
+.chn .chn-in { display: block; width: calc(100% + 2 * var(--s-2)); height: var(--h-k); margin: var(--s-1) calc(-1 * var(--s-2)) 0; padding: 0 var(--s-2); border: 0; border-radius: var(--r-ctl); outline: none;
+  background: var(--fill-1); color: var(--ink-1); font: var(--t-text); caret-color: var(--accent-text); transition: background-color var(--fade-out) linear, box-shadow var(--fade-out) linear; }
+.chn .chn-in + .chn-in { margin-top: var(--s-2); }
+.chn .chn-in::placeholder { color: var(--ink-2); opacity: 1; }
+.chn .chn-in:focus { background: var(--raised); box-shadow: 0 0 0 1px var(--edge-2); transition-duration: var(--fade-in); }
+/* public or private, and Create: one row, the choice's first letter on the text edge, Create's fill ending with the fields' */
+.chn .chn-act { display: flex; align-items: center; justify-content: space-between; margin-top: var(--s-3); }
+.chn .chn-act .seg { margin-left: calc(-1 * var(--s-2)); }
+.chn .chn-act .seg button { padding: 0 var(--s-2); }
+.chn .chn-act .go { margin-right: calc(-1 * var(--s-2)); }
+/* the caption: what the choice means, or why Create was refused. Two lines are kept for it, so a refusal moves nothing */
+.chn .chn-say { font: var(--t-caption); color: var(--ink-2); min-height: calc(2 * 16px); margin-top: var(--s-2); }
+.chn .chn-say[data-bad] { color: var(--failure); }
+
+}

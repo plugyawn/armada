@@ -20,7 +20,7 @@ function bindFrame() {
   /* the nav: the kit's top row, a scroller of real places, and me */
   const top = $(".top", nav); nav.textContent = ""; navScroll = el("div", "scroll"); navFixed = el("div", "fixed", `<button class="row" data-k="jump" data-tip="Jump to" data-key="⌘K">${ic("search")}<span class="lab">Jump to</span></button><button class="row" data-k="home">${ic("home")}<span class="lab">Home</span></button>`);
   nav.append(top, navFixed, navScroll); const meRow = el("button", "row me", `${faceOf(state.ME, "s20")}<span class="lab">${esc(state.meName)}</span>`); nav.append(meRow); host(nav);
-  $(".wk-name", top).dataset.tip = "The workspace menu is not in the beta yet"; $(".new", top).dataset.tip = "New is not in the beta yet"; meRow.dataset.tip = "Signed in as " + state.meName; drawMeRow();
+  $(".wk-name", top).dataset.tip = "The workspace menu is not in the beta yet"; $(".new", top).dataset.tip = "New channel"; meRow.dataset.tip = "Signed in as " + state.meName; drawMeRow();
 }
 
 export {band, bindFrame, cz, feed, go, goc, lane, main, modeBtn, nav, navFixed, navScroll, outline, panes, ph, sh,

@@ -47,6 +47,7 @@ import {wireLightbox} from "./media.js";
 import {prefetchChunks} from "./chunks.js";
 import {onSubmessage, wireWidgets} from "./widgets.js";
 import {onArtifactEvent, wireArtifacts} from "./artifacts.js";
+import {onSubscription, wireChannels} from "./channels.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
@@ -54,6 +55,7 @@ on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing"
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 on("armada_post", onPost); on("submessage", (ev) => { onSubmessage(ev); onArtifactEvent(ev); }); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
 on("scheduled_messages", onScheduled); on("reminders", onReminders);
+on("subscription", onSubscription);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -70,6 +72,7 @@ async function boot() {
   press(main, "[data-seg]", (b) => { pick.seg = b.dataset.seg; if (pick.q) { pick.q = ""; tx.textContent = ""; syncField(); } pick.sel = null; state.hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); panes.Partner.scrollTop = 0; ready(); });
   press(main, "[data-later]", () => putOff());
   wirePages();   /* a person's page, a post, the editor (pages.js) */
+  wireChannels();   /* New, from the nav's "+" (channels.js) */
   press(panes.Partner, ".pkc", (b) => { selectCell(b.dataset.sid); drawPickerBand(); ready(); });
   panes.Partner.addEventListener("dblclick", (e) => { const b = e.target.closest(".pkc"); if (b) { selectCell(b.dataset.sid); choosePick(); } });
   press(document.body, "[data-pick]", (b) => { pick.picks[b.dataset.pickfor] = b.dataset.pick; drawPickerSide(); drawPickerBand(); ready(); });

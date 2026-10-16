@@ -6,7 +6,7 @@ import {ready} from "./composer.js";
 import {signOut} from "./connection.js";
 
 /* ---------- the Lab: what is real, what is not, and the few real controls ---------- */
-const NOT = ["New, the workspace menu, More in the header; settings", "The keyboard selection of messages; a reaction picker (React and a double press give 👍; a chip toggles)", "Queue (⌘Return), sub-agents, the trace, artifacts, monitors", "Diffs, Commit, pull requests, file editing, syntax colour in Files", "The checklist as a sheet below 1408 px", "Sending my own typing; presence after load; moved or renamed topics; channels I am not subscribed to", "The typing bubble growing into the message (it appears, it does not morph)"];
+const NOT = ["The workspace menu, More in the header; settings", "The keyboard selection of messages; a reaction picker (React and a double press give 👍; a chip toggles)", "Queue (⌘Return), sub-agents, the trace, artifacts, monitors", "Diffs, Commit, pull requests, file editing, syntax colour in Files", "The checklist as a sheet below 1408 px", "Sending my own typing; presence after load; moved or renamed topics; channels I am not subscribed to", "The typing bubble growing into the message (it appears, it does not morph)"];
 let lab;
 function buildLab() {
   /* the standing label opens the beta's panel */

@@ -7,7 +7,7 @@
                                            and at the speed it is moving, so nothing jumps and nothing queues.
    M.flip(el, before, "move")              release the difference between a rect read before a write and el's rest now
    M.rest(el)                              el's rect with every spring in flight on it and its ancestors taken out
-   M.fade(el, to)  M.leave(el)             opacity, from its current value; leave removes el after --fade-out
+   M.fade(el, to)  M.leave(el, then, from) opacity, from its current value (or `from`); leave removes el after --fade-out
    M.thumb(thumb, target)                  slide a selection thumb to target
    M.figure(cell, "13", {quiet})           change a figure in its fixed cells; only the characters that changed move
    M.swap(cell, node, {dir})               change a glyph or a word in a fixed cell
@@ -81,7 +81,7 @@
     const a = play(e, {opacity: [from, to]}, {duration: (ms ?? (to > from ? T["fade-in"] : T["fade-out"])) * SLOW, easing: "linear"}); fades.set(e, a); return a; }
   const appear = (e, from = 0, ms, o = {}) => play(e, {opacity: [from, 1]}, {duration: (ms ?? T["fade-in"]) * SLOW, easing: "linear", delay: (o.delay || 0) * SLOW, fill: o.delay ? "backwards" : "none", pseudoElement: o.pseudo});
   /* the thing is already gone as far as the app is concerned (inert, out of the tab order); this lets it be seen leaving */
-  function leave(e, then) { e.inert = true; const a = play(e, {opacity: [+getComputedStyle(e).opacity, 0]}, {duration: T["fade-out"] * SLOW, easing: "linear", fill: "forwards"});
+  function leave(e, then, from = +getComputedStyle(e).opacity) { e.inert = true; const a = play(e, {opacity: [from, 0]}, {duration: T["fade-out"] * SLOW, easing: "linear", fill: "forwards"});
     a.finished.then(() => { e.remove(); then && then(); }, () => {}); return a; }
   const hold = (e, n = 1) => reduced() ? null : play(e, {opacity: [0, 0]}, {duration: T.step * n * SLOW});   /* the agent's forms change in steps: this part appears n steps late, as a cut */
 
@@ -101,7 +101,7 @@
     v = String(v); const old = cell.textContent, up = o.dir ?? (parseFloat(v.replace(/\D/g, "")) >= parseFloat(old.replace(/\D/g, "")) ? 1 : -1);
     if (old === v) return; if (old.length !== v.length || !cell.firstElementChild) { cell.innerHTML = cells(v); if (old) appear(cell, 0.4); return; }
     [...cell.children].forEach((b, i) => { if (b.firstChild.nodeValue === v[i]) return;
-      const g = document.createElement("i"); g.textContent = b.firstChild.nodeValue; b.firstChild.nodeValue = v[i]; b.querySelectorAll("i").forEach((x) => x.remove()); b.append(g); leave(g);
+      const g = document.createElement("i"); g.textContent = b.firstChild.nodeValue; b.firstChild.nodeValue = v[i]; b.querySelectorAll("i").forEach((x) => x.remove()); b.append(g); leave(g, null, 1);   /* a ghost just made is whole: reading its opacity would force a style recalculation each tick */
       if (o.cut) return;                                                         /* a clock: the digit changes in a step, nothing travels */
       if (!o.quiet) release(b, {y: T.rise * up}, "touch"); });
   }

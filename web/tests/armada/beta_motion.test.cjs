@@ -50,10 +50,11 @@ for (const [name, value] of Object.entries({
 }
 // Web Animations, as far as motion.js uses them.
 const animations = [];
-dom.window.Element.prototype.animate = function (_keyframes, options) {
+dom.window.Element.prototype.animate = function (keyframes, options) {
     let done;
     const animation = {
         target: this,
+        keyframes,
         options,
         finished: new Promise((resolve) => {
             done = resolve;
@@ -176,4 +177,26 @@ run_test("while the page is hidden nothing animates: what starts is finished at 
     assert.notEqual(M.release(a, {y: 12}, "touch"), null);
     await settle();
     assert.ok(!(await settled(runs)), "on a page that is seen, an animation runs its course");
+});
+
+run_test("a clock's tick reads no style: the digit that leaves was just made, whole", () => {
+    const clock_cell = dom.document.createElement("span");
+    clock_cell.innerHTML = M.cells("0:41");
+    dom.find("#pane").append(clock_cell);
+    const real = dom.window.getComputedStyle;
+    let reads = 0;
+    set_global("getComputedStyle", (...args) => {
+        reads += 1;
+        return real(...args);
+    });
+    // The spy counts a read, so that none counted means none made.
+    globalThis.getComputedStyle(clock_cell);
+    assert.equal(reads, 1);
+    reads = 0;
+    M.figure(clock_cell, "0:42", {cut: true});
+    set_global("getComputedStyle", real);
+    assert.equal(clock_cell.textContent.slice(0, 4), "0:42");
+    assert.equal(reads, 0);
+    const leaving = animations.at(-1);
+    assert.deepEqual(leaving.keyframes, {opacity: [1, 0]});
 });

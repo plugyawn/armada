@@ -21,6 +21,8 @@ class ZulipExceptionReporterFilter(SafeExceptionReporterFilter):
         filtered_vars = [
             "content",
             "secret",
+            # A plugin's secrets (zerver/views/armada_plugins.py).
+            "secrets",
             "password",
             "key",
             "api-key",

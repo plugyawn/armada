@@ -797,6 +797,11 @@ ARMADA_PALETTE: Literal["lapis", "tide", "citrine", "onyx"] = "lapis"
 # off needs no rebuild; it is the way back if the new interface fails.
 ARMADA_NEW_INTERFACE_AT_ROOT = True
 
+# Plugins (design/r9/plugins; zerver/lib/armada_plugins.py) are installed
+# from github.com/<owner>/<repo>; with this, also from a git repository on
+# this machine's disk, for a development server and the tests.
+ARMADA_PLUGIN_LOCAL_SOURCES = False
+
 # Partners (zerver/lib/partner.py): how use becomes experience, and the
 # levels at which a partner changes. Levels are computed from experience
 # when they are read, so retuning these needs no migration.

@@ -48,6 +48,12 @@ def add_context(event: "Event", hint: "Hint") -> Optional["Event"]:
         if "email" in user_info:
             del user_info["email"]
 
+        # A plugin's secrets (zerver/views/armada_plugins.py) never leave
+        # the server, so the form field that brings them is scrubbed.
+        request_data = event.get("request", {}).get("data")
+        if isinstance(request_data, dict) and "secrets" in request_data:
+            request_data["secrets"] = "[Filtered]"
+
     return event
 
 

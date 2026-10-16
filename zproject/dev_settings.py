@@ -116,6 +116,8 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = False
 # Off by default and in the production template, since the memory Codex
 # consolidates is shared by every topic's agent; on for development.
 ARMADA_WORKER_CODEX_MEMORIES = True
+# A plugin can be installed from a git repository on this machine.
+ARMADA_PLUGIN_LOCAL_SOURCES = True
 
 SYSTEM_ONLY_REALMS: set[str] = set()
 USING_PGROONGA = True

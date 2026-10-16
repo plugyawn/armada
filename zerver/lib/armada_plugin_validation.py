@@ -281,3 +281,31 @@ def canonicalize_widget_document(value: object) -> tuple[dict[str, Any], str]:
                     f"$.rest.news: {news!r} is not failed, needs or empty"
                 )
     return document, encoded
+
+
+def canonicalize_plugin_settings(
+    manifest: dict[str, Any], values: object
+) -> tuple[dict[str, Any], list[str]]:
+    """An install's settings, whole: what was given, with the manifest's
+    default for each setting not given, checked against the manifest's
+    form; and the required settings still missing, for which the install
+    waits."""
+    form = manifest.get("settings", {"type": "object", "properties": {}})
+    if not isinstance(values, dict):
+        raise ArmadaPluginContractError("$: the settings are an object")
+    settings = {
+        name: setting["default"]
+        for name, setting in form["properties"].items()
+        if "default" in setting
+    }
+    # None is a setting not given, which takes its default.
+    settings.update({name: value for name, value in values.items() if value is not None})
+    error = json_schema_error(
+        {"type": "object", "additionalProperties": False, "properties": form["properties"]},
+        settings,
+    )
+    if error is not None:
+        raise ArmadaPluginContractError(error)
+    _refuse_markup(settings, skip=frozenset())
+    missing = [name for name in form.get("required", []) if settings.get(name) in (None, "", [])]
+    return settings, missing

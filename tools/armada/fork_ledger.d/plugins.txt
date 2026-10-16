@@ -1,0 +1,13 @@
+# Plugins (design/r9/plugins, packages PL0 to PL3).
+kept api_docs/include/rest-endpoints.md  # the plugin endpoints in the API documentation's sidebar
+kept scripts/setup/generate_secrets.py  # armada_plugin_secrets_key, the Fernet key for plugins' secrets
+kept zerver/filters.py  # error reports mask the secrets form field
+kept zerver/models/realm_audit_logs.py  # PLUGIN_* event types: what each install did, its Recent list
+kept zproject/sentry.py  # Sentry events drop the secrets form field
+# The other Zulip files plugins change already have lines in other
+# packages' files, which keep them: zerver/models/__init__.py and
+# zerver/openapi/zulip.yaml (R1.txt; the plugin routes, API changelog
+# ZF-0be29a), zproject/urls.py (beta.txt), zproject/default_settings.py
+# (F3.txt), zproject/computed_settings.py and zproject/dev_settings.py
+# (deploy.txt), zerver/lib/export.py (export.txt; the plugin tables are not
+# exported).

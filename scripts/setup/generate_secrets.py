@@ -128,6 +128,13 @@ def generate_secrets(development: bool = False) -> None:
     if need_secret("camo_key"):
         add_secret("camo_key", random_string(64))
 
+    # Armada encrypts plugins' secrets with this Fernet key, and derives
+    # their tokens from it (zerver/lib/armada_plugins.py).
+    if need_secret("armada_plugin_secrets_key"):
+        import base64
+
+        add_secret("armada_plugin_secrets_key", base64.urlsafe_b64encode(os.urandom(32)).decode())
+
     # We enable Altcha in development
     if development and need_secret("altcha_hmac"):
         add_secret("altcha_hmac", random_token())

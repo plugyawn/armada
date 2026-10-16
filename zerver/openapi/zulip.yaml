@@ -27472,6 +27472,615 @@ paths:
                         "url": "https://example.constructor.app/groups/room/room-123",
                       }
 
+  /armada/plugins:
+    get:
+      operationId: get-armada-plugins
+      tags: ["armada"]
+      summary: Get the organization's plugins
+      description: |
+        Get the plugins installed in the organization, with those removed less
+        than a week ago, whose removal can still be undone.
+
+        A plugin's secrets are never included: only whether each is set, who
+        set it and when, and the last four characters of a long one.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      plugins:
+                        type: array
+                        description: |
+                          The organization's plugins, oldest first.
+                        items:
+                          $ref: "#/components/schemas/ArmadaPlugin"
+                    example: {"result": "success", "msg": "", "plugins": []}
+    post:
+      operationId: install-armada-plugin
+      tags: ["armada"]
+      summary: Install a plugin
+      description: |
+        Install a plugin from a repository at a pinned commit. The plugin gets
+        its own bot, which it posts and reads its events as, and the plugin
+        host starts its process. An install waits while a required setting or
+        secret is missing.
+
+        Installing a plugin whose removal can still be undone replaces that
+        removal, and reuses its bot.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                source_kind:
+                  type: string
+                  enum:
+                    - github
+                    - local
+                    - remote
+                  default: github
+                  description: |
+                    Where the plugin's code comes from: a repository on GitHub, a
+                    repository on this server, or nowhere here, for a plugin whose
+                    manifest names the service it runs as.
+                  example: github
+                source:
+                  type: string
+                  default: ""
+                  description: |
+                    For `github`, the repository, as
+                    `github.com/<owner>/<repository>`.
+                  example: github.com/plugyawn/armada-gpus
+                repository_id:
+                  type: integer
+                  description: |
+                    For `local`, the ID of this server's repository.
+                  example: 4
+                path:
+                  type: string
+                  default: ""
+                  description: |
+                    The plugin's directory in its repository, such as
+                    `plugins/eval-queue`.
+                  example: ""
+                sha:
+                  type: string
+                  default: ""
+                  description: |
+                    The commit to pin the plugin at: 40 hexadecimal digits, for
+                    every plugin but a remote one. The plugin host refuses to start
+                    it if the repository's manifest at that commit is not
+                    `manifest`.
+                  example: 4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5
+                manifest:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    The plugin's manifest, `armada-plugin.json` at that commit,
+                    which must satisfy Armada's plugin contract.
+                  example:
+                    {
+                      "id": "gpus",
+                      "name": "GPUs",
+                      "version": "0.1.0",
+                      "description": "Free GPUs, and the jobs on them.",
+                      "glyph": "gpu",
+                      "requires": {"armada": ">=1"},
+                      "run": {"command": ["uv", "run", "armada-gpus"]},
+                      "provides": {},
+                    }
+                settings:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    The plugin's settings, as its manifest's form describes
+                    them. Any setting not given takes its default.
+                  example: {"manage_prefix": "nlscale-"}
+                secrets:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: |
+                    The secrets the manifest asks for, by name. They are
+                    encrypted, and only the plugin's own process sees them.
+                  example: {"prime_api_key": "pit_0123456789abcdef"}
+                widget_defaults:
+                  type: object
+                  additionalProperties:
+                    $ref: "#/components/schemas/ArmadaWidgetDefault"
+                  description: |
+                    The team's default for some of its widgets, by key. A widget
+                    not given takes its manifest's team default: shown in everyone's
+                    nav while the organization has fewer than six such widgets, and
+                    offered in the "+" menu after that.
+                  example: {"gpus": {"nav": "shown"}}
+              required:
+                - manifest
+            encoding:
+              manifest:
+                contentType: application/json
+              repository_id:
+                contentType: application/json
+              settings:
+                contentType: application/json
+              secrets:
+                contentType: application/json
+              widget_defaults:
+                contentType: application/json
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      plugin:
+                        $ref: "#/components/schemas/ArmadaPlugin"
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "plugin":
+                          {
+                            "id": 1,
+                            "plugin": "gpus",
+                            "name": "GPUs",
+                            "version": "0.1.0",
+                            "source_kind": "github",
+                            "source": "github.com/plugyawn/armada-gpus",
+                            "source_repository_id": null,
+                            "source_path": "",
+                            "sha": "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5",
+                            "manifest":
+                              {
+                                "id": "gpus",
+                                "name": "GPUs",
+                                "version": "0.1.0",
+                                "description": "Free GPUs, and the jobs on them.",
+                                "glyph": "gpu",
+                                "requires": {"armada": ">=1"},
+                                "run":
+                                  {"command": ["uv", "run", "armada-gpus"]},
+                                "provides": {},
+                              },
+                            "state": "starting",
+                            "detail": "",
+                            "bot_user_id": 31,
+                            "installed_by": 11,
+                            "made_by": null,
+                            "made_by_run_id": null,
+                            "made_in_stream_id": null,
+                            "made_in_topic": null,
+                            "made_in_message_id": null,
+                            "settings": {"manage_prefix": "nlscale-"},
+                            "secrets":
+                              [
+                                {
+                                  "name": "prime_api_key",
+                                  "title": "Prime Intellect API key",
+                                  "required": false,
+                                  "set": true,
+                                  "hint": "cdef",
+                                  "set_by": 11,
+                                  "date_set": 1760605200,
+                                },
+                              ],
+                            "links":
+                              [
+                                {
+                                  "id": 3,
+                                  "kind": "pool",
+                                  "value": "nlscale-a",
+                                  "stream_id": 7,
+                                  "topic": "lr-sweep",
+                                },
+                              ],
+                            "disabled": false,
+                            "widget_defaults":
+                              {"gpus": {"nav": "shown", "column": true}},
+                            "disabled_tools": [],
+                            "date_installed": 1760605200,
+                            "date_removed": null,
+                          },
+                      }
+        "400":
+          description: Bad request.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/CodedError"
+                  - example:
+                      {
+                        "code": "BAD_REQUEST",
+                        "msg": "GPUs is already installed.",
+                        "result": "error",
+                      }
+                    description: |
+                      A typical failed JSON response for when the plugin is
+                      installed already:
+  /armada/plugins/{install_id}:
+    patch:
+      operationId: update-armada-plugin
+      tags: ["armada"]
+      summary: Update a plugin
+      description: |
+        Change a plugin's settings, replace its secrets, turn it off or on, or
+        change where it shows and which of its tools the agent may use.
+
+        Settings are saved whole: a setting not given takes its default. A
+        change its process must see restarts it, and lifts a failure.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    The plugin's settings, whole.
+                  example: {"manage_prefix": "nlscale-"}
+                secrets:
+                  type: object
+                  additionalProperties:
+                    type: string
+                  description: |
+                    Secrets to set or replace, by name.
+                  example: {"prime_api_key": "pit_0123456789abcdef"}
+                disabled:
+                  type: boolean
+                  description: |
+                    Whether the plugin is turned off: its process stops, and
+                    its widgets and tools go.
+                  example: false
+                widget_defaults:
+                  type: object
+                  additionalProperties:
+                    $ref: "#/components/schemas/ArmadaWidgetDefault"
+                  description: |
+                    Changes to the team's defaults for its widgets, by key.
+                  example: {"gpus": {"nav": "offered"}}
+                disabled_tools:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    The names of its tools the agent may not use.
+                  example: ["pod_create"]
+            encoding:
+              settings:
+                contentType: application/json
+              secrets:
+                contentType: application/json
+              disabled:
+                contentType: application/json
+              widget_defaults:
+                contentType: application/json
+              disabled_tools:
+                contentType: application/json
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      plugin:
+                        $ref: "#/components/schemas/ArmadaPlugin"
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "plugin":
+                          {
+                            "id": 1,
+                            "plugin": "gpus",
+                            "name": "GPUs",
+                            "version": "0.1.0",
+                            "source_kind": "github",
+                            "source": "github.com/plugyawn/armada-gpus",
+                            "source_repository_id": null,
+                            "source_path": "",
+                            "sha": "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5",
+                            "manifest":
+                              {
+                                "id": "gpus",
+                                "name": "GPUs",
+                                "version": "0.1.0",
+                                "description": "Free GPUs, and the jobs on them.",
+                                "glyph": "gpu",
+                                "requires": {"armada": ">=1"},
+                                "run":
+                                  {"command": ["uv", "run", "armada-gpus"]},
+                                "provides": {},
+                              },
+                            "state": "starting",
+                            "detail": "",
+                            "bot_user_id": 31,
+                            "installed_by": 11,
+                            "made_by": null,
+                            "made_by_run_id": null,
+                            "made_in_stream_id": null,
+                            "made_in_topic": null,
+                            "made_in_message_id": null,
+                            "settings": {"manage_prefix": "nlscale-"},
+                            "secrets":
+                              [
+                                {
+                                  "name": "prime_api_key",
+                                  "title": "Prime Intellect API key",
+                                  "required": false,
+                                  "set": true,
+                                  "hint": "cdef",
+                                  "set_by": 11,
+                                  "date_set": 1760605200,
+                                },
+                              ],
+                            "links":
+                              [
+                                {
+                                  "id": 3,
+                                  "kind": "pool",
+                                  "value": "nlscale-a",
+                                  "stream_id": 7,
+                                  "topic": "lr-sweep",
+                                },
+                              ],
+                            "disabled": false,
+                            "widget_defaults":
+                              {"gpus": {"nav": "shown", "column": true}},
+                            "disabled_tools": [],
+                            "date_installed": 1760605200,
+                            "date_removed": null,
+                          },
+                      }
+    delete:
+      operationId: remove-armada-plugin
+      tags: ["armada"]
+      summary: Remove a plugin
+      description: |
+        Remove a plugin. Its widgets go, its bot is deactivated (its messages
+        stay), and its process stops. Its settings, secrets and links are kept
+        for a week, so that the removal can be undone; then they are deleted.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      responses:
+        "200":
+          $ref: "#/components/responses/SimpleSuccess"
+  /armada/plugins/{install_id}/restore:
+    post:
+      operationId: restore-armada-plugin
+      tags: ["armada"]
+      summary: Undo a plugin's removal
+      description: |
+        Undo the removal of a plugin, within a week of it: its bot, settings,
+        secrets and links come back, and the plugin host starts it again.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      plugin:
+                        $ref: "#/components/schemas/ArmadaPlugin"
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "plugin":
+                          {
+                            "id": 1,
+                            "plugin": "gpus",
+                            "name": "GPUs",
+                            "version": "0.1.0",
+                            "source_kind": "github",
+                            "source": "github.com/plugyawn/armada-gpus",
+                            "source_repository_id": null,
+                            "source_path": "",
+                            "sha": "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5",
+                            "manifest":
+                              {
+                                "id": "gpus",
+                                "name": "GPUs",
+                                "version": "0.1.0",
+                                "description": "Free GPUs, and the jobs on them.",
+                                "glyph": "gpu",
+                                "requires": {"armada": ">=1"},
+                                "run":
+                                  {"command": ["uv", "run", "armada-gpus"]},
+                                "provides": {},
+                              },
+                            "state": "starting",
+                            "detail": "",
+                            "bot_user_id": 31,
+                            "installed_by": 11,
+                            "made_by": null,
+                            "made_by_run_id": null,
+                            "made_in_stream_id": null,
+                            "made_in_topic": null,
+                            "made_in_message_id": null,
+                            "settings": {"manage_prefix": "nlscale-"},
+                            "secrets":
+                              [
+                                {
+                                  "name": "prime_api_key",
+                                  "title": "Prime Intellect API key",
+                                  "required": false,
+                                  "set": true,
+                                  "hint": "cdef",
+                                  "set_by": 11,
+                                  "date_set": 1760605200,
+                                },
+                              ],
+                            "links":
+                              [
+                                {
+                                  "id": 3,
+                                  "kind": "pool",
+                                  "value": "nlscale-a",
+                                  "stream_id": 7,
+                                  "topic": "lr-sweep",
+                                },
+                              ],
+                            "disabled": false,
+                            "widget_defaults":
+                              {"gpus": {"nav": "shown", "column": true}},
+                            "disabled_tools": [],
+                            "date_installed": 1760605200,
+                            "date_removed": null,
+                          },
+                      }
+  /armada/plugins/{install_id}/links:
+    post:
+      operationId: add-armada-plugin-link
+      tags: ["armada"]
+      summary: Link a plugin to a channel or a topic
+      description: |
+        Join a value the plugin understands, such as a project or a pool of
+        machines, to a channel or to one of its topics. The plugin's widgets
+        then show in that place's column, and its bot joins the channel.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                kind:
+                  type: string
+                  description: |
+                    The kind of link, as the plugin's manifest names it.
+                  example: project
+                value:
+                  type: string
+                  description: |
+                    The value to link, which must match the manifest's pattern
+                    for that kind.
+                  example: runix/nextlat-scaling
+                stream_id:
+                  type: integer
+                  description: |
+                    The ID of the channel.
+                  example: 7
+                topic:
+                  type: string
+                  description: |
+                    The topic, for a link to one topic; without it, the link is
+                    to the whole channel.
+                  example: lr-sweep
+              required:
+                - kind
+                - value
+                - stream_id
+            encoding:
+              stream_id:
+                contentType: application/json
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      id:
+                        type: integer
+                        description: |
+                          The ID of the link.
+                    example: {"result": "success", "msg": "", "id": 3}
+  /armada/plugins/{install_id}/links/{link_id}:
+    delete:
+      operationId: remove-armada-plugin-link
+      tags: ["armada"]
+      summary: Unlink a plugin
+      description: |
+        Remove a link. The plugin's bot leaves the channel when nothing of the
+        plugin is linked there any more.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+        - name: link_id
+          in: path
+          description: |
+            The ID of the link.
+          schema:
+            type: integer
+          example: 3
+          required: true
+      responses:
+        "200":
+          $ref: "#/components/responses/SimpleSuccess"
+
 components:
   #######################
   # Security definitions
@@ -27486,6 +28095,297 @@ components:
         `/fetch_api_key` or `/dev_fetch_api_key` endpoints.
 
   schemas:
+    ArmadaWidgetDefault:
+      type: object
+      description: |
+        A change to the team's default for one widget.
+      additionalProperties: false
+      properties:
+        nav:
+          type: string
+          enum:
+            - shown
+            - offered
+            - "off"
+          description: |
+            Shown in everyone's nav, offered in its "+" menu, or not in the nav.
+        column:
+          type: boolean
+          description: |
+            Whether its list shows in the column of linked places.
+    ArmadaPlugin:
+      type: object
+      description: |
+        A plugin installed in the organization, as a member sees it. Its
+        secrets are never included.
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          description: |
+            The ID of the install.
+        plugin:
+          type: string
+          description: |
+            The plugin's ID, from its manifest.
+        name:
+          type: string
+          description: |
+            The plugin's name, which its bot is named after.
+        version:
+          type: string
+          description: |
+            The plugin's version at the pinned commit.
+        source_kind:
+          type: string
+          enum:
+            - github
+            - local
+            - remote
+          description: |
+            Where its code comes from: a repository on GitHub, a repository
+            on this server (the team's plugins repository), or nowhere here,
+            for a plugin its author runs as a service.
+        source:
+          type: string
+          description: |
+            For `github`, its repository, as `github.com/<owner>/<repository>`;
+            for `remote`, its service's address; otherwise empty.
+        source_repository_id:
+          type: integer
+          nullable: true
+          description: |
+            For `local`, the ID of this server's repository it comes from.
+        source_path:
+          type: string
+          description: |
+            Its directory in its repository, such as `plugins/eval-queue`, or
+            empty for the repository's root.
+        sha:
+          type: string
+          description: |
+            The commit it is pinned at; empty for `remote`.
+        manifest:
+          type: object
+          additionalProperties: {}
+          description: |
+            The plugin's manifest at that commit.
+        state:
+          type: string
+          enum:
+            - waiting
+            - starting
+            - running
+            - failed
+            - removed
+            - draft
+          description: |
+            Waiting while a required setting or secret is missing; starting
+            until its process answers; running; failed after five failures in
+            a row; removed for a week, while the removal can be undone; a
+            draft while the agent makes it, seen only by the person it is
+            made for.
+        detail:
+          type: string
+          description: |
+            While waiting, the required settings and secrets that are missing;
+            when failed, the last lines its process wrote.
+        bot_user_id:
+          type: integer
+          description: |
+            The ID of the plugin's own bot.
+        installed_by:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the user it was installed for, by hand or by the agent.
+        made_by:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the user who asked the agent to make it, or `null` for a
+            plugin from the store.
+        made_by_run_id:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the agent run that made it.
+        made_in_stream_id:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the channel where it was asked for.
+        made_in_topic:
+          type: string
+          nullable: true
+          description: |
+            The topic where it was asked for.
+        made_in_message_id:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the message that asked for it.
+        settings:
+          type: object
+          additionalProperties: {}
+          description: |
+            Its settings, whole, as its manifest's form describes them.
+        secrets:
+          type: array
+          description: |
+            The secrets its manifest asks for, and whether each is set.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+                description: |
+                  The secret's name in the manifest.
+              title:
+                type: string
+                description: |
+                  What the manifest calls it.
+              required:
+                type: boolean
+                description: |
+                  Whether the plugin waits until it is set.
+              set:
+                type: boolean
+                description: |
+                  Whether it is set.
+              hint:
+                type: string
+                description: |
+                  The last four characters of a secret of 16 characters or
+                  more; otherwise empty.
+              set_by:
+                type: integer
+                nullable: true
+                description: |
+                  The ID of the user who set it.
+              date_set:
+                type: integer
+                nullable: true
+                description: |
+                  When it was set, as a UNIX timestamp in UTC seconds.
+            required:
+              - name
+              - title
+              - required
+              - set
+              - hint
+              - set_by
+              - date_set
+        links:
+          type: array
+          description: |
+            Where it is linked.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: integer
+                description: |
+                  The ID of the link.
+              kind:
+                type: string
+                description: |
+                  The kind of link, as the manifest names it.
+              value:
+                type: string
+                description: |
+                  The value linked, such as a project.
+              stream_id:
+                type: integer
+                description: |
+                  The ID of the channel.
+              topic:
+                type: string
+                nullable: true
+                description: |
+                  The topic, or `null` for the whole channel.
+            required:
+              - id
+              - kind
+              - value
+              - stream_id
+              - topic
+        disabled:
+          type: boolean
+          description: |
+            Whether it is turned off.
+        widget_defaults:
+          type: object
+          description: |
+            The team's default for each of its widgets, by the widget's key.
+            A person may still show, hide or move a widget for themselves.
+          additionalProperties:
+            type: object
+            description: |
+              One widget's default.
+            additionalProperties: false
+            properties:
+              nav:
+                type: string
+                enum:
+                  - shown
+                  - offered
+                  - "off"
+                description: |
+                  Shown in everyone's nav, offered in its "+" menu, or not in
+                  the nav.
+              column:
+                type: boolean
+                description: |
+                  Whether its list shows in the column of linked places.
+            required:
+              - nav
+              - column
+        disabled_tools:
+          type: array
+          items:
+            type: string
+          description: |
+            Its tools the agent may not use.
+        date_installed:
+          type: integer
+          description: |
+            When it was installed, as a UNIX timestamp in UTC seconds.
+        date_removed:
+          type: integer
+          nullable: true
+          description: |
+            When it was removed, or `null`.
+      required:
+        - id
+        - plugin
+        - name
+        - version
+        - source_kind
+        - source
+        - source_repository_id
+        - source_path
+        - sha
+        - manifest
+        - state
+        - detail
+        - bot_user_id
+        - installed_by
+        - made_by
+        - made_by_run_id
+        - made_in_stream_id
+        - made_in_topic
+        - made_in_message_id
+        - settings
+        - secrets
+        - links
+        - disabled
+        - widget_defaults
+        - disabled_tools
+        - date_installed
+        - date_removed
     IgnoredParametersUnsupported:
       type: array
       items:
@@ -31538,6 +32438,15 @@ components:
   # Shared parameters
   ####################
   parameters:
+    ArmadaPluginInstallId:
+      name: install_id
+      in: path
+      description: |
+        The ID of the plugin's install.
+      schema:
+        type: integer
+      example: 1
+      required: true
     UserGroupId:
       name: user_group_id
       in: path

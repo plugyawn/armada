@@ -189,6 +189,10 @@ ALL_ZULIP_TABLES = {
     "zerver_onboardingusermessage",
     "zerver_page",
     "zerver_partner",
+    "zerver_plugininstall",
+    "zerver_pluginlink",
+    "zerver_pluginsecret",
+    "zerver_pluginwidgetstate",
     "zerver_post",
     "zerver_post_attachments",
     "zerver_preregistrationrealm",
@@ -316,6 +320,13 @@ NON_EXPORTED_TABLES = {
     # ChannelEmailAddress entries are low value to export since
     # channel email addresses include the server's hostname.
     "zerver_channelemailaddress",
+    # Plugins: an install's secrets are encrypted with this server's key,
+    # and its process runs from this server's disk, so a plugin is
+    # installed afresh on the new server.
+    "zerver_plugininstall",
+    "zerver_pluginlink",
+    "zerver_pluginsecret",
+    "zerver_pluginwidgetstate",
     # For any tables listed below here, it's a bug that they are not present in the export.
     #
     # The agent's tables: its repositories and their worktrees, which

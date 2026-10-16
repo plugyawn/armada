@@ -608,6 +608,10 @@ INTERNAL_BOT_DOMAIN = "zulip.com"
 # This needs to be synced with the Camo installation
 CAMO_KEY = get_secret("camo_key") if CAMO_URI != "" else None
 
+# Encrypts plugins' secrets and derives their tokens (zerver/lib/armada_plugins.py).
+# Several keys, separated by spaces, rotate it: the first encrypts, and any decrypts.
+ARMADA_PLUGIN_SECRETS_KEY = get_secret("armada_plugin_secrets_key")
+
 ########################################################################
 # STATIC CONTENT AND MINIFICATION SETTINGS
 ########################################################################

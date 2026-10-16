@@ -136,6 +136,19 @@ class AuditLogEventType(IntEnum):
 
     INVITATION_REVOKED = 1001
 
+    # Armada's plugins (zerver/lib/armada_plugins.py): what each install
+    # did, for its Recent list. modified_user is the install's bot.
+    PLUGIN_INSTALLED = 1101
+    PLUGIN_SETTINGS_CHANGED = 1102
+    PLUGIN_LINKED = 1103
+    PLUGIN_UNLINKED = 1104
+    PLUGIN_REMOVED = 1105
+    PLUGIN_RESTORED = 1106
+    # Made by the agent for someone, or moved to another commit; extra_data
+    # has from_sha, to_sha, from_version, to_version, run_id, for_user_id.
+    PLUGIN_MADE = 1107
+    PLUGIN_UPDATED = 1108
+
     # The following values are only for remote server/realm logs.
     # Values should be exactly 10000 greater than the corresponding
     # value used for the same purpose in realm audit logs (e.g.,

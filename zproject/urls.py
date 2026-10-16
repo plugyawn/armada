@@ -58,6 +58,15 @@ from zerver.views.armada_pages import (
     patch_armada_post,
     post_armada_post,
 )
+from zerver.views.armada_plugins import (
+    delete_armada_plugin,
+    delete_armada_plugin_link,
+    get_armada_plugins,
+    patch_armada_plugin,
+    post_armada_plugin,
+    post_armada_plugin_link,
+    post_armada_plugin_restore,
+)
 from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
 from zerver.views.armada_workspace import (
     delete_armada_workspace_entry_backend,
@@ -456,6 +465,18 @@ v1_api_and_json_patterns = [
         GET=(get_armada_post, {"intentionally_undocumented"}),
         PATCH=(patch_armada_post, {"intentionally_undocumented"}),
         DELETE=(delete_armada_post, {"intentionally_undocumented"}),
+    ),
+    # Plugins (zerver/lib/armada_plugins.py).
+    rest_path("armada/plugins", GET=get_armada_plugins, POST=post_armada_plugin),
+    rest_path(
+        "armada/plugins/<int:install_id>",
+        PATCH=patch_armada_plugin,
+        DELETE=delete_armada_plugin,
+    ),
+    rest_path("armada/plugins/<int:install_id>/restore", POST=post_armada_plugin_restore),
+    rest_path("armada/plugins/<int:install_id>/links", POST=post_armada_plugin_link),
+    rest_path(
+        "armada/plugins/<int:install_id>/links/<int:link_id>", DELETE=delete_armada_plugin_link
     ),
     # INTERIM BETA: partners (zerver/lib/partner.py).
     rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),

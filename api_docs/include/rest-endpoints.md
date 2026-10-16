@@ -174,6 +174,16 @@
 * [Update a bot's stored data](/api/update-bot-storage)
 * [Remove a bot's stored data](/api/remove-bot-storage)
 
+## Armada plugins
+
+* [Get the organization's plugins](/api/get-armada-plugins)
+* [Install a plugin](/api/install-armada-plugin)
+* [Update a plugin](/api/update-armada-plugin)
+* [Remove a plugin](/api/remove-armada-plugin)
+* [Undo a plugin's removal](/api/restore-armada-plugin)
+* [Link a plugin to a channel or a topic](/api/add-armada-plugin-link)
+* [Unlink a plugin](/api/remove-armada-plugin-link)
+
 ## Specialty endpoints
 
 * [Fetch an API key (production)](/api/fetch-api-key)

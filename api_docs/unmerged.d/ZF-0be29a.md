@@ -21,3 +21,13 @@
   [`DELETE /armada/plugins/{install_id}/links/{link_id}`](/api/remove-armada-plugin-link):
   New endpoints to link a plugin to a channel or to a topic, and to
   unlink it.
+* [`POST /armada/widgets`](/api/push-armada-widget): New endpoint with
+  which a plugin's own bot pushes a document, or data, for one of its
+  widgets.
+* [`POST /armada/plugins/{install_id}/actions`](/api/run-armada-plugin-action):
+  New endpoint to run a widget's action that calls one of the plugin's
+  tools, for the user who pressed it.
+* [`POST /register`](/api/register-queue), [`GET /events`](/api/get-events):
+  New `armada_plugins` and `armada_widgets` in the register response, and
+  new `armada_plugin` and `armada_widget` events, for the organization's
+  plugins and the widget documents the user may see.

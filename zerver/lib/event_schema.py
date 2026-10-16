@@ -18,10 +18,14 @@ from zerver.lib.event_types import (
     AllowMessageEditingData,
     ArmadaPartnerEvent,
     ArmadaPartnerMeEvent,
+    ArmadaPluginAddOrUpdateEvent,
+    ArmadaPluginRemoveEvent,
     ArmadaPostEvent,
     ArmadaReadReceiptsEvent,
     ArmadaRunEvent,
     ArmadaStreamEvent,
+    ArmadaWidgetRemoveEvent,
+    ArmadaWidgetUpdateEvent,
     ArmadaWorkspaceChangedEvent,
     AttachmentAddEvent,
     AttachmentRemoveEvent,
@@ -255,9 +259,13 @@ check_web_reload_client_event = make_checker(WebReloadClientEvent)
 check_armada_read_receipts_event = make_checker(ArmadaReadReceiptsEvent)
 check_armada_partner_event = make_checker(ArmadaPartnerEvent)
 check_armada_partner_me_event = make_checker(ArmadaPartnerMeEvent)
+check_armada_plugin_add_or_update_event = make_checker(ArmadaPluginAddOrUpdateEvent)
+check_armada_plugin_remove_event = make_checker(ArmadaPluginRemoveEvent)
 check_armada_post_event = make_checker(ArmadaPostEvent)
 check_armada_run_event = make_checker(ArmadaRunEvent)
 check_armada_stream_event = make_checker(ArmadaStreamEvent)
+check_armada_widget_remove_event = make_checker(ArmadaWidgetRemoveEvent)
+check_armada_widget_update_event = make_checker(ArmadaWidgetUpdateEvent)
 check_armada_workspace_changed_event = make_checker(ArmadaWorkspaceChangedEvent)
 
 

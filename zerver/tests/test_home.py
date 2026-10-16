@@ -140,6 +140,8 @@ class HomeTest(ZulipTestCase):
         "realm_bots",
         "agent_user_ids",
         "repository_stream_ids",
+        "armada_plugins",
+        "armada_widgets",
         "realm_can_access_all_users_group",
         "realm_can_add_custom_emoji_group",
         "realm_can_add_subscribers_group",
@@ -309,7 +311,8 @@ class HomeTest(ZulipTestCase):
 
         # Verify succeeds once logged-in
         with (
-            self.assert_database_query_count(58),
+            # One for the plugins' snapshot (zerver/lib/armada_plugin_events.py).
+            self.assert_database_query_count(59),
             patch("zerver.lib.cache.cache_set") as cache_mock,
         ):
             result = self._get_home_page(stream="Denmark")
@@ -660,7 +663,8 @@ class HomeTest(ZulipTestCase):
         # Verify number of queries for Realm admin isn't much higher than for normal users.
         self.login("iago")
         with (
-            self.assert_database_query_count(60),
+            # One for the plugins' snapshot (zerver/lib/armada_plugin_events.py).
+            self.assert_database_query_count(61),
             patch("zerver.lib.cache.cache_set") as cache_mock,
         ):
             result = self._get_home_page()
@@ -692,7 +696,8 @@ class HomeTest(ZulipTestCase):
         self._get_home_page()
 
         # Then for the second page load, measure the number of queries.
-        with self.assert_database_query_count(55):
+        # One for the plugins' snapshot (zerver/lib/armada_plugin_events.py).
+        with self.assert_database_query_count(56):
             result = self._get_home_page()
 
         # Do a sanity check that our new streams were in the payload.

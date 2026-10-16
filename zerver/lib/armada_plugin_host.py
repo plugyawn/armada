@@ -26,7 +26,9 @@ For each install that should run, the host:
 A remote plugin runs elsewhere; the host asks its /health the same way.
 What a process writes (its last lines, kept on the install, and its log
 beside its checkout) has its secrets, its bot's key and its token blanked.
-The host also purges removed installs after a week, and their checkouts.
+The host also purges removed installs after a week, and their checkouts,
+and on each pass sends the widget documents that waited out their two
+seconds and marks the widgets that went quiet as stale.
 """
 
 import contextlib
@@ -69,6 +71,7 @@ from zerver.lib.armada_plugins import (
     purge_removed_plugins,
     set_plugin_state,
 )
+from zerver.lib.armada_widgets import flush_widget_events, mark_stale_widgets
 from zerver.models import PluginInstall
 
 logger = logging.getLogger(__name__)
@@ -339,6 +342,10 @@ class ArmadaPluginHost:
                     self._reconcile(install)
                 except Exception:
                     logger.exception("The plugin host could not run install %s", install.id)
+        # The widget documents that waited out their two seconds, and the
+        # widgets that went quiet, reach their clients from here.
+        flush_widget_events(timezone_now())
+        mark_stale_widgets(timezone_now())
         now = self.clock()
         if now >= self.next_purge:
             self.next_purge = now + ARMADA_PLUGIN_PURGE_SECONDS

@@ -6381,6 +6381,240 @@ paths:
                             - type: object
                               additionalProperties: false
                               description: |
+                                Event sent when a plugin is installed, changes, or comes back
+                                from a removal: to everyone in the organization, or, for a
+                                draft, to the user it is made for. Each user gets the links
+                                whose channel they can read.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_plugin
+                                op:
+                                  type: string
+                                  enum:
+                                    - add
+                                    - update
+                                plugin:
+                                  $ref: "#/components/schemas/ArmadaPluginView"
+                              example:
+                                {
+                                  "type": "armada_plugin",
+                                  "op": "update",
+                                  "plugin":
+                                    {
+                                      "id": 1,
+                                      "plugin": "gpus",
+                                      "name": "GPUs",
+                                      "glyph": "gpu",
+                                      "version": "0.1.0",
+                                      "state": "running",
+                                      "disabled": false,
+                                      "bot_user_id": 31,
+                                      "widgets":
+                                        [
+                                          {
+                                            "key": "gpus",
+                                            "label": "GPUs",
+                                            "in": ["nav"],
+                                          },
+                                        ],
+                                      "widget_defaults":
+                                        {
+                                          "gpus":
+                                            {"nav": "shown", "column": false},
+                                        },
+                                      "links": [],
+                                      "made_by": null,
+                                      "made_in_stream_id": null,
+                                      "made_in_topic": null,
+                                      "made_in_message_id": null,
+                                    },
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
+                                Event sent when a plugin is removed; its widgets go with it.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_plugin
+                                op:
+                                  type: string
+                                  enum:
+                                    - remove
+                                install_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the install removed.
+                              example:
+                                {
+                                  "type": "armada_plugin",
+                                  "op": "remove",
+                                  "install_id": 1,
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
+                                Event sent when a plugin pushes a new document for one of its
+                                widgets, or when the widget turns stale: to everyone for the
+                                nav, and to the channel's subscribers for a linked place. At
+                                most one is sent every two seconds for a widget and scope,
+                                with the newest document.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_widget
+                                op:
+                                  type: string
+                                  enum:
+                                    - update
+                                install_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the plugin's install.
+                                widget:
+                                  type: string
+                                  description: |
+                                    The widget's key in the plugin's manifest.
+                                link_id:
+                                  type: integer
+                                  nullable: true
+                                  description: |
+                                    The link whose place it shows in, or `null` for the nav.
+                                item:
+                                  type: string
+                                  description: |
+                                    The key of the row it was opened from, or empty.
+                                stream_id:
+                                  type: integer
+                                  nullable: true
+                                  description: |
+                                    The linked place's channel, or `null`.
+                                topic:
+                                  type: string
+                                  nullable: true
+                                  description: |
+                                    The linked place's topic, or `null`.
+                                document:
+                                  type: object
+                                  additionalProperties: {}
+                                  description: |
+                                    The widget document.
+                                version:
+                                  type: integer
+                                  description: |
+                                    How many times the document has changed.
+                                fed_at:
+                                  type: integer
+                                  description: |
+                                    When the plugin last pushed it, as a UNIX timestamp.
+                                stale:
+                                  type: boolean
+                                  description: |
+                                    Whether it has not been pushed for three times its
+                                    cadence.
+                              example:
+                                {
+                                  "type": "armada_widget",
+                                  "op": "update",
+                                  "install_id": 1,
+                                  "widget": "gpus",
+                                  "link_id": null,
+                                  "item": "",
+                                  "stream_id": null,
+                                  "topic": null,
+                                  "document":
+                                    {
+                                      "version": 1,
+                                      "data": {"free": "4 free"},
+                                      "rest":
+                                        {
+                                          "figure": "data.free",
+                                          "sizer": "88 free",
+                                        },
+                                      "blocks":
+                                        [
+                                          {
+                                            "type": "list",
+                                            "label": "Machines",
+                                            "items": [],
+                                          },
+                                        ],
+                                    },
+                                  "version": 3,
+                                  "fed_at": 1760605200,
+                                  "stale": false,
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
+                                Event sent when a widget's document is taken away, because its
+                                link or the widget itself went.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_widget
+                                op:
+                                  type: string
+                                  enum:
+                                    - remove
+                                install_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the plugin's install.
+                                widget:
+                                  type: string
+                                  description: |
+                                    The widget's key.
+                                link_id:
+                                  type: integer
+                                  nullable: true
+                                  description: |
+                                    The link of its place, or `null` for the nav.
+                                item:
+                                  type: string
+                                  description: |
+                                    The key of the row it was opened from, or empty.
+                              example:
+                                {
+                                  "type": "armada_widget",
+                                  "op": "remove",
+                                  "install_id": 1,
+                                  "widget": "gpus",
+                                  "link_id": 3,
+                                  "item": "",
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
                                 Event containing details of a newly created saved snippet.
 
                                 **Changes**: New in Zulip 10.0 (feature level 297).
@@ -19249,6 +19483,28 @@ paths:
                           navigation views.
 
                           **Changes**: New in Zulip 11.0 (feature level 390).
+                      armada_plugins:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ArmadaPluginView"
+                        description: |
+                          Present if `armada_plugin` is present in `fetch_event_types`.
+
+                          The organization's plugins, and the user's own drafts, as
+                          their widgets need them.
+
+                          **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                      armada_widgets:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ArmadaWidget"
+                        description: |
+                          Present if `armada_widget` is present in `fetch_event_types`.
+
+                          The widget documents of the nav, and of the places the user
+                          is subscribed to.
+
+                          **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
                       saved_snippets:
                         type: array
                         items:
@@ -28179,6 +28435,187 @@ paths:
         "200":
           $ref: "#/components/responses/SimpleSuccess"
 
+  /armada/plugins/{install_id}/actions:
+    post:
+      operationId: run-armada-plugin-action
+      tags: ["armada"]
+      summary: Run a widget's action
+      description: |
+        Run an action of one of a plugin's widgets that calls one of the
+        plugin's tools: Armada calls the tool on the plugin's MCP endpoint
+        for the user, who is named in the call's `_meta` as `armada/user`.
+        An action that cannot be undone declares `confirm`, and runs only
+        with `confirmed`. An action that asks the agent, or opens a page, is
+        the client's to do.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                widget:
+                  type: string
+                  description: |
+                    The widget's key.
+                  example: gpus
+                link_id:
+                  type: integer
+                  description: |
+                    The link of the widget's place, for a widget in a linked place.
+                  example: 3
+                item:
+                  type: string
+                  default: ""
+                  description: |
+                    The row key a widget was opened from, if it was.
+                  example: ""
+                row:
+                  type: string
+                  description: |
+                    The key of the row whose action this is.
+                  example: nlscale-c
+                index:
+                  type: integer
+                  description: |
+                    For one of the document's own actions, its index.
+                  example: 0
+                confirmed:
+                  type: boolean
+                  default: false
+                  description: |
+                    Whether the user confirmed an action that declares `confirm`.
+                  example: true
+              required:
+                - widget
+            encoding:
+              link_id:
+                contentType: application/json
+              index:
+                contentType: application/json
+              confirmed:
+                contentType: application/json
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      text:
+                        type: string
+                        description: |
+                          What the tool said, as text.
+                      is_error:
+                        type: boolean
+                        description: |
+                          Whether the tool reported a failure.
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "text": "Ended.",
+                        "is_error": false,
+                      }
+  /armada/widgets:
+    post:
+      operationId: push-armada-widget
+      tags: ["armada"]
+      summary: Push a plugin's widget
+      description: |
+        A plugin's bot pushes a document for one of its widgets, or data for
+        the document it pushed before, which lands in that document's `data`.
+        Armada checks it against its plugin contract and manifest, keeps the
+        latest for each widget and scope, and sends an `armada_widget` event
+        to the users who can see that scope, at most once every two seconds.
+
+        Only a plugin's own bot can use this endpoint, for its own widgets and
+        links.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                widget:
+                  type: string
+                  description: |
+                    The widget's key in the plugin's manifest.
+                  example: gpus
+                link_id:
+                  type: integer
+                  description: |
+                    For a widget in a linked place, the link's ID; without it, the
+                    widget is the nav's.
+                  example: 3
+                item:
+                  type: string
+                  default: ""
+                  description: |
+                    For a widget opened from a row, the row's key.
+                  example: ""
+                document:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    The widget document.
+                  example:
+                    {
+                      "version": 1,
+                      "data": {"free": "4 free"},
+                      "rest": {"figure": "data.free", "sizer": "88 free"},
+                      "blocks":
+                        [{"type": "list", "label": "Machines", "items": []}],
+                    }
+                data:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    Data for the document the widget has.
+                  example: {"free": "2 free"}
+              required:
+                - widget
+            encoding:
+              link_id:
+                contentType: application/json
+              document:
+                contentType: application/json
+              data:
+                contentType: application/json
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      version:
+                        type: integer
+                        description: |
+                          How many times the document has changed.
+                    example: {"result": "success", "msg": "", "version": 3}
+
 components:
   #######################
   # Security definitions
@@ -28193,6 +28630,222 @@ components:
         `/fetch_api_key` or `/dev_fetch_api_key` endpoints.
 
   schemas:
+    ArmadaPluginView:
+      type: object
+      description: |
+        A plugin as its widgets need it, for everyone in the organization who
+        sees it; a draft only for the person it is made for. It carries no
+        setting, secret or output of its process. Its links are those whose
+        channel the user can read.
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          description: |
+            The ID of the install.
+        plugin:
+          type: string
+          description: |
+            The plugin's ID, from its manifest.
+        name:
+          type: string
+          description: |
+            The plugin's name.
+        glyph:
+          type: string
+          description: |
+            The name of the glyph in Armada's sprite that is the plugin's face.
+        version:
+          type: string
+          description: |
+            The plugin's version.
+        state:
+          type: string
+          enum:
+            - waiting
+            - starting
+            - running
+            - failed
+            - draft
+          description: |
+            What the plugin's process is doing, as for a plugin's `state`.
+        disabled:
+          type: boolean
+          description: |
+            Whether it is turned off.
+        bot_user_id:
+          type: integer
+          description: |
+            The ID of the plugin's own bot.
+        widgets:
+          type: array
+          description: |
+            The widgets its manifest declares, each with its key, label,
+            places, rows in the column, cadence, team default and options.
+          items:
+            type: object
+            additionalProperties: {}
+        widget_defaults:
+          type: object
+          description: |
+            The team's default for each of its widgets, by key.
+          additionalProperties:
+            type: object
+            description: |
+              One widget's default.
+            additionalProperties: false
+            properties:
+              nav:
+                type: string
+                enum:
+                  - shown
+                  - offered
+                  - "off"
+                description: |
+                  Shown in everyone's nav, offered in its "+" menu, or not in the
+                  nav.
+              column:
+                type: boolean
+                description: |
+                  Whether its list shows in the column of linked places.
+            required:
+              - nav
+              - column
+        links:
+          type: array
+          description: |
+            Where it is linked, among the channels the user can read.
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              id:
+                type: integer
+                description: |
+                  The ID of the link.
+              kind:
+                type: string
+                description: |
+                  The kind of link, as the manifest names it.
+              value:
+                type: string
+                description: |
+                  The value linked, such as a project.
+              stream_id:
+                type: integer
+                description: |
+                  The ID of the channel.
+              topic:
+                type: string
+                nullable: true
+                description: |
+                  The topic, or `null` for the whole channel.
+            required:
+              - id
+              - kind
+              - value
+              - stream_id
+              - topic
+        made_by:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the user who asked the agent to make it.
+        made_in_stream_id:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the channel where it was asked for.
+        made_in_topic:
+          type: string
+          nullable: true
+          description: |
+            The topic where it was asked for.
+        made_in_message_id:
+          type: integer
+          nullable: true
+          description: |
+            The ID of the message that asked for it.
+      required:
+        - id
+        - plugin
+        - name
+        - glyph
+        - version
+        - state
+        - disabled
+        - bot_user_id
+        - widgets
+        - widget_defaults
+        - links
+        - made_by
+        - made_in_stream_id
+        - made_in_topic
+        - made_in_message_id
+    ArmadaWidget:
+      type: object
+      description: |
+        The latest document a plugin pushed for one of its widgets, in one
+        scope: the nav, a linked place, or a row's item.
+      additionalProperties: false
+      properties:
+        install_id:
+          type: integer
+          description: |
+            The ID of the plugin's install.
+        widget:
+          type: string
+          description: |
+            The widget's key in the plugin's manifest.
+        link_id:
+          type: integer
+          nullable: true
+          description: |
+            The link whose place it shows in, or `null` for the nav.
+        item:
+          type: string
+          description: |
+            The key of the row it was opened from, or empty.
+        stream_id:
+          type: integer
+          nullable: true
+          description: |
+            The linked place's channel, or `null`.
+        topic:
+          type: string
+          nullable: true
+          description: |
+            The linked place's topic, or `null`.
+        document:
+          type: object
+          additionalProperties: {}
+          description: |
+            The widget document, as Armada's plugin contract describes it: data
+            for Armada to draw, never HTML, CSS, a colour or a script.
+        version:
+          type: integer
+          description: |
+            How many times the document has changed.
+        fed_at:
+          type: integer
+          description: |
+            When the plugin last pushed it, as a UNIX timestamp in UTC seconds.
+        stale:
+          type: boolean
+          description: |
+            Whether the plugin has not pushed it for three times its cadence;
+            its figure may be old.
+      required:
+        - install_id
+        - widget
+        - link_id
+        - item
+        - stream_id
+        - topic
+        - document
+        - version
+        - fed_at
+        - stale
     ArmadaWidgetDefault:
       type: object
       description: |

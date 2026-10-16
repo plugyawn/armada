@@ -11,4 +11,8 @@ kept zproject/sentry.py  # Sentry events drop the secrets form field
 # ZF-0be29a), zproject/urls.py (beta.txt), zproject/default_settings.py
 # (F3.txt), zproject/computed_settings.py and zproject/dev_settings.py
 # (deploy.txt; ARMADA_PLUGIN_*), zerver/lib/export.py (export.txt; the plugin
-# tables are not exported), tools/run-dev (R1.txt; it runs the plugin host).
+# tables are not exported), tools/run-dev (R1.txt; it runs the plugin host),
+# zerver/lib/event_types.py, event_schema.py and events.py (R1.txt; the
+# armada_plugin and armada_widget events and their /register snapshot), and
+# their tests zerver/tests/test_home.py and test_event_system.py (R1.txt; the
+# snapshot's keys and its one query).

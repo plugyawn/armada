@@ -43,6 +43,7 @@ import requests
 from cryptography.fernet import Fernet, MultiFernet
 from django.conf import settings
 from django.db import transaction
+from django.db.models import QuerySet
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
@@ -50,6 +51,7 @@ from zerver.actions.create_user import do_create_user, do_reactivate_user
 from zerver.actions.streams import bulk_add_subscriptions, bulk_remove_subscriptions
 from zerver.actions.user_settings import do_change_full_name, do_regenerate_api_key
 from zerver.actions.users import do_deactivate_user
+from zerver.lib.armada_plugin_events import send_armada_plugin_event, send_armada_widget_event
 from zerver.lib.armada_plugin_validation import (
     MARKUP,
     ArmadaPluginContractError,
@@ -320,7 +322,7 @@ def _settle_state(install: PluginInstall, missing_settings: list[str]) -> None:
         install.failures = 0
 
 
-def _audit(
+def audit_plugin(
     install: PluginInstall,
     acting_user: UserProfile,
     event_type: AuditLogEventType,
@@ -328,6 +330,7 @@ def _audit(
     *,
     stream_id: int | None = None,
 ) -> None:
+    """A line in the install's Recent list: who did what to it."""
     if install.state == PluginInstall.DRAFT:
         # Recent is the team's; a draft is its maker's until it is installed.
         return
@@ -547,6 +550,7 @@ def install_plugin(
         install.save(update_fields=["state", "state_detail"])
         if not draft:
             _audit_install(install, user, origin, secrets)
+        send_armada_plugin_event(install, "add")
     return install
 
 
@@ -607,6 +611,7 @@ def _install_draft(
             do_change_full_name(install.bot, manifest["name"], user, notify=True)
         if not draft:
             _audit_install(install, user, origin, secrets)
+        send_armada_plugin_event(install, "update" if draft else "add")
     return install
 
 
@@ -619,7 +624,7 @@ def _audit_install(
     """Recent's first line: installed from the store, or made by the agent
     for someone."""
     if origin is None:
-        _audit(
+        audit_plugin(
             install,
             user,
             AuditLogEventType.PLUGIN_INSTALLED,
@@ -634,7 +639,7 @@ def _audit_install(
             },
         )
         return
-    _audit(
+    audit_plugin(
         install,
         user,
         AuditLogEventType.PLUGIN_MADE,
@@ -710,29 +715,32 @@ def update_plugin(
             _settle_state(install, missing_settings)
         install.date_updated = timezone_now()
         install.save()
-        _audit(install, user, AuditLogEventType.PLUGIN_SETTINGS_CHANGED, changes)
+        audit_plugin(install, user, AuditLogEventType.PLUGIN_SETTINGS_CHANGED, changes)
+        send_armada_plugin_event(install, "update")
 
 
 def remove_plugin(user: UserProfile, install: PluginInstall) -> None:
-    """Take back what the install shows: its widgets go, its bot is
-    deactivated (its messages stay), and the host stops its process. Its
-    settings, secrets and links are kept a week, for Undo. A draft, which
-    no one else saw, is simply discarded."""
+    """Take back what the install shows: its widgets go from every nav and
+    column, by event, its bot is deactivated (its messages stay), and the
+    host stops its process. Its settings, secrets and links are kept a week,
+    for Undo. A draft, which no one else saw, is simply discarded."""
     _check_not_removed(install)
     if install.state == PluginInstall.DRAFT:
         with transaction.atomic(durable=True):
+            send_armada_plugin_event(install, "remove")
             install.delete()
             do_deactivate_user(install.bot, acting_user=user)
         return
     with transaction.atomic(durable=True):
-        PluginWidgetState.objects.filter(install=install).delete()
+        _remove_widget_states(install, PluginWidgetState.objects.filter(install=install))
         install.state = PluginInstall.REMOVED
         install.state_detail = ""
         install.generation += 1
         install.date_removed = install.date_updated = timezone_now()
         install.save()
         do_deactivate_user(install.bot, acting_user=user)
-        _audit(install, user, AuditLogEventType.PLUGIN_REMOVED, {"version": install.version})
+        audit_plugin(install, user, AuditLogEventType.PLUGIN_REMOVED, {"version": install.version})
+        send_armada_plugin_event(install, "remove")
 
 
 def restore_plugin(user: UserProfile, install: PluginInstall) -> None:
@@ -756,7 +764,8 @@ def restore_plugin(user: UserProfile, install: PluginInstall) -> None:
         install.date_updated = timezone_now()
         _settle_state(install, _check_settings(install.manifest, install.settings)[1])
         install.save()
-        _audit(install, user, AuditLogEventType.PLUGIN_RESTORED, {"version": install.version})
+        audit_plugin(install, user, AuditLogEventType.PLUGIN_RESTORED, {"version": install.version})
+        send_armada_plugin_event(install, "add")
 
 
 def retry_plugin(user: UserProfile, install: PluginInstall) -> None:
@@ -769,7 +778,11 @@ def retry_plugin(user: UserProfile, install: PluginInstall) -> None:
     install.failures = 0
     install.generation += 1
     install.date_updated = timezone_now()
-    install.save(update_fields=["state", "state_detail", "failures", "generation", "date_updated"])
+    with transaction.atomic(durable=True):
+        install.save(
+            update_fields=["state", "state_detail", "failures", "generation", "date_updated"]
+        )
+        send_armada_plugin_event(install, "update")
 
 
 def set_plugin_state(
@@ -777,15 +790,20 @@ def set_plugin_state(
 ) -> None:
     """The plugin host reports what an install's process is doing. It
     acts on what it read at the start of its pass, so the report is
-    dropped if the install changed since (a change raises generation)."""
+    dropped if the install changed since (a change raises generation).
+    Becoming Running starts the wait for its first push, which Recent
+    shows as its start."""
     fields: dict[str, object] = {"state": state, "state_detail": detail[-4000:]}
     if failures is not None:
         fields["failures"] = failures
     if all(getattr(install, name) == value for name, value in fields.items()):
         return
+    if state == PluginInstall.RUNNING and install.state != PluginInstall.RUNNING:
+        fields["date_started"] = timezone_now()
     if PluginInstall.objects.filter(id=install.id, generation=install.generation).update(**fields):
         for name, value in fields.items():
             setattr(install, name, value)
+        send_armada_plugin_event(install, "update")
 
 
 def armada_plugin_url(install: PluginInstall) -> str:
@@ -884,7 +902,9 @@ def update_plugin_version(
         PluginSecret.objects.filter(install=install).exclude(
             name__in=list(new.get("secrets", {}))
         ).delete()
-        PluginWidgetState.objects.filter(install=install, widget__in=dropped).delete()
+        _remove_widget_states(
+            install, PluginWidgetState.objects.filter(install=install, widget__in=dropped)
+        )
         install.sha = pinned.sha
         install.manifest = new
         install.name = new["name"]
@@ -897,8 +917,16 @@ def update_plugin_version(
         install.save()
         if install.bot.full_name != new["name"]:
             do_change_full_name(install.bot, new["name"], user, notify=True)
-        _audit(install, user, AuditLogEventType.PLUGIN_UPDATED, extra_data)
+        audit_plugin(install, user, AuditLogEventType.PLUGIN_UPDATED, extra_data)
+        send_armada_plugin_event(install, "update")
     return diff
+
+
+def _remove_widget_states(install: PluginInstall, states: QuerySet[PluginWidgetState]) -> None:
+    """Delete widget documents, and take them from the clients that had them."""
+    for state in states.select_related("link"):
+        send_armada_widget_event(install, state, state.link, "remove")
+    states.delete()
 
 
 def purge_removed_plugins(now: datetime) -> int:
@@ -972,13 +1000,14 @@ def add_plugin_link(
             install=install, kind=kind, value=value, stream=stream, topic=topic, created_by=user
         )
         bulk_add_subscriptions(user.realm, [stream], [install.bot], acting_user=user)
-        _audit(
+        audit_plugin(
             install,
             user,
             AuditLogEventType.PLUGIN_LINKED,
             {"link_id": link.id, "kind": kind, "value": value, "topic": topic},
             stream_id=stream.id,
         )
+        send_armada_plugin_event(install, "update")
     return link
 
 
@@ -997,10 +1026,14 @@ def remove_plugin_link(user: UserProfile, install: PluginInstall, link_id: int) 
             "value": link.value,
             "topic": link.topic,
         }
+        _remove_widget_states(install, PluginWidgetState.objects.filter(link=link))
         link.delete()
         if not PluginLink.objects.filter(install=install, stream=stream).exists():
             bulk_remove_subscriptions(user.realm, [install.bot], [stream], acting_user=user)
-        _audit(install, user, AuditLogEventType.PLUGIN_UNLINKED, extra_data, stream_id=stream.id)
+        audit_plugin(
+            install, user, AuditLogEventType.PLUGIN_UNLINKED, extra_data, stream_id=stream.id
+        )
+        send_armada_plugin_event(install, "update")
 
 
 def _serialize_secret(

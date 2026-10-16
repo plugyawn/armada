@@ -148,6 +148,10 @@ class AuditLogEventType(IntEnum):
     # has from_sha, to_sha, from_version, to_version, run_id, for_user_id.
     PLUGIN_MADE = 1107
     PLUGIN_UPDATED = 1108
+    # A tool called from a widget's action, for someone; and the first push
+    # of a plugin's fresh process, which Recent shows as its start.
+    PLUGIN_TOOL_CALLED = 1109
+    PLUGIN_STARTED = 1110
 
     # The following values are only for remote server/realm logs.
     # Values should be exactly 10000 greater than the corresponding

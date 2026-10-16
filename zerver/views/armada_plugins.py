@@ -1,6 +1,7 @@
-"""Plugins (design/r9/plugins), over zerver/lib/armada_plugins.py. Every
-route reaches an install through access_plugin_install, which looks only in
-the person's realm."""
+"""Plugins (design/r9/plugins), over zerver/lib/armada_plugins.py and
+zerver/lib/armada_widgets.py. Every route a person uses reaches an install
+through access_plugin_install, which looks only in the person's realm; a
+plugin's bot pushes only to its own install."""
 
 from django.http import HttpRequest, HttpResponse
 from django.views.decorators.debug import sensitive_post_parameters
@@ -18,6 +19,7 @@ from zerver.lib.armada_plugins import (
     serialize_plugin_installs,
     update_plugin,
 )
+from zerver.lib.armada_widgets import push_widget, run_widget_action
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import PathOnly, typed_endpoint, typed_endpoint_without_parameters
 from zerver.models import UserProfile
@@ -139,3 +141,47 @@ def delete_armada_plugin_link(
 ) -> HttpResponse:
     remove_plugin_link(user_profile, access_plugin_install(user_profile, install_id), link_id)
     return json_success(request)
+
+
+@typed_endpoint
+def post_armada_widget(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    widget: str,
+    link_id: Json[int] | None = None,
+    item: str = "",
+    document: Json[dict[str, object]] | None = None,
+    data: Json[dict[str, object]] | None = None,
+) -> HttpResponse:
+    state = push_widget(
+        user_profile, widget=widget, link_id=link_id, item=item, document=document, data=data
+    )
+    return json_success(request, data={"version": state.version})
+
+
+@typed_endpoint
+def post_armada_plugin_action(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    install_id: PathOnly[int],
+    widget: str,
+    link_id: Json[int] | None = None,
+    item: str = "",
+    row: str | None = None,
+    index: Json[int] | None = None,
+    confirmed: Json[bool] = False,
+) -> HttpResponse:
+    install = access_plugin_install(user_profile, install_id)
+    result = run_widget_action(
+        user_profile,
+        install,
+        widget=widget,
+        link_id=link_id,
+        item=item,
+        row=row,
+        index=index,
+        confirmed=confirmed,
+    )
+    return json_success(request, data=result)

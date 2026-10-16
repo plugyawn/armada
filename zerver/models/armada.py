@@ -204,6 +204,10 @@ class PluginInstall(models.Model):
     date_installed = models.DateTimeField(default=timezone_now)
     date_updated = models.DateTimeField(default=timezone_now)
     date_removed = models.DateTimeField(null=True)
+    # When the host last saw it come up, and when it first pushed a widget
+    # after that: Recent's "Started" line (zerver/lib/armada_widgets.py).
+    date_started = models.DateTimeField(null=True)
+    date_fed = models.DateTimeField(null=True)
 
     class Meta:
         constraints = [

@@ -1447,3 +1447,72 @@ class ArmadaPostEvent(BaseEvent):
     type: Literal["armada_post"]
     op: Literal["add", "update", "remove"]
     post: ArmadaPost
+
+
+class ArmadaPluginWidgetDefault(BaseModel):
+    nav: Literal["shown", "offered", "off"]
+    column: bool
+
+
+class ArmadaPluginLink(BaseModel):
+    id: int
+    kind: str
+    value: str
+    stream_id: int
+    topic: str | None
+
+
+class ArmadaPlugin(BaseModel):
+    id: int
+    plugin: str
+    name: str
+    glyph: str
+    version: str
+    state: Literal["waiting", "starting", "running", "failed", "draft"]
+    disabled: bool
+    bot_user_id: int
+    # The manifest's widget declarations (tools/armada/plugin_contract.json).
+    widgets: list[dict[str, object]]
+    widget_defaults: dict[str, ArmadaPluginWidgetDefault]
+    links: list[ArmadaPluginLink]
+    made_by: int | None
+    made_in_stream_id: int | None
+    made_in_topic: str | None
+    made_in_message_id: int | None
+
+
+class ArmadaPluginAddOrUpdateEvent(BaseEvent):
+    type: Literal["armada_plugin"]
+    op: Literal["add", "update"]
+    plugin: ArmadaPlugin
+
+
+class ArmadaPluginRemoveEvent(BaseEvent):
+    type: Literal["armada_plugin"]
+    op: Literal["remove"]
+    install_id: int
+
+
+class ArmadaWidgetUpdateEvent(BaseEvent):
+    type: Literal["armada_widget"]
+    op: Literal["update"]
+    install_id: int
+    widget: str
+    link_id: int | None
+    item: str
+    stream_id: int | None
+    topic: str | None
+    # A widget document (the plugin contract's widget schema).
+    document: dict[str, object]
+    version: int
+    fed_at: int
+    stale: bool
+
+
+class ArmadaWidgetRemoveEvent(BaseEvent):
+    type: Literal["armada_widget"]
+    op: Literal["remove"]
+    install_id: int
+    widget: str
+    link_id: int | None
+    item: str

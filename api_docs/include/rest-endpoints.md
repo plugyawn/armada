@@ -184,6 +184,8 @@
 * [Retry a failed plugin](/api/retry-armada-plugin)
 * [Link a plugin to a channel or a topic](/api/add-armada-plugin-link)
 * [Unlink a plugin](/api/remove-armada-plugin-link)
+* [Run a widget's action](/api/run-armada-plugin-action)
+* [Push a plugin's widget](/api/push-armada-widget)
 
 ## Specialty endpoints
 

@@ -1380,13 +1380,16 @@ class FetchQueriesTest(ZulipTestCase):
         self.login_user(user)
 
         with (
-            self.assert_database_query_count(48),
+            self.assert_database_query_count(49),
             mock.patch("zerver.lib.events.always_want") as want_mock,
         ):
             fetch_initial_state_data(user, realm=user.realm)
 
         expected_counts = dict(
             alert_words=1,
+            # One query for both: the realm's installs, when it has none.
+            armada_plugin=1,
+            armada_widget=1,
             channel_folders=1,
             custom_profile_fields=1,
             default_streams=1,

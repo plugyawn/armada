@@ -27,6 +27,7 @@ from zerver.lib.armada_identity import (
     armada_bot_user_id_has_armada_service,
     armada_bot_user_ids_for_realm,
 )
+from zerver.lib.armada_plugin_events import apply_armada_plugin_event, fetch_armada_plugin_state
 from zerver.lib.armada_workspace_map import armada_project_stream_ids_for_realm
 from zerver.lib.avatar import avatar_url
 from zerver.lib.bot_config import load_bot_config_template
@@ -897,6 +898,15 @@ def fetch_initial_state_data(
             for stream_id in armada_project_stream_ids_for_realm(realm)
             if stream_id in accessible_stream_ids
         ]
+
+    if user_profile is not None and (want("armada_plugin") or want("armada_widget")):
+        state.update(
+            fetch_armada_plugin_state(
+                user_profile,
+                want_plugins=want("armada_plugin"),
+                want_widgets=want("armada_widget"),
+            )
+        )
 
     if want("channel_folders"):
         if user_profile is None:
@@ -2119,6 +2129,8 @@ def apply_event(
         # page posts update dedicated client-side reducers; they do not
         # mutate the initial-state payload assembled by this module.
         pass
+    elif event["type"] in {"armada_plugin", "armada_widget"}:
+        apply_armada_plugin_event(state, event)
     elif event["type"] == "read_receipts":
         # Read receipts are fetched per message, not held in the register
         # state; clients apply these pushes to the receipts they show.

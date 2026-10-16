@@ -87,6 +87,9 @@ ARMADA_NO_VISIBLE_RESPONSE_MESSAGE: Final = (
     f"{ARMADA_AGENT_NAME} completed without a visible response."
 )
 ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
+# While Onix's words stream, cancel and steering are read at most this
+# often; every other event of a run still reads them at once.
+ARMADA_STREAM_CONTROL_POLL_SECONDS: Final = 0.5
 ARMADA_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 ARMADA_LIVE_RUN_CACHE_KEY_PREFIX: Final = "armada:live-run:"
 ARMADA_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
@@ -3064,6 +3067,17 @@ class ArmadaEmbeddedBotHandler:
         ).run()
 
 
+def armada_is_streamed_delta(event: ArmadaWorkerTranscriptEvent) -> bool:
+    """A token or so of an assistant message, as Codex streams it."""
+    metadata = event.get("metadata")
+    return (
+        event.get("kind") == "assistant"
+        and event.get("status") == "running"
+        and isinstance(metadata, dict)
+        and metadata.get("streaming") is True
+    )
+
+
 class ArmadaAssistantText:
     """The assistant item being streamed: the item's id and its text so far.
 
@@ -3146,6 +3160,7 @@ class ArmadaWorkerTurn:
         self.live_operation: ArmadaLiveRunOperation | None = None
         self.task = armada_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
+        self.last_control_poll_at: float | None = None
         self.last_persisted_transcript_source: str | None = None
         self.assistant_persistent_flush_seen = False
         self.assistant_visible_event_seen = False
@@ -3186,6 +3201,21 @@ class ArmadaWorkerTurn:
             self.last_typing_signal_at = time.monotonic()
         if operator == "stop":
             self.typing_started = False
+
+    def control_poll_due(self, event: ArmadaWorkerTranscriptEvent) -> bool:
+        """Whether this event reads cancel and steering. A streamed delta
+        does only when ARMADA_STREAM_CONTROL_POLL_SECONDS have passed since
+        the last read: a reply streams hundreds of them, and each read is
+        three queries."""
+        now = time.monotonic()
+        if (
+            armada_is_streamed_delta(event)
+            and self.last_control_poll_at is not None
+            and now - self.last_control_poll_at < ARMADA_STREAM_CONTROL_POLL_SECONDS
+        ):
+            return False
+        self.last_control_poll_at = now
+        return True
 
     def raise_if_cancel_requested(self) -> None:
         if not self.handler.worker_run_cancel_requested(self.bot_handler, self.message_id):
@@ -3398,7 +3428,9 @@ class ArmadaWorkerTurn:
         self.update_live_transcript("running", force=True)
 
     def handle_transcript_event(self, event: ArmadaWorkerTranscriptEvent) -> None:
-        self.raise_if_cancel_requested()
+        poll_controls = self.control_poll_due(event)
+        if poll_controls:
+            self.raise_if_cancel_requested()
         self.signal_typing("start", force=False)
         title = event.get("title", "").strip()
         event_kind = event.get("kind")
@@ -3436,13 +3468,7 @@ class ArmadaWorkerTurn:
             # never enter the root message buffer, tool count, or final text.
             # Streaming deltas are intentionally skipped; item completion
             # persists the coherent paragraph without a row per token.
-            streaming_child_delta = (
-                event_kind == "assistant"
-                and event.get("status") == "running"
-                and isinstance(metadata, dict)
-                and metadata.get("streaming") is True
-            )
-            if not streaming_child_delta:
+            if not armada_is_streamed_delta(event):
                 child_event = armada_sanitized_child_agent_event(event)
                 if child_event is not None:
                     summary = (
@@ -3455,7 +3481,8 @@ class ArmadaWorkerTurn:
                         summary=trim_armada_text(str(summary), limit=500),
                         payload=dict(child_event),
                     )
-            self.maybe_apply_same_turn_steering()
+            if poll_controls:
+                self.maybe_apply_same_turn_steering()
             return
         if isinstance(metadata, dict) and isinstance(metadata.get("operation"), str):
             # Long engine operations (compaction, …) drive the client's
@@ -3467,12 +3494,7 @@ class ArmadaWorkerTurn:
                 }
             else:
                 self.live_operation = None
-        streaming_assistant = (
-            event_kind == "assistant"
-            and event.get("status") == "running"
-            and isinstance(metadata, dict)
-            and metadata.get("streaming") is True
-        )
+        streaming_assistant = armada_is_streamed_delta(event)
         raw_body = event.get("body", "")
         body = raw_body if streaming_assistant else raw_body.strip()
         summary = title or body.strip() or "Codex event."
@@ -3553,7 +3575,7 @@ class ArmadaWorkerTurn:
         else:
             if sparse_event:
                 self.update_volatile_run_state("running")
-        if event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
+        if poll_controls and event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
             self.maybe_apply_same_turn_steering()
 
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:

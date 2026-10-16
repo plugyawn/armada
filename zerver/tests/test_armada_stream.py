@@ -29,6 +29,7 @@ class StreamRunStore:
 
     def __init__(self) -> None:
         self.recorded_events: list[str] = []
+        self.cancel = False
         self.cancel_reads = 0
         self.steering_reads = 0
 
@@ -56,7 +57,7 @@ class StreamRunStore:
 
     def cancel_requested(self, bot_handler: object, message_id: int) -> bool:
         self.cancel_reads += 1
-        return False
+        return self.cancel
 
     def steering_events_after(
         self, bot_handler: object, message_id: int, *, after_event_id: int
@@ -201,3 +202,46 @@ class ArmadaStreamTest(ZulipTestCase):
         # 400 deltas: once for the first words, once when it is done.
         self.assertLessEqual(visible_text.call_count, 3)
         self.assertEqual(bot_handler.edits[-1].strip(), "".join(words).strip())
+
+    def test_cancel_and_steering_are_read_twice_a_second_while_words_stream(self) -> None:
+        words = [f"word{i} " for i in range(400)]
+        store, _bot_handler = self.run_turn(self.stream_words(words, every=0.005))
+
+        # 2 seconds of words: a read every 0.5 s, and one for each event
+        # that is not a delta (the run's start, the item's end).
+        self.assertLessEqual(store.cancel_reads, 8)
+        self.assertLessEqual(store.steering_reads, 8)
+
+    def test_an_event_that_is_not_a_delta_reads_cancel_at_once(self) -> None:
+        store = StreamRunStore()
+
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("Reading "))
+            reads = store.cancel_reads
+            event_callback(
+                {"kind": "command", "status": "running", "title": "git status", "body": ""}
+            )
+            self.assertEqual(store.cancel_reads, reads + 1)
+            return "Reading done."
+
+        self.run_turn(script, store=store)
+
+    def test_a_cancel_stops_the_stream_within_half_a_second(self) -> None:
+        store = StreamRunStore()
+        sent = 0
+
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            nonlocal sent
+            for i in range(400):
+                self.tick(0.005)
+                if i == 100:
+                    store.cancel = True
+                event_callback(streamed(f"word{i} "))
+                sent += 1
+            raise AssertionError("the cancel was never read")
+
+        _store, bot_handler = self.run_turn(script, store=store)
+
+        self.assertGreaterEqual(sent, 100)
+        self.assertLessEqual(sent - 100, 100)
+        self.assertEqual(bot_handler.edits[-1], "Stopped.")

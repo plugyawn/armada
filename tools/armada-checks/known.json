@@ -558,12 +558,12 @@
         "owner": "F2"
     },
     "size/initial-js.minified-kb": {
-        "measured": 5106,
+        "measured": 5107,
         "unit": "kB",
         "threshold": "<= 2000",
-        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 5.94 MB on 13 October. F2 took the Handlebars compiler, KaTeX and both emoji stylesheets out of the first load; Sentry, jquery-validation and core-js waited on the user's answers (var/armada-overhaul/build/F2.md). 5,423 kB at F2's report, 5,424 kB after its verification fixes (the help's math filled in late, the composer fallback's box-sizing). The ceiling has no headroom: any addition to the app entry turns it red. It steps down as stages delete code. F2b (2026-10-14) took Sentry (K-93), jquery-validation (K-92) and core-js (K-95) out and made the development stack-trace display a chunk of its own: 5,103 kB at 18:15, 5,104 kB at its last runs (other packages' edits in between), still above the plan's 4,900 (var/armada-overhaul/build/F2b.md). Again no headroom. R1 (2026-10-15) raised the ceiling to 5,106 kB: the same rename gave the old interface's class names and templates the longer prefix legacy-: 5,104,229 to 5,105,830 bytes measured on exported trees (var/armada-overhaul/build/R1.md).",
+        "audit": "New in F2 (2026-10-14), measured by tools/armada/size/measure.mjs (production build of the app entry, esbuild minification). var/armada-overhaul/maps/lean-weight.md, Initial payload: 5.94 MB on 13 October. F2 took the Handlebars compiler, KaTeX and both emoji stylesheets out of the first load; Sentry, jquery-validation and core-js waited on the user's answers (var/armada-overhaul/build/F2.md). 5,423 kB at F2's report, 5,424 kB after its verification fixes (the help's math filled in late, the composer fallback's box-sizing). The ceiling has no headroom: any addition to the app entry turns it red. It steps down as stages delete code. F2b (2026-10-14) took Sentry (K-93), jquery-validation (K-92) and core-js (K-95) out and made the development stack-trace display a chunk of its own: 5,103 kB at 18:15, 5,104 kB at its last runs (other packages' edits in between), still above the plan's 4,900 (var/armada-overhaul/build/F2b.md). Again no headroom. R1 (2026-10-15) raised the ceiling to 5,106 kB: the same rename gave the old interface's class names and templates the longer prefix legacy-: 5,104,229 to 5,105,830 bytes measured on exported trees (var/armada-overhaul/build/R1.md). 2026-10-16: 5,107 kB, from 3c425e002b, which lists an upload's pages posts on the old interface's Uploaded files page (1,049 B, measured by A/B builds in final-checks-3.md). The page is on the cut list (K-58), so these bytes leave with it; the new interface's own entry is unchanged.",
         "since": "2026-10-14",
-        "max": 5106,
+        "max": 5107,
         "owner": "F2"
     },
     "size/lazy-chunk.largest-minified-kb": {

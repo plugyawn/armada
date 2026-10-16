@@ -35,6 +35,7 @@ const state = {
   lastKey: -1e9, pressing: false,                          /* the last key and a press held: an evolution waits for the page to be idle */
 };
 const people = new Map(), streams = new Map(), repoStreams = new Set(), armadaBots = new Set(fromData(DATA.agentUserIds, []));   /* the agent's user ids (realm_bot) */
+const pluginBots = new Map();                              /* a plugin install's bot user id -> {install_id, name, glyph}: it speaks on the plane (plugins.js) */
 const topicsOf = new Map();                                /* stream id -> [{name, max_id}] in the order first shown; null while loading */
 const worktrees = new Map();                               /* stream id -> Set of lower-cased topic names that have a worktree */
 const unread = new Map();                                  /* place key -> Set of message ids */
@@ -47,5 +48,5 @@ const msgIndex = new Map();                                /* message id -> its 
 const KEEP = 100, CAP = 400, PLACES_KEPT = 10;
 const expanded = new Set(JSON.parse(store.get("open") || "[]")), allKids = new Set();
 
-export {allKids, armadaBots, CAP, DATA, expanded, groups, KEEP, LIVE_RUN_IDS, marks, msgIndex, people, places, PLACES_KEPT,
+export {allKids, armadaBots, CAP, DATA, expanded, groups, KEEP, LIVE_RUN_IDS, marks, msgIndex, people, places, PLACES_KEPT, pluginBots,
   QUESTION_TIMEOUT, repoStreams, state, stats, streams, topicsOf, unread, worktrees};

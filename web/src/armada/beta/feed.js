@@ -6,6 +6,7 @@ import {dayKey, dayLabel, hhmm, now} from "./time.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isBot, isOnix, nameOf, stoneOf} from "./faces.js";
 import {partEl, partsOf, QUESTION} from "./parts.js";
+import {pluginWho} from "./plugins.js";
 import {drawReactions} from "./reactions.js";
 import {receiptButton, RECEIPTS, untick} from "./receipts.js";
 import {drawThreadLine, openThread, repliesOf, threadAppend} from "./threads.js";
@@ -59,7 +60,8 @@ function newSection(c, m, kind, o) {
   if (kind === "onix") { const lab = named(cl); cl.classList.toggle("lab", lab); cl.innerHTML = faceOf(m.sender_id) + (lab ? '<div class="who">Onix</div>' : ""); }
   /* a bot's post (an alert, a plugin's line): on the plane like Onix's words, one message a turn, always under its face, its
      name and its time, as the plugin design draws a machine's post */
-  else if (kind === "bot") { cl.classList.add("lab"); cl.dataset.mid = m.id; cl.innerHTML = `<div class="who">${faceOf(m.sender_id, "s18")}<span>${esc(nameOf(m.sender_id))}</span><time></time></div>`; }
+  /* a plugin's bot shows its plugin's glyph where another shows its face (plugins.js) */
+  else if (kind === "bot") { const plugin = pluginWho(m.sender_id); cl.classList.add("lab"); cl.classList.toggle("plug", !!plugin); cl.dataset.mid = m.id; cl.innerHTML = `<div class="who">${plugin || `${faceOf(m.sender_id, "s18")}<span>${esc(nameOf(m.sender_id))}</span>`}<time></time></div>`; }
   else if (kind === "them") { const solo = state.place.kind === "dm" && state.place.ids.length === 1, lab = !solo && named(cl); cl.classList.add("s-" + stoneOf(m.sender_id)); cl.classList.toggle("lab", lab);
     cl.innerHTML = o.thread ? `<div class="who">${faceOf(m.sender_id, "s20")}${esc(nameOf(m.sender_id))}</div>` : faceOf(m.sender_id) + (lab ? `<div class="who">${esc(nameOf(m.sender_id))}</div>` : ""); if (o.thread) cl.classList.add("lab"); }
   return cl;

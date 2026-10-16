@@ -9,8 +9,8 @@
 // a nav row whose one trailing thing follows the nav's priority; pressed,
 // it opens as a sheet beside the nav; linked to a place, it adds a list to
 // that place's column; an item opened from a row borrows the column; an
-// and an update changes what is drawn in place. Deleted with
-// web/src/armada/beta/.
+// update changes what is drawn in place; and a plugin's bot speaks on the
+// plane. Deleted with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -75,6 +75,8 @@ const noop = () => {};
 set_global("M", {
     T: {},
     SLOW: 1,
+    // Where a row stands at rest: there is no layout here.
+    rest: () => ({top: 0, left: 0, width: 0, height: 0}),
     release: noop,
     appear: noop,
     fade: noop,
@@ -161,7 +163,9 @@ mock_esm("../../src/armada/beta/frame.js", {
 
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
+const feed = zrequire("armada/beta/feed.js");
 const column = zrequire("armada/beta/column.js");
+const events = zrequire("armada/beta/events.js");
 const plugins = zrequire("armada/beta/plugins.js");
 
 const ME = 11;
@@ -769,6 +773,7 @@ run_test(
         assert.equal(rowOf("Training"), undefined);
         assert.equal(sheet(), null);
         assert.equal(section(), null);
+        assert.equal(beta_state.pluginBots.has(WANDB_BOT), false);
         assert.equal([...plugins.widgets.values()].filter((s) => s.install_id === 8).length, 0);
         // A widget's own removal (its link taken away) takes its list.
         plugins.onPluginEvent({type: "armada_plugin", op: "add", plugin: wandb()});
@@ -804,3 +809,46 @@ run_test(
         assert.equal(section().querySelectorAll("li[data-row]").length, 3);
     },
 );
+
+run_test("a plugin's words are on the plane: no bubble, its glyph before its name", () => {
+    const m = {
+        id: 900,
+        type: "stream",
+        stream_id: 10,
+        subject: "lr-sweep",
+        sender_id: WANDB_BOT,
+        timestamp: seconds(),
+        content: "<p><code>lr-1e-4-a</code> finished at step 60,000.</p>",
+        reactions: [],
+        submessages: [],
+    };
+    routing.addMsg(cache, m);
+    const {cl} = feed.appendMessage(lane, m);
+    assert.ok(cl.classList.contains("plug"));
+    assert.equal(cl.querySelector(".b"), null);
+    assert.ok(cl.querySelector(".ans"));
+    // A bot's label (feed.js): its name and its time, the plugin's glyph
+    // where a face would be.
+    const who = cl.querySelector(".who");
+    assert.equal(who.querySelector("span").textContent, "Weights & Biases");
+    assert.ok(who.firstElementChild.matches(".ic.chart"));
+    assert.ok(who.querySelector("time"));
+
+    // As it arrives, it makes no sound: a plugin is someone else acting.
+    // A person's message does.
+    const played = [];
+    set_global("S", {play: (name) => played.push(name)});
+    const tab = beta_state.state.tab;
+    beta_state.state.tab = "Chat";
+    // The lane holds the place, as openPlace leaves it.
+    feed.drawLane();
+    for (const [id, sender_id] of [
+        [901, WANDB_BOT],
+        [902, 8],
+    ]) {
+        events.onMessage({type: "message", message: {...m, id, sender_id}, flags: []});
+    }
+    assert.deepEqual(played, ["arrive"]);
+    beta_state.state.tab = tab;
+    set_global("S", {play: noop});
+});

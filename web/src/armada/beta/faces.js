@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): people and their faces: names, initials, stones, presence. */
 
-import {armadaBots, DATA, people, state} from "./state.js";
+import {armadaBots, DATA, people, pluginBots, state} from "./state.js";
 import {now} from "./time.js";
 import {brokenSprites, partnerOf, svFace, svSrc} from "./partners.js";
 
@@ -9,9 +9,10 @@ const STONES = ["lapis", "larimar", "rose", "amethyst", "moss", "flint"];
 const stoneOf = (id) => { if (id === state.ME) return "me"; const p = partnerOf(id); return p && p.stone ? p.stone : STONES[id % STONES.length]; };
 const person = (id) => people.get(id) || {id, name: "Someone", email: ""};
 const isOnix = (id) => armadaBots.has(id);
-/* a machine that is not Onix: the Ops bot, a plugin's bot, the notification bot. Its words stand on the plane, as Onix's do */
-const isBot = (id) => !isOnix(id) && !!(people.get(id) || {}).bot;
-const nameOf = (id) => (isOnix(id) ? "Onix" : person(id).name);
+/* a machine that is not Onix: the Ops bot, a plugin's bot, the notification bot. Its words stand on the plane, as Onix's do;
+   a plugin's bot is known from its install (plugins.js) as soon as the install is */
+const isBot = (id) => !isOnix(id) && (pluginBots.has(id) || !!(people.get(id) || {}).bot);
+const nameOf = (id) => (isOnix(id) ? "Onix" : pluginBots.has(id) ? pluginBots.get(id).name : person(id).name);
 /* a face's initials: letters and figures of any script (a name in Devanagari keeps its first letter with its vowel sign),
    cut by grapheme, so no name is drawn as "?" while it has a letter */
 const graphemes = (t) => { try { return [...new Intl.Segmenter(undefined, {granularity: "grapheme"}).segment(t)].map((x) => x.segment); } catch (e) { return [...t]; } };
@@ -30,6 +31,7 @@ const presOf = (id) => { const p = state.presences[id]; if (!p) return ""; const
 const faceSize = (cls) => (/s14/.test(cls || "") ? 14 : /s18/.test(cls || "") ? 18 : /s20/.test(cls || "") ? 20 : 28);
 const faceOf = (id, cls, pres) => { const size = faceSize(cls);
   if (isOnix(id)) return size === 28 ? "" : `<i class="av none s${size}" aria-hidden="true"></i>`;
+  if (pluginBots.has(id)) return size === 28 ? "" : `<i class="av pf s${size}" aria-hidden="true">${ic(GLYPHS[pluginBots.get(id).glyph] ? pluginBots.get(id).glyph : "plugin")}</i>`;
   const p = size >= 18 ? partnerOf(id) : null;
   if (p && !brokenSprites.has(svSrc(p.species))) { const h = svFace(p.species, size, cls, pres, id); if (h) return h; }
   return face(`${initials(person(id).name)}:${stoneOf(id)}${pres ? " " + pres : ""}`, cls).replace("<i ", `<i data-uid="${id}" data-fs="i" `); };

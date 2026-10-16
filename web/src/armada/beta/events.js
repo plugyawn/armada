@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): what each live event does to the page. */
 
 import {$, $$, esc, T} from "./util.js";
-import {groups, marks, msgIndex, people, places, repoStreams, state, stats, streams, topicsOf, unread, worktrees} from "./state.js";
+import {groups, marks, msgIndex, people, places, pluginBots, repoStreams, state, stats, streams, topicsOf, unread, worktrees} from "./state.js";
 import {now} from "./time.js";
 import {addMsg, dkey, keepEnd, markSeen, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
@@ -52,7 +52,8 @@ function onMessage(ev) {
   if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); keepEnd(c); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
   if (state.pinned) { const last = row.parts.filter((x) => !/^pv/.test(x.dataset.part)).pop(), b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) { if (row.cl.dataset.mid === String(m.id)) M.appear(row.cl, 0.3); else row.parts.forEach((x) => M.appear(x, 0.3)); } }   /* a question appears in its run's turn (feed.js) */
-  if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); hopOnce(row.cl); }
+  /* a plugin's post is someone else acting: it makes no sound and no hop (the plugin design, section 8) */
+  if (!mine && !isOnix(m.sender_id) && !pluginBots.has(m.sender_id)) { S.play("arrive"); hopOnce(row.cl); }
   keepEnd(c);
 }
 function onUpdate(ev, at) {

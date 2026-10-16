@@ -81,4 +81,11 @@ aside.side > .wd { flex: 1; min-height: 0; display: flex; flex-direction: column
 .wd .sum { display: flex; justify-content: space-between; gap: var(--s-3); font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: var(--h-s); align-items: center; }
 .wd .sec { margin-top: var(--s-3); }
 
+/* ---------- a plugin's bot speaks as any bot does, on the plane (feed.css, .cl.bot); its glyph stands before its name ---------- */
+.cl.bot.plug > .who .ic { color: var(--ink-2); }
+
+/* ---------- a plugin's face: its glyph on flint, where a person shows a face ---------- */
+.av.pf { background: var(--p-flint); color: var(--p-flint-ink); }
+.av.pf .ic { color: inherit; }
+
 }   /* @layer zulip.armada-beta */

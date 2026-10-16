@@ -3,14 +3,14 @@
    (tools/armada/plugin_contract.json), which the plugin pushes and the server forwards as armada_widget events; the
    installs come as armada_plugin events. Both are in /register's snapshot (zerver/lib/armada_plugin_events.py). What is
    drawn at load is here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as
-   the widget's sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), and the
-   place for its commands in Jump to. The list's rows and those commands are the chunk's, fetched when the page is idle.
-   What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav, and an item that borrows the
-   column. An update patches what is drawn in place: a figure rolls in its cell, a mark changes into another, and
-   nothing else moves. */
+   the widget's sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), a plugin's
+   words on the plane, and the place for its commands in Jump to. The list's rows and those commands are the chunk's,
+   fetched when the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav,
+   and an item that borrows the column. An update patches what is drawn in place: a figure rolls in its cell, a mark
+   changes into another, and nothing else moves. */
 
 import {$, $$, esc, press} from "./util.js";
-import {state} from "./state.js";
+import {pluginBots, state} from "./state.js";
 import {hhmm, now} from "./time.js";
 import {api} from "./connection.js";
 import {main, nav, outline, side} from "./frame.js";
@@ -26,11 +26,12 @@ const scopeOf = (install_id, widget, link_id, item) => `${install_id}/${widget}/
 const scopeOfState = (s) => scopeOf(s.install_id, s.widget, s.link_id, s.item);
 const STALE_CADENCES = 3, DEFAULT_CADENCE = 60;   /* zerver/lib/armada_widgets.py: a widget not fed for three times its cadence is stale */
 
-function keepInstall(p) { installs.set(p.id, p); }
-function dropInstall(id) { installs.delete(id); for (const [k, s] of widgets) if (s.install_id === id) widgets.delete(k); }
+function keepInstall(p) { installs.set(p.id, p); for (const [bot, x] of pluginBots) if (x.install_id === p.id && bot !== p.bot_user_id) pluginBots.delete(bot);
+  if (p.bot_user_id) pluginBots.set(p.bot_user_id, {install_id: p.id, name: p.name, glyph: p.glyph}); }
+function dropInstall(id) { installs.delete(id); for (const [bot, x] of pluginBots) if (x.install_id === id) pluginBots.delete(bot); for (const [k, s] of widgets) if (s.install_id === id) widgets.delete(k); }
 /* /register's snapshot (connection.js): every install I see and the documents of the places I can see */
 function applyPlugins(r) {
-  installs.clear(); widgets.clear();
+  installs.clear(); pluginBots.clear(); widgets.clear();
   for (const p of r.armada_plugins || []) keepInstall(p);
   for (const s of r.armada_widgets || []) widgets.set(scopeOfState(s), s);
   if (groupEl) { drawWidgets(); watchStale(); }
@@ -165,6 +166,10 @@ const forgetWanted = () => { wanted++; };
 const viewReady = () => Promise.all([chunk("plugins"), chunk("artifact"), chunk("scene")]);
 function withView(fn) { const v = view(); if (v) { fn(v); return; } const ask = ++wanted; viewReady().then(() => { if (ask === wanted) fn(view()); }, () => {}); }
 
+/* ---------- a plugin's words on the plane ---------- */
+/* its bot speaks as Onix does and as the minis do (statement 42): no bubble, and its glyph before its name (feed.js) */
+const pluginWho = (id) => { const x = pluginBots.get(id); return x ? `${ic(glyphOf(x.glyph))}<span>${esc(x.name)}</span>` : ""; };
+
 /* ---------- live ---------- */
 function onPluginEvent(ev) {
   const id = ev.op === "remove" ? ev.install_id : ev.plugin && ev.plugin.id; if (!id) return;
@@ -197,5 +202,5 @@ function wirePlugins() {
     e.preventDefault(); const r = rows[Math.max(0, Math.min(rows.length - 1, to))]; M.focusKbd(r); });
 }
 
-export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onWidgetEvent, pluginItems, pluginSectionsHTML, restOf, rowsOf, view as pluginView, widgets,
+export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onWidgetEvent, pluginItems, pluginSectionsHTML, pluginWho, restOf, rowsOf, view as pluginView, widgets,
   wirePlugins};

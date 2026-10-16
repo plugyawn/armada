@@ -16,6 +16,7 @@ import {openPlace} from "./routing.js";
 import {main} from "./frame.js";
 import {faceOf, nameOf} from "./faces.js";
 import {blockPart, clean, echoHTML, tpl} from "./parts.js";
+import {dropNames, liftInline, loadPics} from "./media.js";
 import {drawHeader} from "./header.js";
 import {drawSide} from "./column.js";
 
@@ -83,7 +84,7 @@ function drawPage() {
   const p = inView(), box = $("#page"); if (!p || !box) return;
   if (p.view === "edit") { drawEditor(p, box); return; }
   if (p.view === "index" && $("textarea.bio", box)) return;   /* my line is being written: news waits until it is saved */
-  const h = p.view === "index" ? indexHTML(p.uid) : postHTML(p.post_id); if (box._sig === h) return; box._sig = h; box.innerHTML = h; host(box);
+  const h = p.view === "index" ? indexHTML(p.uid) : postHTML(p.post_id); if (box._sig === h) return; box._sig = h; box.innerHTML = h; host(box); loadPics(box);
 }
 
 /* ---------- a person's page: their face and line, their posts newest first, and at its foot what the page is ---------- */
@@ -102,7 +103,7 @@ function indexHTML(uid) {
 /* the server's rendering (or, until it arrives, the words as typed) cut as a README is: code, tables and images stand as
    blocks; headings sit under the post's title */
 function bodyHTML(html) {
-  tpl.innerHTML = html || ""; const root = clean(tpl.content), box = el("div");
+  tpl.innerHTML = html || ""; const root = clean(tpl.content), box = el("div"); liftInline(root); dropNames(root);
   for (const n of [...root.children]) {
     if (n.matches("div.codehilite, pre")) box.append(el("pre", "blk", blockPart(n).html));
     else if (n.matches("table")) box.append(el("div", "blk tbl", blockPart(n).html));
@@ -154,8 +155,8 @@ function setMode(mode) {
   $$(".seg button", box).forEach((b) => { const on = b.dataset.mode === mode; b.classList.toggle("on", on); b.setAttribute("aria-selected", String(on)); });
   src.hidden = mode !== "write"; prev.hidden = mode !== "preview"; if (mode === "write") { src.focus({preventScroll: true}); return; }
   const content = src.value; if (!content.trim()) { prev.innerHTML = note("Nothing to preview yet."); return; }
-  prev.innerHTML = bodyHTML(echoHTML(content)); host(prev);   /* at once, as typed; the server's rendering replaces it */
-  api("POST", "messages/render", {content}).then((r) => { if (ed && ed.mode === "preview" && src.value === content) { prev.innerHTML = bodyHTML(r.rendered); host(prev); } }, (e) => say(e.message));
+  prev.innerHTML = bodyHTML(echoHTML(content)); host(prev); loadPics(prev);   /* at once, as typed; the server's rendering replaces it */
+  api("POST", "messages/render", {content}).then((r) => { if (ed && ed.mode === "preview" && src.value === content) { prev.innerHTML = bodyHTML(r.rendered); host(prev); loadPics(prev); } }, (e) => say(e.message));
 }
 let busy = false;
 /* what the server answers lands on the editor that asked; if I have gone elsewhere meanwhile, I stay there */

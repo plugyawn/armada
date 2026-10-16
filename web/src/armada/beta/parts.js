@@ -8,11 +8,14 @@ import {codeBlock} from "./code_blocks.js";
 import {echoRefs, quoteOf} from "./mention_text.js";
 import {quoteHTML, refLook} from "./mentions.js";
 import {tkey} from "./routing.js";
+import {dropNames, liftInline, loadPics, localSize, picHTML, picsOf} from "./media.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
-   A block is: a code block (div.codehilite or pre), a table, an image (div.message_inline_image), a spoiler, a link
-   preview (div.message_embed), display maths. Everything else is prose: paragraphs, lists, quotes, headings.
+   A block is: a code block (div.codehilite or pre), a table, pictures (div.message_inline_image; consecutive previews are
+   one block, and a Markdown image is lifted out of its words first: media.js), a spoiler, a link preview (div.message_embed),
+   display maths. Everything else is prose: paragraphs, lists, quotes, headings. A link that only names a picture shown below
+   it is that picture's label, not words (media.js, dropNames).
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
@@ -37,14 +40,14 @@ function clean(root) {
     e.innerHTML = `${ic(topic != null ? "branch" : repoStreams.has(sid) ? "repo" : "hash")}<span>${esc(st.name)}</span>${topic != null ? `<span class="sep">\u203a</span><span>${esc(topic)}</span>` : ""}`; a.replaceWith(e); });
   $$("a[href]:not(.placelink)", root).forEach((a) => { const h = a.getAttribute("href"); if (h[0] === "#") a.href = "/" + h; a.target = "_blank"; a.rel = "noopener noreferrer"; });   /* a link to a narrow opens the place it names in a new tab (routing.js reads the old interface's narrows) */
   $$("time[datetime]", root).forEach((t) => { const d = new Date(t.getAttribute("datetime")); if (!isNaN(d)) t.textContent = `${dayLabel(d / 1000)} ${hhmm(d / 1000)}`; });
-  $$("img:not(.emoji)", root).forEach((i) => { i.removeAttribute("width"); i.removeAttribute("height"); i.loading = "lazy"; });   /* uploads load with the session's cookie */
+  $$("img:not(.emoji)", root).forEach((i) => { if (!i.closest("div.message_inline_image") && !i.classList.contains("inline-image")) i.loading = "lazy"; });   /* pictures are media.js's; a link preview's image loads when near */
   return root;
 }
 function codeHTML(pre) { const code = pre.querySelector("code") || pre; $$("span", code).forEach((s) => { const c = PYG[s.className]; if (c) s.className = c; else s.replaceWith(...s.childNodes); }); return code.innerHTML.replace(/\n$/, ""); }
 function blockPart(n) {
   if (n.matches("div.codehilite, pre")) return {t: "pre", html: codeHTML(n.matches("pre") ? n : n.querySelector("pre") || n)};
   if (n.matches("table")) { $$("th, td", n).forEach((c) => { if (/right/.test(c.getAttribute("style") || "")) c.className = "r"; c.removeAttribute("style"); }); return {t: "tbl", html: n.outerHTML}; }
-  if (n.matches("div.message_inline_image")) { const i = n.querySelector("img"); if (i) return {t: "pic", html: i.outerHTML}; }
+  if (n.matches("div.message_inline_image")) { const items = picsOf(n); if (items.length) return {t: "pic", items, html: picHTML(items)}; }
   return {t: "blk", html: n.innerHTML};
 }
 const QUESTION = /needs your input to continue/;
@@ -58,7 +61,7 @@ const JUMBO = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|[\u{1f1e
 function partsOf(m) {
   const onix = isOnix(m.sender_id), out = []; let run = [];
   if (onix && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
-  tpl.innerHTML = m.content || ""; const root = clean(tpl.content);
+  tpl.innerHTML = m.content || ""; const root = clean(tpl.content); liftInline(root); dropNames(root);
   $$("code", root).forEach((x) => { if (x.closest("pre")) return; x.dir = "ltr"; if (x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
   if (onix) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
   const flush = () => { if (!run.length) return;
@@ -74,7 +77,9 @@ function partsOf(m) {
     if (asking && n.tagName === "UL") { flush(); out.push(askPart(n)); continue; }   /* the question's options are buttons, under the question */
     if (asking && n.tagName === "P" && QUESTION.test(n.textContent)) { n.textContent = "Onix needs your answer to go on."; }
     if (asking && n.tagName === "P" && ASK_CAPTION.test(n.textContent.trim())) n.className = "askcap";   /* the server's words say what answers it: in words, the answer names Onix (or the place's switch is on), so people talking here do not answer it */
-    if (BLOCK(n)) { flush(); out.push(blockPart(n)); } else run.push(n); }
+    if (BLOCK(n)) { flush(); const p = blockPart(n), last = out[out.length - 1];
+      if (p.t === "pic" && last && last.t === "pic" && last.items && last._end === n.previousElementSibling) { last.items.push(...p.items); last.html = picHTML(last.items); last._end = n; } else { if (p.t === "pic") p._end = n; out.push(p); } }   /* previews side by side are one group */
+    else run.push(n); }
   flush();
   if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
   return out;
@@ -93,7 +98,6 @@ function partEl(p, m) {
   e.dataset.mid = m.id; e.dataset.part = p.t; e._src = p.html; loadPics(e); return e;
 }
 function setAns(ans, html) { ans.innerHTML = html; for (const c of ans.children) c._src = c.innerHTML; }
-function loadPics() {}
 /* the local echo: the words as typed, with the Markdown the field's words usually carry, cut into the same parts the
    server's rendering will be cut into (a fenced block is a block, a list or a quote stays in its bubble), so the
    server's copy replaces it without changing its shape. The server's rendering replaces it only where it differs. */
@@ -112,7 +116,7 @@ function echoHTML(text) {
     if (f) { para(buf); buf = []; const code = []; i++; while (i < lines.length && !lines[i].trim().startsWith(f[1])) code.push(lines[i++]); i++; out.push(`<div class="codehilite"><pre><span></span><code>${esc(code.join("\n"))}\n</code></pre></div>`); continue; }
     if (!l.trim()) { para(buf); buf = []; i++; continue; }
     const img = /^\[([^\]]+)\]\((\/user_uploads\/[^)\s]+\.(?:png|jpe?g|gif|webp))\)$/i.exec(l.trim());
-    if (img) { buf.push(l); para(buf); buf = []; out.push(`<div class="message_inline_image"><a href="${esc(img[2])}"><img src="${esc(img[2])}"></a></div>`); i++; continue; }
+    if (img) { buf.push(l); para(buf); buf = []; const sz = localSize(img[2]); out.push(`<div class="message_inline_image"><a href="${esc(img[2])}" title="${esc(img[1])}"><img class="image-loading-placeholder"${sz ? ` data-original-dimensions="${sz.w}x${sz.h}"` : ""}></a></div>`); i++; continue; }   /* my picture's box is the size read in this browser, its source what this page shows of it already (media.js) */
     buf.push(l); i++; }
   para(buf);
   return out.join("") || "<p></p>";

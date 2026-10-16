@@ -1,0 +1,46 @@
+/* INTERIM BETA (README.md): pictures in the conversation (media.js), the lightbox (lightbox.js). Tokens only. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* a group of pictures is a block with no fill of its own: each picture is a box of its own shape, known before it loads
+   (--ar, the server's width over height, clamped; --w, its width, which it is never shown wider than), on the block's fill
+   until it has loaded. One picture is at most 320 high and as wide as the lane lets a block be (--lim). */
+.blk.pic { --lim: var(--col); display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-1); padding: 0; background: none; line-height: 0; width: auto; max-width: 100%; align-self: flex-start; }
+.cl.them > .blk.pic, .cl.me > .blk.pic { --lim: calc(var(--col) * 0.78 + 80px); }   /* a person's turn: its blocks' own measure (beta.css) */
+.thr-in .blk.pic { --lim: calc(var(--col) * 0.66); }                                  /* a thread: its bubbles' measure */
+.cl.me > .blk.pic { align-self: flex-end; justify-content: flex-end; }
+.blk.pic > .im { position: relative; display: block; flex: none; overflow: hidden; border-radius: var(--r-block); background: var(--block); cursor: zoom-in;
+  aspect-ratio: var(--ar); width: min(var(--lim), var(--w), calc(320px * var(--ar))); transition: background-color var(--fade-in) linear; }
+.blk.pic > .im[data-kind="link"] { cursor: pointer; }
+.blk.pic > .im > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 0 0; opacity: 0; transition: opacity var(--fade-in) linear; }
+.blk.pic > .im[data-state="shown"] > img { opacity: 1; }
+/* a picture cut to its box (a full-page screenshot) fades out at its cut edge, so it does not read as ending there */
+.blk.pic > .im[data-crop="tall"] > img { -webkit-mask-image: linear-gradient(#000 calc(100% - 24px), transparent); mask-image: linear-gradient(#000 calc(100% - 24px), transparent); }
+.blk.pic > .im[data-crop="wide"] > img { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+/* a picture whose size the server does not know (an image on another site): a box of one size, the picture contained in it
+   from its start; once it has loaded the box's fill goes, so what is left of the box is the plane */
+.blk.pic > .im[data-size="unknown"] { width: min(var(--lim), 320px); height: 200px; }
+.blk.pic > .im[data-size="unknown"] > img { object-fit: contain; }
+.cl.me > .blk.pic > .im[data-size="unknown"] > img { object-position: 100% 0; }
+.blk.pic > .im[data-size="unknown"][data-state="shown"] { background-color: transparent; }
+/* a picture that cannot load says so in its own box, which keeps its size */
+.blk.pic > .im[data-state="failed"] { cursor: default; }
+.blk.pic > .im > .nf { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: var(--s-2); padding: 0 var(--s-2); font: var(--t-caption); line-height: 16px; color: var(--ink-2); text-align: center; overflow: hidden; }
+.blk.pic > .im > .nf > .ic { flex: none; }
+/* a block that follows a bubble of the same speaker closes the corner it shares with it (mock.css does this for a filled block) */
+.cl.them > .bl + .blk.pic > .im:first-child { border-top-left-radius: var(--r-ctl); }
+.cl.me > .bl + .blk.pic:not(:has(> .im + .im)) > .im { border-top-right-radius: var(--r-ctl); }
+/* a person's pictures carry the message's controls as a bubble does: on their open side, at their top */
+.cl > .blk.pic > .over { top: 2px; left: calc(100% + 6px); right: auto; }
+.cl.me > .blk.pic > .over { left: auto; right: calc(100% + 6px); }
+
+/* several pictures sent together: justified rows. Each grows by its shape from a basis 120 high, so a row's pictures share one
+   height and fill the measure; none is taller than 240 or wider than it is. */
+.blk.pic:has(> .im + .im) { width: var(--lim); }
+.blk.pic:has(> .im + .im) > .im { flex: var(--ar) 1 calc(var(--ar) * 120px); width: auto; max-width: min(var(--w), calc(var(--ar) * 240px)); }
+.blk.pic:has(> .im + .im) > .im[data-size="unknown"] { flex: none; width: 160px; height: 120px; }
+
+/* the field's chip for a picture shows the picture; while the file goes up the chip counts how much has gone */
+.cz .att > .ap { flex: none; width: 20px; height: 20px; border-radius: var(--r-mark); object-fit: cover; }
+.cz .att > .pct { flex: none; width: 4ch; font: var(--t-caption); font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; }
+
+}   /* @layer zulip.armada-beta */

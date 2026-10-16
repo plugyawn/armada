@@ -53,6 +53,7 @@ into the engineered client deletes the module it replaces.
 | `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote, a send's client key (contract C4); node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
 | `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`); a block of streamed words (`streamHTML`) | feed |
 | `code_blocks.js` | a code block: its code, its copy button, long output folded with Show all | feed |
+| `media.js` | pictures: the server's previews read into boxes of known size (`picOf`, `picHTML`), a Markdown image lifted out of its words, the name link that is a picture's label (`liftInline`, `dropNames`), loading when near (`loadPics`), my own pictures shown at once (`localPicture`, `rememberLocal`); its sheet is `media.css`; node tests in `web/tests/armada/beta_media.test.cjs` | feed |
 | `feed.js` | the conversation: its scroll, its turns, `drawLane()` | feed |
 | `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words (`agent_stream` events, written once a frame, a block at a time) followed in place | feed |
 | `reactions.js` | reactions | feed |

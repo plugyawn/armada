@@ -25,6 +25,11 @@ const link = createLink({
   state,
   csrf: ($('input[name="csrfmiddlewaretoken"]') || {}).value || "",   /* the session's token, written into the page by the server */
   fetch: (url, init) => fetch(url, init),
+  /* fetch cannot say how much of a body has gone; an upload goes by XMLHttpRequest, which can, and answers as fetch does */
+  upload: (url, init, progress) => new Promise((ok, no) => { const x = new XMLHttpRequest(); x.open(init.method, url); for (const [k, v] of Object.entries(init.headers || {})) x.setRequestHeader(k, v);
+    x.upload.onprogress = (e) => { if (e.lengthComputable && e.total) progress(e.loaded / e.total); };
+    x.onload = () => ok({status: x.status, ok: x.status < 400, headers: {get: (n) => x.getResponseHeader(n)}, json: async () => JSON.parse(x.responseText)});
+    x.onerror = x.onabort = () => no(new TypeError("Failed to fetch")); if (init.signal) init.signal.addEventListener("abort", () => x.abort()); x.send(init.body); }),
   now: () => performance.now(),
   setTimeout: (f, ms) => setTimeout(f, ms),
   clearTimeout: (t) => clearTimeout(t),

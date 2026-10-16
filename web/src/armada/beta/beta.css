@@ -21,12 +21,9 @@ div.b > * + * { margin-top: var(--s-2); }
 .b img.emoji, .ans img.emoji { height: 20px; width: 20px; vertical-align: -4px; }
 .b code { font: var(--t-code); }
 .ans a, .doc a { color: var(--accent-text); }
-/* blocks made from a message: code scrolls sideways inside its block instead of wrapping; an image fits the lane */
+/* blocks made from a message: code scrolls sideways inside its block instead of wrapping; pictures are media.css's */
 pre.blk { overflow-x: auto; scrollbar-width: none; font: var(--t-code); white-space: pre; }
 .blk.tbl { overflow-x: auto; scrollbar-width: none; }
-.blk.pic { padding: 0; overflow: hidden; background: none; line-height: 0; width: auto; max-width: 100%; align-self: flex-start; }
-.cl.me > .blk.pic { align-self: flex-end; }
-.blk.pic img { max-width: 100%; max-height: 320px; border-radius: var(--r-block); display: block; }
 .cl.them > .blk, .cl.me > .blk { max-width: min(100%, calc(var(--col) * 0.78 + 80px)); }
 .cl.me > pre.blk, .cl.me > .blk.tbl { align-self: flex-end; }
 .cl > .rcpt.end { align-self: flex-end; }

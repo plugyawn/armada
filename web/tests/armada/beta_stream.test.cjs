@@ -353,7 +353,11 @@ run_test("a picture among words is drawn once, however often its block is writte
     say(" in one go.");
     frame();
     assert.equal(row.querySelectorAll("img").length, 1);
-    assert.equal(row.querySelectorAll("img")[0].getAttribute("src"), "/user_uploads/2/ab/shot.png");
+    // The picture links its file; it gets its source as it comes near (media.js).
+    assert.equal(
+        row.querySelectorAll("img")[0].closest("a").getAttribute("href"),
+        "/user_uploads/2/ab/shot.png",
+    );
     assert.match(row.textContent, /The page now:.*It loads in one go\./s);
     say("\n\nDone.");
     frame();

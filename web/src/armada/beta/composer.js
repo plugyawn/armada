@@ -14,6 +14,7 @@ import {pack} from "./partners.js";
 import {reseed, seedField, syncReply} from "./mentions.js";
 import {fieldEmpty, seedOf} from "./mention_text.js";
 import {drawRunState} from "./band.js";
+import {localPicture, rememberLocal} from "./media.js";
 
 let verb = "Send";
 /* Onix answers what I send in a place only where I turned it on there: off until then, kept in this browser for each place,
@@ -50,12 +51,16 @@ const syncField = () => { reseed(); cz.classList.toggle("has-text", !!tx.textCon
   const h = switchHolds(); if (h !== held) { held = h; if (onixNow() && state.P) drawRunState(); } };
 
 /* ---------- attach: the field's Plus, a paste or a drop; the file goes to the server's upload endpoint and stands as a chip
-   before the words until the message is sent ---------- */
-function upload(file) { const a = {id: ++state.localSeq, name: file.name || "pasted file", url: null, failed: false}; state.atts.push(a); drawAtts();
+   before the words until the message is sent. A picture's chip shows the picture, read in this browser; while the file goes
+   up the chip counts how much has gone, in a cell as wide as "100%", so the chip never changes its width. ---------- */
+function upload(file) { const a = {id: ++state.localSeq, name: file.name || "pasted file", url: null, failed: false, sent: 0, pic: null}; state.atts.push(a); drawAtts();
+  localPicture(file).then((pic) => { if (!pic) return; a.pic = pic; if (a.url) rememberLocal(a.url, pic); drawAtts(); });
   const fd = new FormData(); fd.append("file", file, a.name);
-  api("POST", "user_uploads", {}, {body: fd}).then((r) => { a.url = r.url || r.uri; a.name = r.filename || a.name; }, (e) => { a.failed = true; note(e.message); }).finally(() => { drawAtts(); ready(); }); }
+  api("POST", "user_uploads", {}, {body: fd, progress: (f) => { a.sent = f; drawSent(a); }}).then((r) => { a.url = r.url || r.uri; a.name = r.filename || a.name; if (a.pic) rememberLocal(a.url, a.pic); }, (e) => { a.failed = true; note(e.message); }).finally(() => { drawAtts(); ready(); }); }
+const sentText = (a) => `${Math.min(99, Math.floor(a.sent * 100))}%`;
+function drawSent(a) { const c = $(`.att[data-att="${a.id}"] .pct`, cz); if (c && !a.url && !a.failed) c.textContent = sentText(a); }
 function drawAtts() { let box = $(".atts", cz); if (!state.atts.length) { if (box) box.remove(); syncField(); return; } if (!box) { box = el("span", "atts"); $(".txw", cz).prepend(box); }
-  box.innerHTML = state.atts.map((a) => `<span class="att${a.url ? "" : a.failed ? " bad" : " up"}">${ic(/\.(png|jpe?g|gif|webp|svg)$/i.test(a.name) ? "image" : "file")}<span class="an">${esc(mid(a.name, 28))}${a.url ? "" : a.failed ? " (failed)" : "…"}</span><button class="x" data-unatt="${a.id}" aria-label="Remove ${esc(a.name)}" data-tip="Remove">${ic("x")}</button></span>`).join(""); host(box); syncField(); }
+  box.innerHTML = state.atts.map((a) => `<span class="att${a.url ? "" : a.failed ? " bad" : " up"}" data-att="${a.id}">${a.pic ? `<img class="ap" alt="" src="${esc(a.pic.preview)}">` : ic(/\.(png|jpe?g|gif|webp|svg|heic|avif)$/i.test(a.name) ? "image" : "file")}<span class="an">${esc(mid(a.name, 28))}${a.failed ? " (failed)" : ""}</span>${!a.url && !a.failed ? `<span class="pct">${sentText(a)}</span>` : ""}<button class="x" data-unatt="${a.id}" aria-label="Remove ${esc(a.name)}" data-tip="Remove">${ic("x")}</button></span>`).join(""); host(box); syncField(); }
 function note(text) { M.say(go, text, 2400); }
 
 export {answering, drawAtts, drawComposer, note, onixHere, onixKey, onixNow, ready, setVerb, switchHolds, syncField, upload, verb};

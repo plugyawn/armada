@@ -5,7 +5,7 @@ import {msgIndex, state, stats} from "./state.js";
 import {dur} from "./time.js";
 import {feed, lane} from "./frame.js";
 import {loadPics, partEl, partsOf, streamHTML, tpl} from "./parts.js";
-import {dist, edge, finish, grown, hugAll, hush, pin, sectionOf, syncJump, toHug} from "./feed.js";
+import {dist, edge, finish, grown, hugAll, hush, pin, releaseRows, sectionOf, syncJump, toHug} from "./feed.js";
 import {runOfMsg} from "./runs.js";
 import {drawTurnPlan} from "./checklist.js";
 import {appendCode, codeBlock, setCode} from "./code_blocks.js";
@@ -223,7 +223,7 @@ function extend(o, n, head, depth = 0) {
    top; then it holds, and Jump to latest says there is more */
 function follow(d, cl) { if (!state.pinned || state.tab !== "Chat") { syncJump(); return; }
   const top = M.rest(cl).top, limit = feed.getBoundingClientRect().top + 20;
-  if (feed.scrollHeight > feed.clientHeight + 1 && top - d < limit) { const part = Math.max(0, Math.round(top - limit)); if (part > 0) { feed.scrollTop += part; state.lastSet = feed.scrollTop; edge(); M.release(lane, {y: part}, "touch", {clamp: {y: T.follow || 24}}); } state.pinned = dist() < 4; syncJump(); return; }
-  pin(); edge(); M.release(lane, {y: d}, "touch", {clamp: {y: Math.max(T.follow || 24, 28)}}); }
+  if (feed.scrollHeight > feed.clientHeight + 1 && top - d < limit) { const part = Math.max(0, Math.round(top - limit)); if (part > 0) { feed.scrollTop += part; state.lastSet = feed.scrollTop; edge(); releaseRows(part, "touch", {clamp: {y: T.follow || 24}}); } state.pinned = dist() < 4; syncJump(); return; }
+  pin(); edge(); releaseRows(d, "touch", {clamp: {y: Math.max(T.follow || 24, 28)}}); }
 
 export {drawFooters, endRun, follow, onAgentStream, placeholderAns, resetStreams, syncOnix, updateMessage, WORKING};

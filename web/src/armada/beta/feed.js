@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): the conversation: its scroll, its turns, the lane drawn. */
 
-import {$$, el, esc} from "./util.js";
+import {$$, clamp, el, esc} from "./util.js";
 import {msgIndex, state, unread} from "./state.js";
 import {dayKey, dayLabel, hhmm} from "./time.js";
 import {band, feed, lane} from "./frame.js";
@@ -17,7 +17,29 @@ const dist = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight;
 const pin = () => { feed.scrollTop = 1e7; state.lastSet = feed.scrollTop; };
 const edge = () => { const y = feed.scrollTop; feed.classList.toggle("cut", y > 2); feed.style.setProperty("--cut", Math.min(20, Math.round(y)) + "px"); };
 const firstRow = () => lane.firstElementChild, lastCl = () => lane.lastElementChild;
-function haltLane() { const y = (M.current(lane)[0].y || 0) + (M.current(lane, "pane")[0].y || 0); M.halt(lane); M.halt(lane, "pane"); if (Math.abs(y) > 0.5) feed.scrollTop -= y; }
+/* ---------- the conversation moves as one piece, and only what is in view is moved ----------
+   A write that shifts the conversation (a row added at its end, the field growing a line, Jump, a thread opening, a place
+   opened) is released on the rows that are in view at some moment of the move, all on one spring, transform only. A row
+   out of view is never animated: a spring on the lane itself made the compositor lift the whole conversation into a layer
+   and paint it again, at a cost that grew with everything loaded (about 300 ms of dropped frames a message at 2,000). */
+const moving = new Set();                                  /* the rows that carry the conversation's spring */
+const springOf = (r) => M.current(r, "lane");
+/* where the conversation is in its spring: [displacement, velocity] of the rows that carry it (they share one state) */
+function laneMotion() { for (const r of moving) { const [x, v] = springOf(r); if (x.y || v.y) return [x.y || 0, v.y || 0]; moving.delete(r); } return [0, 0]; }
+const laneMoving = () => laneMotion()[0] !== 0;
+/* the lane's rows that a move displaced by `d` px at its start shows at some moment, read from layout (no transform): a
+   row at rest from t to b is seen from t + d to b + d, then travels to t to b */
+function rowsInView(d) { const kids = lane.children, n = kids.length; if (!n) return [];
+  const fr = feed.getBoundingClientRect(), top = lane.getBoundingClientRect().top, from = fr.top - Math.max(0, d), to = fr.bottom - Math.min(0, d);
+  let lo = 0, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1, k = kids[m]; if (top + k.offsetTop + k.offsetHeight < from) lo = m + 1; else hi = m; }
+  const out = []; for (let i = lo; i < n; i++) { const k = kids[i]; if (top + k.offsetTop > to) break; out.push(k); } return out; }
+/* the conversation is shown `d` px from where layout put it and released on the spring `token`; a row that joins a move
+   already under way takes the move's displacement and speed, so the rows never overlap or part */
+function releaseRows(d, token = "move", o = {}) { const [y, v] = laneMotion(), cap = o.clamp && o.clamp.y;
+  for (const r of rowsInView(cap ? clamp(y + d, -cap, cap) : y + d)) { const [x, w] = springOf(r); M.release(r, {y: y + d - (x.y || 0)}, token, {...o, id: "lane", kick: {y: v - (w.y || 0)}}); moving.add(r); } }
+/* a hand on the conversation (a wheel, a touch, a send) stops its spring where it is seen */
+function haltLane() { const [y] = laneMotion(); stillLane(); if (Math.abs(y) > 0.5) feed.scrollTop -= y; }
+function stillLane() { for (const r of moving) M.halt(r, "lane"); moving.clear(); }
 function show(e, on) { if (!e) return; if (e === band.jump) band.el.classList.toggle("more", on); if (on === !e.classList.contains("off")) return; e.inert = !on; if (on) { e.classList.remove("off"); M.appear(e); } else { M.fade(e, 0); e.classList.add("off"); e.style.opacity = ""; } }
 const syncJump = () => show(band.jump, state.tab === "Chat" && dist() >= 4);
 /* a write that adds to the feed: older rows are shown where they were and released to where they are. One forced layout. */
@@ -25,7 +47,7 @@ function grown(write, token = "move", o = {}) {
   const ref = firstRow(), before = ref ? M.rest(ref).top : 0; const out = write(); hugAll();
   if (state.pinned) pin();
   const d = ref && ref.isConnected ? before - M.rest(ref).top : 0;
-  if (d) M.release(lane, {y: d}, token, o);
+  if (d) releaseRows(d, token, o);
   edge(); syncJump(); return out;
 }
 
@@ -75,7 +97,7 @@ function hugAll() { if (!toHug.size) return; const bs = []; for (const cl of toH
   bs.forEach((b, i) => { if (want[i] && b.offsetHeight !== want[i].h) b.style.width = ""; }); }
 const hush = (root) => $$(".rc, .rt, [data-thread], .tl .lk, .line .lk, .bl > .lk", root).forEach((b) => (b.tabIndex = -1));
 function drawLane(o = {}) {
-  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; lane.textContent = ""; lane._day = null;
+  const c = state.P, h0 = feed.scrollHeight, y0 = feed.scrollTop; stillLane(); lane.textContent = ""; lane._day = null;
   const set = unread.get(state.place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null;
   if (c.loaded && !c.oldest) lane.append(el("div", "more-up", c.loading ? "Loading earlier messages" : "Scroll up for earlier messages"));
   const list = c.msgs.filter((m) => !m.thread_root_message_id);
@@ -88,5 +110,5 @@ function drawLane(o = {}) {
 }
 function sectionOf(id, root = lane) { const n = root.querySelector(`[data-mid="${id}"]`); return n ? n.closest(".cl") : null; }
 
-export {appendMessage, dist, drawLane, edge, finish, firstRow, grown, haltLane, hugAll, hush, pin, sectionOf, show,
-  syncJump, toHug};
+export {appendMessage, dist, drawLane, edge, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin, releaseRows,
+  sectionOf, show, syncJump, toHug};

@@ -6,7 +6,7 @@ import {api} from "./connection.js";
 import {feed, lane, panes, side} from "./frame.js";
 import {blockPart, clean, loadPics, tpl} from "./parts.js";
 import {setVerb, verb} from "./composer.js";
-import {edge, haltLane, pin, syncJump} from "./feed.js";
+import {edge, haltLane, pin, releaseRows, syncJump} from "./feed.js";
 import {hasWorktree} from "./runs.js";
 import {overHide} from "./hover.js";
 
@@ -18,7 +18,7 @@ function setTab(name, quiet) { if (name === state.tab || !panes[name]) return; i
   /* the header, the band and the field are the same on every view: what I type on README goes to the conversation */
   overHide(); setVerb(verb, true);
   if (name === "Chat") { if (state.pinned) pin(); else if (state.P) feed.scrollTop = state.P.scroll || 0; edge(); syncJump(); }
-  if (!quiet) { const inner = name === "Chat" ? lane : pn.firstElementChild; M.release(inner, {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); }
+  if (!quiet) { if (name === "Chat") releaseRows(T["pane-rise"] || 4, "touch"); else M.release(pn.firstElementChild, {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); }
   if (name === "README") drawReadme(); if (name === "Files") drawFiles(); if (name === "Changes") drawChanges();
 }
 const ws = (path, q) => api("GET", `armada/workspaces/${state.P.ctx.workspace_uuid}${path}`, q);

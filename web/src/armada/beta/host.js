@@ -13,7 +13,7 @@ import {api, handle, on, onRestart, poll, register, session} from "./connection.
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
 import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, outline, panes, side, toBtn, tx} from "./frame.js";
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
-import {dist, drawLane, edge, firstRow, haltLane, hugAll, pin, syncJump, toHug} from "./feed.js";
+import {dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, releaseRows, syncJump, toHug} from "./feed.js";
 import {drawNav, loadTopics, navMore, subs, toggleStream} from "./nav.js";
 import {drawAsks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
 import {drawHeader} from "./header.js";
@@ -101,7 +101,7 @@ async function boot() {
   press(main, "[data-goto]", (b) => { setTab(b.dataset.goto); ready(); });
   press(outline, "li[data-k]", (li) => { const p = placeFromKey(li.dataset.k); if (p) openPlace(p); });
   press(main, ".stop", () => stop());
-  press(main, ".jump", () => { haltLane(); const ref = firstRow(), before = ref ? M.rest(ref).top : 0; state.pinned = true; pin(); syncJump(); edge(); const d = ref ? before - M.rest(ref).top : 0; if (d) M.release(lane, {y: clamp(d, -240, 240)}, "move"); ready(); });
+  press(main, ".jump", () => { haltLane(); const ref = firstRow(), before = ref ? M.rest(ref).top : 0; state.pinned = true; pin(); syncJump(); edge(); const d = ref ? before - M.rest(ref).top : 0; if (d) releaseRows(d, "move", {clamp: {y: 240}}); ready(); });
   press(cz, ".k.to", () => { if (!state.place || !state.place.repo) return; if (onixHere()) store.del(onixKey(state.place)); else store.set(onixKey(state.place), "1"); drawComposer(); drawRunState(); S.play("tick"); ready(); });
   press(cz, ".k.mode", (b, e, ptr) => togglePicker({kbd: !ptr}));
   press(cz, ".out", () => fileIn.click());
@@ -126,9 +126,9 @@ async function boot() {
   feed.addEventListener("wheel", haltLane, {passive: true}); feed.addEventListener("touchstart", haltLane, {passive: true});
   band.el.addEventListener("wheel", (e) => { if (state.tab !== "Chat") return; haltLane(); feed.scrollTop += e.deltaY; }, {passive: true});
   new ResizeObserver(() => { if (state.tab === "Chat" && state.pinned) pin(); syncJump(); }).observe(feed);
-  let dockH = 0; new ResizeObserver(([e]) => { const h = e.borderBoxSize ? e.borderBoxSize[0].blockSize : e.contentRect.height, was = dockH; dockH = h; if (!was || h === was || state.tab !== "Chat") return; if (state.pinned) { pin(); M.release(lane, {y: h - was}, "touch"); } M.release(band.el, {y: h - was}, "touch"); }).observe($("main > .dock"));
+  let dockH = 0; new ResizeObserver(([e]) => { const h = e.borderBoxSize ? e.borderBoxSize[0].blockSize : e.contentRect.height, was = dockH; dockH = h; if (!was || h === was || state.tab !== "Chat") return; if (state.pinned) { pin(); releaseRows(h - was, "touch"); } M.release(band.el, {y: h - was}, "touch"); }).observe($("main > .dock"));
   new ResizeObserver(() => fitLists(side)).observe(outline);
-  new ResizeObserver(() => { if (state.tab === "Chat" && state.pinned && !M.current(lane)[0].y) { pin(); edge(); } }).observe(lane, {box: "border-box"});   /* a face that loads late, an image that arrives, the room a live run keeps (the lane's padding): the end stays the end */
+  new ResizeObserver(() => { if (state.tab === "Chat" && state.pinned && !laneMoving()) { pin(); edge(); } }).observe(lane, {box: "border-box"});   /* a face that loads late, an image that arrives, the room a live run keeps (the lane's padding): the end stays the end */
   addEventListener("keydown", (e) => { state.lastKey = performance.now();
     if (moment) { if (e.key === "Escape" && !moment.done && !tx.textContent.trim()) { e.preventDefault(); holdMoment(); return; } cutMoment(); }   /* any key ends the moment where it stands (the evolution happens) and goes on to the field; Esc with the field empty keeps the old form */
     if (card && e.key === "Escape") { e.preventDefault(); closeCard(); ready(); return; }

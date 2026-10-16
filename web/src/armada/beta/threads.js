@@ -9,7 +9,7 @@ import {feed, lane} from "./frame.js";
 import {faceOf, nameOf} from "./faces.js";
 import {echoHTML, plainOf} from "./parts.js";
 import {ready} from "./composer.js";
-import {appendMessage, dist, edge, grown, haltLane, hugAll, sectionOf, syncJump} from "./feed.js";
+import {appendMessage, dist, edge, grown, haltLane, hugAll, releaseRows, sectionOf, syncJump} from "./feed.js";
 import {wireOf} from "./mention_text.js";
 import {transmit} from "./outbox.js";
 
@@ -36,7 +36,7 @@ function openThread(id, quiet, o = {}) { const cl = sectionOf(id); if (!cl) retu
   if (quiet) { write(); hugAll(); } else {   /* the root stays where it was read; the view moves only to bring the thread's field into sight, never the root out of it */
     haltLane(); state.pinned = false; const y = feed.scrollTop; write(); hugAll(); feed.scrollTop = y;
     const f = $(":scope > .cz", box).getBoundingClientRect(), fr = feed.getBoundingClientRect(), rr = (tl || anchor).getBoundingClientRect(), up = Math.min(f.bottom - (fr.bottom - 8), rr.top - (fr.top + 28));
-    if (up > 0) { feed.scrollTop += up; M.release(lane, {y: up}, "move"); } state.lastSet = feed.scrollTop; state.pinned = dist() < 4; edge(); syncJump(); M.release(box, {y: -(T.rise || 6)}, "touch"); M.appear(box, 0.3); }
+    if (up > 0) { feed.scrollTop += up; releaseRows(up, "move"); } state.lastSet = feed.scrollTop; state.pinned = dist() < 4; edge(); syncJump(); M.release(box, {y: -(T.rise || 6)}, "touch"); M.appear(box, 0.3); }
   if (tl) $(".lk", tl).classList.add("on");
   if (o.focus) { state.threadTx = $(":scope > .cz .tx", box); ready(); } }
 /* replies further back than the conversation's window: the thread's own narrow fetches them, once */

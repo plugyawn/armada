@@ -5,7 +5,7 @@ import {expanded, marks, msgIndex, places, repoStreams, state, streams, topicsOf
 import {api} from "./connection.js";
 import {band, feed, lane, main, navFixed, panes} from "./frame.js";
 import {drawComposer, ready} from "./composer.js";
-import {drawLane} from "./feed.js";
+import {drawLane, releaseRows} from "./feed.js";
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
@@ -73,7 +73,7 @@ async function openPlace(p, o = {}) {
   if (p.kind === "page") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#page"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); openPage(p); return; }
   if (p.kind === "home") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); drawHome(); if (prev && prev.key !== p.key) M.release($("#home"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); fetchMentions(); return; }
   drawNav(); drawHeader(); drawLane(); drawRunState(true); drawSide(); drawTyping(); drawComposer();
-  if (prev && prev.key !== p.key) M.release(lane, {y: T["pane-rise"] || 4}, "touch", {id: "pane"});
+  if (prev && prev.key !== p.key) releaseRows(T["pane-rise"] || 4, "touch");
   ready();
   const c = state.P, fresh = !c.loaded;
   const jobs = [fresh ? fetchMsgs(c) : null, fetchRuns(c), c.ctx ? null : fetchCtx(c)];

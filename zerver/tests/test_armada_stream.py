@@ -20,6 +20,7 @@ from zerver.lib.armada import (
     ArmadaWorkerTranscriptEvent,
     armada_turn_idle_hook,
     build_armada_active_session_summary_from_messages,
+    get_armada_live_run_state,
     get_armada_session_payload,
 )
 from zerver.lib.armada_agent import (
@@ -490,3 +491,28 @@ class ArmadaStreamTest(ZulipTestCase):
 
         with self.assertLogs("zerver.lib.armada", level="WARNING"):
             self.run_turn(script, bot_handler=bot_handler)
+
+    def test_a_page_that_opens_mid_answer_can_join_the_text_so_far(self) -> None:
+        seen = []
+
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("First words"))
+            self.tick(2.5)
+            event_callback(streamed(" and more"))
+            seen.append(get_armada_live_run_state(TRIGGER_MESSAGE_ID))
+            return "First words and more"
+
+        self.run_turn(script)
+
+        # Saved with the message: the item streaming, and its text.
+        live = seen[0]
+        assert live is not None
+        self.assertEqual(
+            live["stream"],
+            {"message_id": PROGRESS_MESSAGE_ID, "item": 0, "text": "First words and more"},
+        )
+        # Over: nothing to join.
+        live = get_armada_live_run_state(TRIGGER_MESSAGE_ID)
+        assert live is not None
+        self.assertEqual(live["status"], "done")
+        self.assertIsNone(live["stream"])

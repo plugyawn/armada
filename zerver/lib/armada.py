@@ -183,11 +183,22 @@ class ArmadaLiveRunOperation(TypedDict):
     label: str
 
 
+class ArmadaLiveStreamState(TypedDict):
+    """The text of the item a live run is streaming, as of its last save:
+    what a client that missed the item's first agent_stream events joins
+    the rest to."""
+
+    message_id: int
+    item: int
+    text: str
+
+
 class ArmadaLiveRunState(TypedDict):
     status: str
     updated_at: float
     operation: NotRequired[ArmadaLiveRunOperation | None]
     has_visible_assistant_text: NotRequired[bool]
+    stream: NotRequired[ArmadaLiveStreamState | None]
 
 
 class ArmadaRecentMessage(TypedDict):
@@ -1257,12 +1268,14 @@ def write_armada_live_run_state(
     status: ArmadaWorkerRunStatus,
     operation: ArmadaLiveRunOperation | None = None,
     has_visible_assistant_text: bool = False,
+    stream: ArmadaLiveStreamState | None = None,
 ) -> None:
     state: ArmadaLiveRunState = {
         "status": status,
         "updated_at": time.time(),
         "operation": operation,
         "has_visible_assistant_text": has_visible_assistant_text,
+        "stream": stream,
     }
     cache.set(
         armada_live_run_cache_key(trigger_message_id),
@@ -1302,11 +1315,20 @@ def armada_live_run_state_from_cache(state: object) -> ArmadaLiveRunState | None
         label = raw_operation.get("label")
         if isinstance(kind, str) and isinstance(label, str):
             operation = {"kind": kind, "label": label}
+    raw_stream = state.get("stream")
+    stream: ArmadaLiveStreamState | None = None
+    if isinstance(raw_stream, dict):
+        message_id = raw_stream.get("message_id")
+        item = raw_stream.get("item")
+        text = raw_stream.get("text")
+        if isinstance(message_id, int) and isinstance(item, int) and isinstance(text, str):
+            stream = {"message_id": message_id, "item": item, "text": text}
     return {
         "status": status,
         "updated_at": float(updated_at),
         "operation": operation,
         "has_visible_assistant_text": state.get("has_visible_assistant_text") is True,
+        "stream": stream,
     }
 
 
@@ -3469,11 +3491,19 @@ class ArmadaWorkerTurn:
         self,
         status: ArmadaWorkerRunStatus,
     ) -> None:
+        stream = self.answer_stream
         write_armada_live_run_state(
             self.message_id,
             status=status,
             operation=self.live_operation,
             has_visible_assistant_text=self.assistant_text.has_visible_text,
+            stream={
+                "message_id": stream.message_id,
+                "item": stream.item,
+                "text": self.assistant_text.text,
+            }
+            if stream is not None and stream.item >= 0
+            else None,
         )
 
     def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:

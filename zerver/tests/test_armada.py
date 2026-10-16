@@ -1,6 +1,7 @@
 # ruff: noqa: S108
 
 import json
+import logging
 import queue
 import random
 import threading
@@ -17,6 +18,7 @@ from urllib.request import Request
 
 from django.conf import settings
 from django.test import override_settings
+from pika.exceptions import ChannelClosedByBroker
 from typing_extensions import NotRequired, Self, Unpack, override
 
 from zerver.lib.armada import (
@@ -5397,7 +5399,9 @@ class ArmadaSessionDefaultsTest(TestCase):
             with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
                 for slot, own_queue in enumerate(armada_worker_queue_names()):
                     self.assertEqual(
-                        armada_worker_module.armada_worker_consumer_priorities(slot),
+                        armada_worker_module.armada_worker_consumer_priorities(
+                            slot, retired_queue_names=()
+                        ),
                         {
                             name: 10 if name == own_queue else 0
                             for name in armada_worker_queue_names()
@@ -5409,7 +5413,9 @@ class ArmadaSessionDefaultsTest(TestCase):
             with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
                 broker = ConsumerPriorityBroker(
                     {
-                        slot: armada_worker_module.armada_worker_consumer_priorities(slot)
+                        slot: armada_worker_module.armada_worker_consumer_priorities(
+                            slot, retired_queue_names=()
+                        )
                         for slot in range(slots)
                     }
                 )
@@ -5427,26 +5433,146 @@ class ArmadaSessionDefaultsTest(TestCase):
                 self.assertEqual(broker.deliver(home_queue), home)
 
     def test_armada_worker_uses_priority_affinity_and_one_global_inflight_event(self) -> None:
-        for slots, slot in ((2, 1), (8, 3)):
+        for slots, slot in ((1, 0), (2, 1), (8, 3)):
             with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
                 worker = object.__new__(armada_worker_module.ArmadaWorker)
                 worker.worker_slot = slot
                 worker.q = Mock(spec=SimpleQueueClient)
 
-                with patch.object(worker, "initialize_statistics"):
+                with (
+                    patch.object(worker, "initialize_statistics"),
+                    patch.object(
+                        armada_worker_module, "armada_worker_queue_exists", return_value=False
+                    ) as queue_exists,
+                    self.assertNoLogs(armada_worker_module.logger),
+                ):
                     worker.start()
 
+                queue_exists.assert_called_once_with(worker.q, f"armada_worker_{slots}")
                 worker.q.start_json_consumers.assert_called_once()
                 priorities, callback = worker.q.start_json_consumers.call_args.args
                 self.assertEqual(
-                    priorities, armada_worker_module.armada_worker_consumer_priorities(slot)
+                    priorities,
+                    {
+                        name: 10 if index == slot else 0
+                        for index, name in enumerate(armada_worker_queue_names())
+                    },
                 )
-                self.assertEqual(sorted(priorities), sorted(armada_worker_queue_names()))
-                self.assertEqual(priorities[armada_worker_queue_names()[slot]], 10)
                 self.assertTrue(
                     worker.q.start_json_consumers.call_args.kwargs["annotate_redelivery"]
                 )
                 self.assertTrue(callable(callback))
+
+    def test_lowering_the_slots_strands_no_run(self) -> None:
+        # The server ran eight slots; it now runs two, and RabbitMQ still has
+        # the queues of slots 2 to 7, with runs in some of them.
+        left_queues = {f"armada_worker_{slot}" for slot in range(2, 8)}
+        with override_settings(ARMADA_WORKER_SLOTS=2):
+            subscriptions = {}
+            for slot in range(2):
+                worker = object.__new__(armada_worker_module.ArmadaWorker)
+                worker.worker_slot = slot
+                worker.q = Mock(spec=SimpleQueueClient)
+                with (
+                    patch.object(worker, "initialize_statistics"),
+                    patch.object(
+                        armada_worker_module,
+                        "armada_worker_queue_exists",
+                        side_effect=lambda client, name: name in left_queues,
+                    ),
+                    self.assertLogs(armada_worker_module.logger, "INFO") as logs,
+                ):
+                    worker.start()
+                self.assertEqual(
+                    logs.output,
+                    [
+                        f"INFO:{armada_worker_module.logger.name}:Slot {slot} also consumes"
+                        " armada_worker_2, armada_worker_3, armada_worker_4, armada_worker_5,"
+                        " armada_worker_6, armada_worker_7, left by a larger"
+                        " [armada] worker_slots."
+                    ],
+                )
+                subscriptions[slot] = worker.q.start_json_consumers.call_args.args[0]
+
+        self.assertEqual(
+            subscriptions[0],
+            {"armada_worker": 10, "armada_worker_1": 0, **dict.fromkeys(sorted(left_queues), 0)},
+        )
+        broker = ConsumerPriorityBroker(subscriptions)
+        # A run left in a retired queue starts on an idle slot.
+        self.assertEqual(broker.deliver("armada_worker_5"), 0)
+        self.assertEqual(broker.deliver("armada_worker_7"), 1)
+        self.assertIsNone(broker.deliver("armada_worker_6"))
+        broker.finish(1)
+        self.assertEqual(broker.deliver("armada_worker_6"), 1)
+
+    def test_retired_slot_queues_run_from_the_setting_to_the_first_missing(self) -> None:
+        probed: list[str] = []
+
+        def queue_exists(name: str) -> bool:
+            probed.append(name)
+            return name in {"armada_worker_2", "armada_worker_3", "armada_worker_5"}
+
+        with override_settings(ARMADA_WORKER_SLOTS=2):
+            self.assertEqual(
+                armada_worker_module.armada_worker_retired_queue_names(queue_exists),
+                ["armada_worker_2", "armada_worker_3"],
+            )
+        self.assertEqual(probed, ["armada_worker_2", "armada_worker_3", "armada_worker_4"])
+
+        probed.clear()
+        with override_settings(ARMADA_WORKER_SLOTS=8):
+            self.assertEqual(
+                armada_worker_module.armada_worker_retired_queue_names(queue_exists), []
+            )
+        self.assertEqual(probed, ["armada_worker_8"])
+
+    def test_queue_exists_asks_rabbitmq_on_a_channel_of_its_own(self) -> None:
+        channel = Mock()
+        queue_client = SimpleNamespace(connection=Mock())
+        queue_client.connection.channel.return_value = channel
+        queue_exists = armada_worker_module.armada_worker_queue_exists
+
+        self.assertTrue(queue_exists(cast(SimpleQueueClient, queue_client), "armada_worker_2"))
+        channel.queue_declare.assert_called_once_with(queue="armada_worker_2", passive=True)
+        channel.close.assert_called_once_with()
+
+        channel.reset_mock()
+        pika_channel_logger = logging.getLogger("pika.channel")
+        missing = "NOT_FOUND - no queue 'armada_worker_3' in vhost '/'"
+
+        def close_for_missing_queue(**kwargs: object) -> None:
+            # What pika logs when the broker closes the channel.
+            pika_channel_logger.warning("Received remote Channel.Close (404): %r", missing)
+            raise ChannelClosedByBroker(404, missing)
+
+        channel.queue_declare.side_effect = close_for_missing_queue
+        with self.assertNoLogs(pika_channel_logger):
+            self.assertFalse(queue_exists(cast(SimpleQueueClient, queue_client), "armada_worker_3"))
+        # The broker closed the channel itself.
+        channel.close.assert_not_called()
+        # Only during the question is that close left out.
+        with self.assertLogs(pika_channel_logger, "WARNING") as logs:
+            pika_channel_logger.warning("Received remote Channel.Close (404): %r", missing)
+        self.assertEqual(
+            logs.output, [f"WARNING:pika.channel:Received remote Channel.Close (404): {missing!r}"]
+        )
+
+        # Any other close is an error, and pika's warning about it stays.
+        def refuse(**kwargs: object) -> None:
+            pika_channel_logger.warning("Received remote Channel.Close (403): ACCESS_REFUSED")
+            raise ChannelClosedByBroker(403, "ACCESS_REFUSED")
+
+        channel.queue_declare.side_effect = refuse
+        with (
+            self.assertLogs(pika_channel_logger, "WARNING") as logs,
+            self.assertRaises(ChannelClosedByBroker),
+        ):
+            queue_exists(cast(SimpleQueueClient, queue_client), "armada_worker_4")
+        self.assertEqual(
+            logs.output,
+            ["WARNING:pika.channel:Received remote Channel.Close (403): ACCESS_REFUSED"],
+        )
 
     def test_armada_worker_statistics_are_slot_specific(self) -> None:
         worker = object.__new__(armada_worker_module.ArmadaWorker)

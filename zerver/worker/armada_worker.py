@@ -3,11 +3,12 @@ import logging
 import threading
 import time
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from django.conf import settings
 from django.db import close_old_connections, reset_queries
+from pika.exceptions import ChannelClosedByBroker
 from typing_extensions import override
 
 from scripts.lib.armada_worker_slots import (
@@ -68,7 +69,9 @@ armada_worker_runtime_last_used: dict[ArmadaWorkerRuntimeKey, float] = {}
 armada_worker_runtimes_in_use: set[ArmadaWorkerRuntimeKey] = set()
 
 
-def armada_worker_consumer_priorities(worker_slot: int) -> dict[str, int]:
+def armada_worker_consumer_priorities(
+    worker_slot: int, *, retired_queue_names: Sequence[str]
+) -> dict[str, int]:
     """The RabbitMQ consumer priority of each queue one slot consumes.
 
     Every slot consumes every slot's queue, with one delivery in flight
@@ -76,12 +79,61 @@ def armada_worker_consumer_priorities(worker_slot: int) -> dict[str, int]:
     delivery to the highest-priority consumer that has room. So a run
     goes to its home slot when that slot is idle, where its worktree's
     runtime is warm, and otherwise at once to any idle slot: as many runs
-    go at once as there are slots, wherever their homes are."""
+    go at once as there are slots, wherever their homes are. The queues
+    of retired slots are consumed the same way, so that nothing left in
+    them is stranded."""
     own_queue = armada_worker_slot_queue_name(worker_slot)
     return {
         own_queue: ARMADA_WORKER_HOME_QUEUE_PRIORITY,
-        **{queue_name: 0 for queue_name in armada_worker_queue_names() if queue_name != own_queue},
+        **{
+            queue_name: 0
+            for queue_name in (*armada_worker_queue_names(), *retired_queue_names)
+            if queue_name != own_queue
+        },
     }
+
+
+def armada_worker_retired_queue_names(queue_exists: Callable[[str], bool]) -> list[str]:
+    """The queues of slots beyond ARMADA_WORKER_SLOTS that RabbitMQ still has.
+
+    A server that ran more slots left them behind, perhaps with runs in
+    them, and while a restart is under way a process that still has the
+    larger setting may send runs there. Every slot declares every slot's
+    queue, so they follow the current ones without a gap, and the first
+    missing name ends them."""
+    retired_queue_names: list[str] = []
+    slot = settings.ARMADA_WORKER_SLOTS
+    while queue_exists(queue_name := armada_worker_slot_queue_name(slot)):
+        retired_queue_names.append(queue_name)
+        slot += 1
+    return retired_queue_names
+
+
+def armada_worker_queue_exists(queue_client: SimpleQueueClient, queue_name: str) -> bool:
+    """Whether RabbitMQ has a queue, asked without creating it. A passive
+    declaration of a missing queue closes the channel it was sent on, so
+    it goes on a channel of its own, and pika's warning about that close,
+    which every slot's start would otherwise log, is left out."""
+    assert queue_client.connection is not None
+    expected_close = f"NOT_FOUND - no queue '{queue_name}'"
+
+    def drop_expected_close(record: logging.LogRecord) -> bool:
+        return expected_close not in record.getMessage()
+
+    pika_channel_logger = logging.getLogger("pika.channel")
+    pika_channel_logger.addFilter(drop_expected_close)
+    try:
+        channel = queue_client.connection.channel()
+        try:
+            channel.queue_declare(queue=queue_name, passive=True)
+        except ChannelClosedByBroker as error:
+            if error.reply_code != 404:
+                raise
+            return False
+        channel.close()
+        return True
+    finally:
+        pika_channel_logger.removeFilter(drop_expected_close)
 
 
 def armada_worker_slot_should_warm(
@@ -293,10 +345,22 @@ class ArmadaWorker(QueueProcessingWorker):
         if not self.IN_SLOT_POOL:
             super().start()
             return
-        assert isinstance(self.q, SimpleQueueClient)
+        queue_client = self.q
+        assert isinstance(queue_client, SimpleQueueClient)
+        retired_queue_names = armada_worker_retired_queue_names(
+            lambda queue_name: armada_worker_queue_exists(queue_client, queue_name)
+        )
+        if retired_queue_names:
+            logger.info(
+                "Slot %d also consumes %s, left by a larger [armada] worker_slots.",
+                self.worker_slot,
+                ", ".join(retired_queue_names),
+            )
         self.initialize_statistics()
-        self.q.start_json_consumers(
-            armada_worker_consumer_priorities(self.worker_slot),
+        queue_client.start_json_consumers(
+            armada_worker_consumer_priorities(
+                self.worker_slot, retired_queue_names=retired_queue_names
+            ),
             lambda events: self.consume_single_event(events[0]),
             annotate_redelivery=True,
         )

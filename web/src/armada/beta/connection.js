@@ -9,6 +9,7 @@ import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
 import {palette} from "./palette.js";
 import {fetchPartners} from "./partners.js";
+import {fetchMentions} from "./home.js";
 import {tx} from "./frame.js";
 import {liveRun} from "./runs.js";
 import {resetStreams} from "./agent_turn.js";
@@ -66,15 +67,16 @@ function applyRegister(r) {
   streams.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);
   repoStreams.clear(); (r.repository_stream_ids || []).forEach((i) => streams.has(i) && repoStreams.add(i));
   state.dms = (r.recent_private_conversations || []).slice(0, 12);
-  unread.clear(); const u = r.unread_msgs || {}; for (const s of u.streams || []) unread.set(tkey(s.stream_id, s.topic), new Set(s.unread_message_ids)); for (const d of u.pms || []) unread.set(dkey([d.other_user_id]), new Set(d.unread_message_ids)); for (const d of u.huddles || []) unread.set(dkey(d.user_ids_string.split(",").map(Number).filter((i) => i !== state.ME)), new Set(d.unread_message_ids));
+  unread.clear(); const u = r.unread_msgs || {}; state.unreadMentions = u.mentions || []; for (const s of u.streams || []) unread.set(tkey(s.stream_id, s.topic), new Set(s.unread_message_ids)); for (const d of u.pms || []) unread.set(dkey([d.other_user_id]), new Set(d.unread_message_ids)); for (const d of u.huddles || []) unread.set(dkey(d.user_ids_string.split(",").map(Number).filter((i) => i !== state.ME)), new Set(d.unread_message_ids));
 }
 /* the queue was lost and registered again: what the page holds may have missed events, so every place is asked again
-   (the open one now, the others when opened) and the team's partners with it. R5 makes this a diff in place. */
+   (the open one now, the others when opened), the team's partners with it, and the unread mentions it does not hold. R5
+   makes this a diff in place. */
 function resync() { resetStreams();
   for (const c of places.values()) { for (const m of c.msgs) if (!m.local) { if (msgIndex.get(m.id) === c) msgIndex.delete(m.id); forgetReceipts(m.id); }
     c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; c.park = null; c.drawn = false; c.dirty.clear(); c.rows.clear(); }
   if (state.place) openPlace(state.place, {force: true, keepHash: true});
-  fetchPartners(false);
+  fetchPartners(false); fetchMentions();
 }
 /* the queue, for as long as the session stands */
 function poll() { return link.run(); }

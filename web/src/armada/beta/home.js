@@ -39,7 +39,10 @@ let homeScanned = false, homeTimer = 0;
 function drawHomeRow() { clearTimeout(homeTimer); homeTimer = setTimeout(() => { drawHome(); drawHomeTrail(); if (state.place && state.place.kind === "home") { state.hd._sig = ""; drawHeader(); drawSide(); } }, 50); }
 function drawHomeTrail() { const r = $('.row[data-k="home"]', nav); if (!r) return; const n = [...marks.values()].filter((v) => v === "needs").length, old = $(":scope > .mk", r); if (!!old === !!n) return; if (old) old.remove(); if (n) { r.insertAdjacentHTML("beforeend", mk("needs")); M.appear(r.lastElementChild); } }
 async function scanAll() { await Promise.all([scanLive(), ...[...repoStreams].map((sid) => loadTopics(sid))]); homeScanned = true; drawHomeRow(); }   /* the repositories' topics name the rows */
-async function fetchMentions() { try { const r = await api("GET", "messages", {narrow: [{operator: "is", operand: "mentioned"}], anchor: "newest", num_before: 60, num_after: 0, apply_markdown: true, client_gravatar: false}); for (const m of r.messages) if (!(m.flags || []).includes("read")) mentions.set(m.id, m); } catch (e) { return; } drawHomeRow(); }
+/* my unread mentions: register names them (unread_msgs.mentions); the newest 60 the page does not hold are read in one
+   request, once for each register, and events keep them after: a mention that arrives is added, one that is read leaves */
+async function fetchMentions() { const ids = state.unreadMentions.filter((i) => !mentions.has(i)).sort((a, b) => b - a).slice(0, 60); state.unreadMentions = []; if (!ids.length) return;
+  try { const r = await api("GET", "messages", {message_ids: ids, apply_markdown: true, client_gravatar: true}); for (const m of r.messages) if (!(m.flags || []).includes("read")) mentions.set(m.id, m); } catch (e) { return; } drawHomeRow(); }
 
 export {drawHome, drawHomeRow, drawHomeTrail, fetchMentions, HOME, homeRows, homeScanned, mentions, questionOf,
   scanAll};

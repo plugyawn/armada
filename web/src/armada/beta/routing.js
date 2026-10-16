@@ -17,7 +17,7 @@ import {drawSide} from "./column.js";
 import {drawChanges, setTab} from "./views.js";
 import {closeMenu, editing, endEdit, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
-import {drawHome, drawHomeTrail, fetchMentions, HOME} from "./home.js";
+import {drawHome, drawHomeTrail, fetchMentions, HOME, mentions} from "./home.js";
 import {pack} from "./partners.js";
 import {drawPicker, drawPickerBand, PARTNER} from "./partner_picker.js";
 import {closeCard} from "./partner_card.js";
@@ -111,7 +111,7 @@ function syncPaused(c) { const k = c.place.key, paused = !!(c.ctx && c.ctx.is_pa
 /* the picker is a place of its own too, with the band (its one sentence) and the field (its search) */
 /* a person's page, a post and the editor are one pane (pages.js), with no band and no field, as Home */
 function showHome(on, picker = false, page = false) { if (!feed) return; feed.hidden = on || picker || page; panes.Home.hidden = !on; if (panes.Partner) panes.Partner.hidden = !picker; if (panes.Page) panes.Page.hidden = !page; $("main > .dock").hidden = on || page; band.el.hidden = on || page; main.classList.toggle("bare", on || page); R.classList.toggle("picking", picker); }
-function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.size || document.hidden) return; const ids = [...set].filter((i) => typeof i === "number"); unread.delete(c.place.key); drawTrail(c.place.key); if (ids.length) api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}).catch(() => {}); }
+function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.size || document.hidden) return; const ids = [...set].filter((i) => typeof i === "number"); unread.delete(c.place.key); drawTrail(c.place.key); ids.forEach((i) => mentions.delete(i)); if (ids.length) api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}).catch(() => {}); }
 let ctxTimer = 0;
 function refreshCtx(c, ms = 1000) { clearTimeout(ctxTimer); ctxTimer = setTimeout(async () => { await fetchCtx(c); if (c === state.P) { drawHeader(); drawSide(); if (state.tab === "Changes") drawChanges(); } }, ms); }
 

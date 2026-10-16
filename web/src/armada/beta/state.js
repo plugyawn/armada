@@ -16,7 +16,7 @@ const stats = {sends: new Recent(), firstWords: new Recent(), runs: new Recent()
    the field. The maps below are changed in place. */
 const state = {
   ME: 0, meName: "", queue: null, lastEvent: -1, skew: 0,
-  dms: [], presences: {}, presenceId: -1, place: null, P: null, tab: "Chat", localSeq: 0, agentMention: "@**Onix**",
+  dms: [], unreadMentions: [], presences: {}, presenceId: -1, place: null, P: null, tab: "Chat", localSeq: 0, agentMention: "@**Onix**",
   runtimeCfg: null,                                        /* the server's runtime settings, from armada/runs: the service tier is server-wide */
   /* the realm's rules for changing and deleting a message (the page's data, then the realm event): a limit of null is
      none; a group setting is as the server writes it, a group's id or {direct_members, direct_subgroups}, read against

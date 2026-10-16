@@ -1,14 +1,14 @@
 /* INTERIM BETA (README.md): runs: their marks, the live runs at load, the questions they wait on. */
 
 import {$, $$} from "./util.js";
-import {LIVE_RUN_IDS, marks, places, QUESTION_TIMEOUT, state, streams} from "./state.js";
+import {LIVE_RUN_IDS, marks, places, QUESTION_TIMEOUT, state, streams, topicsOf} from "./state.js";
 import {now} from "./time.js";
 import {api} from "./connection.js";
 import {tkey} from "./routing.js";
 import {lane} from "./frame.js";
 import {isOnix} from "./faces.js";
 import {QUESTION} from "./parts.js";
-import {drawTrail} from "./nav.js";
+import {drawTrail, loadTopics} from "./nav.js";
 import {drawRunState} from "./band.js";
 import {drawHomeRow, questionOf} from "./home.js";
 
@@ -21,18 +21,27 @@ function seeRun(list, r) { list.unshift(r); for (let i = list.length - 1; i >= 0
 const runMark = (r, status = r.status) => (r.waiting ? "needs" : status === "queued" ? "queued" : "live");
 const LIVE_MARKS = new Set(["needs", "live", "queued"]);
 /* which worktrees have a run going: the page was given the live runs in my channels at load (zerver/views/armada_beta.py),
-   read here in one request for every twenty; run events keep them current after that. For each, the last few messages
-   of its worktree say whether it waits on a question the server's live state no longer holds. */
-async function scanLive() {
+   read here in one request for every twenty; run events keep them current after that. The server's live state says
+   whether each waits on a question; where that state is gone, or says it waits and the question's words are not known,
+   the last word of each such worktree is read, all of them in one request. */
+async function scanLive() { const unsure = [];
   for (let i = 0; i < LIVE_RUN_IDS.length; i += 20) { let r;
     try { r = await api("GET", "armada/runs", {run_ids: LIVE_RUN_IDS.slice(i, i + 20)}); } catch (e) { continue; }
     if (r.runtime_config) state.runtimeCfg = r.runtime_config;
-    await Promise.all(r.armada_runs.map(adoptLive)); } }
-async function adoptLive(r0) { if (r0.session_kind === "side" || !liveNow(r0)) return; const s = [...streams.values()].find((x) => x.name.toLowerCase() === String(r0.stream || "").toLowerCase()); if (!s) return;
+    for (const r0 of r.armada_runs) { const u = adoptLive(r0); if (u) unsure.push(u); } }
+  await lastWords(unsure); }
+function adoptLive(r0) { if (r0.session_kind === "side" || !liveNow(r0)) return null; const s = [...streams.values()].find((x) => x.name.toLowerCase() === String(r0.stream || "").toLowerCase()); if (!s) return null;
   const k = tkey(s.stream_id, r0.topic || ""), c = places.get(k); let list = c && c.runsLoaded ? c.runs : runsSeen.get(k); if (!list) runsSeen.set(k, (list = []));
   let r = list.find((x) => x.id === r0.id); if (!r) { r = askState(r0); seeRun(list, r); }   /* known already (the place was opened, or an event came): that copy is newer */
-  if (c && c.loaded) inferAsk(r, c.msgs); else { try { const mr = await api("GET", "messages", {narrow: [{operator: "channel", operand: s.stream_id}, {operator: "topic", operand: r.topic}], anchor: "newest", num_before: 6, num_after: 0, apply_markdown: true, client_gravatar: false}); inferAsk(r, mr.messages); } catch (e) {} }
-  if (!liveNow(r)) return; const want = runMark(r); if (marks.get(k) !== want) { marks.set(k, want); drawTrail(k); } }
+  if (c && c.loaded) inferAsk(r, c.msgs); else if (!r0.live || (r.waiting && !r.question)) return {r, k, sid: s.stream_id};
+  markLive(r, k); return null; }
+async function lastWords(unsure) { if (!unsure.length) return;
+  await Promise.all([...new Set(unsure.map((u) => u.sid))].map(loadTopics));
+  const last = (u) => { const t = (topicsOf.get(u.sid) || []).find((x) => x.name.toLowerCase() === String(u.r.topic || "").toLowerCase()); return t ? t.max_id : 0; };
+  const ids = [...new Set(unsure.map(last).filter(Boolean))]; let msgs = [];
+  if (ids.length) try { msgs = (await api("GET", "messages", {message_ids: ids, apply_markdown: true, client_gravatar: true})).messages; } catch (e) {}
+  for (const u of unsure) { const m = msgs.find((x) => x.id === last(u)); if (m) inferAsk(u.r, [m]); markLive(u.r, u.k); } }
+function markLive(r, k) { if (!liveNow(r)) return; const want = runMark(r); if (marks.get(k) !== want) { marks.set(k, want); drawTrail(k); } }
 /* a run that waits for a person: the server's live state says it is on a question (request_user_input); the answer is
    any message that names the agent while the run waits (zerver/lib/armada.py, request_user_answers) */
 function askState(r) { if (r.waiting === undefined) r.waiting = !!(r.live && r.live.operation && r.live.operation.kind === "question" && (r.status === "running" || r.status === "queued")); return r; }

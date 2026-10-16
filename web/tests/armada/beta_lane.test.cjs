@@ -207,6 +207,7 @@ const feed_js = zrequire("armada/beta/feed.js");
 const events = zrequire("armada/beta/events.js");
 const send = zrequire("armada/beta/send.js");
 const receipts = zrequire("armada/beta/receipts.js");
+const connection = zrequire("armada/beta/connection.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -529,4 +530,115 @@ run_test("a hidden page writes no rows, and writes them once when it is seen", (
     const seen = shape(lane);
     feed_js.drawLane();
     assert.equal(seen, shape(lane));
+});
+
+const turns = () => lane.querySelectorAll(":scope > .cl").length;
+// n turns, one message each, a minute apart from `from`, Iago's and mine.
+const many = (from, n, topic) =>
+    Array.from({length: n}, (_, i) => message(from + i, i % 2 ? ME : IAGO, topic, i));
+
+run_test("a place left keeps its newest messages, and lets the rest go", async () => {
+    const {KEEP} = beta_state;
+    const c = open_with("trimmed", many(4000, 300, "trimmed"));
+    receipts.onReadReceipts({message_ids: [4001, 4299], user_id: IAGO});
+    await routing.openPlace(place_of("trimmed elsewhere"));
+    assert.equal(c.msgs.length, KEEP);
+    assert.equal(c.msgs[0].id, 4300 - KEEP);
+    assert.ok(!beta_state.msgIndex.has(4300 - KEEP - 1));
+    assert.ok(beta_state.msgIndex.has(4300 - KEEP));
+    assert.ok(!receipts.rcpt.has(4001));
+    assert.ok(receipts.rcpt.has(4299));
+    assert.equal([...c.park.children].filter((x) => x.matches(".cl")).length, KEEP);
+    // Opened again: its newest messages, and the line that offers the rest.
+    await routing.openPlace(place_of("trimmed"));
+    assert.equal(turns(), KEEP);
+    assert.ok(lane.querySelector(":scope > .more-up"));
+    const back = shape(lane);
+    feed_js.drawLane();
+    assert.equal(back, shape(lane));
+});
+
+run_test("the cut through a turn leaves the rest of the turn, as drawn", async () => {
+    const {KEEP} = beta_state;
+    // Iago's first turn is four messages; the place holds two more than it
+    // keeps, so the cut falls inside that turn.
+    const c = open_with("cut", [
+        ...Array.from({length: 4}, (_, i) => message(8000 + i, IAGO, "cut", i)),
+        ...Array.from({length: KEEP - 2}, (_, i) =>
+            message(8004 + i, i % 2 ? IAGO : ME, "cut", 4 + i),
+        ),
+    ]);
+    const first = turn_of(8000);
+    await routing.openPlace(place_of("cut elsewhere"));
+    await routing.openPlace(place_of("cut"));
+    assert.equal(c.msgs[0].id, 8002);
+    assert.equal(turn_of(8002), first);
+    const cut = shape(lane);
+    feed_js.drawLane();
+    assert.equal(cut, shape(lane));
+});
+
+run_test("the open place, its end in view, lets its oldest go past the cap", () => {
+    const {CAP, KEEP} = beta_state;
+    open_with("capped", many(5000, CAP, "capped"));
+    beta_state.state.pinned = true;
+    assert.equal(turns(), CAP);
+    events.onMessage({message: message(5000 + CAP, IAGO, "capped", CAP), flags: ["read"]});
+    assert.equal(beta_state.state.P.msgs.length, KEEP);
+    assert.equal(turns(), KEEP);
+    assert.ok(!beta_state.msgIndex.has(5000));
+    // On another view, the rows written wait to be hugged; the ones let go
+    // are not held for it.
+    beta_state.state.tab = "README";
+    for (let i = 1; i <= CAP; i += 1) {
+        events.onMessage({
+            message: message(5000 + CAP + i, i % 2 ? ME : IAGO, "capped", CAP + i),
+            flags: ["read"],
+        });
+    }
+    beta_state.state.tab = "Chat";
+    assert.ok(feed_js.toHug.size > 0);
+    assert.ok(
+        [...feed_js.toHug].every((x) => x.isConnected),
+        "a turn let go is held for hugging",
+    );
+    // While I read further up, nothing is let go.
+    beta_state.state.pinned = false;
+    const held = beta_state.state.P.msgs.length;
+    for (let i = 1; i <= CAP; i += 1) {
+        events.onMessage({
+            message: message(5000 + 2 * CAP + i, IAGO, "capped", 2 * CAP + i),
+            flags: ["read"],
+        });
+    }
+    assert.equal(beta_state.state.P.msgs.length, held + CAP);
+});
+
+run_test("ten places are kept at most; one let go hears only its unread count", async () => {
+    const {PLACES_KEPT} = beta_state;
+    const opened = [];
+    for (let i = 0; i <= PLACES_KEPT; i += 1) {
+        const p = place_of(`lru ${i}`);
+        await routing.openPlace(p);
+        opened.push(p.key);
+        events.onMessage({message: message(6000 + i * 10, IAGO, `lru ${i}`), flags: ["read"]});
+    }
+    assert.deepEqual([...beta_state.places.keys()], opened.slice(-PLACES_KEPT));
+    assert.ok(!beta_state.msgIndex.has(6000));
+    assert.ok(beta_state.msgIndex.has(6010));
+    // A message to the place let go is counted unread, and kept nowhere.
+    events.onMessage({message: message(6001, IAGO, "lru 0"), flags: []});
+    assert.ok(beta_state.unread.get(opened[0]).has(6001));
+    assert.ok(!beta_state.msgIndex.has(6001));
+    assert.ok(!beta_state.places.has(opened[0]));
+    // Opened again, it asks the server for its messages.
+    requests.length = 0;
+    await routing.openPlace(place_of("lru 0"));
+    assert.ok(requests.some((r) => r.method === "GET" && r.url === "/json/messages"));
+});
+
+run_test("a lost queue forgets the messages it will ask for again", () => {
+    open_with("resync", many(7000, 5, "resync"));
+    connection.resync();
+    assert.ok(!beta_state.msgIndex.has(7000));
 });

@@ -1,15 +1,15 @@
 /* INTERIM BETA (README.md): places: their keys and addresses, their caches and what fills them, and opening one. */
 
 import {$, $$, R, store, T} from "./util.js";
-import {expanded, marks, msgIndex, places, repoStreams, state, streams, topicsOf, unread} from "./state.js";
+import {CAP, expanded, KEEP, marks, msgIndex, places, PLACES_KEPT, repoStreams, state, streams, topicsOf, unread} from "./state.js";
 import {api} from "./connection.js";
 import {band, feed, lane, main, navFixed, panes} from "./frame.js";
 import {drawComposer, ready} from "./composer.js";
-import {drawLane, releaseRows, showLane} from "./feed.js";
+import {cutRows, drawLane, dropRows, ends, pin, releaseRows, showLane, shown} from "./feed.js";
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
-import {closeInfo, loadMembers, loadReceipts, RECEIPTS} from "./receipts.js";
+import {closeInfo, forgetReceipts, loadMembers, loadReceipts, RECEIPTS} from "./receipts.js";
 import {drawFooters} from "./agent_turn.js";
 import {drawTyping} from "./events.js";
 import {drawRunState} from "./band.js";
@@ -45,7 +45,8 @@ function placeFromNarrow(h) { const parts = h.slice(1).split("/"), dec = (s) => 
   const ch = term("channel", "stream"), topic = term("topic", "subject"), dm = term("dm", "pm-with");
   if (ch !== null && topic !== null) { const sid = parseInt(ch, 10); if (!streams.has(sid)) return null; const p = placeFromKey(tkey(sid, topic)); if (p) p.topic = (topicsOf.get(sid) || []).find((x) => x.name.toLowerCase() === topic.toLowerCase())?.name ?? topic; return p; }
   const ids = dm !== null && /^([\d,]+)/.exec(dm); return ids ? placeFromKey(dkey(ids[1].split(",").map(Number).filter((i) => i && i !== state.ME))) : null; }
-const cacheOf = (p) => { let c = places.get(p.key); if (!c) { c = {place: p, msgs: [], byId: new Map(), rows: new Map(), dirty: new Set(), park: null, drawn: false, loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; places.set(p.key, c); } return c; };
+/* a place's cache; `places` is kept in the order places were last opened, the least recent first (keep) */
+const cacheOf = (p) => { let c = places.get(p.key); if (!c) c = {place: p, msgs: [], byId: new Map(), rows: new Map(), dirty: new Set(), park: null, drawn: false, loaded: false, oldest: false, loading: false, runs: [], ctx: null, typers: new Map(), open: new Set()}; else places.delete(p.key); places.set(p.key, c); return c; };
 const narrowOf = (p) => (p.kind === "topic" ? [{operator: "channel", operand: p.stream_id}, {operator: "topic", operand: p.topic}] : [{operator: "dm", operand: p.ids.length ? p.ids : [state.ME]}]);
 const placeOfMsg = (m) => (m.type === "stream" ? tkey(m.stream_id, m.subject ?? m.topic ?? "") : dkey((m.display_recipient || []).map((u) => u.id).filter((i) => i !== state.ME)));
 function addMsg(c, m) { if (c.byId.has(m.id)) return false; c.byId.set(m.id, m); msgIndex.set(m.id, c); let i = c.msgs.length; if (typeof m.id === "number") while (i > 0 && typeof c.msgs[i - 1].id === "number" && c.msgs[i - 1].id > m.id) i--; c.msgs.splice(i, 0, m); return true; }
@@ -57,6 +58,24 @@ async function fetchMsgs(c, older) {
   catch (e) { c.error = e.message; }
   c.loading = false;
 }
+/* ---------- what a place keeps (state.js: KEEP, CAP, PLACES_KEPT) ----------
+   A message let go leaves its place's rows, msgIndex and the receipts; scrolling up asks the server for it again. A place
+   let go is fetched again when it is opened; until then its live events change only its unread counts and marks. A
+   message on its way is never let go, nor a place that holds one. */
+function trim(c, keep) { const n = c.msgs.length - keep; if (n <= 0) return;
+  const drop = new Set(c.msgs.slice(0, n).filter((m) => typeof m.id === "number" && !m.pending && !m.failed)); if (!drop.size) return;
+  c.msgs = c.msgs.filter((m) => !drop.has(m)); c.oldest = false; const gone = new Set();
+  for (const m of drop) { gone.add(m.id); c.byId.delete(m.id); if (msgIndex.get(m.id) === c) msgIndex.delete(m.id); forgetReceipts(m.id); }
+  cutRows(c, c.msgs.find((m) => !m.thread_root_message_id), gone);
+  for (const id of c.open) if (!c.byId.has(id)) c.open.delete(id);
+  if (shown(c)) { ends(c); if (state.threadTx && !state.threadTx.isConnected) state.threadTx = null; } }
+function letGo(c) { for (const m of c.msgs) { if (msgIndex.get(m.id) === c) msgIndex.delete(m.id); forgetReceipts(m.id); } for (const t of c.typers.values()) clearTimeout(t); c.typers.clear(); dropRows(c); }
+/* after a place is opened: the places left keep KEEP messages each, and no more than PLACES_KEPT places are kept */
+function keep() { for (const c of places.values()) if (c !== state.P) trim(c, KEEP);
+  for (const [k, c] of places) { if (places.size <= PLACES_KEPT) break; if (c === state.P || c.msgs.some((m) => m.pending || m.failed)) continue; letGo(c); places.delete(k); } }
+/* a message added to a place: a place left trims back to KEEP a page past it; the open one, while its end is in view (or was,
+   when the page was hidden), past CAP. Rows being read further up are never let go. */
+function keepEnd(c) { const here = c === state.P; if (here && !state.pinned) return; if (c.msgs.length <= (here ? CAP : KEEP + 50)) return; trim(c, KEEP); if (shown(c)) pin(); }
 async function fetchRuns(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "armada/runs", {stream: p.stream, topic: p.topic}); if (r.runtime_config) state.runtimeCfg = r.runtime_config; c.runs = r.armada_runs.filter((x) => x.session_kind !== "side"); c.runs.forEach(askState); runsSeen.set(p.key, c.runs); c.runsLoaded = true; } catch (e) {} }
 async function fetchCtx(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "armada/topic-context", {stream: p.stream, topic: p.topic}); c.ctx = r.armada_topic_context; } catch (e) { c.ctxError = e.message; } }
 
@@ -72,7 +91,7 @@ async function openPlace(p, o = {}) {
   if (p.kind === "partner") { drawNav(); drawHeader(); drawRunState(true); drawPicker(); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#picker"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); ready(); return; }
   if (p.kind === "page") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#page"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); openPage(p); return; }
   if (p.kind === "home") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); drawHome(); if (prev && prev.key !== p.key) M.release($("#home"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); fetchMentions(); return; }
-  drawNav(); drawHeader(); showLane(state.P); drawRunState(true); drawSide(); drawTyping(); drawComposer();
+  drawNav(); drawHeader(); showLane(state.P); keep(); drawRunState(true); drawSide(); drawTyping(); drawComposer();
   if (prev && prev.key !== p.key) releaseRows(T["pane-rise"] || 4, "touch");
   ready();
   const c = state.P, fresh = !c.loaded;
@@ -96,5 +115,5 @@ function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.siz
 let ctxTimer = 0;
 function refreshCtx(c, ms = 1000) { clearTimeout(ctxTimer); ctxTimer = setTimeout(async () => { await fetchCtx(c); if (c === state.P) { drawHeader(); drawSide(); if (state.tab === "Changes") drawChanges(); } }, ms); }
 
-export {addMsg, cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, placeOfMsg, refreshCtx,
+export {addMsg, cacheOf, dkey, fetchMsgs, keepEnd, markRead, openPlace, placeFromHash, placeFromKey, placeOfMsg, refreshCtx,
   tkey, topicLabel};

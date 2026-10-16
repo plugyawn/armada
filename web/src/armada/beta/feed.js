@@ -145,7 +145,7 @@ function removeRow(c, id) { const cl = c.rows.get(id); c.rows.delete(id); if (!c
   if (cl.dataset.mid !== String(id) && $(":scope > [data-part]", cl)) { finish(cl); return; }
   const parent = cl.parentNode, next = cl.nextElementSibling; forgetRows(c, cl); cl.remove(); if (parent.classList && parent.classList.contains("thr-in")) return;
   for (let x = next ? next.previousElementSibling : parent.lastElementChild; x && x.matches(".day, .unread") && !(next && next.matches(".cl")); ) { const p = x.previousElementSibling; x.remove(); x = p; }
-  if (!next) { const line = $$(":scope > .day", parent).pop(); parent._day = line ? +line.dataset.day : null; }
+  if (!next) { let line = parent.lastElementChild; while (line && !line.matches(".day")) line = line.previousElementSibling; parent._day = line ? +line.dataset.day : null; }   /* a parked fragment has no :scope */
   if (next && joinable(c, next.previousElementSibling, next)) merge(c, next.previousElementSibling, next, "after"); else relabelFrom(next); }
 /* older messages a page brought, written above the lane's first row: the page's last day line goes when the lane begins on
    that day, and its last turn joins the lane's first where drawLane would have written them as one */
@@ -205,8 +205,24 @@ function park(c) { const r = document.createRange(); r.selectNodeContents(lane);
 function showLane(c) { stillLane();
   if (owner !== c) { if (owner) park(owner); owner = c; if (c.park) { lane.append(c.park); lane._day = c.park._day; c.park = null; } else c.drawn = false; }
   if (!c.drawn) drawLane(); else catchUp(c, {revisit: true}); }
+/* the oldest messages of a place let go (routing.js, trim): every row above the oldest message kept goes in one cut, a day
+   line is written over that message's turn if its own went, and the turn loses the parts of the messages that went. A
+   thousand rows cost one range removal; it reads no layout, and works on parked rows as well. */
+function cutRows(c, first, gone) { for (const id of gone) c.rows.delete(id);
+  const turn = first && c.rows.get(first.id), parent = turn ? turn.parentNode : owner === c ? lane : c.park; if (!parent) return;
+  const up = parent.firstElementChild && parent.firstElementChild.matches(".more-up") ? parent.firstElementChild : null, from = up ? up.nextElementSibling : parent.firstElementChild;
+  let start = turn; while (start && start.previousElementSibling && start.previousElementSibling.matches(".day, .unread")) start = start.previousElementSibling;
+  if (from && from !== start) { const r = document.createRange(); r.setStartBefore(from); if (start) r.setEndBefore(start); else r.setEndAfter(parent.lastElementChild); r.deleteContents(); }
+  unhug(); if (!turn) { parent._day = null; return; }
+  if (!start.matches(".day")) { const line = el("div", "day", dayLabel(dayTs(+turn.dataset.day))); line.dataset.day = turn.dataset.day; start.before(line); }
+  let cut = false; for (const x of [...turn.children]) if (x.dataset.mid && gone.has(idOf(x.dataset.mid))) { x.remove(); cut = true; }
+  if (cut) finish(turn); relabelFrom(turn); }
+/* a place let go (routing.js, keep): its rows go, parked or in the lane */
+function dropRows(c) { if (owner === c) { stillLane(); lane.textContent = ""; lane._day = null; owner = null; unhug(); } c.park = null; c.rows.clear(); c.dirty.clear(); c.drawn = false; }
+/* a turn that has left the lane is not held for hugging (a turn written while another view is up waits there for the next hug) */
+function unhug() { for (const x of toHug) if (!x.isConnected) toHug.delete(x); }
 /* every bubble hugs its words again: the lane's width changed, or the faces loaded */
 function rehug() { hugGen++; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); if (owner) owner.hugGen = hugGen; }
 
-export {appendMessage, catchUp, dist, drawLane, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
+export {appendMessage, catchUp, cutRows, dist, drawLane, dropRows, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
   rehug, releaseRows, removeRow, sectionOf, show, showLane, shown, stale, syncJump, toHug};

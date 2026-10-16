@@ -3,7 +3,7 @@
 import {$, $$, el, esc} from "./util.js";
 import {armadaBots, marks, state, stats} from "./state.js";
 import {now} from "./time.js";
-import {addMsg} from "./routing.js";
+import {addMsg, keepEnd} from "./routing.js";
 import {lane, nav, sh, tx} from "./frame.js";
 import {echoHTML} from "./parts.js";
 import {drawAtts, note, ready, syncField} from "./composer.js";
@@ -57,7 +57,7 @@ function send(o = {}) {
   seedField(); ready();
   const task = performance.now() - t0, rec = {task: Math.round(task * 100) / 100, sinceKey: null, painted: null}; stats.sends.push(rec);
   requestAnimationFrame(() => setTimeout(() => { rec.painted = Math.round((performance.now() - at) * 10) / 10; rec.sinceKey = Math.round((t0 - at) * 10) / 10; drawLab(); }, 0));
-  transmit(c, m, ph);
+  transmit(c, m, ph); keepEnd(c);
   requestAnimationFrame(() => setTimeout(() => { if (state.P === c) drawSide(); }, 0));   /* the column learns I spoke after the frame that shows my bubble, never inside the send task */
 }
 function retry(id) { const m = state.P.byId.get(id); if (!m || !m.failed) return; m.failed = false; m.pending = true; const cl = sectionOf(m.id); if (cl) clearFailMark(cl, m.id); S.play("send"); transmit(state.P, m, null); ready(); }

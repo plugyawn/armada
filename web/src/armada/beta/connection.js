@@ -3,7 +3,7 @@
    every request) are link.js's; this module gives them the page. */
 
 import {$, el, esc} from "./util.js";
-import {armadaBots, groups, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
+import {armadaBots, groups, msgIndex, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
 import {dkey, openPlace, tkey} from "./routing.js";
 import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
@@ -13,6 +13,7 @@ import {tx} from "./frame.js";
 import {liveRun} from "./runs.js";
 import {resetStreams} from "./agent_turn.js";
 import {createLink} from "./link.js";
+import {forgetReceipts} from "./receipts.js";
 
 /* the tabs of this browser tell each other whose session they hold, and when it ends (resilience.md 2.5) */
 const tabs = typeof BroadcastChannel === "function" ? new BroadcastChannel("armada") : null;
@@ -68,7 +69,8 @@ function applyRegister(r) {
 /* the queue was lost and registered again: what the page holds may have missed events, so every place is asked again
    (the open one now, the others when opened) and the team's partners with it. R5 makes this a diff in place. */
 function resync() { resetStreams();
-  for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; c.park = null; c.drawn = false; c.dirty.clear(); }
+  for (const c of places.values()) { for (const m of c.msgs) if (!m.local) { if (msgIndex.get(m.id) === c) msgIndex.delete(m.id); forgetReceipts(m.id); }
+    c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; c.park = null; c.drawn = false; c.dirty.clear(); c.rows.clear(); }
   if (state.place) openPlace(state.place, {force: true, keepHash: true});
   fetchPartners(false);
 }
@@ -126,4 +128,4 @@ function listen() {
 }
 listen();
 
-export {api, handle, on, onRestart, poll, register, session, signOut, signedOut};
+export {api, handle, on, onRestart, poll, register, resync, session, signOut, signedOut};

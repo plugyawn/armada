@@ -4,7 +4,7 @@ import {$, $$, esc, T} from "./util.js";
 import {groups, marks, msgIndex, people, places, state, stats, streams, topicsOf, unread} from "./state.js";
 import {now} from "./time.js";
 import {api} from "./connection.js";
-import {addMsg, dkey, placeOfMsg, refreshCtx, tkey} from "./routing.js";
+import {addMsg, dkey, keepEnd, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
@@ -41,12 +41,13 @@ function onMessage(ev) {
   if (isOnix(m.sender_id)) { const ph = c.msgs.find((x) => x.local && x.onix); if (ph) { ph.maybeLive = true; adopt(c, ph, m.id, m); if (c === state.P) { const cl = sectionOf(m.id); if (cl) { cl.dataset.mid = m.id; syncOnix(cl, ph); } } return; } }
   c.typers.delete(m.sender_id); addMsg(c, m);
   if (m.thread_root_message_id) { const root = c.byId.get(m.thread_root_message_id); if (root) { root.reply_summary = root.reply_summary || {reply_count: 0, participants: []}; root.reply_summary.reply_count = Math.max((root.reply_summary.reply_count || 0) + 1, repliesOf(c, root.id).length); if (shown(c)) { const cl = sectionOf(root.id); if (cl) grown(() => { drawThreadLine(cl, root); const box = $(`.thr-in[data-mid="${root.id}"]`, cl); if (box) threadAppend(box, m); }, "settle"); } else stale(c, root.id); } return; }
-  if (!shown(c)) return;   /* its row is written when its place is shown (catchUp) */
+  if (!shown(c)) { keepEnd(c); return; }   /* its row is written when its place is shown (catchUp) */
   drawTyping(); drawSide();
-  if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); return; }
+  if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); keepEnd(c); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
   if (state.pinned) { const last = row.parts[row.parts.length - 1], b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
   if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); hopOnce(row.cl); }
+  keepEnd(c);
 }
 function onUpdate(ev, at) {
   const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (!m) return;

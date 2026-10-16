@@ -33,7 +33,10 @@ const marks = new Map();                                   /* place key -> "need
 const places = new Map();                                  /* place key -> what is known of it */
 const groups = new Map();                                  /* user group id -> {members, subgroups}: Sets of ids, the subgroups direct */
 const msgIndex = new Map();                                /* message id -> its place's cache */
+/* what the page keeps of the places it has opened (routing.js, keep): a place left keeps its newest KEEP messages and their
+   rows; the place in view, its end in view, trims back to KEEP once it holds CAP; PLACES_KEPT places are kept at most */
+const KEEP = 100, CAP = 400, PLACES_KEPT = 10;
 const expanded = new Set(JSON.parse(store.get("open") || "[]")), allKids = new Set();
 
-export {allKids, armadaBots, DATA, expanded, groups, LIVE_RUN_IDS, marks, msgIndex, people, places, QUESTION_TIMEOUT,
-  repoStreams, state, stats, streams, topicsOf, unread, worktrees};
+export {allKids, armadaBots, CAP, DATA, expanded, groups, KEEP, LIVE_RUN_IDS, marks, msgIndex, people, places, PLACES_KEPT,
+  QUESTION_TIMEOUT, repoStreams, state, stats, streams, topicsOf, unread, worktrees};

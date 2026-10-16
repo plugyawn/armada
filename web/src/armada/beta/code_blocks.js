@@ -10,7 +10,10 @@ function codeBlock(html) { const pre = el("pre", "blk"); setCode(pre, html); pre
 /* the code, written again as the server's rendering of it changes (a streamed answer): the button is kept */
 function setCode(pre, html) { let code = $(":scope > .code", pre); if (!code) { code = el("span", "code"); pre.prepend(code); } code.innerHTML = html;
   if (!$(":scope > .cp", pre)) { pre.append(el("button", "c sq s cp", ic("copy"))); const b = $(":scope > .cp", pre); b.setAttribute("aria-label", "Copy code"); b.dataset.tip = "Copy code"; b.tabIndex = -1; host(pre); }
-  fold(pre, (html.match(/\n/g) || []).length + 1); }
+  pre._lines = (html.match(/\n/g) || []).length + 1; fold(pre, pre._lines); }
+/* code still being written: its new characters go at the end (before `before`, the working mark, when it stands there),
+   as text, and nothing before them is written again */
+function appendCode(pre, text, before = null) { const code = $(":scope > .code", pre); if (before) before.before(text); else code.append(text); pre._lines += (text.match(/\n/g) || []).length; fold(pre, pre._lines); }
 /* Long output folds: a block of more than FOLD_AT lines shows FOLD_AT - 1 of them and, on the line under them, how many
    more there are and Show all. Folded, it is exactly as tall as a block of FOLD_AT lines, so a block that Onix is still
    writing stops growing at that height, and nothing under it moves while it streams on. Show all opens it for as long as
@@ -25,4 +28,4 @@ function unfold(b, e, ptr) { const pre = b.closest("pre"); pre._open = !pre._ope
 /* the code as it reads, without the highlighting; from the pointer, the caret goes back to the field, as Copy text does */
 function copyCode(b, e, ptr) { const code = $(":scope > .code", b.closest("pre")); try { navigator.clipboard.writeText(code.textContent).catch(() => {}); } catch (x) {} M.say(b, "Copied", 1200); if (ptr) ready(); }
 
-export {codeBlock, setCode};
+export {appendCode, codeBlock, setCode};

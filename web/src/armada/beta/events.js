@@ -14,7 +14,7 @@ import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, settleAsk} from "./r
 import {drawProg} from "./checklist.js";
 import {applyReaction} from "./reactions.js";
 import {drawThreadLine, repliesOf, threadAppend} from "./threads.js";
-import {follow, syncOnix, updateMessage, WORKING} from "./agent_turn.js";
+import {endRun, syncOnix, updateMessage, WORKING} from "./agent_turn.js";
 import {adopt} from "./outbox.js";
 import {drawRunState} from "./band.js";
 import {drawSide} from "./column.js";
@@ -55,6 +55,7 @@ function onUpdate(ev, at) {
   updateMessage(c, m, at);
 }
 function onRun(ev) {
+  if (ev.status !== "queued" && ev.status !== "running") endRun(ev.run_id);   /* its streamed words: the saved message has them all */
   if (!ev.stream) return; const s = [...streams.values()].find((x) => x.name.toLowerCase() === ev.stream.toLowerCase()); if (!s) return; const key = tkey(s.stream_id, ev.topic || ""), c = places.get(key), live = ev.status === "queued" || ev.status === "running";
   const list = c ? c.runs : runsSeen.get(key) || []; if (!runsSeen.has(key)) runsSeen.set(key, list);
   let r = list.find((x) => x.id === ev.run_id); const fresh = !r; if (!r) { r = {id: ev.run_id, session_kind: "shared", date_created: ev.run_date_created, plan: null, overview: null, tool_count: 0, waiting: false}; list.unshift(r); }
@@ -70,7 +71,7 @@ function onRun(ev) {
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }
   if (c !== state.P) return;
   drawRunState(fresh); drawSide(); drawProg();
-  if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) { const before = feed.scrollHeight; syncOnix(cl, m); const d = feed.scrollHeight - before; if (d) follow(d, cl); } }   /* what the conversation grew by: the footer is there from the run's start, so its end grows nothing */
+  if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
 function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); }

@@ -49,10 +49,10 @@ into the engineered client deletes the module it replaces.
 | `model_picker.js` | the model and effort picker | composer |
 | `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble) | composer |
 | `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote, a send's client key (contract C4); node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
-| `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`) | feed |
+| `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`); a block of streamed words (`streamHTML`) | feed |
 | `code_blocks.js` | a code block: its code, its copy button, long output folded with Show all | feed |
 | `feed.js` | the conversation: its scroll, its turns, `drawLane()` | feed |
-| `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words followed in place | feed |
+| `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words (`agent_stream` events, written once a frame, a block at a time) followed in place | feed |
 | `reactions.js` | reactions | feed |
 | `receipts.js` | read receipts, the ticks and Info | feed |
 | `threads.js` | threads, opened in place, with their own field | feed |

@@ -21,6 +21,7 @@ import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, onReadReceipts, openInfo, RECEIPTS, toggleInfo} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
+import {onAgentStream} from "./agent_turn.js";
 import {onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
 import {pickEntry, setTab} from "./views.js";
@@ -37,7 +38,7 @@ import {wireMentions} from "./mentions.js";
 import {onPost, wirePages} from "./pages.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
-on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
+on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser);

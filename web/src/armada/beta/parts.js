@@ -118,4 +118,18 @@ function echoHTML(text) {
   return out.join("") || "<p></p>";
 }
 
-export {blockPart, clean, echoHTML, loadPics, partEl, partsOf, plainOf, QUESTION, tpl};
+/* one block of what Onix is writing (agent_turn.js streams it a block at a time), rendered near enough to the server's
+   Markdown that the server's copy, at the end, changes the words' marks and not their places: the echo's rules, and the
+   two an answer has and a person's message seldom does, a heading line and a table */
+const TABLE_ROW = /^\s*\|/, TABLE_RULE = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;   /* a row may still be being written */
+const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((x) => inlineEcho(x.trim()));
+function streamHTML(src) {
+  const lines = src.replace(/\n+$/, "").split("\n"), h = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(lines[0]);
+  if (h) { const n = h[1].length, rest = lines.slice(1).join("\n"); return `<h${n}>${inlineEcho(h[2])}</h${n}>` + (rest.trim() ? echoHTML(rest) : ""); }
+  if (lines.length >= 2 && TABLE_ROW.test(lines[0]) && TABLE_RULE.test(lines[1]) && lines.slice(2).every((l) => TABLE_ROW.test(l))) {
+    const right = lines[1].trim().replace(/^\||\|$/g, "").split("|").map((x) => /-:\s*$/.test(x)), cell = (tag) => (x, i) => `<${tag}${right[i] ? ' style="text-align: right"' : ""}>${x}</${tag}>`;
+    return `<table><thead><tr>${cells(lines[0]).map(cell("th")).join("")}</tr></thead><tbody>${lines.slice(2).map((l) => `<tr>${cells(l).map(cell("td")).join("")}</tr>`).join("")}</tbody></table>`; }
+  return echoHTML(src);
+}
+
+export {blockPart, clean, echoHTML, loadPics, partEl, partsOf, plainOf, QUESTION, streamHTML, tpl};

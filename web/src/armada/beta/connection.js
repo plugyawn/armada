@@ -11,6 +11,7 @@ import {palette} from "./palette.js";
 import {fetchPartners} from "./partners.js";
 import {tx} from "./frame.js";
 import {liveRun} from "./runs.js";
+import {resetStreams} from "./agent_turn.js";
 import {createLink} from "./link.js";
 
 /* the tabs of this browser tell each other whose session they hold, and when it ends (resilience.md 2.5) */
@@ -28,7 +29,7 @@ const link = createLink({
   hidden: () => document.hidden,
   online: () => navigator.onLine !== false,
   registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_bot", "stream", "realm", "realm_user_groups"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm", "user_group", "stream", "realm_user"], apply_markdown: true, client_gravatar: false,
+    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm", "user_group", "stream", "realm_user"], apply_markdown: true, client_gravatar: false,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: false, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}}),
   onRegister: applyRegister,
   onEvent: handle,
@@ -66,7 +67,7 @@ function applyRegister(r) {
 }
 /* the queue was lost and registered again: what the page holds may have missed events, so every place is asked again
    (the open one now, the others when opened) and the team's partners with it. R5 makes this a diff in place. */
-function resync() {
+function resync() { resetStreams();
   for (const c of places.values()) { c.loaded = false; c.msgs = c.msgs.filter((m) => m.local); c.byId = new Map(c.msgs.map((m) => [m.id, m])); c.oldest = false; }
   if (state.place) openPlace(state.place, {force: true, keepHash: true});
   fetchPartners(false);

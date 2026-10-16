@@ -124,13 +124,16 @@ from zerver.models.realms import get_realm
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
     ARMADA_MODEL_CATALOG_CACHE_SECONDS,
+    armada_codex_login,
     armada_model_catalog,
     armada_worker_run_summary_events,
+    armada_worker_runtime_auth_status,
     armada_workspace_isolation_username,
     build_armada_git_context,
     build_armada_runtime_config_payload,
     ensure_armada_configured_bot,
     extract_armada_codex_model_catalog,
+    read_armada_codex_login,
     serialize_armada_worker_run,
     serialize_armada_workspace_context,
     update_armada_run_control_event,
@@ -709,8 +712,6 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(detail, "Set ARMADA_WORKER_AGENT_RUNTIME to codex-app-server.")
 
     def test_worker_runtime_auth_status_reports_login_paths(self) -> None:
-        from zerver.views.armada import armada_worker_runtime_auth_status
-
         with patch(
             "zerver.views.armada.armada_codex_login_available",
             return_value=True,
@@ -6319,9 +6320,10 @@ def codex_debug_models_output(slugs: list[str]) -> str:
     return orjson.dumps({"models": models}).decode()
 
 
-class HeldCodexDebugModels:
-    """Stands in for subprocess.run running `codex debug models`: it notes
-    the thread that ran it, and answers only once released."""
+class HeldCodexCommand:
+    """Stands in for subprocess.run running a Codex command (`codex debug
+    models`, `codex login status`): it notes the thread that ran it, and
+    answers only once released."""
 
     def __init__(self, answer: str | Exception) -> None:
         self.answer = answer
@@ -6353,7 +6355,7 @@ def new_model_catalog(
 class ArmadaModelCatalogTest(ZulipTestCase):
     @contextmanager
     def codex_on_path(
-        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexDebugModels
+        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexCommand
     ) -> Iterator[None]:
         self.addCleanup(codex.release.set)
         with (
@@ -6371,7 +6373,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
         return cast(list[str], build_armada_runtime_config_payload()["model_choices"])
 
     def finish_refresh(
-        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexDebugModels
+        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexCommand
     ) -> None:
         refresh = cache.refresh
         assert refresh is not None
@@ -6390,7 +6392,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
             ),
             checked_at=time.monotonic() - ARMADA_MODEL_CATALOG_CACHE_SECONDS,
         )
-        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        codex = HeldCodexCommand(codex_debug_models_output(["gpt-new"]))
 
         def served_by_runs_endpoint() -> list[str]:
             result = self.client_get(
@@ -6412,9 +6414,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
 
     def test_cold_start_serves_the_configured_models(self) -> None:
         cache = new_model_catalog()
-        codex = HeldCodexDebugModels(
-            codex_debug_models_output(["gpt-6-sol", "gpt-6-astra", "gpt-new"])
-        )
+        codex = HeldCodexCommand(codex_debug_models_output(["gpt-6-sol", "gpt-6-astra", "gpt-new"]))
         with self.codex_on_path(cache, codex):
             self.assertEqual(self.served_models(), ["gpt-6-astra", "gpt-6-sol"])
             self.finish_refresh(cache, codex)
@@ -6422,7 +6422,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
 
     def test_only_one_refresh_runs_at_a_time(self) -> None:
         cache = new_model_catalog()
-        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        codex = HeldCodexCommand(codex_debug_models_output(["gpt-new"]))
         with self.codex_on_path(cache, codex):
             self.served_models()
             refresh = cache.refresh
@@ -6441,7 +6441,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
         # where test-backend's coverage can see it; checked_at keeps the
         # requests below from starting refreshes of their own.
         cache = new_model_catalog(checked_at=time.monotonic())
-        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        codex = HeldCodexCommand(codex_debug_models_output(["gpt-new"]))
         codex.release.set()
         warning = "Could not refresh Codex's model catalog; keeping the last one"
         with self.codex_on_path(cache, codex):
@@ -6474,7 +6474,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
 
     def test_no_refresh_without_codex(self) -> None:
         cache = new_model_catalog()
-        codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
+        codex = HeldCodexCommand(codex_debug_models_output(["gpt-new"]))
         with (
             self.codex_on_path(cache, codex),
             patch("zerver.views.armada.which", return_value=None),
@@ -6483,6 +6483,83 @@ class ArmadaModelCatalogTest(ZulipTestCase):
             self.assertIsNone(cache.refresh)
             self.assertIsNotNone(cache.checked_at)
         self.assertEqual(codex.callers, [])
+
+
+class ArmadaCodexLoginTest(ZulipTestCase):
+    """GET /json/armada/config reports whether the Codex CLI is logged in;
+    asking runs the CLI, so it is asked off the request path."""
+
+    @contextmanager
+    def codex_on_path(
+        self, login: ArmadaBackgroundRead[bool | None], codex: HeldCodexCommand
+    ) -> Iterator[None]:
+        self.addCleanup(codex.release.set)
+        with (
+            patch("zerver.views.armada.armada_codex_login", login),
+            patch("zerver.views.armada.which", return_value="/usr/local/bin/codex"),
+            patch("zerver.views.armada.subprocess.run", side_effect=codex),
+            self.settings(ARMADA_WORKER_AGENT_RUNTIME="codex-app-server"),
+        ):
+            yield
+
+    def new_login(self) -> ArmadaBackgroundRead[bool | None]:
+        return dataclasses.replace(
+            armada_codex_login, value=None, checked_at=None, refresh=None, lock=threading.Lock()
+        )
+
+    def auth_detail(self) -> tuple[bool, str]:
+        result = self.client_get(f"/json{ARMADA_CONFIG_ENDPOINT}", intentionally_undocumented=True)
+        config = self.assert_json_success(result)["armada_config"]
+        step = next(step for step in config["setup_steps"] if step["key"] == "worker_auth")
+        return config["worker_runtime_auth_ready"], step["detail"]
+
+    def test_config_asks_codex_in_the_background(self) -> None:
+        self.login("hamlet")
+        login = self.new_login()
+        codex = HeldCodexCommand("Logged in using ChatGPT")
+        with self.codex_on_path(login, codex):
+            # Codex answers only once released, after this response.
+            self.assertEqual(
+                self.auth_detail(), (False, "Checking whether Codex CLI is logged in.")
+            )
+            refresh = login.refresh
+            assert refresh is not None
+            codex.release.set()
+            refresh.join(timeout=10)
+            self.assertEqual(self.auth_detail(), (True, "Codex CLI is logged in."))
+        self.assertEqual(codex.callers, ["armada-codex-login"])
+
+    def test_config_asks_nothing_without_the_codex_runtime(self) -> None:
+        self.login("hamlet")
+        login = self.new_login()
+        codex = HeldCodexCommand("Logged in using ChatGPT")
+        with (
+            self.codex_on_path(login, codex),
+            self.settings(ARMADA_WORKER_AGENT_RUNTIME="disabled"),
+        ):
+            self.assertEqual(
+                self.auth_detail(), (False, "Select a supported worker runtime before logging in.")
+            )
+            with patch("zerver.views.armada.which", return_value=None):
+                self.assertEqual(
+                    armada_worker_runtime_auth_status("codex-app-server")[:2],
+                    (False, "Run `codex login` inside the worker environment."),
+                )
+        self.assertIsNone(login.refresh)
+        self.assertEqual(codex.callers, [])
+
+    def test_login_status_answers(self) -> None:
+        # The refresh thread's body, run here where coverage can see it.
+        codex = HeldCodexCommand("Logged in using ChatGPT")
+        codex.release.set()
+        with patch("zerver.views.armada.subprocess.run", side_effect=codex):
+            self.assertTrue(read_armada_codex_login())
+            codex.answer = "Not logged in"
+            self.assertFalse(read_armada_codex_login())
+            codex.answer = subprocess.TimeoutExpired(["codex", "login", "status"], 10)
+            self.assertFalse(read_armada_codex_login())
+            codex.answer = FileNotFoundError("codex")
+            self.assertFalse(read_armada_codex_login())
 
 
 class ArmadaWorkspacePathTest(ZulipTestCase):

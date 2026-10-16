@@ -116,6 +116,7 @@ ARMADA_RUN_TRACE_LIMIT = 50
 ARMADA_RUN_TRACE_MAX_LIMIT = 100
 ARMADA_MODEL_SLUG_LIMIT = 100
 ARMADA_MODEL_CATALOG_CACHE_SECONDS = 300
+ARMADA_CODEX_LOGIN_CACHE_SECONDS = 60
 
 
 def armada_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
@@ -135,10 +136,10 @@ def armada_codex_login_command() -> str:
     return f"{settings.ARMADA_WORKER_CODEX_BIN} login"
 
 
-def armada_codex_login_available(codex_bin: str) -> bool:
+def read_armada_codex_login() -> bool:
     try:
         completed = subprocess.run(
-            [codex_bin, "login", "status"],
+            [settings.ARMADA_WORKER_CODEX_BIN, "login", "status"],
             check=False,
             capture_output=True,
             text=True,
@@ -150,42 +151,52 @@ def armada_codex_login_available(codex_bin: str) -> bool:
     return completed.returncode == 0 and "Logged in" in output
 
 
+armada_codex_login = ArmadaBackgroundRead[bool | None](
+    name="armada-codex-login",
+    description="Codex's login status",
+    read=read_armada_codex_login,
+    value=None,
+    max_age_seconds=ARMADA_CODEX_LOGIN_CACHE_SECONDS,
+)
+
+
+def armada_codex_login_available() -> bool | None:
+    """Whether the Codex CLI is logged in, as last asked; None until the
+    first answer. Asking starts the CLI, which can take seconds, so it is
+    asked in the background and no request waits for it."""
+    if which(settings.ARMADA_WORKER_CODEX_BIN) is None:
+        return False
+    return armada_codex_login.get()
+
+
 def armada_worker_runtime_auth_status(
     worker_agent_runtime: str,
 ) -> tuple[bool, str, str | None, str | None, str | None, str | None]:
-    codex_bin = settings.ARMADA_WORKER_CODEX_BIN
-    login_command = armada_codex_login_command()
-    codex_logged_in = armada_codex_login_available(codex_bin)
-    codex_login_instructions = (
-        f"Run Codex CLI login inside the worker environment used by {ARMADA_AGENT_NAME}."
-    )
-
-    if worker_agent_runtime == "codex-app-server":
-        if codex_logged_in:
-            return (
-                True,
-                "Codex CLI is logged in.",
-                "codex-cli",
-                login_command,
-                "worker-environment",
-                codex_login_instructions,
-            )
+    if worker_agent_runtime != "codex-app-server":
         return (
             False,
-            f"Run `{login_command}` inside the worker environment.",
-            "codex-cli",
-            login_command,
-            "worker-environment",
-            codex_login_instructions,
+            "Select a supported worker runtime before logging in.",
+            None,
+            None,
+            None,
+            None,
         )
 
+    login_command = armada_codex_login_command()
+    codex_logged_in = armada_codex_login_available()
+    if codex_logged_in is None:
+        detail = "Checking whether Codex CLI is logged in."
+    elif codex_logged_in:
+        detail = "Codex CLI is logged in."
+    else:
+        detail = f"Run `{login_command}` inside the worker environment."
     return (
-        False,
-        "Select a supported worker runtime before logging in.",
-        None,
-        None,
-        None,
-        None,
+        bool(codex_logged_in),
+        detail,
+        "codex-cli",
+        login_command,
+        "worker-environment",
+        f"Run Codex CLI login inside the worker environment used by {ARMADA_AGENT_NAME}.",
     )
 
 

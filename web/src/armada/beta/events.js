@@ -10,7 +10,7 @@ import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
 import {appendMessage, edge, ends, grown, pin, removeRow, sectionOf, show, shown, stale, syncJump} from "./feed.js";
 import {drawNav, drawTrail} from "./nav.js";
-import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, settleAsk} from "./runs.js";
+import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, seeRun, settleAsk} from "./runs.js";
 import {drawProg} from "./checklist.js";
 import {applyReaction} from "./reactions.js";
 import {drawThreadLine, repliesOf, threadAppend} from "./threads.js";
@@ -60,7 +60,7 @@ function onRun(ev) {
   if (ev.status !== "queued" && ev.status !== "running") endRun(ev.run_id);   /* its streamed words: the saved message has them all */
   if (!ev.stream) return; const s = [...streams.values()].find((x) => x.name.toLowerCase() === ev.stream.toLowerCase()); if (!s) return; const key = tkey(s.stream_id, ev.topic || ""), c = places.get(key), live = ev.status === "queued" || ev.status === "running";
   const list = c ? c.runs : runsSeen.get(key) || []; if (!runsSeen.has(key)) runsSeen.set(key, list);
-  let r = list.find((x) => x.id === ev.run_id); const fresh = !r; if (!r) { r = {id: ev.run_id, session_kind: "shared", date_created: ev.run_date_created, plan: null, overview: null, tool_count: 0, waiting: false}; list.unshift(r); }
+  let r = list.find((x) => x.id === ev.run_id); const fresh = !r; if (!r) { r = {id: ev.run_id, session_kind: "shared", date_created: ev.run_date_created, plan: null, overview: null, tool_count: 0, waiting: false}; seeRun(list, r); }
   if (!live) r.waiting = false; else if (ev.event_type === "question_waiting" && !(r.answeredAt && now() / 1000 - r.answeredAt < 20)) { if (!r.waiting) r.askedAt = r.askedAt || ev.date_created; r.waiting = true; settleAsk(r); }   /* the server's heartbeat while it waits */
   const was = marks.get(key), want = live ? runMark(r, ev.status) : null; if (live) { if (was !== want) { marks.set(key, want); drawTrail(key); } } else if (LIVE_MARKS.has(was)) { if (ev.status === "failed" && !(state.place && state.place.key === key)) marks.set(key, "failed"); else marks.delete(key); drawTrail(key); }
   drawHomeRow(key);

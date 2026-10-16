@@ -14,6 +14,10 @@ import {drawHomeRow, questionOf} from "./home.js";
 
 const MARK_RANK = {needs: 5, live: 4, queued: 3, failed: 2, paused: 1};
 /* a live run's mark: waiting on me (the balloon), working, or queued behind another */
+/* a run seen in a place (an event, the scan at load) is put first; a place keeps its newest RUNS_KEPT, and any older one still
+   live (the column lists 30) */
+const RUNS_KEPT = 30;
+function seeRun(list, r) { list.unshift(r); for (let i = list.length - 1; i >= 0 && list.length > RUNS_KEPT; i--) if (!liveNow(list[i])) list.splice(i, 1); }
 const runMark = (r, status = r.status) => (r.waiting ? "needs" : status === "queued" ? "queued" : "live");
 const LIVE_MARKS = new Set(["needs", "live", "queued"]);
 /* which worktrees have a run going: the page was given the live runs in my channels at load (zerver/views/armada_beta.py),
@@ -26,7 +30,7 @@ async function scanLive() {
     await Promise.all(r.armada_runs.map(adoptLive)); } }
 async function adoptLive(r0) { if (r0.session_kind === "side" || !liveNow(r0)) return; const s = [...streams.values()].find((x) => x.name.toLowerCase() === String(r0.stream || "").toLowerCase()); if (!s) return;
   const k = tkey(s.stream_id, r0.topic || ""), c = places.get(k); let list = c && c.runsLoaded ? c.runs : runsSeen.get(k); if (!list) runsSeen.set(k, (list = []));
-  let r = list.find((x) => x.id === r0.id); if (!r) { r = askState(r0); list.unshift(r); }   /* known already (the place was opened, or an event came): that copy is newer */
+  let r = list.find((x) => x.id === r0.id); if (!r) { r = askState(r0); seeRun(list, r); }   /* known already (the place was opened, or an event came): that copy is newer */
   if (c && c.loaded) inferAsk(r, c.msgs); else { try { const mr = await api("GET", "messages", {narrow: [{operator: "channel", operand: s.stream_id}, {operator: "topic", operand: r.topic}], anchor: "newest", num_before: 6, num_after: 0, apply_markdown: true, client_gravatar: false}); inferAsk(r, mr.messages); } catch (e) {} }
   if (!liveNow(r)) return; const want = runMark(r); if (marks.get(k) !== want) { marks.set(k, want); drawTrail(k); } }
 /* a run that waits for a person: the server's live state says it is on a question (request_user_input); the answer is
@@ -62,4 +66,4 @@ const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
 
 export {answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
-  runMark, runOfMsg, runsSeen, scanLive, settleAsk, sweepAsks, waitingRun};
+  runMark, runOfMsg, runsSeen, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};

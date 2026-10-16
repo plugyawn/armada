@@ -5,7 +5,9 @@ import {$, store} from "./util.js";
 const DATA = ($("#beta-data") || {dataset: {}}).dataset;   /* what the page cannot ask for (zerver/views/armada_beta.py) */
 const QUESTION_TIMEOUT = +DATA.questionTimeout || 600;    /* how long a run waits for an answer, then goes on with defaults (ARMADA_QUESTION_TIMEOUT_SECONDS) */
 const LIVE_RUN_IDS = (() => { try { return JSON.parse(DATA.liveRunIds || "[]"); } catch (e) { return []; } })();   /* the live runs in my channels at load: where Home starts */
-const stats = {sends: [], firstWords: [], runs: [], events: 0, api: 0, log: []};
+/* the page's own measurements, which the Lab and the checks read: each list keeps its newest 600 entries, as the event log does */
+class Recent extends Array { static get [Symbol.species]() { return Array; } push(...x) { super.push(...x); if (this.length > 600) this.splice(0, this.length - 600); return this.length; } }
+const stats = {sends: new Recent(), firstWords: new Recent(), runs: new Recent(), events: 0, api: 0, log: []};
 
 /* ---------- state ---------- */
 /* what more than one part of the page replaces: the session, the place in view and its cache, the view, the feed's scroll,

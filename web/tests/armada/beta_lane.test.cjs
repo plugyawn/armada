@@ -236,6 +236,7 @@ const receipts = zrequire("armada/beta/receipts.js");
 const connection = zrequire("armada/beta/connection.js");
 const partners = zrequire("armada/beta/partners.js");
 const nav = zrequire("armada/beta/nav.js");
+const runs = zrequire("armada/beta/runs.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -243,6 +244,7 @@ const KING = 7;
 const AGENT = 9;
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
+beta_state.state.hd = find("header.hd");
 beta_state.armadaBots.add(AGENT);
 for (const [id, name] of [
     [ME, "Shiva"],
@@ -725,4 +727,40 @@ run_test("a message in a collapsed channel counts on that channel's row, in plac
     );
     assert.equal(denmark.querySelector(".n").textContent, "2");
     assert.ok(denmark.classList.contains("new-in"));
+});
+
+run_test("the page's own measurements keep their newest entries", () => {
+    const {sends} = beta_state.stats;
+    sends.length = 0;
+    for (let i = 0; i < 700; i += 1) {
+        sends.push({task: i});
+    }
+    assert.equal(sends.length, 600);
+    assert.equal(sends[0].task, 100);
+    assert.equal(sends.at(-1).task, 699);
+});
+
+run_test("a place keeps its newest runs, and any older one still live", () => {
+    const where = {stream: "devel", topic: "runs kept"};
+    const run = (run_id, status) => ({
+        type: "agent_run",
+        ...where,
+        run_id,
+        status,
+        event_type: status,
+        run_date_created: T0 + run_id,
+        date_created: T0 + run_id,
+    });
+    open_with("runs kept", []);
+    events.onRun(run(1, "running"));
+    for (let id = 2; id <= 60; id += 1) {
+        events.onRun(run(id, "completed"));
+    }
+    const seen = runs.runsSeen.get(routing.tkey(10, "runs kept"));
+    assert.equal(seen.length, runs.RUNS_KEPT);
+    assert.equal(seen[0].id, 60);
+    assert.ok(
+        seen.some((r) => r.id === 1),
+        "a live run was let go",
+    );
 });

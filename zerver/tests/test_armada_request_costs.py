@@ -5,6 +5,12 @@ pays many times a minute, so that a change that adds a query to one of
 them has to change a number here.
 """
 
+import dataclasses
+import subprocess
+import tempfile
+import threading
+import time
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -24,10 +30,12 @@ from zerver.lib.armada import (
     ARMADA_EMBEDDED_BOT_SERVICE,
 )
 from zerver.lib.armada_run_card import record_agent_run_event
+from zerver.lib.armada_workspace_git import refresh_workspace_git_state
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import queries_captured
 from zerver.models import UserProfile
 from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
+from zerver.views.armada import armada_codex_login, armada_model_catalog
 
 
 class ArmadaRequestCostTest(ZulipTestCase):
@@ -218,3 +226,71 @@ class ArmadaRequestCostTest(ZulipTestCase):
         # subscription once for all five.
         with self.assert_database_query_count(6):
             self.assert_length(list_runs(by_id), 5)
+
+    def test_no_read_runs_a_subprocess(self) -> None:
+        """Opening a topic, the Home batch, the partners, the config and a
+        warm worktree read run nothing but queries: git, Codex and the
+        like run in background threads, or in the worker."""
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        workdir = Path(temp.name) / "pair-programming-session"
+        workdir.mkdir()
+        git = ["git", "-C", str(workdir), "-c", "user.email=a@example.com", "-c", "user.name=A"]
+        subprocess.run([*git, "init", "--quiet", "--initial-branch=armada-session"], check=True)
+        subprocess.run([*git, "commit", "--quiet", "--allow-empty", "-m", "First"], check=True)
+        node = Workspace.objects.create(
+            realm=self.owner.realm,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
+            workdir=str(workdir),
+            branch_name="armada-session",
+        )
+        refresh_workspace_git_state(node.id)
+        run = self.make_run()
+        self.record_events(run, 2)
+        self.login_user(self.owner)
+        topic = {"stream": ARMADA_DEFAULT_STREAM, "topic": ARMADA_DEFAULT_TOPIC}
+        spawned_by: list[str] = []
+        real_init = subprocess.Popen.__init__
+
+        def popen_init(popen: subprocess.Popen[bytes], *args: Any, **kwargs: Any) -> None:
+            spawned_by.append(threading.current_thread().name)
+            real_init(popen, *args, **kwargs)
+
+        reads = [
+            ("/json/armada/topic-context", topic),
+            ("/json/armada/runs", topic),
+            ("/json/armada/runs", {**topic, "include_context": "true"}),
+            ("/json/armada/runs", {"run_ids": orjson.dumps([run.id]).decode()}),
+            ("/json/armada/partners", {}),
+            ("/json/armada/config", {}),
+        ]
+        # As a process starts: Codex not yet asked whether it is logged in,
+        # and the model catalog just read, so that it asks nothing here.
+        login = dataclasses.replace(
+            armada_codex_login, value=None, checked_at=None, refresh=None, lock=threading.Lock()
+        )
+        catalog = dataclasses.replace(
+            armada_model_catalog,
+            value=[],
+            checked_at=time.monotonic(),
+            refresh=None,
+            lock=threading.Lock(),
+        )
+        with (
+            patch.object(subprocess.Popen, "__init__", popen_init),
+            patch("zerver.views.armada.which", return_value="/usr/local/bin/codex"),
+            patch("zerver.views.armada.armada_codex_login", login),
+            patch("zerver.views.armada.armada_model_catalog", catalog),
+            self.settings(ARMADA_WORKER_AGENT_RUNTIME="codex-app-server"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            for url, params in reads:
+                self.assert_json_success(
+                    self.client_get(url, params, intentionally_undocumented=True)
+                )
+            refresh = login.refresh
+        if refresh is not None:
+            refresh.join(timeout=10)
+        # Codex was asked whether it is logged in, from its own thread.
+        self.assertEqual(spawned_by, ["armada-codex-login"])

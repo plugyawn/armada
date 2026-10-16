@@ -28,7 +28,7 @@ const lane = document.querySelector("#col");
 // The rest of the page is loaded only where it is used, and nothing here
 // uses it.
 mock_esm("../../src/armada/beta/frame.js", {lane});
-mock_esm("../../src/armada/beta/faces.js", {isOnix: (id) => id === AGENT, nameOf: () => "Onix"});
+mock_esm("../../src/armada/beta/faces.js", {isOnix: (id) => id === AGENT});
 
 const beta_state = zrequire("armada/beta/state.js");
 const parts = zrequire("armada/beta/parts.js");

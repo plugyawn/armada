@@ -96,11 +96,19 @@ set_global(
     "face",
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
 );
-set_global("fetch", async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({result: "success", msg: "", messages: [], armada_runs: []}),
-}));
+// The stand-in server: the live runs it holds answer GET armada/runs.
+const runs_asked = [];
+let live_runs = [];
+set_global("fetch", async (url) => {
+    if (url.startsWith("/json/armada/runs")) {
+        runs_asked.push(url);
+    }
+    return {
+        ok: true,
+        status: 200,
+        json: async () => ({result: "success", msg: "", messages: [], armada_runs: live_runs}),
+    };
+});
 
 const ME = 3;
 const AGENT = 9;
@@ -397,6 +405,58 @@ run_test("words that were missed leave the answer to the saved message", () => {
     frame();
     assert.equal(words(row), "Second item.");
 });
+
+run_test(
+    "a page that opens mid-answer joins the words it gets to the run's saved text",
+    async () => {
+        const row = start_run(146);
+        runs_asked.length = 0;
+        // The page opened after the item began: its first event is past the start.
+        const later = (offset, text) =>
+            agent_turn.onAgentStream(
+                {type: "agent_stream", run_id: RUN, message_id: 146, item: 0, offset, text},
+                0,
+            );
+        live_runs = [
+            {
+                id: RUN,
+                live: {stream: {message_id: 146, item: 0, text: "The parser keeps the first"}},
+            },
+        ];
+        later(17, "the first value");
+        later(32, ", so --verbose won.");
+        for (let i = 0; i < 20; i += 1) {
+            await Promise.resolve();
+        }
+        frame();
+        assert.equal(runs_asked.length, 1);
+        assert.equal(words(row), "The parser keeps the first value, so --verbose won.");
+        // The rest streams on from there.
+        later(51, " Fixed.");
+        frame();
+        assert.equal(words(row), "The parser keeps the first value, so --verbose won. Fixed.");
+
+        // The server's copy can run ahead of its events (words it held back
+        // to pace the stream): an event that overlaps it adds only the rest.
+        const late = start_run(148);
+        const more = (offset, text) =>
+            agent_turn.onAgentStream(
+                {type: "agent_stream", run_id: RUN, message_id: 148, item: 0, offset, text},
+                0,
+            );
+        live_runs = [{id: RUN, live: {stream: {message_id: 148, item: 0, text: "One two three"}}}];
+        more(4, "two");
+        for (let i = 0; i < 20; i += 1) {
+            await Promise.resolve();
+        }
+        frame();
+        assert.equal(words(late), "One two three");
+        more(7, " three four");
+        frame();
+        assert.equal(words(late), "One two three four");
+        live_runs = [];
+    },
+);
 
 run_test("words for a place that is not open are written when its row is drawn", () => {
     const say = streamer(151);

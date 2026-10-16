@@ -12,6 +12,7 @@ import {appendCode, codeBlock, setCode} from "./code_blocks.js";
 import {drawReactions} from "./reactions.js";
 import {drawLab} from "./lab.js";
 import {wordsChanged} from "./hover.js";
+import {api} from "./connection.js";
 
 /* ----- Onix's turn: one element for the life of an answer ----- */
 /* where the working mark rides: the end of the last words, in a paragraph or in a list's last item */
@@ -108,15 +109,37 @@ function watchGrowth(cl) { grows ??= new ResizeObserver((entries) => { for (cons
    written when its row is drawn. An event only appends; one animation frame writes everything that has arrived. The
    text is cut into blocks (a blank line outside a fence ends one; a fence is one): a block that has ended is written
    once and not again, so a frame writes only the open block, and only its new words where it can. */
-const liveText = new Map();   /* message id -> {run, item, text, base, dirty, at} */
+const liveText = new Map();   /* message id -> {run, item, text, base, dirty, at, held} */
 let frameDue = 0;
+const writeSoon = () => { if (!frameDue) frameDue = requestAnimationFrame(writeStreams); };
 function onAgentStream(ev, at) {
   let s = liveText.get(ev.message_id);
-  if (ev.offset === 0) { if (!s || s.item !== ev.item || s.text !== ev.text) { s = {run: ev.run_id, item: ev.item, text: ev.text, base: true, dirty: true, at, w: null}; liveText.set(ev.message_id, s); } }
+  if (ev.offset === 0) { if (!s || s.item !== ev.item || s.text !== ev.text) { s = {run: ev.run_id, item: ev.item, text: ev.text, base: true, dirty: true, at, w: null, held: []}; liveText.set(ev.message_id, s); } }
   else if (s && s.base && s.item === ev.item && ev.offset === s.text.length) { s.text += ev.text; s.dirty = true; }
-  else if (s && s.base && s.item === ev.item && ev.offset < s.text.length) return;   /* had already */
-  else { if (s) s.base = false; else liveText.set(ev.message_id, {run: ev.run_id, item: ev.item, text: "", base: false, dirty: false, at, w: null}); return; }   /* missed some: the saved message is shown until a new item */
-  if (!frameDue) frameDue = requestAnimationFrame(writeStreams);
+  else if (s && s.base && s.item === ev.item && ev.offset < s.text.length) {   /* had some already: a start joined from the server's copy runs ahead */
+    if (ev.offset + ev.text.length <= s.text.length) return; s.text += ev.text.slice(s.text.length - ev.offset); s.dirty = true; }
+  else {   /* words with nothing to follow: the page opened after the item began, or some were missed. The saved message is
+              shown, and these are kept for the start the server holds (join) */
+    if (!s || s.item !== ev.item) { s = {run: ev.run_id, item: ev.item, text: "", base: false, dirty: false, at, w: null, held: []}; liveText.set(ev.message_id, s); }
+    else if (s.base) { s.base = false; s.held = []; s.w = null; }   /* the saved copies draw the row now; the writer starts again */
+    if (s.held.length < 2000) s.held.push([ev.offset, ev.text]);
+    join(ev.message_id, s); return; }
+  writeSoon();
+}
+/* the start of an item a page did not see begin: its text as of the run's last save, which the live run holds (GET
+   armada/runs, the run's "live"), with the words kept since put after it. Asked at most every 2 s (a save is that
+   often) and five times an item; a start the kept words do not follow from is not taken. */
+async function join(id, s) {
+  if (s.joining || s.tries >= 5 || performance.now() - (s.triedAt || -1e9) < 2000) return;
+  s.joining = true; s.tries = (s.tries || 0) + 1; s.triedAt = performance.now(); let r = null;
+  try { r = await api("GET", "armada/runs", {run_ids: [s.run]}); } catch (e) {}
+  s.joining = false; if (!r || liveText.get(id) !== s || s.base) return;
+  const run = (r.armada_runs || []).find((x) => x.id === s.run), st = run && run.live && run.live.stream;
+  if (!st || st.message_id !== id || st.item !== s.item) return;
+  let text = st.text;
+  for (const [o, t] of s.held) { if (o > text.length || text.slice(o, o + t.length) !== t.slice(0, text.length - o)) return;
+    if (o + t.length > text.length) text += t.slice(text.length - o); }
+  s.text = text; s.base = true; s.held = []; s.dirty = true; writeSoon();
 }
 function writeStreams() { frameDue = 0;
   for (const [id, s] of liveText) { if (!s.dirty || !s.base) continue; const c = msgIndex.get(id); if (c !== state.P) continue;   /* drawn when its place is */

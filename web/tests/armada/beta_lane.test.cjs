@@ -206,6 +206,7 @@ const routing = zrequire("armada/beta/routing.js");
 const feed_js = zrequire("armada/beta/feed.js");
 const events = zrequire("armada/beta/events.js");
 const send = zrequire("armada/beta/send.js");
+const receipts = zrequire("armada/beta/receipts.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -367,4 +368,33 @@ run_test("a message I send keeps its turn when the server's copy takes its place
     assert.equal(turn_of(id), turn);
     events.onReaction(thumbs(id));
     assert.match(turn.textContent, /\u{1F44D}/u);
+});
+
+const tick_of = (id) => turn_of(id).querySelector(".rt");
+
+run_test("a read receipt finds its tick without a search of the lane", () => {
+    // Every other turn is mine, one message each, and carries its tick.
+    open_with("ticks", forty(500));
+    const mine = [501, 503, 505];
+    for (const id of mine) {
+        assert.match(tick_of(id).getAttribute("aria-label"), /^Sent/);
+    }
+    assert.equal(
+        lane_searches(() => receipts.onReadReceipts({message_ids: mine, user_id: IAGO})),
+        0,
+    );
+    for (const id of mine) {
+        assert.match(tick_of(id).getAttribute("aria-label"), /^Read/);
+    }
+});
+
+run_test("who read a message is kept only while a place holds the message", () => {
+    // A message of mine in a place this page has not opened: nothing is
+    // kept for it (the place asks when it opens) ...
+    receipts.onReadReceipts({message_ids: [123456], user_id: IAGO});
+    assert.ok(!receipts.rcpt.has(123456));
+    // ... and a message deleted takes what was known of it along.
+    assert.ok(receipts.rcpt.has(501));
+    events.onDelete({message_ids: [501]});
+    assert.ok(!receipts.rcpt.has(501));
 });

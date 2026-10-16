@@ -7,7 +7,7 @@ import {feed, lane} from "./frame.js";
 import {partsOf} from "./parts.js";
 import {note} from "./composer.js";
 import {sectionOf} from "./feed.js";
-import {drawTicks} from "./receipts.js";
+import {drawTicks, retick} from "./receipts.js";
 import {updateMessage} from "./agent_turn.js";
 import {clearFailMark, failMark} from "./send.js";
 import {clientKey} from "./mention_text.js";
@@ -27,7 +27,7 @@ async function transmit(c, m, ph) {
 function dropLocal(c, x) { c.byId.delete(x.id); msgIndex.delete(x.id); c.msgs = c.msgs.filter((y) => y !== x); if (c !== state.P) return; const cl = sectionOf(x.id); c.rows.delete(x.id); if (cl) M.leave(cl, () => { const y = feed.scrollTop; cl.remove(); feed.scrollTop = y; }); }
 /* the server's copy of what I sent: my row takes its id. Nothing on screen changes unless the server rendered it differently. */
 function adopt(c, m, id, server) {
-  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); const cl = c.rows.get(old); if (cl) { c.rows.delete(old); c.rows.set(id, cl); for (const n of [cl, ...cl.querySelectorAll(`[data-mid="${old}"]`)]) if (n.dataset.mid === String(old)) n.dataset.mid = id; cl.querySelectorAll(`.rt[data-info="${old}"]`).forEach((n) => (n.dataset.info = id)); } }
+  const old = m.id; if (old !== id) { c.byId.delete(old); msgIndex.delete(old); m.id = id; c.byId.set(id, m); msgIndex.set(id, c); const cl = c.rows.get(old); if (cl) { c.rows.delete(old); c.rows.set(id, cl); for (const n of [cl, ...cl.querySelectorAll(`[data-mid="${old}"]`)]) if (n.dataset.mid === String(old)) n.dataset.mid = id; cl.querySelectorAll(`.rt[data-info="${old}"]`).forEach((n) => (n.dataset.info = id)); } retick(old, id); }
   /* a send whose answer was lost was marked Not sent; its own event says it arrived, so the mark and its Retry go */
   if (m.failed && c === state.P) { const cl = sectionOf(id); if (cl) clearFailMark(cl, id); }
   m.local = false; m.pending = false; m.failed = false;

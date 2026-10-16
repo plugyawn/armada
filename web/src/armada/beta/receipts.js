@@ -8,6 +8,7 @@ import {feed, lane, main} from "./frame.js";
 import {faceOf, nameOf, presOf} from "./faces.js";
 import {ready} from "./composer.js";
 import {closeMenu, overHide} from "./hover.js";
+import {sectionOf} from "./feed.js";
 
 /* ----- read receipts: the r4 receipts study (design/r4/receipts/RECEIPTS.md), pushed by the server (contract C2) -----
    My turns carry ticks beside their time, in a 16 px cell that exists from the frame of the send and changes only what it
@@ -22,7 +23,9 @@ const RECEIPTS = DATA.readReceipts === "on";
 const RCPT_CAP = 12;                                       /* background requests for receipts in any 60 s (opening places) */
 const RCPT_INFO_CAP = 12;                                  /* Info's own budget: what I asked for answers at once, whatever the background spent */
 const RCPT_FRESH = 10000, RCPT_BATCH = 20;                 /* RCPT_BATCH: my latest messages a place asks about (the endpoint takes 100) */
-const rcpt = new Map();                                    /* message id -> {read: Set of user ids, at, err} */
+const rcpt = new Map();                                    /* message id -> {read: Set of user ids, at, err}, for messages a place holds */
+const tickOf = new Map();                                  /* message id -> the button that holds its time and ticks (receiptButton) */
+const idOf = (mid) => (/^\d+$/.test(mid) ? +mid : mid);
 const rcptLog = [], rcptInfoLog = [], rcptInflight = new Map(), members = new Map();
 let info = null;
 stats.receipts = {requests: 0, refused: 0, maxPerMinute: 0};
@@ -37,7 +40,7 @@ function fetchReceipts(id, o = {}) { if (!RECEIPTS || typeof id !== "number") re
     .then((x) => { rcpt.set(id, x); rcptInflight.delete(id); drawTicks(id); if (info && info.id === id) drawInfo(); return x; });
   rcptInflight.set(id, p); return p; }
 function loadMembers(sid) { if (members.has(sid)) return Promise.resolve(members.get(sid));
-  const p = api("GET", `streams/${sid}/members`).then((r) => { const s = new Set(r.subscribers); members.set(sid, s); $$(".rt[data-info]", lane).forEach((b) => drawTicks(+b.dataset.info)); if (info) drawInfo(); return s; }, () => { members.delete(sid); return null; });
+  const p = api("GET", `streams/${sid}/members`).then((r) => { const s = new Set(r.subscribers); members.set(sid, s); for (const id of [...tickOf.keys()]) drawTicks(id); if (info) drawInfo(); return s; }, () => { members.delete(sid); return null; });
   members.set(sid, p); return p; }
 /* who a message's receipts count, as far as the page can know: the channel's subscribers now (or the conversation's
    people), less the sender, bots (Onix among them: it answers, it does not read), deactivated people and people I muted.
@@ -62,13 +65,19 @@ function tickWords(m, st) { const x = rcpt.get(m.id), who = audience(m);
   return who && who.length ? `Read by ${who.filter((i) => x.read.has(i)).length} of ${who.length}` : `Read by ${[...x.read].filter((i) => i !== m.sender_id).length}`; }
 /* the time and the ticks: one button, which opens Info */
 function receiptButton(t, mid) { const b = el("button", "rt"); b.dataset.info = mid; b.tabIndex = -1; const cell = el("span", "tk"); b.append(t, cell);
-  const id = /^\d+$/.test(mid) ? +mid : mid, c = msgIndex.get(id); paintTick(b, c && c.byId.get(id), false); return b; }
+  const id = idOf(mid), c = msgIndex.get(id); paintTick(b, c && c.byId.get(id), false); tickOf.set(id, b); return b; }
+/* a tick button taken off its turn (finish draws the time again) is forgotten, unless a newer one has its message */
+function untick(b) { const id = idOf(b.dataset.info); if (tickOf.get(id) === b) tickOf.delete(id); }
+/* the server's id for a message that was mine locally (outbox.js, adopt) */
+function retick(old, id) { const b = tickOf.get(old); if (!b) return; tickOf.delete(old); tickOf.set(id, b); }
+/* a message no place holds any more: what is known of who read it goes with it */
+function forgetReceipts(id) { rcpt.delete(id); tickOf.delete(id); }
 function paintTick(b, m, motion) { const cell = $(".tk", b), st = tickState(m), was = cell.dataset.s; if (was === st) return;
   cell.dataset.s = st; const same = (was === "read" && st === "all") || (was === "all" && st === "read"); if (!same) cell.innerHTML = tickSVG(st);
   const words = tickWords(m, st); b.setAttribute("aria-label", `${words}. Message info`); b.dataset.tip = words;
   const svg = $("svg", cell); if (!motion || !svg || same) return;
   if (was === "pending" && st === "sent") M.land(svg); else if (st === "read" || st === "all") M.appear(svg, 0, T["fade-in"]); }
-function drawTicks(id) { if (!lane) return; for (const b of $$(`.rt[data-info="${id}"]`, lane)) { const c = msgIndex.get(id), m = c && c.byId.get(id); if (m) paintTick(b, m, true); } }
+function drawTicks(id) { const b = tickOf.get(id), c = msgIndex.get(id), m = c && c.byId.get(id); if (b && m) paintTick(b, m, b.isConnected); }
 /* on opening a place: who has read my latest messages there that are not yet read by everyone, in one request */
 function loadReceipts() { if (!RECEIPTS || !state.P || !state.place || state.place.kind === "home") return; const c = state.P;
   const ids = c.msgs.filter((m) => m.sender_id === state.ME && typeof m.id === "number" && !m.thread_root_message_id).slice(-RCPT_BATCH).filter((m) => tickState(m) !== "all").map((m) => m.id);
@@ -78,7 +87,7 @@ function loadReceipts() { if (!RECEIPTS || !state.P || !state.place || state.pla
     if (info && ids.includes(info.id)) drawInfo(); }, () => {}); }
 /* someone read my messages (the read_receipts event, sent to their sender): a tick lands where it stands */
 function onReadReceipts(ev) { if (!RECEIPTS) return; const at = performance.now();
-  for (const id of ev.message_ids) { const x = rcpt.get(id); if (x) x.read.add(ev.user_id); else rcpt.set(id, {read: new Set([ev.user_id]), at}); drawTicks(id); }
+  for (const id of ev.message_ids) { if (!msgIndex.has(id)) continue; const x = rcpt.get(id); if (x) x.read.add(ev.user_id); else rcpt.set(id, {read: new Set([ev.user_id]), at}); drawTicks(id); }   /* a message no place holds is asked about when its place opens */
   if (info && ev.message_ids.includes(info.id)) drawInfo(); }
 /* Info: who has read a message, and who has not yet. Above the message it describes (below when there is no room), never
    over the field; the conversation stays live under it. Rows keep the order they had when it opened: a change rewrites a
@@ -87,11 +96,11 @@ function toggleInfo(id, from, kbd) { if (info && info.id === id) { closeInfo(); 
 function openInfo(id, from, kbd) { closeInfo(true); closeMenu(); overHide(); const m = state.P && state.P.byId.get(id); if (!RECEIPTS || !m || typeof id !== "number") { ready(); return; }
   const box = el("div", "info raised float"); box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Message info"); box.tabIndex = -1;
   info = {id, el: box, from, kbd, order: null}; main.append(box); if (state.place.kind === "topic") loadMembers(state.place.stream_id); drawInfo(); placeInfo();
-  $$(`.rt[data-info="${id}"]`, lane).forEach((b) => b.classList.add("open")); box.focus({preventScroll: true}); M.release(box, {y: T["pane-rise"] || 4}, "move");
+  if (tickOf.has(id)) tickOf.get(id).classList.add("open"); box.focus({preventScroll: true}); M.release(box, {y: T["pane-rise"] || 4}, "move");
   fetchReceipts(id, {force: true, retry: true}); }
 function placeInfo() { if (!info) return; const id = info.id, box = info.el, mr = main.getBoundingClientRect(), fr = feed.getBoundingClientRect(), dock = $("main > .dock").getBoundingClientRect();
-  const parts = $$(`[data-mid="${id}"]`, lane).filter((x) => x.matches(".bl, [data-part], .cl")), first = parts[0], last = parts[parts.length - 1]; if (!first) return;
-  const rt = $(`.rt[data-info="${id}"]`, lane), a = first.getBoundingClientRect(), z = last.getBoundingClientRect(), h = box.offsetHeight, w = box.offsetWidth;
+  const cl = sectionOf(id), parts = !cl ? [] : [...(cl.dataset.mid === String(id) ? [cl] : []), ...$$(`:scope > [data-mid="${id}"]`, cl).filter((x) => x.matches(".bl, [data-part]"))], first = parts[0], last = parts[parts.length - 1]; if (!first) return;
+  const rt = tickOf.get(id), a = first.getBoundingClientRect(), z = last.getBoundingClientRect(), h = box.offsetHeight, w = box.offsetWidth;
   const left = clamp((rt ? rt.getBoundingClientRect().left : a.left) - mr.left, 8, mr.width - w - 8);
   let top = a.top - h - 8; if (top < fr.top + 8) top = z.bottom + 8; if (top + h > dock.top - 8) top = Math.max(fr.top + 8, a.top - h - 8);
   box.style.cssText = `position:absolute;left:${Math.round(left)}px;top:${Math.round(top - mr.top)}px`; }
@@ -108,8 +117,8 @@ function drawInfo() { if (!info) return; const c = msgIndex.get(info.id), m = c 
   const err = x && x.err ? `<p class="bad">Could not load who read this. <button class="lk" data-info-retry>Retry</button></p>` : "";
   info.el.innerHTML = `<div class="ih"><b>${head}</b><span class="e">${end}</span></div>${err}<ul class="ls">${rows}</ul>${run ? `<ul class="ls agent"><li>${faceOf([...armadaBots][0], "s20")}<span class="t">Onix</span><span class="e">${esc(runWord)}</span></li></ul>` : ""}`;
   host(info.el); }
-function closeInfo(quiet) { if (!info) return; const {el: box, from, kbd} = info; info = null; $$(".rt.open", lane).forEach((b) => b.classList.remove("open")); box.inert = true; M.leave(box, () => box.remove());
+function closeInfo(quiet) { if (!info) return; const {el: box, from, kbd, id} = info; info = null; if (tickOf.has(id)) tickOf.get(id).classList.remove("open"); box.inert = true; M.leave(box, () => box.remove());
   if (quiet) return; if (kbd && from && from.isConnected) M.focusKbd(from); else ready(); }
 
-export {closeInfo, drawTicks, fetchReceipts, info, loadMembers, loadReceipts, onReadReceipts, openInfo, receiptButton,
-  RECEIPTS, toggleInfo};
+export {closeInfo, drawTicks, fetchReceipts, forgetReceipts, info, loadMembers, loadReceipts, onReadReceipts, openInfo, rcpt,
+  receiptButton, RECEIPTS, retick, toggleInfo, untick};

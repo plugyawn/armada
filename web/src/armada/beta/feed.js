@@ -7,7 +7,7 @@ import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {partEl, partsOf} from "./parts.js";
 import {drawReactions} from "./reactions.js";
-import {receiptButton, RECEIPTS} from "./receipts.js";
+import {receiptButton, RECEIPTS, untick} from "./receipts.js";
 import {drawThreadLine, openThread} from "./threads.js";
 import {placeholderAns, syncOnix} from "./agent_turn.js";
 import {failMark} from "./send.js";
@@ -63,7 +63,7 @@ function newSection(c, m, kind, o) {
 }
 /* a turn's bubbles: the first keeps its lower inner corner square, the last its upper one; the turn's time stands on its last bubble */
 function finish(cl) { if (cl.classList.contains("onix")) return; const bs = $$(":scope > .bl > .b", cl); bs.forEach((b, i) => { b.classList.toggle("u", i < bs.length - 1); b.classList.toggle("t", i > 0); });
-  $$(":scope > .bl > time, :scope > .bl > .rt, :scope > .rcpt.at", cl).forEach((t) => t.remove()); const lastPart = $$(":scope > [data-part]", cl).pop(); if (!lastPart || cl.dataset.pending) return;
+  $$(":scope > .bl > time, :scope > .bl > .rt, :scope > .rcpt.at", cl).forEach((t) => { for (const b of t.matches(".rt") ? [t] : $$(".rt", t)) untick(b); t.remove(); }); const lastPart = $$(":scope > [data-part]", cl).pop(); if (!lastPart || cl.dataset.pending) return;
   const edited = (mid) => { const c = msgIndex.get(+mid), x = c && c.byId.get(+mid); return !!(x && (x.edited || x.last_edit_timestamp)); };
   /* an edited message that is not the turn's last says so on its own last bubble; the last one says it with the time */
   const lastOf = new Map(); for (const b of $$(":scope > .bl[data-mid]", cl)) lastOf.set(b.dataset.mid, b);

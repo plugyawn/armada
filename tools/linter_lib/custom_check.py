@@ -339,6 +339,7 @@ js_rules = RuleList(
             "exclude_pattern": r"(const |\S)style ?=",
             "description": "Avoid using the `style=` attribute; we prefer styling in CSS files",
             "exclude": {
+                "web/tests/armada/beta_previews.test.cjs",
                 "web/tests/compose_paste.test.cjs",
                 "web/tests/postprocess_content.test.cjs",
                 "web/tests/lib/zjquery_element.cjs",

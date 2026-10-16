@@ -11,13 +11,15 @@ import {tkey} from "./routing.js";
 import {dropNames, liftInline, loadPics, localSize, picHTML, picsOf} from "./media.js";
 import {widgetPart} from "./widgets.js";
 import {artifactPart} from "./artifacts.js";
+import {cardEl, moreEl, takeCards} from "./previews.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
    A block is: a code block (div.codehilite or pre), a table, pictures (div.message_inline_image; consecutive previews are
-   one block, and a Markdown image is lifted out of its words first: media.js), a spoiler, a link preview (div.message_embed),
-   display maths. Everything else is prose: paragraphs, lists, quotes, headings. A link that only names a picture shown below
-   it is that picture's label, not words (media.js, dropNames).
+   one block, and a Markdown image is lifted out of its words first: media.js), a spoiler, display maths. Everything else is
+   prose: paragraphs, lists, quotes, headings. A link that only names a picture shown below it is that picture's label, not
+   words (media.js, dropNames). A link's preview (a page's, div.message_embed; a video's) is a card under the run of prose
+   that holds its link (previews.js).
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
@@ -64,15 +66,15 @@ function partsOf(m) {
   const onix = isOnix(m.sender_id), out = []; let run = [];
   if (onix && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
   const wdg = widgetPart(m); if (wdg) return [wdg];   /* a poll or a to-do list stands in place of the words that made it (widgets.js) */
-  tpl.innerHTML = m.content || ""; const root = clean(tpl.content); liftInline(root); dropNames(root);
+  tpl.innerHTML = m.content || ""; const root = clean(tpl.content); const cards = takeCards(root, m); liftInline(root); dropNames(root);
   $$("code", root).forEach((x) => { if (x.closest("pre")) return; x.dir = "ltr"; if (x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
   if (onix) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
-  const flush = () => { if (!run.length) return;
+  const flush = () => { if (!run.length) return; const under = cards.under(run);
     if (onix) { run.forEach((n) => { if (/^H[12]$/.test(n.tagName)) { const h = el("h3"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } else if (/^H[3-6]$/.test(n.tagName)) { const h = el("h4"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } });
       const box = el("div"); box.append(...run); $$("li", box).forEach((li) => { const s = el("span"); s.append(...li.childNodes); li.append(s); }); out.push({t: "ans", html: box.innerHTML}); }
     else if (run.length === 1 && run[0].tagName === "P") { const p = run[0], txt = p.textContent.trim(), ems = $$(".em, img.emoji", p).length; out.push({t: "b", tag: "p", html: p.innerHTML, jumbo: ems >= 1 && ems <= 3 && JUMBO.test(txt.replace(/\s/g, ""))}); }
     else { const box = el("div"); box.append(...run); out.push({t: "b", tag: "div", html: box.innerHTML}); }
-    run = []; };
+    run = []; out.push(...under); };
   const quote = onix ? null : quoteOf([...root.children]);   /* a reply: its one-line quote stands above the words */
   if (quote) { root.firstElementChild.remove(); root.firstElementChild.remove(); out.push({t: "rq", html: quoteHTML(quote), ref: quote.id}); }
   const asking = onix && QUESTION.test(root.textContent);
@@ -83,7 +85,7 @@ function partsOf(m) {
     if (BLOCK(n)) { flush(); const p = blockPart(n), last = out[out.length - 1];
       if (p.t === "pic" && last && last.t === "pic" && last.items && last._end === n.previousElementSibling) { last.items.push(...p.items); last.html = picHTML(last.items); last._end = n; } else { if (p.t === "pic") p._end = n; out.push(p); } }   /* previews side by side are one group */
     else run.push(n); }
-  flush();
+  flush(); out.push(...cards.rest());
   const art = artifactPart(m); if (art) out.push(art);   /* the artifact a run attached: a block after its words (artifacts.js) */
   if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
   return out;
@@ -99,6 +101,8 @@ function partEl(p, m) {
   else if (p.t === "pic") e = el("div", "blk pic", p.html);
   else if (p.t === "wdg") e = el("div", "blk wdg", p.html);
   else if (p.t === "art") e = el("div", "blk art", p.html);
+  else if (p.t === "pv") e = cardEl(p);
+  else if (p.t === "pvm") e = moreEl(p);
   else if (p.t === "rq") { e = el("button", "rq", p.html); e.dataset.quote = p.ref; e.setAttribute("aria-label", "Go to the message this replies to"); }
   else e = el("div", "blk", p.html);
   e.dataset.mid = m.id; e.dataset.part = p.t; e._src = p.html; loadPics(e); return e;

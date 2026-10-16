@@ -1,0 +1,35 @@
+/* INTERIM BETA (README.md): a link's card under the words that hold it (previews.js). Tokens only, as beta.css.
+   The kit draws the card (.pv in kit/mock.css: 368 wide, 56 high, the block's fill, the 40 px cell at its end); what is
+   here is what real data needs: a height that never depends on what arrives, a picture that fades in inside its cell,
+   a video's still, and the card as a link. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+a.pv { height: 56px; flex: none; color: var(--ink-1); text-decoration: none; overflow: hidden; transition: background-color var(--fade-out) linear; }
+a.pv:hover { background-color: color-mix(in srgb, var(--block) 94%, var(--ink-1)); transition-duration: var(--fade-in); }
+.cl.me > .pv { align-self: flex-end; }
+.cl > .pv + .pv, .cl > .pv + .pvm { margin-top: var(--gap-same); }
+
+/* "+N more": a quiet line under a bubble's three cards, at their text edge, that opens the rest where it stands */
+.cl > button.pvm { height: 24px; padding: 0 var(--pad-x); border-radius: var(--r-ctl); font: var(--t-text); color: var(--ink-2); transition: background-color var(--fade-out) linear; }
+.cl > button.pvm:hover { background-color: var(--fill-1); transition-duration: var(--fade-in); }
+.cl.me > .pvm { align-self: flex-end; }
+
+/* two lines of one height each, whatever they hold: the title, then the site and what the page says of itself */
+.pv > .pvt { display: block; min-width: 0; }
+.pv .pvh { display: flex; align-items: baseline; gap: var(--s-2); height: 20px; font: var(--t-strong); color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pv .pvh > b { font: inherit; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pv .pvc { display: block; height: 16px; font: var(--t-caption); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the picture's cell (and a video's still): the glyph under the picture, which fades in once it has loaded; a picture
+   that fails is taken away */
+.pv > .tn { position: relative; overflow: hidden; }
+.pv > .tn > img, .pv > .still > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--fade-in) linear; }
+.pv > .tn > img[data-state="ready"], .pv > .still > img[data-state="ready"] { opacity: 1; }
+
+/* a video: its still at 16:9 across the card, a play mark at its middle, then the two lines */
+a.pv[data-kind="video"] { display: block; height: auto; padding: 0; }
+.pv[data-kind="video"] > .still { display: block; position: relative; aspect-ratio: 16 / 9; background: var(--fill-2); overflow: hidden; }
+.pv[data-kind="video"] > .still > .play { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; padding: 12px; border-radius: var(--r-round); background: color-mix(in srgb, var(--block) 88%, transparent); color: var(--ink-1); fill: currentColor; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.pv[data-kind="video"] > .pvt { height: 56px; padding: var(--s-2) var(--pad-x); }
+
+}   /* @layer zulip.armada-beta */

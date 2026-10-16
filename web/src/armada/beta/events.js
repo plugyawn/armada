@@ -45,7 +45,7 @@ function onMessage(ev) {
   drawTyping(); drawSide();
   if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); keepEnd(c); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
-  if (state.pinned) { const last = row.parts[row.parts.length - 1], b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
+  if (state.pinned) { const last = row.parts.filter((x) => !/^pv/.test(x.dataset.part)).pop(), b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
   if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); hopOnce(row.cl); }
   keepEnd(c);
 }

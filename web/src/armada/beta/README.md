@@ -20,7 +20,8 @@ Delete it when the rebuild's conversation lands.
 - The page is ES modules, one for each part of it (below), wired by `host.js`. Reads and writes go to `/json/` with
   the session cookie and the page's CSRF token.
 - `beta.css`: what real data needs beyond the kit. Tokens only. `feed.css`: the same for the conversation's parts (the
-  feed's modules), so that the feed's rules do not interleave with everyone else's.
+  feed's modules), so that the feed's rules do not interleave with everyone else's. `previews.css`: a link's card
+  (`previews.js`).
 
 ## Modules and owners
 
@@ -52,6 +53,7 @@ into the engineered client deletes the module it replaces.
 | `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble) | composer |
 | `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote, a send's client key (contract C4); node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
 | `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`); a block of streamed words (`streamHTML`) | feed |
+| `previews.js` | a link's card under the words that hold it: a page's preview, a video's still, at most three a bubble with "+N more" (statement 41); its sheet is `previews.css`; tested by `web/tests/armada/beta_previews.test.cjs` | feed |
 | `code_blocks.js` | a code block: its code, its copy button, long output folded with Show all | feed |
 | `media.js` | pictures: the server's previews read into boxes of known size (`picOf`, `picHTML`), a Markdown image lifted out of its words, the name link that is a picture's label (`liftInline`, `dropNames`), loading when near (`loadPics`), my own pictures shown at once (`localPicture`, `rememberLocal`); its sheet is `media.css`; node tests in `web/tests/armada/beta_media.test.cjs` | feed |
 | `chunks.js` | what loads on first use: the lightbox, an artifact's document and a scene are chunks (`chunk`, `loadedChunk`), prefetched once the first place is drawn and the page is idle (`prefetchChunks`); a chunk imports nothing the first load holds, and is handed what it uses of the page when it arrives (its module's default export) | feed |

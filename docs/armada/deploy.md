@@ -1090,10 +1090,10 @@ estimates, not load tests; only the figures marked measured were measured.
 - **CPU: 4 vCPU.** Zulip, plus the commands agents run in their worktrees
   (tests, builds), which is where the load comes from.
 - **Memory: 6 to 8 GB, plus 2 to 4 GB swap.** Each agent slot keeps up to
-  four Codex app-servers warm for 30 minutes after their topic's last run
-  (about 170 MB each when idle, measured in the dev VM), two slots and the
-  monitor worker can each hold four, and a running agent's commands can
-  need gigabytes. More than 3.8 GB is also what makes Zulip run each queue,
+  four Codex app-servers warm for 5 minutes after their topic's last turn
+  (`ARMADA_WORKER_RUNTIME_IDLE_SECONDS`; about 230 MB each, measured on the
+  hosted beta), two slots and the monitor worker can each hold four, a quiet
+  server holds none, and a running agent's commands can need gigabytes. More than 3.8 GB is also what makes Zulip run each queue,
   and both agent slots, as a process of its own.
 - **Disk: 25 to 40 GB.** Zulip asks for 10 GB free beyond the system; each
   repository is stored once, as a bare clone, plus one full checkout per

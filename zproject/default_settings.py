@@ -842,6 +842,10 @@ ARMADA_WORKER_APPROVAL_POLICY: Literal["untrusted", "on-request", "never"] = "on
 # Keep long-running Codex tool calls alive below the six-hour broker delivery
 # policy; this is an application idle timeout, not a queue visibility timeout.
 ARMADA_WORKER_TIMEOUT_SECONDS = 19800
+# A topic's Codex app-server (about 230 MB) stays warm between turns for
+# this long, then is closed; the next turn starts it again.  A quiet
+# server holds none.
+ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 5 * 60
 ARMADA_WORKER_OUTPUT_LIMIT = 50000
 ARMADA_WORKER_CODEX_EPHEMERAL = False
 # Codex's memories feature.  Every topic's agent shares one CODEX_HOME,

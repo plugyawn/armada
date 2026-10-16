@@ -6,6 +6,7 @@ from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any
 
+from django.conf import settings
 from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
@@ -47,11 +48,17 @@ from zerver.worker.base import QueueProcessingWorker, assign_queue
 logger = logging.getLogger(__name__)
 
 ARMADA_WORKER_RUNTIME_CACHE_LIMIT = 4
-ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 30 * 60
 ARMADA_SIDE_PUMP_INTERVAL_SECONDS = 0.2
 ArmadaWorkerRuntimeKey = tuple[str, str, str]
+# The warm runtimes of this worker process, one per worktree, least recently
+# used first. A turn checks its runtime out for its whole length, so the idle
+# reaper, which runs on the liveness thread, never closes one in use. The lock
+# guards the three collections; closing a runtime waits for its process, so
+# it always happens after the lock is released.
+armada_worker_runtime_lock = threading.Lock()
 armada_worker_runtimes: OrderedDict[ArmadaWorkerRuntimeKey, ArmadaWorkerRuntime] = OrderedDict()
 armada_worker_runtime_last_used: dict[ArmadaWorkerRuntimeKey, float] = {}
+armada_worker_runtimes_in_use: set[ArmadaWorkerRuntimeKey] = set()
 
 
 def armada_worker_slot_should_warm(
@@ -76,23 +83,45 @@ def close_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
 
 
 def close_armada_worker_runtimes() -> None:
-    runtimes = list(armada_worker_runtimes.values())
-    armada_worker_runtimes.clear()
-    armada_worker_runtime_last_used.clear()
+    with armada_worker_runtime_lock:
+        runtimes = list(armada_worker_runtimes.values())
+        armada_worker_runtimes.clear()
+        armada_worker_runtime_last_used.clear()
+        armada_worker_runtimes_in_use.clear()
     for runtime in runtimes:
         close_armada_worker_runtime(runtime)
 
 
-def evict_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
-    """Close one runtime and remove every process-local cache reference to it."""
+def forget_armada_worker_runtime_locked(runtime: ArmadaWorkerRuntime) -> None:
     for runtime_key, candidate in list(armada_worker_runtimes.items()):
         if candidate is not runtime:
             continue
         armada_worker_runtimes.pop(runtime_key, None)
         armada_worker_runtime_last_used.pop(runtime_key, None)
+        armada_worker_runtimes_in_use.discard(runtime_key)
+
+
+def evict_armada_worker_runtime(runtime: ArmadaWorkerRuntime) -> None:
+    """Close one runtime and remove every process-local cache reference to it."""
+    with armada_worker_runtime_lock:
+        forget_armada_worker_runtime_locked(runtime)
     # Isolation failures are deliberately uncached, but stolen workers still
     # own and must close those app-server processes after the turn.
     close_armada_worker_runtime(runtime)
+
+
+def release_armada_worker_runtime(
+    runtime: ArmadaWorkerRuntime,
+    *,
+    current_time: float | None = None,
+) -> None:
+    """End a turn's hold on its runtime; its idle time starts now."""
+    now = time.monotonic() if current_time is None else current_time
+    with armada_worker_runtime_lock:
+        for runtime_key, candidate in armada_worker_runtimes.items():
+            if candidate is runtime:
+                armada_worker_runtimes_in_use.discard(runtime_key)
+                armada_worker_runtime_last_used[runtime_key] = now
 
 
 def cache_armada_worker_runtime(
@@ -100,29 +129,53 @@ def cache_armada_worker_runtime(
     runtime: ArmadaWorkerRuntime,
     *,
     current_time: float | None = None,
+    in_use: bool = False,
 ) -> None:
-    existing_runtime = armada_worker_runtimes.pop(runtime_key, None)
-    if existing_runtime is not None and existing_runtime is not runtime:
-        close_armada_worker_runtime(existing_runtime)
-    armada_worker_runtimes[runtime_key] = runtime
-    armada_worker_runtime_last_used[runtime_key] = (
-        time.monotonic() if current_time is None else current_time
-    )
-    while len(armada_worker_runtimes) > ARMADA_WORKER_RUNTIME_CACHE_LIMIT:
-        evicted_key, evicted_runtime = armada_worker_runtimes.popitem(last=False)
-        armada_worker_runtime_last_used.pop(evicted_key, None)
-        close_armada_worker_runtime(evicted_runtime)
+    closing: list[ArmadaWorkerRuntime] = []
+    with armada_worker_runtime_lock:
+        existing_runtime = armada_worker_runtimes.pop(runtime_key, None)
+        if existing_runtime is not None and existing_runtime is not runtime:
+            closing.append(existing_runtime)
+        armada_worker_runtimes[runtime_key] = runtime
+        armada_worker_runtime_last_used[runtime_key] = (
+            time.monotonic() if current_time is None else current_time
+        )
+        if in_use:
+            armada_worker_runtimes_in_use.add(runtime_key)
+        else:
+            armada_worker_runtimes_in_use.discard(runtime_key)
+        for evicted_key in list(armada_worker_runtimes):
+            if len(armada_worker_runtimes) <= ARMADA_WORKER_RUNTIME_CACHE_LIMIT:
+                break
+            if evicted_key in armada_worker_runtimes_in_use:
+                continue
+            closing.append(armada_worker_runtimes.pop(evicted_key))
+            armada_worker_runtime_last_used.pop(evicted_key, None)
+    for closed_runtime in closing:
+        close_armada_worker_runtime(closed_runtime)
 
 
-def reap_idle_armada_worker_runtimes(*, current_time: float | None = None) -> None:
+def reap_idle_armada_worker_runtimes(*, current_time: float | None = None) -> int:
+    """Close every warm runtime nobody has used for
+    ARMADA_WORKER_RUNTIME_IDLE_SECONDS, so a quiet server holds no Codex
+    process. The next turn in that worktree starts a new one."""
     now = time.monotonic() if current_time is None else current_time
-    for runtime_key, last_used in list(armada_worker_runtime_last_used.items()):
-        if now - last_used < ARMADA_WORKER_RUNTIME_IDLE_SECONDS:
-            continue
-        runtime = armada_worker_runtimes.pop(runtime_key, None)
-        armada_worker_runtime_last_used.pop(runtime_key, None)
-        if runtime is not None:
-            close_armada_worker_runtime(runtime)
+    idle_seconds = settings.ARMADA_WORKER_RUNTIME_IDLE_SECONDS
+    with armada_worker_runtime_lock:
+        idle_keys = [
+            runtime_key
+            for runtime_key, last_used in armada_worker_runtime_last_used.items()
+            if runtime_key not in armada_worker_runtimes_in_use and now - last_used >= idle_seconds
+        ]
+        idle_runtimes = []
+        for runtime_key in idle_keys:
+            armada_worker_runtime_last_used.pop(runtime_key, None)
+            runtime = armada_worker_runtimes.pop(runtime_key, None)
+            if runtime is not None:
+                idle_runtimes.append(runtime)
+    for runtime in idle_runtimes:
+        close_armada_worker_runtime(runtime)
+    return len(idle_runtimes)
 
 
 def get_armada_worker_runtime(
@@ -132,16 +185,20 @@ def get_armada_worker_runtime(
     process_isolation: ArmadaProcessIsolation | None,
     isolation_error: str | None,
 ) -> ArmadaWorkerRuntime:
+    """Check out the worktree's runtime for one turn; the caller gives it
+    back with release_armada_worker_runtime (or evicts it)."""
     sandbox = armada_worker_sandbox_for_workdir(workdir)
     isolation_label = process_isolation.label() if process_isolation is not None else ""
     runtime_key = (workdir, sandbox, isolation_label)
     current_time = time.monotonic()
-    reap_idle_armada_worker_runtimes(current_time=current_time)
     if isolation_error is None:
-        runtime = armada_worker_runtimes.get(runtime_key)
+        with armada_worker_runtime_lock:
+            runtime = armada_worker_runtimes.get(runtime_key)
+            if runtime is not None:
+                armada_worker_runtimes.move_to_end(runtime_key)
+                armada_worker_runtime_last_used[runtime_key] = current_time
+                armada_worker_runtimes_in_use.add(runtime_key)
         if runtime is not None:
-            armada_worker_runtimes.move_to_end(runtime_key)
-            armada_worker_runtime_last_used[runtime_key] = current_time
             runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
             return runtime
     runtime = build_armada_worker_runtime_from_settings(
@@ -154,7 +211,7 @@ def get_armada_worker_runtime(
     )
     runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
     if isolation_error is None:
-        cache_armada_worker_runtime(runtime_key, runtime, current_time=current_time)
+        cache_armada_worker_runtime(runtime_key, runtime, current_time=current_time, in_use=True)
     return runtime
 
 
@@ -263,6 +320,7 @@ class ArmadaWorker(QueueProcessingWorker):
                 finally:
                     reset_queries()
                     close_old_connections()
+                reap_idle_armada_worker_runtimes()
         finally:
             close_old_connections()
 
@@ -442,8 +500,8 @@ class ArmadaWorker(QueueProcessingWorker):
                 process_isolation,
                 isolation_error,
             )
-            active_session = load_armada_active_session_from_zulip(message, bot_handler)
             try:
+                active_session = load_armada_active_session_from_zulip(message, bot_handler)
                 runtime.warm(active_session)
             except Exception:
                 logger.warning(
@@ -452,6 +510,8 @@ class ArmadaWorker(QueueProcessingWorker):
                     context_topic,
                     exc_info=True,
                 )
+            finally:
+                release_armada_worker_runtime(runtime)
             return
         if redelivered:
             wait_for_redelivered_armada_worker_run(
@@ -507,15 +567,6 @@ class ArmadaWorker(QueueProcessingWorker):
             process_isolation,
             workdir=workdir,
         )
-        runtime = side_runtime or get_armada_worker_runtime(
-            model,
-            workdir,
-            reasoning_effort,
-            process_isolation,
-            isolation_error,
-        )
-        if side_runtime is None:
-            self.active_runtime = runtime
         keep_runtime_warm = (
             side_runtime is not None
             or not self.POOL_QUEUE_NAMES
@@ -528,6 +579,15 @@ class ArmadaWorker(QueueProcessingWorker):
                 )
             )
         )
+        runtime = side_runtime or get_armada_worker_runtime(
+            model,
+            workdir,
+            reasoning_effort,
+            process_isolation,
+            isolation_error,
+        )
+        if side_runtime is None:
+            self.active_runtime = runtime
         armada_handler = ArmadaEmbeddedBotHandler(
             worker_runtime=runtime,
             active_session_loader=load_armada_active_session_from_zulip,
@@ -582,10 +642,12 @@ class ArmadaWorker(QueueProcessingWorker):
             if side_runtime is not None:
                 self.active_side_run_id = None
                 self.active_side_run_attempt = None
-            if not keep_runtime_warm:
+            elif not keep_runtime_warm:
                 # A stolen turn may resume the native thread on this slot, but
                 # only its stable home slot is allowed to retain a warm process.
                 evict_armada_worker_runtime(runtime)
+            else:
+                release_armada_worker_runtime(runtime)
 
     def next_queued_side_run(
         self,

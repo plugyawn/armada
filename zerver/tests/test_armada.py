@@ -4,6 +4,7 @@ import json
 import queue
 import random
 import threading
+import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from subprocess import Popen
@@ -14,6 +15,8 @@ from unittest import TestCase
 from unittest.mock import Mock, call, patch
 from urllib.request import Request
 
+from django.conf import settings
+from django.test import override_settings
 from typing_extensions import NotRequired, Self, Unpack, override
 
 from zerver.lib.armada import (
@@ -1747,37 +1750,22 @@ class ArmadaSessionDefaultsTest(TestCase):
                     side_effect=build_runtime,
                 ),
             ):
-                first_runtime = armada_worker_module.get_armada_worker_runtime(
-                    "model-a",
-                    "/tmp/armada-a",
-                    "medium",
-                    None,
-                    None,
-                )
-                second_runtime = armada_worker_module.get_armada_worker_runtime(
-                    "model-a",
-                    "/tmp/armada-b",
-                    "medium",
-                    None,
-                    None,
-                )
-                self.assertIs(
-                    armada_worker_module.get_armada_worker_runtime(
+
+                def run_turn(workdir: str) -> ArmadaWorkerRuntime:
+                    runtime = armada_worker_module.get_armada_worker_runtime(
                         "model-a",
-                        "/tmp/armada-a",
+                        workdir,
                         "medium",
                         None,
                         None,
-                    ),
-                    first_runtime,
-                )
-                third_runtime = armada_worker_module.get_armada_worker_runtime(
-                    "model-a",
-                    "/tmp/armada-c",
-                    "medium",
-                    None,
-                    None,
-                )
+                    )
+                    armada_worker_module.release_armada_worker_runtime(runtime)
+                    return runtime
+
+                first_runtime = run_turn("/tmp/armada-a")
+                second_runtime = run_turn("/tmp/armada-b")
+                self.assertIs(run_turn("/tmp/armada-a"), first_runtime)
+                third_runtime = run_turn("/tmp/armada-c")
 
                 self.assertEqual(created_runtimes, [first_runtime, second_runtime, third_runtime])
                 assert isinstance(first_runtime, FakeRuntime)
@@ -1855,19 +1843,146 @@ class ArmadaSessionDefaultsTest(TestCase):
         runtime_key = ("/srv/armada-workspaces/topic-a", "danger-full-access", "")
         armada_worker_module.close_armada_worker_runtimes()
         try:
-            with patch.object(armada_worker_module, "ARMADA_WORKER_RUNTIME_IDLE_SECONDS", 30):
+            with override_settings(ARMADA_WORKER_RUNTIME_IDLE_SECONDS=30):
                 armada_worker_module.cache_armada_worker_runtime(
                     runtime_key,
                     runtime,
                     current_time=10,
                 )
-                armada_worker_module.reap_idle_armada_worker_runtimes(current_time=39)
+                self.assertEqual(
+                    armada_worker_module.reap_idle_armada_worker_runtimes(current_time=39), 0
+                )
                 self.assertFalse(runtime.closed)
-                armada_worker_module.reap_idle_armada_worker_runtimes(current_time=40)
+                self.assertEqual(
+                    armada_worker_module.reap_idle_armada_worker_runtimes(current_time=40), 1
+                )
 
             self.assertTrue(runtime.closed)
             self.assertEqual(armada_worker_module.armada_worker_runtimes, {})
             self.assertEqual(armada_worker_module.armada_worker_runtime_last_used, {})
+        finally:
+            armada_worker_module.close_armada_worker_runtimes()
+
+    def test_armada_worker_runtime_in_use_is_never_reaped_and_idles_from_release(self) -> None:
+        class FakeRuntime(ArmadaWorkerRuntime):
+            def __init__(self) -> None:
+                super().__init__()
+                self.closed = False
+
+            @override
+            def close(self) -> None:
+                self.closed = True
+
+        runtime = FakeRuntime()
+        armada_worker_module.close_armada_worker_runtimes()
+        try:
+            with (
+                override_settings(ARMADA_WORKER_RUNTIME_IDLE_SECONDS=300),
+                patch.object(
+                    armada_worker_module,
+                    "build_armada_worker_runtime_from_settings",
+                    return_value=runtime,
+                ),
+            ):
+                checked_out = armada_worker_module.get_armada_worker_runtime(
+                    "gpt-6-astra",
+                    "/srv/armada-workspaces/topic-a",
+                    "medium",
+                    None,
+                    None,
+                )
+                self.assertIs(checked_out, runtime)
+                # A turn far longer than the idle time: still held, never reaped.
+                turn_end = time.monotonic() + 3600
+                self.assertEqual(
+                    armada_worker_module.reap_idle_armada_worker_runtimes(current_time=turn_end),
+                    0,
+                )
+                self.assertFalse(runtime.closed)
+
+                armada_worker_module.release_armada_worker_runtime(runtime, current_time=turn_end)
+                self.assertEqual(
+                    armada_worker_module.reap_idle_armada_worker_runtimes(
+                        current_time=turn_end + 299
+                    ),
+                    0,
+                )
+                self.assertFalse(runtime.closed)
+                self.assertEqual(
+                    armada_worker_module.reap_idle_armada_worker_runtimes(
+                        current_time=turn_end + 300
+                    ),
+                    1,
+                )
+            self.assertTrue(runtime.closed)
+            self.assertEqual(armada_worker_module.armada_worker_runtimes, {})
+            self.assertEqual(armada_worker_module.armada_worker_runtimes_in_use, set())
+        finally:
+            armada_worker_module.close_armada_worker_runtimes()
+
+    def test_armada_worker_lru_eviction_spares_the_runtime_in_use(self) -> None:
+        class FakeRuntime(ArmadaWorkerRuntime):
+            def __init__(self) -> None:
+                super().__init__()
+                self.closed = False
+
+            @override
+            def close(self) -> None:
+                self.closed = True
+
+        held = FakeRuntime()
+        idle = FakeRuntime()
+        newest = FakeRuntime()
+        armada_worker_module.close_armada_worker_runtimes()
+        try:
+            with patch.object(armada_worker_module, "ARMADA_WORKER_RUNTIME_CACHE_LIMIT", 2):
+                armada_worker_module.cache_armada_worker_runtime(
+                    ("/srv/armada-workspaces/held", "workspace-write", ""), held, in_use=True
+                )
+                armada_worker_module.cache_armada_worker_runtime(
+                    ("/srv/armada-workspaces/idle", "workspace-write", ""), idle
+                )
+                armada_worker_module.cache_armada_worker_runtime(
+                    ("/srv/armada-workspaces/newest", "workspace-write", ""), newest
+                )
+            self.assertFalse(held.closed)
+            self.assertTrue(idle.closed)
+            self.assertEqual(
+                list(armada_worker_module.armada_worker_runtimes.values()), [held, newest]
+            )
+        finally:
+            armada_worker_module.close_armada_worker_runtimes()
+
+    def test_armada_worker_liveness_loop_reaps_a_quiet_workers_runtimes(self) -> None:
+        # The leak the audit found: a worker that gets no further event kept
+        # its app-servers for ever, because only the next event reaped them.
+        class FakeRuntime(ArmadaWorkerRuntime):
+            def __init__(self) -> None:
+                super().__init__()
+                self.closed = False
+
+            @override
+            def close(self) -> None:
+                self.closed = True
+
+        runtime = FakeRuntime()
+        worker = object.__new__(armada_worker_module.ArmadaWorker)
+        worker.run_liveness_stop = Mock()
+        worker.run_liveness_stop.wait.side_effect = [False, True]
+        armada_worker_module.close_armada_worker_runtimes()
+        try:
+            armada_worker_module.cache_armada_worker_runtime(
+                ("/srv/armada-workspaces/quiet", "workspace-write", ""),
+                runtime,
+                current_time=time.monotonic() - settings.ARMADA_WORKER_RUNTIME_IDLE_SECONDS,
+            )
+            with (
+                patch.object(worker, "run_liveness_pass"),
+                patch.object(armada_worker_module, "close_old_connections"),
+            ):
+                worker.run_liveness_loop()
+            self.assertTrue(runtime.closed)
+            self.assertEqual(armada_worker_module.armada_worker_runtimes, {})
         finally:
             armada_worker_module.close_armada_worker_runtimes()
 

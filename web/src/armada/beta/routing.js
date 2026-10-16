@@ -78,7 +78,8 @@ function keep() { for (const c of places.values()) if (c !== state.P) trim(c, KE
 /* a message added to a place: a place left trims back to KEEP a page past it; the open one, while its end is in view (or was,
    when the page was hidden), past CAP. Rows being read further up are never let go. */
 function keepEnd(c) { const here = c === state.P; if (here && !state.pinned) return; if (c.msgs.length <= (here ? CAP : KEEP + 50)) return; trim(c, KEEP); if (shown(c)) pin(); }
-async function fetchRuns(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "armada/runs", {stream: p.stream, topic: p.topic}); if (r.runtime_config) state.runtimeCfg = r.runtime_config; c.runs = r.armada_runs.filter((x) => x.session_kind !== "side"); c.runs.forEach(askState); runsSeen.set(p.key, c.runs); c.runsLoaded = true; } catch (e) {} }
+/* the runs of any channel's topic: a mention starts one there with or without a repository (runs.js, agentCanRun) */
+async function fetchRuns(c) { const p = c.place; if (p.kind !== "topic") return; try { const r = await api("GET", "armada/runs", {stream: p.stream, topic: p.topic}); if (r.runtime_config) state.runtimeCfg = r.runtime_config; c.runs = r.armada_runs.filter((x) => x.session_kind !== "side"); c.runs.forEach(askState); runsSeen.set(p.key, c.runs); c.runsLoaded = true; } catch (e) {} }
 async function fetchCtx(c) { const p = c.place; if (p.kind !== "topic" || !p.repo) return; try { const r = await api("GET", "armada/topic-context", {stream: p.stream, topic: p.topic}); c.ctx = r.armada_topic_context; } catch (e) { c.ctxError = e.message; } }
 
 async function openPlace(p, o = {}) {

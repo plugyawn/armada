@@ -5,7 +5,7 @@ import {state, streams} from "./state.js";
 import {age} from "./time.js";
 import {topicLabel} from "./routing.js";
 import {nameOf, presOf} from "./faces.js";
-import {runsSeen} from "./runs.js";
+import {agentCanRun, agentHere, runsSeen} from "./runs.js";
 import {progOf} from "./checklist.js";
 import {setTab} from "./views.js";
 import {homeRows} from "./home.js";
@@ -23,7 +23,8 @@ function headCfg() { const p = state.place, c = state.P;
   if (p.kind === "dm") { const ids = p.ids.length ? p.ids : [state.ME], one = ids.length === 1 ? ids[0] : 0, pr = one ? presOf(one) : "";
     return {kind: "plain", title: esc(ids.map(nameOf).join(", ")), say: one ? (one === state.ME ? "Notes to yourself." : pr === "on" ? "Here now." : pr === "away" ? "Away." : "Not here just now.") : `${ids.length + 1} people`, checklist: {title: "Together"}}; }
   const s = streams.get(p.stream_id), title = esc(topicLabel(p.topic));
-  if (!p.repo) return {kind: "plain", path: esc(s.name), title, say: esc(s.description || "A channel with no repository."), checklist: {title: "People"}};
+  /* a channel with no repository: the column holds the checklist where Onix can run or has run (column.js), else People */
+  if (!p.repo) return {kind: "plain", path: esc(s.name), title, say: esc(s.description || (agentCanRun(p, c) ? "A channel with no repository yet. Onix makes one on its first run here." : "A channel with no repository.")), checklist: agentHere(p, c) ? progOf(c) : {title: "People"}};
   const ctx = c.ctx, g = ctx && ctx.git && ctx.git.available ? ctx.git : null, path = esc(repoPath(ctx && (ctx.repository_url || ctx.github_repo), s.name));
   if (ctx && !g) return {kind: "plain", path, title, say: ctx.workspace_uuid ? "The worktree's state is not available." : "No worktree yet. Onix makes one on its first run here.", checklist: progOf(c)};
   const lc = g && g.last_commit, base = (ctx && ctx.base_ref) || "main";

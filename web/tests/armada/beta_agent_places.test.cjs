@@ -19,7 +19,7 @@ const {run_test} = require("../lib/test.cjs");
 
 const dom = real_dom.make_real_dom(`
 <div id="beta-data" data-may-start-runs="on"></div>
-<nav><div class="scroll"></div></nav>
+<nav><div class="fixed"></div><div class="scroll"></div></nav>
 <main>
   <div class="band"><div class="lane">
     <div id="run" class="off"><span id="run-st"></span><span id="clock"></span><span id="act"></span><button id="stop">Stop</button></div>
@@ -63,11 +63,15 @@ set_global("M", {
     refuse: noop,
     figure: noop,
     say: noop,
+    current: () => [{}, {}],
 });
 set_global("S", {play: noop});
 set_global("host", noop);
 set_global("fig", String);
+set_global("fitLists", noop);
+set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
 set_global("wk", () => `<span class="mk wk"></span>`);
+set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
 set_global(
     "face",
     (spec, cls) => `<i class="av ${cls}">${spec.split(" ")[0].split(":")[0]}</i>`,
@@ -100,6 +104,7 @@ mock_esm("../../src/armada/beta/frame.js", {
     feed: find("#pane"),
     lane: find("#col"),
     nav: find("nav"),
+    navFixed: find("nav .fixed"),
     navScroll: find("nav .scroll"),
     side: find("#side"),
     outline: find("#outline"),
@@ -123,17 +128,19 @@ mock_esm("../../src/armada/beta/frame.js", {
     toBtn: find(".k.to"),
     modeBtn: find(".k.mode"),
 });
-mock_esm("../../src/armada/beta/column.js", {drawSide: noop});
+mock_esm("../../src/armada/beta/header.js", {drawHeader: noop});
 
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const mentions = zrequire("armada/beta/mentions.js");
 const send = zrequire("armada/beta/send.js");
+const column = zrequire("armada/beta/column.js");
 
 const ME = 3;
 const IAGO = 5;
 const AGENT = 9;
 const OPS = 4;
+const CLICK = 22;
 beta_state.state.ME = ME;
 beta_state.state.meName = "King Hamlet";
 beta_state.armadaBots.add(AGENT);
@@ -146,6 +153,9 @@ for (const [id, name, bot] of [
 }
 // #ops, a channel with no repository yet, as in a fresh organisation.
 beta_state.streams.set(OPS, {stream_id: OPS, name: "ops"});
+// #click, a channel with its repository.
+beta_state.streams.set(CLICK, {stream_id: CLICK, name: "click"});
+beta_state.repoStreams.add(CLICK);
 mentions.wireMentions();
 
 // A place opened, its messages read.
@@ -157,7 +167,7 @@ function open(p) {
     beta_state.state.P = c;
     return c;
 }
-const topic = (name) => open(routing.placeFromKey(routing.tkey(OPS, name)));
+const topic = (name, stream = OPS) => open(routing.placeFromKey(routing.tkey(stream, name)));
 const direct = () => open(routing.placeFromKey(routing.dkey([IAGO])));
 
 // Every promise the page waits on resolves through promises alone; its
@@ -229,4 +239,57 @@ run_test("a message that names Onix there is sent as one to Onix", async () => {
     const post = requests.find((r) => r.method === "POST" && r.url === "/json/messages");
     assert.equal(post.body.content, "@**Onix** why did the backup stop?");
     assert.equal(post.body.agent_followup, "true");
+});
+
+// The column, read as a person reads it: each list's heading and rows.
+function column_lists() {
+    column.drawSide();
+    return [...find("#outline").children].map((x) =>
+        [
+            x.querySelector(".sh > span"),
+            ...x.querySelectorAll("li"),
+            ...(x.matches(".note") ? [x] : []),
+        ]
+            .filter(Boolean)
+            .map((y) => y.textContent.trim()),
+    );
+}
+const run = {id: 1, status: "done", trigger_message_id: 18, date_created: 0, plan: null};
+
+run_test("the column holds the checklist, Runs and Onix wherever Onix can run", () => {
+    // #ops has no repository: no Changes, whose facts are git's.
+    const c = topic("certificate");
+    c.runsLoaded = true;
+    assert.deepEqual(column_lists(), [
+        ["No run here yet."],
+        ["Runs", "No runs yet"],
+        ["People", "Onix"],
+    ]);
+
+    // #click has its repository: Changes stands under the checklist.
+    const w = topic("option-groups", CLICK);
+    w.runsLoaded = true;
+    w.ctx = {git: {available: true, changed_files: []}};
+    assert.deepEqual(column_lists(), [
+        ["No run here yet."],
+        ["Changes", "No uncommitted changes"],
+        ["Runs", "No runs yet"],
+        ["People", "Onix"],
+    ]);
+});
+
+run_test("where Onix cannot run, the column keeps its runs if it has run there", () => {
+    beta_state.DATA.mayStartRuns = "off";
+    const c = topic("queues");
+    assert.deepEqual(column_lists(), [[]], "People only, under the heading line");
+    c.runs = [run];
+    assert.equal(column_lists()[1][0], "Runs");
+    beta_state.DATA.mayStartRuns = "on";
+});
+
+run_test("opening any channel's topic reads its runs", async () => {
+    requests.length = 0;
+    routing.openPlace(routing.placeFromKey(routing.tkey(OPS, "disk")));
+    await settle();
+    assert.ok(requests.some((r) => r.url === "/json/armada/runs"));
 });

@@ -91,6 +91,7 @@ set_global("fitLists", noop);
 set_global("fig", String);
 set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
 set_global("wk", () => `<svg class="mk wk"></svg>`);
+set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
 set_global(
     "face",
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,

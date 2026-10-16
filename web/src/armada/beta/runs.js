@@ -76,8 +76,10 @@ const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === 
    its runs (the page's data, may-start-runs) and a topic its people have not paused. A channel with no repository is no
    exception: Onix's first run there makes one. */
 const agentCanRun = (p = state.place, c = state.P) => !!p && p.kind === "topic" && armadaBots.size > 0 && DATA.mayStartRuns !== "off" && !(c && c.ctx && c.ctx.is_paused);
+/* a topic where Onix can run, or has: the column holds its checklist and its runs, and Onix stands among its people */
+const agentHere = (p = state.place, c = state.P) => !!p && p.kind === "topic" && (agentCanRun(p, c) || !!(c && c.runs.length));
 const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
 
-export {agentCanRun, answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
+export {agentCanRun, agentHere, answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
   runMark, runOfMsg, runsSeen, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};

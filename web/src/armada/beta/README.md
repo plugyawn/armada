@@ -46,6 +46,7 @@ into the engineered client deletes the module it replaces.
 | `partner_card.js` | a person's card (any face opens it; mine from the account row) and the evolution moment | faces |
 | `composer.js` | the field: the agent switch, the verb, the placeholder, attachments, `note()`, `ready()` | composer |
 | `send.js` | sending: the words addressed and echoed, `send()`, `retry()` | composer |
+| `caret.js` | the field's caret: the browser's own while it moves, a drawn one that blinks on the compositor at rest | composer |
 | `model_picker.js` | the model and effort picker | composer |
 | `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble) | composer |
 | `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote, a send's client key (contract C4); node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
@@ -110,7 +111,7 @@ To delete the beta, remove all of these in one change:
 
 - this directory
 - `zerver/views/armada_beta.py`, `templates/zerver/armada_beta.html`, `zerver/tests/test_armada_beta.py`,
-  `web/tests/armada/beta_link.test.cjs`
+  `web/tests/armada/beta_*.test.cjs`
 - in `zproject/urls.py`, the import from `zerver.views.armada_beta`, the two `beta/` paths and the four
   `armada/partner...` routes, with their comments (`zerver/lib/partner.py` stays for the rebuild, which moves its rows into
   the Partner model)

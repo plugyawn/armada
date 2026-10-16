@@ -7,7 +7,7 @@
    Rules kept from the prototype: read, write the whole new state, then ask the motion kit to release the difference;
    every handler ends with the field ready; nothing moves that the person did not act on. */
 
-import {$, $$, clamp, el, esc, press, store, T} from "./util.js";
+import {$, $$, clamp, el, esc, press, store} from "./util.js";
 import {allKids, expanded, marks, QUESTION_TIMEOUT, state, stats, streams, topicsOf, unread} from "./state.js";
 import {api, handle, on, onRestart, poll, register, session} from "./connection.js";
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
@@ -37,6 +37,7 @@ import {choosePick, drawPicker, drawPickerBand, drawPickerSide, movePick, openPi
 import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openCard, playMoment, wireCard} from "./partner_card.js";
 import {buildLab, lab} from "./lab.js";
 import {wireMentions} from "./mentions.js";
+import {wireCaret} from "./caret.js";
 import {onPost, wirePages} from "./pages.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
@@ -72,11 +73,11 @@ async function boot() {
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
   addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home" && state.place.kind !== "page") f.forEach(upload); });   /* the editor takes its own drops (pages.js) */
   tx.addEventListener("focus", () => { state.threadTx = null; });
-  buildOver(); wireMentions();
+  buildOver(); wireMentions(); wireCaret();
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
-  cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret", "idle"); go.classList.remove("armed");
-  let caret = 0; tx.addEventListener("input", () => { syncField(); go.classList.toggle("armed", !!tx.textContent.trim()); tx.classList.remove("idle"); clearTimeout(caret); caret = setTimeout(() => tx.classList.add("idle"), T["caret-hold"] || 600);
+  cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret"); go.classList.remove("armed");
+  tx.addEventListener("input", () => { syncField(); go.classList.toggle("armed", !!tx.textContent.trim());
     if (state.place && state.place.kind === "partner") { pick.q = tx.textContent; pick.sel = null; state.hd._sig = ""; drawHeader(); drawPicker(); drawPickerBand(); } });   /* on the picker the field is its search, across every generation */
   tx.addEventListener("keydown", (e) => { if (state.place && state.place.kind === "partner" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {   /* the picker: arrows move through the grid, Return chooses, Esc clears the search */
       if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) { e.preventDefault(); movePick(e.key); drawPickerBand(); return; }

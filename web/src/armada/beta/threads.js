@@ -47,7 +47,7 @@ async function fetchThread(c, id) { try { const r = await api("GET", "messages",
 function threadAppend(box, m) { const f = $(":scope > .cz", box); appendMessage(box, m, {thread: true}); if (f) box.append(f); }
 function threadField(id) {
   const t = el("template"); t.innerHTML = composerHTML({plain: 1, verb: "Reply", focus: false}, "", null); const cz_ = t.content.firstElementChild, tx_ = $(".tx", cz_), go_ = $(".disc", cz_);
-  cz_.classList.remove("is-focus", "has-text"); tx_.innerHTML = ""; tx_.contentEditable = "plaintext-only"; tx_.classList.add("m-caret", "idle"); go_.classList.remove("armed"); $$(".sz", cz_).forEach((x) => x.classList.add("sz")); host(cz_);
+  cz_.classList.remove("is-focus", "has-text"); tx_.innerHTML = ""; tx_.contentEditable = "plaintext-only"; tx_.classList.add("m-caret"); go_.classList.remove("armed"); $$(".sz", cz_).forEach((x) => x.classList.add("sz")); host(cz_);
   const sync = () => { const on = !!tx_.textContent.trim(); cz_.classList.toggle("has-text", on); go_.classList.toggle("armed", on); };
   tx_.addEventListener("input", sync); tx_.addEventListener("focus", () => { state.threadTx = tx_; cz_.classList.add("is-focus"); }); tx_.addEventListener("blur", () => cz_.classList.remove("is-focus"));
   tx_.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); replyThread(id, tx_, e.timeStamp); sync(); } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); state.threadTx = null; ready(); } });

@@ -227,8 +227,8 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .dots circle:nth-child(2) { animation-delay: calc(var(--caret-period) * 0.15); } .dots circle:nth-child(3) { animation-delay: calc(var(--caret-period) * 0.3); }
 @keyframes dot { 0%, 60%, 100% { opacity: 0.35; transform: scale(0.83); } 30% { opacity: 1; transform: scale(1.17); } }
 .dots.s { width: 13px; height: 3px; }
-@media (prefers-reduced-motion: reduce) { .star.live :is(.spin, svg), .dots circle, .m-caret.idle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
-:root[data-motion="reduced"] :is(.star.live .spin, .star.live svg, .dots circle, .m-caret.idle, .idle > .cur) { animation: none; }
+@media (prefers-reduced-motion: reduce) { .star.live :is(.spin, svg), .dots circle, .idle > .cur { animation: none; } .dots circle { opacity: 0.7; transform: none; } }
+:root[data-motion="reduced"] :is(.star.live .spin, .star.live svg, .dots circle, .idle > .cur) { animation: none; }
 :root[data-motion="reduced"] .dots circle { opacity: 0.7; transform: none; }
 .off .dots circle, [inert] .star.live :is(.spin, svg) { animation: none; }   /* a loop on a thing that is not shown does not run */
 
@@ -263,10 +263,13 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 :root { --fill-press: color-mix(in srgb, var(--ink-1) 22%, transparent); }
 @media (prefers-contrast: more) { :root { --fill-press: color-mix(in srgb, var(--ink-1) 30%, transparent); } }
 .cell { position: relative; display: inline-grid; place-items: center; } .cell > * { grid-area: 1 / 1; } .cell > .gone { pointer-events: none; } .cell > .sz { visibility: hidden; font-style: normal; }
-/* the caret: solid while typing, then a fade, never a jump */
+/* the caret: solid while typing, then a fade, never a jump. Solid, it is the browser's own; at rest (caret.js) a drawn caret
+   over the same spot fades on the compositor, the browser's own transparent under it, or the browser's own blink where the
+   spot cannot be read. Animating caret-color cost a style recalculation every frame. */
 .m-caret { caret-color: var(--accent-text); caret-animation: manual; }
-.m-caret.idle:focus { animation: m-caret var(--caret-period) linear infinite; }
-@keyframes m-caret { 0%, 40% { caret-color: var(--accent-text); } 52%, 88% { caret-color: transparent; } 100% { caret-color: var(--accent-text); } }
+.m-caret[data-rest="drawn"] { caret-color: transparent; }
+.m-caret[data-rest="native"] { caret-animation: auto; }
+.m-cur { position: absolute; width: 1px; background: var(--accent-text); pointer-events: none; animation: m-cur var(--caret-period) linear infinite; }   /* as wide as the browser's own, at 1x and 2x */
 .cur { display: inline-block; width: var(--caret-w); height: 20px; background: var(--accent-text); vertical-align: -4px; margin: 0 1px; border-radius: 1px; }
 .idle > .cur { animation: m-cur var(--caret-period) linear infinite; }
 @keyframes m-cur { 0%, 40% { opacity: 1; } 52%, 88% { opacity: 0; } 100% { opacity: 1; } }

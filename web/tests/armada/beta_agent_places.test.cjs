@@ -13,6 +13,7 @@
 
 const assert = require("node:assert/strict");
 
+const question = require("../../../zerver/tests/fixtures/armada_question_message.json");
 const {clock, mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
 const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
@@ -64,6 +65,7 @@ set_global("M", {
     figure: noop,
     say: noop,
     current: () => [{}, {}],
+    rest: () => ({top: 0, left: 0}),
 });
 set_global("S", {play: noop});
 set_global("host", noop);
@@ -136,6 +138,8 @@ const mentions = zrequire("armada/beta/mentions.js");
 const send = zrequire("armada/beta/send.js");
 const column = zrequire("armada/beta/column.js");
 const events = zrequire("armada/beta/events.js");
+const feed = zrequire("armada/beta/feed.js");
+const runs = zrequire("armada/beta/runs.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -334,4 +338,34 @@ run_test("a channel's first run makes it a repository in the open page", async (
     clock.tick(1000);
     assert.ok(requests.some((r) => r.url === "/json/armada/topic-context"));
     assert.ok(routing.placeFromKey(routing.tkey(OPS, "disk")).repo);
+});
+
+run_test("a question that waits is answered by its options, as a typed reply", async () => {
+    // Onix asks in #general > greetings, a channel the page was loaded
+    // without a repository for, as on runix.chat; the run waits.
+    beta_state.streams.set(3, {stream_id: 3, name: "general"});
+    const c = open(routing.placeFromKey(routing.tkey(3, "greetings")));
+    const now = Math.floor(Date.now() / 1000);
+    const asked = {id: 54, type: "stream", stream_id: 3, subject: "greetings", sender_id: AGENT};
+    routing.addMsg(c, {...asked, timestamp: now, content: question.rendered, reactions: []});
+    c.runs = [{id: 11, status: "running", trigger_message_id: 52, date_created: now - 2}];
+    runs.inferAsk(c.runs[0], c.msgs);
+    feed.drawLane();
+    runs.drawAsks();
+    // The first option, as a press or the key 1 in an empty field reaches
+    // it, is sent as I would write the answer.
+    requests.length = 0;
+    assert.ok(runs.answerWith(runs.askOption(1), 0));
+    await settle();
+    const sent = requests.filter((r) => r.method === "POST" && r.url === "/json/messages");
+    assert.deepEqual(
+        sent.map((r) => r.body.content),
+        ["@**Onix** Red"],
+    );
+    assert.equal(runs.askOption(3), null, "there is no third option");
+
+    // Answered: the question no longer waits, and its options are spent.
+    runs.drawAsks();
+    assert.equal(runs.askOption(2), null);
+    assert.equal(runs.answerWith(find('[data-answer="Blue"]'), 0), false);
 });

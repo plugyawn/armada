@@ -11,6 +11,7 @@ import {QUESTION} from "./parts.js";
 import {drawTrail, loadTopics} from "./nav.js";
 import {drawRunState} from "./band.js";
 import {drawHomeRow, questionOf} from "./home.js";
+import {send} from "./send.js";
 
 const MARK_RANK = {needs: 5, live: 4, queued: 3, failed: 2, paused: 1};
 /* a live run's mark: waiting on me (the balloon), working, or queued behind another */
@@ -70,6 +71,11 @@ const askedAt = (c, r) => { if (r.askedAt) return r.askedAt; const q = c.msgs.fi
 function drawAsks() { if (!state.P || !lane) return; const r = waitingRun(state.P), all = $$(".blk.ask", lane), last = all[all.length - 1]; all.forEach((q) => { const on = !!r && q === last; $$(".opt", q).forEach((o) => o.setAttribute("aria-disabled", String(!on)));   /* not disabled: a control disabled under the pointer drops the focus to the page */ q.classList.toggle("done", !on);
     /* the caption under the options says what is true now: a question the run no longer waits on does not say it waits */
     const cap = q.nextElementSibling && $("p.askcap > em", q.nextElementSibling); if (cap) { if (cap.dataset.live == null) cap.dataset.live = cap.textContent; const t = on ? cap.dataset.live : "The run no longer waits for an answer here."; if (cap.textContent !== t) cap.textContent = t; } }); }
+/* an option of the question in sight answers it while its run waits, pressed (host.js) or by its number in an empty field
+   (the design: "1 to 9 answer while the field is empty"): it is sent as I would write it, naming Onix, so the server takes
+   it as the answer exactly as it takes a typed reply. Spent (answered, out of time, the run ended), it does nothing. */
+function askOption(n) { const all = $$(".blk.ask", lane), o = waitingRun(state.P) && all.length ? $$(".opt", all[all.length - 1])[n - 1] : null; return o && o.getAttribute("aria-disabled") !== "true" ? o : null; }
+function answerWith(o, at) { if (!o || o.getAttribute("aria-disabled") === "true" || !waitingRun(state.P)) return false; o.classList.add("sel"); send({text: o.dataset.answer, at, onix: true}); return true; }
 const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === "running");
 /* where a mention of Onix starts a run, by the server's own rules (zerver/lib/armada.py, handle_message; armada_worker.py,
    start_blocked_reason): any channel's topic and never a direct message, with the agent set up, a person allowed to start
@@ -81,5 +87,5 @@ const agentHere = (p = state.place, c = state.P) => !!p && p.kind === "topic" &&
 const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
 
-export {agentCanRun, agentHere, answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
+export {agentCanRun, agentHere, answered, answerWith, askedAt, askOption, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
   runMark, runOfMsg, runsSeen, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};

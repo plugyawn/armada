@@ -5,7 +5,7 @@ import {$, el, esc, press} from "./util.js";
 import {armadaBots, marks, people, repoStreams, state, streams, topicsOf, worktrees} from "./state.js";
 import {cz, feed, lane, main, tx} from "./frame.js";
 import {faceOf, nameOf, presOf} from "./faces.js";
-import {note, onixNow, ready, syncField} from "./composer.js";
+import {answering, note, onixHere, ready, syncField} from "./composer.js";
 import {loadTopics, subs} from "./nav.js";
 import {fetchMsgs, tkey} from "./routing.js";
 import {catchUp, dist, edge, haltLane, syncJump} from "./feed.js";
@@ -14,10 +14,9 @@ import {editing} from "./hover.js";
 import {fillField, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople, rankPlaces, seedOf, triggerAt} from "./mention_text.js";
 
 const agentId = () => [...armadaBots][0];
-const inWorktree = () => !!state.place && state.place.kind === "topic" && !!state.place.repo;
 
 /* ---------- the switch's pill: with the switch on, the field starts with @Onix, so what is sent is what is seen ---------- */
-const seedWanted = () => inWorktree() && onixNow() && !editing && armadaBots.size > 0;
+const seedWanted = () => (onixHere() || (answering() && agentCanRun())) && !editing && armadaBots.size > 0;   /* the switch, in a repository; Home's Answer, wherever Onix can run */
 function seedField() {
   const s = seedOf(tx), want = seedWanted();
   if (want && !s && !tx.textContent.trim()) {

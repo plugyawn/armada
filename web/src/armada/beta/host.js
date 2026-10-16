@@ -15,12 +15,13 @@ import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, out
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
 import {catchUp, dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, rehug, releaseRows, syncJump, toHug} from "./feed.js";
 import {drawNav, loadTopics, navMore, subs, toggleStream} from "./nav.js";
-import {drawAsks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
+import {agentCanRun, answerWith, askOption, drawAsks, runsSeen, sweepAsks} from "./runs.js";
 import {drawHeader} from "./header.js";
 import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, onReadReceipts, openInfo, RECEIPTS, toggleInfo} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
+import {fieldEmpty} from "./mention_text.js";
 import {onAgentStream} from "./agent_turn.js";
 import {drawTyping, onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
@@ -95,6 +96,7 @@ async function boot() {
     if (e.key === "Enter" && e.altKey && !e.shiftKey && !e.isComposing && openSendWhen()) { e.preventDefault(); return; }   /* Option-Return: Send when (later.js); Return alone sends at once */
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); if (!(state.place && state.place.kind === "partner")) go.classList.remove("armed"); return; }
     if (e.key === "Escape" && editing) { e.preventDefault(); e.stopPropagation(); endEdit(); return; }
+    if (/^[1-9]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !e.isComposing && !editing && fieldEmpty(tx) && answerWith(askOption(+e.key), e.timeStamp)) { e.preventDefault(); return; }   /* 1 to 9 answer Onix's question while the field is empty (runs.js) */
     if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop && editLast()) e.preventDefault(); });   /* Up in an empty field (the switch's pill alone is empty) edits my last message, while the realm lets me */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
@@ -120,9 +122,9 @@ async function boot() {
   press(cz, ".k.mode", (b, e, ptr) => togglePicker({kbd: !ptr}));
   press(cz, ".out", () => fileIn.click());
   press(cz, "[data-unatt]", (b) => { state.atts = state.atts.filter((a) => String(a.id) !== b.dataset.unatt); drawAtts(); ready(); });
-  press(lane, ".blk.ask .opt", (o, e) => { if (o.getAttribute("aria-disabled") === "true" || !waitingRun(state.P)) { ready(); return; } o.classList.add("sel"); send({text: o.dataset.answer, at: e.timeStamp, onix: true}); });   /* an option is the answer: it is sent as I would write it */
+  press(lane, ".blk.ask .opt", (o, e) => { if (!answerWith(o, e.timeStamp)) ready(); });   /* an option is the answer: it is sent as I would write it (runs.js) */
   $("#home").addEventListener("keydown", (e) => { const r = e.target; if ((e.key === "Enter" || e.key === " ") && r.matches && r.matches(".hrow[tabindex='0']")) { e.preventDefault(); r.click(); } });   /* a row with no verb is itself the button */
-  press($("#home"), ".hrow, .hrow button", (r) => { const p = placeFromKey(r.dataset.k); if (!p) return; if (r.matches("[data-answer]") && p.repo) cacheOf(p).answering = true; openPlace(p); });   /* Answer: what I write there next answers Onix, once */
+  press($("#home"), ".hrow, .hrow button", (r) => { const p = placeFromKey(r.dataset.k); if (!p) return; if (r.matches("[data-answer]") && agentCanRun(p)) cacheOf(p).answering = true; openPlace(p); });   /* Answer: what I write there next answers Onix, once */
   press(lane, ".rc", (rc) => { const part = rc.closest(".rcs"), m = state.P.byId.get(+part.dataset.mid); if (m) react(m, {emoji_name: rc.dataset.name, emoji_code: rc.dataset.code, reaction_type: rc.dataset.type}); ready(); });
   press(lane, "[data-thread]", (b) => { openThread(+b.dataset.thread, false, {focus: true}); });
   press(lane, "[data-retry]", (b) => retry(b.dataset.retry));

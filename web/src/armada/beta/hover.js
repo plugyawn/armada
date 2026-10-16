@@ -42,11 +42,13 @@ function buildOver() {
     e.preventDefault(); const all = doors(), n = all[clamp(all.indexOf(t) + d, 0, all.length - 1)]; if (!n || n === t) return; door = n; syncDoor(); n.focus({preventScroll: true});
     const r = n.getBoundingClientRect(), fr = feed.getBoundingClientRect(), up = fr.top + 48 - r.top, down = r.bottom - (fr.bottom - 72); if (up > 0) feed.scrollTop -= up; else if (down > 0) feed.scrollTop += Math.min(down, r.top - fr.top - 48); });
   lane.addEventListener("focusin", (e) => { const t = e.target; if (t.dataset && t.dataset.door) { door = t; overShow(t); } });
+  addEventListener("keydown", (e) => { if (e.key === "Tab") syncDoor(); }, {capture: true});   /* the stop is chosen as Tab moves to it, before the browser does */
   lane.addEventListener("focusout", (e) => { if (!overAt || menu) return; const to = e.relatedTarget; if (to && (overAt.contains(to) || over.contains(to) || (to.dataset && to.dataset.door))) return; overHide(); });
   new ResizeObserver(() => wordsVer++).observe(lane); document.fonts.addEventListener("loadingdone", () => wordsVer++);   /* the lane, not the window: hiding the nav widens it too, and the words wrap again */
-  new MutationObserver(() => { wordsVer++; if (overAt && !over.inert && overAt.matches(".cl.onix") && !placeOver.due) { placeOver.due = true; requestAnimationFrame(placeOver); }   /* Onix's words grew under the overlay: it moves with their corner */
-    if (!syncDoor.due) { syncDoor.due = true; queueMicrotask(syncDoor); } }).observe(lane, {childList: true, subtree: true});
 }
+/* Onix's words in a row changed (agent_turn.js says so where it writes them): their boxes are read again, and an overlay
+   standing on them moves with their corner */
+function wordsChanged(cl) { cl._words = null; if (over && overAt === cl && !over.inert && !placeOver.due) { placeOver.due = true; requestAnimationFrame(placeOver); } }
 /* where Onix's words are, in its row's own coordinates: each part measured to its ink (a paragraph, a heading or a list is as
    wide as its longest line; a block is its box). Read once until the lane next changes, so a pointer that moves reads one
    rectangle, the row's. */
@@ -64,7 +66,7 @@ function onWords(cl, x, y) { const base = cl.getBoundingClientRect(), px = x - b
   return wordsOf(cl).rects.some((r) => px >= r.l - 8 && px <= r.r + 8 && py >= r.t - 4 && py <= r.b + 4); }
 let door = null;
 const doors = () => $$(".bl > .b, .cl.onix[data-mid]", lane).filter((t) => !t.closest(".cz"));
-function syncDoor() { syncDoor.due = false; const all = doors(); if (!door || !door.isConnected || !all.includes(door)) door = all[all.length - 1] || null;
+function syncDoor() { const all = doors(); if (!door || !door.isConnected || !all.includes(door)) door = all[all.length - 1] || null;
   for (const x of $$("[data-door]", lane)) if (x !== door) { x.removeAttribute("tabindex"); delete x.dataset.door; }
   if (door && !door.dataset.door) { door.tabIndex = 0; door.dataset.door = "1"; } }
 function overShow(t) { if (!t || !t.isConnected) return; if (overAt === t && !over.inert) return; const up = !over.inert && over.isConnected, before = up && over.getBoundingClientRect(); overAt = t; (t.matches(".b") ? t.parentElement : t).append(over); over.inert = false;   /* a bubble's overlay stands in its row, past its time and reactions (beta.css) */
@@ -166,5 +168,5 @@ function confirmDelete(m) { if (dialogOpen || !canDelete(m)) return; dialogOpen 
   const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); (document.activeElement === $("[data-no]", d) ? close : yes)(); } else if (e.key === "Tab") { e.preventDefault(); const b = $$("button", d), i = b.indexOf(document.activeElement); b[(i + 1) % b.length].focus(); } };
   addEventListener("keydown", key, true); press(d, "[data-no]", close); press(d, "[data-yes]", yes); $("[data-no]", d).focus(); }   /* it stands on Cancel: Return alone never deletes */
 
-export {buildOver, canDelete, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
+export {wordsChanged, buildOver, canDelete, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
   overHide, saveEdit, startEdit};

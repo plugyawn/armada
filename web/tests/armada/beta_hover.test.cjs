@@ -41,7 +41,6 @@ set_global("removeEventListener", (...args) => dom.window.removeEventListener(..
 set_global("getSelection", () => dom.window.getSelection());
 set_global("innerWidth", 1440);
 set_global("innerHeight", 900);
-set_global("requestAnimationFrame", (f) => setTimeout(f, 16));
 set_global(
     "ResizeObserver",
     class {
@@ -316,6 +315,9 @@ const write = (text) => {
 // between messages.
 async function standOn(id) {
     await settle();
+    // Tab: the page chooses the message in the Tab order as the key goes
+    // down, and the browser moves focus to it.
+    dom.press("Tab");
     lane.querySelector("[data-door]").focus();
     const order = beta_state.state.P.msgs.map((m) => String(m.id));
     const here = () => document.activeElement.closest("[data-mid]").dataset.mid;

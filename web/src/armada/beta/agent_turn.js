@@ -11,6 +11,7 @@ import {drawTurnPlan} from "./checklist.js";
 import {setCode} from "./code_blocks.js";
 import {drawReactions} from "./reactions.js";
 import {drawLab} from "./lab.js";
+import {wordsChanged} from "./hover.js";
 
 /* ----- Onix's turn: one element for the life of an answer ----- */
 /* where the working mark rides: the end of the last words, in a paragraph or in a list's last item */
@@ -32,7 +33,7 @@ function syncOnix(cl, m) {
     const said = $$(":scope > .ans", cl).some((a) => a.textContent.trim() || a.querySelector("img")) || !!$(":scope > [data-part]:not(.ans)", cl);
     if (r && r.status === "cancelled" && !said) { const a = $$(":scope > .ans", cl).pop() || cl.appendChild(placeholderAns(m)); let p = $("p", a); if (!p) { p = el("p"); a.append(p); } p.prepend(document.createTextNode("Stopped.")); p._src = "Stopped."; a._src = "<p>Stopped.</p>"; }
     $$(":scope > .ans", cl).forEach((a) => { if (!a.textContent.trim() && !a.querySelector("img")) a.remove(); }); }
-  drawFooter(cl, live, r);
+  drawFooter(cl, live, r); wordsChanged(cl);
 }
 const toolsOf = (r) => (r && r.tool_count ? ` · ${r.tool_count} ${r.tool_count === 1 ? "tool" : "tools"}` : "");
 function footHTML(live, r) {

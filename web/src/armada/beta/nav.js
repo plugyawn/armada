@@ -39,11 +39,17 @@ function drawNav() {
 /* the nav's list fades under the me row while there is more of it below */
 const navMore = () => navScroll.classList.toggle("more", navScroll.scrollTop + navScroll.clientHeight < navScroll.scrollHeight - 1);
 const rowOf = (key) => $$(".row", navScroll).find((r) => r.dataset.k === key);
-function drawTrail(key) { const r = rowOf(key); if (!r) { if (key.startsWith("s:")) { const sid = +key.split(":")[1]; if (!expanded.has(sid)) drawNav(); } return; }
-  const sel = r.classList.contains("sel"), html = trailHTML(key, sel), old = $(":scope > .mk, :scope > .n", r), was = old ? old.outerHTML : "";
-  r.classList.toggle("new-in", !!countOf(key) || marks.get(key) === "failed");
-  if (old && html && old.matches(".n") && /class="n fig"/.test(html)) { M.figure(old, countOf(key), {quiet: true}); return; }
-  if (old && html && old.matches(".mk") && /class="mk/.test(html)) { if (!old.classList.contains(marks.get(key))) M.cross(old, html); return; }
+function drawTrail(key) { const r = rowOf(key);
+  if (!r) { if (key.startsWith("s:")) { const sid = +key.split(":")[1]; if (!expanded.has(sid)) drawChannelTrail(sid); } return; }
+  r.classList.toggle("new-in", !!countOf(key) || marks.get(key) === "failed"); setTrail(r, trailHTML(key, r.classList.contains("sel")), countOf(key), marks.get(key)); }
+/* a collapsed channel's row carries its topics' strongest mark, else their unread count (as drawNav writes it), in place */
+function drawChannelTrail(sid) { const r = rowOf("c:" + sid); if (!r) return; const cm = streamMark(sid), cn = streamCount(sid);
+  r.classList.toggle("new-in", !!cn); setTrail(r, cm ? mk(cm) : cn ? `<span class="n fig">${fig(cn)}</span>` : "", cn, cm); }
+/* a row's one trailing thing, changed where it stands: a count rolls in its cell, a mark crosses into another; else the old
+   one leaves and the new one appears */
+function setTrail(r, html, n, mark) { const old = $(":scope > .mk, :scope > .n", r), was = old ? old.outerHTML : "";
+  if (old && html && old.matches(".n") && /class="n fig"/.test(html)) { M.figure(old, n, {quiet: true}); return; }
+  if (old && html && old.matches(".mk") && /class="mk/.test(html)) { if (!old.classList.contains(mark)) M.cross(old, html); return; }
   if (was === html) return; if (old) { old.classList.remove("mk", "n"); old.inert = true; M.leave(old, () => old.remove()); }
   if (html) { r.insertAdjacentHTML("beforeend", html); M.appear(r.lastElementChild); } }
 const topicLoads = new Map();

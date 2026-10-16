@@ -131,7 +131,9 @@ set_global("M", {
     fade: noop,
     flip: noop,
     land: noop,
-    figure: noop,
+    figure(cell, value) {
+        cell.textContent = String(value);
+    },
     cross: noop,
     say: noop,
     refuse: noop,
@@ -257,6 +259,7 @@ for (const [id, name] of [
     });
 }
 beta_state.streams.set(10, {stream_id: 10, name: "devel"});
+beta_state.streams.set(20, {stream_id: 20, name: "Denmark"});
 
 // Messages are a minute apart from 8:00 on one day (local time), so that
 // each person's message after someone else's is a turn of its own and no
@@ -703,4 +706,23 @@ run_test("a partner that changes redraws that person's faces, and nothing else",
         assert.equal(f.dataset.fs, "sv:5");
     }
     assert.equal(iago_left(), "sv:5");
+});
+
+run_test("a message in a collapsed channel counts on that channel's row, in place", () => {
+    assert.ok(!beta_state.expanded.has(20));
+    nav.drawNav();
+    const rows = [...document.querySelectorAll("nav .row")];
+    const denmark = document.querySelector('nav .row[data-k="c:20"]');
+    const unseen = (id, topic) => ({
+        message: {...message(id, IAGO, topic), stream_id: 20, display_recipient: "Denmark"},
+        flags: [],
+    });
+    events.onMessage(unseen(9600, "ferries"));
+    events.onMessage(unseen(9601, "bridges"));
+    assert.ok(
+        rows.every((r) => r.isConnected),
+        "the nav was drawn again",
+    );
+    assert.equal(denmark.querySelector(".n").textContent, "2");
+    assert.ok(denmark.classList.contains("new-in"));
 });

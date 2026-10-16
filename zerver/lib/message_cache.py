@@ -329,6 +329,7 @@ class MessageDict:
                 "sender_id": message.sender.id,
                 "sending_client__name": message.sending_client.name,
                 "sender__realm_id": message.sender.realm_id,
+                "sender__bot_type": message.sender.bot_type,
                 "thread_root_id": message.thread_root_id,
             }
             for message in messages
@@ -336,7 +337,10 @@ class MessageDict:
 
         MessageDict.sew_submessages_and_reactions_to_msgs(message_rows)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in message_rows]
-        MessageDict.bulk_hydrate_armada_message_flags(message_dicts)
+        MessageDict.bulk_hydrate_armada_message_flags(
+            message_dicts,
+            embedded_bot_sender_ids=MessageDict.embedded_bot_sender_ids(message_rows),
+        )
         return message_dicts
 
     @staticmethod
@@ -358,13 +362,16 @@ class MessageDict:
             "sender_id",
             "sending_client__name",
             "sender__realm_id",
+            "sender__bot_type",
             "thread_root_id",
         ]
         # Uses index: zerver_message_pkey
         messages = Message.objects.filter(id__in=needed_ids).values(*fields)
         MessageDict.sew_submessages_and_reactions_to_msgs(messages)
         message_dicts = [MessageDict.build_dict_from_raw_db_row(row) for row in messages]
-        MessageDict.bulk_hydrate_armada_message_flags(message_dicts)
+        MessageDict.bulk_hydrate_armada_message_flags(
+            message_dicts, embedded_bot_sender_ids=MessageDict.embedded_bot_sender_ids(messages)
+        )
         return message_dicts
 
     @staticmethod
@@ -522,11 +529,24 @@ class MessageDict:
             obj["sender_email_address_visibility"] = user_row["email_address_visibility"]
 
     @staticmethod
-    def bulk_hydrate_armada_message_flags(objs: list[dict[str, Any]]) -> None:
+    def embedded_bot_sender_ids(rows: Iterable[dict[str, Any]]) -> set[int]:
+        return {
+            row["sender_id"] for row in rows if row["sender__bot_type"] == UserProfile.EMBEDDED_BOT
+        }
+
+    @staticmethod
+    def bulk_hydrate_armada_message_flags(
+        objs: list[dict[str, Any]], *, embedded_bot_sender_ids: set[int] | None = None
+    ) -> None:
+        """Sets is_agent_message: whether the agent's embedded bot sent
+        the message. Only an embedded bot can be the agent, so a caller
+        that knows which senders are embedded bots passes them, and a
+        message from anyone else costs no query."""
         objs_to_hydrate = [obj for obj in objs if "is_agent_message" not in obj]
-        agent_user_ids = armada_bot_user_ids_from_user_ids(
-            obj["sender_id"] for obj in objs_to_hydrate
-        )
+        sender_ids = {obj["sender_id"] for obj in objs_to_hydrate}
+        if embedded_bot_sender_ids is not None:
+            sender_ids &= embedded_bot_sender_ids
+        agent_user_ids = armada_bot_user_ids_from_user_ids(sender_ids)
 
         for obj in objs_to_hydrate:
             obj["is_agent_message"] = obj["sender_id"] in agent_user_ids

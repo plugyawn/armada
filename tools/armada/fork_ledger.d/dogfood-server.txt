@@ -1,0 +1,3 @@
+# Dogfood fixes to the server: a message's agent flag costs a query only
+# when an embedded bot sent it. zerver/lib/message_cache.py and
+# zerver/tests/test_message_dict.py change too; their lines are R1's.

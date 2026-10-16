@@ -12,7 +12,7 @@ from zerver.lib.message import messages_for_ids
 from zerver.lib.message_cache import MessageDict, sew_messages_and_reactions
 from zerver.lib.per_request_cache import flush_per_request_caches
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.lib.test_helpers import make_client
+from zerver.lib.test_helpers import make_client, queries_captured
 from zerver.lib.topic import TOPIC_LINKS, TOPIC_NAME
 from zerver.lib.types import DisplayRecipientT, UserDisplayRecipient
 from zerver.models import Message, Reaction, Realm, RealmFilter, Recipient, Stream, UserProfile
@@ -43,19 +43,30 @@ class MessageDictTest(ZulipTestCase):
 
         armada_message_id = self.send_stream_message(armada_bot, "Denmark", content="armada")
         other_message_id = self.send_stream_message(other_bot, "Denmark", content="other")
+        person_message_id = self.send_stream_message(user_profile, "Denmark", content="person")
 
         expected_by_id = {
             armada_message_id: True,
             other_message_id: False,
+            person_message_id: False,
         }
         for message_id, expected in expected_by_id.items():
             message = Message.objects.get(id=message_id)
             self.assertEqual(MessageDict.wide_dict(message)["is_agent_message"], expected)
 
-        fetched_dicts = MessageDict.ids_to_dict([armada_message_id, other_message_id])
+        fetched_dicts = MessageDict.ids_to_dict(list(expected_by_id))
         fetched_by_id = {message_dict["id"]: message_dict for message_dict in fetched_dicts}
         for message_id, expected in expected_by_id.items():
             self.assertEqual(fetched_by_id[message_id]["is_agent_message"], expected)
+
+        # Only an embedded bot can be the agent, so a person's message
+        # is flagged without asking which bots are the agent's, both
+        # when it is sent and when it is fetched.
+        person_message = Message.objects.select_related("sender").get(id=person_message_id)
+        with queries_captured() as queries:
+            MessageDict.messages_to_encoded_cache([person_message])
+            MessageDict.ids_to_dict([person_message_id])
+        self.assertFalse(any('"zerver_service"' in query.sql for query in queries))
 
     def test_both_codepaths(self) -> None:
         """

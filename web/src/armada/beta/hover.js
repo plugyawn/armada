@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): the message's controls: the hover overlay, its menu, edit and delete. */
 
 import {$, $$, clamp, el, press, T} from "./util.js";
-import {msgIndex, state} from "./state.js";
+import {groups, msgIndex, people, state, streams} from "./state.js";
 import {now} from "./time.js";
 import {api} from "./connection.js";
 import {feed, go, lane, main, sh, tx} from "./frame.js";
@@ -83,11 +83,11 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
   else if (name === "thread") { overHide(); openThread(m.thread_root_message_id || m.id, false, {focus: true}); }
   else if (name === "copy") { try { navigator.clipboard.writeText(plainText(t.matches(".b") ? t : t)).catch(() => {}); } catch (e) {} M.say(btn, "Copied", 1200); if (!kbd) ready(); }
   else if (name === "more") openMenu(m, btn); }
-/* More: what can be done to this message. Any sent one can be replied to; mine can be edited while the realm allows it, and deleted;
-   any can be linked or copied. */
-function openMenu(m, btn) { closeMenu(); const mine = m.sender_id === state.ME && typeof m.id === "number", items = [];
+/* More: what can be done to this message. Any sent one can be replied to; mine can be edited, and any deleted, while the realm
+   allows it; any can be linked or copied. */
+function openMenu(m, btn) { closeMenu(); const items = [];
   if (typeof m.id === "number") items.push(["reply", "Reply", "R"]);
-  if (canEdit(m)) items.push(["edit", "Edit", "E"]); if (mine && !isOnix(m.sender_id)) items.push(["delete", "Delete", ""]);
+  if (canEdit(m)) items.push(["edit", "Edit", "E"]); if (canDelete(m)) items.push(["delete", "Delete", ""]);
   items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
   if (m.sender_id > 0 && m.sender_id !== state.ME && !isOnix(m.sender_id)) items.push(["card", "Card", ""]);   /* the sender's card, which a face opens to the pointer */
   menu = el("div", "menu raised float", items.map(([k, label, key]) => `<button class="mi" data-mi="${k}" tabindex="-1">${label}<span class="k">${key}</span></button>`).join("")); menu.setAttribute("role", "menu");
@@ -109,6 +109,25 @@ function closeMenu() { if (!menu) return; const x = menu; menu = null; x.inert =
    than anyone. `grace` is the seconds Zulip's own client allows Up past the limit (5), for a key pressed as it passes. */
 function canEdit(m, grace = 0) { const {allowEdit, editLimit} = state.realm;
   return !!m && typeof m.id === "number" && m.sender_id === state.ME && !isOnix(m.sender_id) && allowEdit && (editLimit == null || now() / 1000 - m.timestamp < editLimit + grace); }
+/* whether the realm lets me delete this message now, by the server's own rule (validate_can_delete_message): null when it
+   does, else the server's words for why not. Whoever the realm's can_delete_any_message_group holds (never a guest) or the
+   channel's may delete any message. Anyone else may delete a message of their own or of a bot they own, when the realm's
+   can_delete_own_message_group holds them (in a channel, the channel's will do), inside the limit when there is one.
+   Onix's words are the run's record and are not offered, as before. A channel the page does not hold grants nothing. */
+const NO_RIGHT = "You don't have permission to delete this message", TOO_LATE = "The time limit for deleting this message has passed";
+function whyNoDelete(m) { if (!m || typeof m.id !== "number" || isOnix(m.sender_id)) return NO_RIGHT;
+  const {deleteAny, deleteOwn, deleteLimit, guest} = state.realm, s = m.type === "stream" ? streams.get(m.stream_id) : null, sender = people.get(m.sender_id);
+  if ((!guest && holds(deleteAny)) || (s && holds(s.can_delete_any_message_group))) return null;
+  if (m.sender_id !== state.ME && !(sender && sender.bot && sender.owner === state.ME)) return NO_RIGHT;
+  if (!holds(deleteOwn) && !(s && holds(s.can_delete_own_message_group))) return NO_RIGHT;
+  return deleteLimit == null || now() / 1000 - m.timestamp < deleteLimit ? null : TOO_LATE; }
+const canDelete = (m) => !whyNoDelete(m);
+/* whether a group setting holds me: a group's id, or {direct_members, direct_subgroups}; a group holds its members and its
+   subgroups' members, however deep (Zulip's is_user_in_setting_group) */
+function holds(setting) { if (setting == null) return false; if (typeof setting === "object" && setting.direct_members.includes(state.ME)) return true;
+  const todo = typeof setting === "number" ? [setting] : [...setting.direct_subgroups], seen = new Set();
+  while (todo.length) { const id = todo.pop(); if (seen.has(id)) continue; seen.add(id); const g = groups.get(id); if (!g) continue; if (g.members.has(state.ME)) return true; todo.push(...g.subgroups); }
+  return false; }
 /* Up in an empty field: my latest message here, while I may still edit it; true when it opened */
 function editLast() { const m = state.P && state.P.msgs.filter((x) => x.sender_id === state.ME && typeof x.id === "number" && !x.thread_root_message_id).pop();
   if (!canEdit(m, 5)) return false; startEdit(m); return true; }
@@ -128,21 +147,24 @@ function endEdit() { if (!editing) return; const {m, was, reply} = editing; edit
    Edited mark), says why, and gives my words back to the field as the same edit, to save again or to copy; whatever the
    field held by then is kept as an edit's draft is. With another edit in the field by then, my words join that edit's
    draft and come back when it ends. */
-async function saveEdit(text, at) { const {m} = editing; if (!text) { endEdit(); confirmDelete(m); return; }
+async function saveEdit(text, at) { const {m} = editing; if (!text) { const why = whyNoDelete(m); if (!why) { endEdit(); confirmDelete(m); } else refuse("Not deleted: " + why); return; }   /* no words: delete it, when I may; else the edit stays open */
   const raw = takeReply() + text, c = msgIndex.get(m.id) || state.P, saved = {content: m.content, edited: m.edited}, shown = echoHTML(raw);
   endEdit(); m.content = shown; m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
   try { await api("PATCH", `messages/${m.id}`, {content: raw}); }
   catch (e) { if (m.content === shown) { m.content = saved.content; m.edited = saved.edited; updateMessage(c, m); }   /* unless the server's own event has written it since */
     if (editing) { const held = el("div"); fillFromWire(held, (editing.was.length ? " " : "") + raw); editing.was.push(...held.childNodes); }
     else { openEdit(m, raw); caretAtEnd(); }
-    note("Not saved: " + e.message); M.refuse(sh); S.play("nope"); } }
-/* deleting cannot be undone, so it asks once, in a dialog; the server's event takes the message away */
-function confirmDelete(m) { if (dialogOpen) return; dialogOpen = true; const d = el("div", "dlg raised float", `<p style="font:var(--t-strong)">Delete this message?</p><p style="color:var(--ink-2);margin-top:var(--s-2)">It is removed for everyone, and cannot be brought back.</p><div class="btns"><button class="btn" data-no>Cancel</button><button class="go" data-yes>Delete</button></div>`); d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
+    refuse("Not saved: " + e.message); } }
+/* a refusal, said as every refusal of the page is: the words beside Send, the field's shake, the sound */
+function refuse(words) { note(words); M.refuse(sh); S.play("nope"); }
+/* deleting cannot be undone, so it asks once, in a dialog; the server's event takes the message away. A delete the server
+   refuses, or cannot be asked, leaves the message as it was and says why. */
+function confirmDelete(m) { if (dialogOpen || !canDelete(m)) return; dialogOpen = true; const d = el("div", "dlg raised float", `<p style="font:var(--t-strong)">Delete this message?</p><p style="color:var(--ink-2);margin-top:var(--s-2)">It is removed for everyone, and cannot be brought back.</p><div class="btns"><button class="btn" data-no>Cancel</button><button class="go" data-yes>Delete</button></div>`); d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true");
   d.style.cssText = "position:absolute;left:calc(50% - 200px);top:160px"; main.append(d); host(d); M.release(d, {y: -(T["pane-rise"] || 4)}, "touch");
   const close = () => { dialogOpen = false; d.inert = true; M.leave(d, () => d.remove()); removeEventListener("keydown", key, true); ready(); };
-  const yes = async () => { close(); try { await api("DELETE", `messages/${m.id}`); } catch (e) { note(e.message); } };
+  const yes = async () => { close(); try { await api("DELETE", `messages/${m.id}`); } catch (e) { refuse("Not deleted: " + e.message); } };
   const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); (document.activeElement === $("[data-no]", d) ? close : yes)(); } else if (e.key === "Tab") { e.preventDefault(); const b = $$("button", d), i = b.indexOf(document.activeElement); b[(i + 1) % b.length].focus(); } };
   addEventListener("keydown", key, true); press(d, "[data-no]", close); press(d, "[data-yes]", yes); $("[data-no]", d).focus(); }   /* it stands on Cancel: Return alone never deletes */
 
-export {buildOver, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
+export {buildOver, canDelete, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
   overHide, saveEdit, startEdit};

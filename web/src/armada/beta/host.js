@@ -21,7 +21,7 @@ import {react} from "./reactions.js";
 import {closeInfo, fetchReceipts, info, onReadReceipts, openInfo, RECEIPTS, toggleInfo} from "./receipts.js";
 import {openThread} from "./threads.js";
 import {retry, send} from "./send.js";
-import {onDelete, onFlags, onMessage, onReaction, onRealm, onRun, onTyping, onUpdate, onWorkspaceChanged} from "./events.js";
+import {onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged} from "./events.js";
 import {drawRunState, stop, tick} from "./band.js";
 import {pickEntry, setTab} from "./views.js";
 import {buildOver, closeMenu, confirmDelete, editing, editLast, endEdit, menu, msgOf, over, overAt, startEdit} from "./hover.js";
@@ -40,7 +40,7 @@ import {onPost, wirePages} from "./pages.js";
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
-on("armada_post", onPost); on("realm", onRealm);
+on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");

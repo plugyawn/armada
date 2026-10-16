@@ -3,7 +3,9 @@
 // The interim beta's message controls (web/src/armada/beta/hover.js), with
 // a real DOM and a stand-in server: More and Up offer an edit only while
 // the realm allows it, and a save the server refuses puts the message
-// back and gives my words back to the field. The conversation is drawn by
+// back and gives my words back to the field; More offers Delete only
+// where the realm's and the channel's rules let me delete, and a delete
+// the server refuses leaves the message and says why. The conversation is drawn by
 // the beta's own feed; the frame around it is a few bare elements. The
 // beta reads the kit's window globals when it draws; the few it needs here
 // are stand-ins that draw nothing of their own, except that a swapped
@@ -46,6 +48,16 @@ set_global(
         observe() {}
     },
 );
+// jsdom lays nothing out: an element's box is all zeros, and a range has
+// none at all. The overlay measures Onix's words as ranges (hover.js).
+dom.window.Range.prototype.getBoundingClientRect = () => ({
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+});
 Object.defineProperty(document, "fonts", {
     value: {addEventListener() {}, ready: Promise.resolve()},
 });
@@ -106,6 +118,8 @@ set_global(
 const ME = 3;
 const IAGO = 5;
 const AGENT = 9;
+// A bot of mine, which the server lets me delete the messages of.
+const MY_BOT = 7;
 const LIMIT = 600;
 // The fake clock's now, which only the last test moves on. (Setting the
 // clock's date instead would outlive this file: the next one's clock
@@ -191,20 +205,57 @@ const mentions = zrequire("armada/beta/mentions.js");
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
 beta_state.armadaBots.add(AGENT);
-for (const [id, name] of [
-    [ME, "Shiva"],
-    [IAGO, "Iago"],
-    [AGENT, "Onix"],
+for (const [id, name, owner] of [
+    [ME, "Shiva", null],
+    [IAGO, "Iago", null],
+    [AGENT, "Onix", ME],
+    [MY_BOT, "Notice Bot", ME],
 ]) {
     beta_state.people.set(id, {
         id,
         name,
         email: `${id}@example.com`,
-        bot: id === AGENT,
+        bot: owner !== null,
         active: true,
+        owner,
     });
 }
-beta_state.state.realm = {allowEdit: true, editLimit: LIMIT};
+// The realm's system groups, nested as the server makes them: everyone
+// holds the members, who hold the full members, who hold the moderators,
+// who hold the administrators, who hold the owners. Iago administers; I
+// am a full member.
+const [NOBODY, OWNERS, ADMINS, MODERATORS, FULL_MEMBERS, MEMBERS, EVERYONE] = [
+    9, 10, 11, 12, 13, 14, 15,
+];
+for (const [id, members, subgroups] of [
+    [NOBODY, [], []],
+    [OWNERS, [], []],
+    [ADMINS, [IAGO], [OWNERS]],
+    [MODERATORS, [], [ADMINS]],
+    [FULL_MEMBERS, [ME], [MODERATORS]],
+    [MEMBERS, [], [FULL_MEMBERS]],
+    [EVERYONE, [], [MEMBERS]],
+]) {
+    beta_state.groups.set(id, {members: new Set(members), subgroups: new Set(subgroups)});
+}
+// Zulip's defaults, with this realm's ten minutes for editing and for
+// deleting: administrators delete anything, everyone else their own.
+const REALM = {
+    allowEdit: true,
+    editLimit: LIMIT,
+    deleteLimit: LIMIT,
+    deleteAny: ADMINS,
+    deleteOwn: EVERYONE,
+    guest: false,
+};
+beta_state.state.realm = {...REALM};
+const DEVEL = {
+    stream_id: 10,
+    name: "devel",
+    can_delete_any_message_group: NOBODY,
+    can_delete_own_message_group: NOBODY,
+};
+beta_state.streams.set(10, {...DEVEL});
 
 // #devel > dogfood findings: an old message of mine, a recent one, and
 // Iago's answer, the latest.
@@ -302,10 +353,9 @@ run_test("More offers Edit on my message only while the realm lets me edit it", 
     assert.match(menu.textContent, /Edit/);
     closeMore();
 
-    // An hour old, past the realm's ten minutes: Delete stays, Edit goes.
+    // An hour old, past the realm's ten minutes: Edit goes.
     menu = await openMore(120);
     assert.doesNotMatch(menu.textContent, /Edit/);
-    assert.match(menu.textContent, /Delete/);
     closeMore();
 
     // Someone else's message is never mine to edit.
@@ -334,7 +384,7 @@ run_test("More offers Edit on my message only while the realm lets me edit it", 
     menu = await openMore(124);
     assert.doesNotMatch(menu.textContent, /Edit/);
     closeMore();
-    beta_state.state.realm = {allowEdit: true, editLimit: LIMIT};
+    beta_state.state.realm = {...REALM};
     // Nothing was asked of the server for an edit that was not offered.
     assert.deepEqual(requests, []);
 });
@@ -511,6 +561,169 @@ run_test("More's arrows go round: Up from the first item, Down from the last", a
     assert.equal(find('[role="dialog"]'), null);
     assert.match(find(".cz").textContent, /Iago.*that looks saved/);
     mentions.takeReply();
+});
+
+// Whether More offers Delete on a message, read from the menu itself.
+async function offersDelete(id) {
+    const menu = await openMore(id);
+    const offered = [...menu.querySelectorAll("button")].some((b) =>
+        b.textContent.startsWith("Delete"),
+    );
+    closeMore();
+    return offered;
+}
+const realmChanges = (data) =>
+    events.onRealm({type: "realm", op: "update_dict", property: "default", data});
+const channelChanges = (property, value) =>
+    events.onStream({type: "stream", op: "update", stream_id: 10, name: "devel", property, value});
+
+run_test("More offers Delete only where the realm's rules let me delete", async () => {
+    serve();
+    // Mine, a minute old: everyone may delete their own inside the
+    // realm's ten minutes, and everyone holds me three groups down.
+    assert.equal(await offersDelete(124), true);
+    // An hour old, past the limit.
+    assert.equal(await offersDelete(120), false);
+    // Iago's: only those who may delete anything may delete it.
+    assert.equal(await offersDelete(125), false);
+
+    // A message of a bot I own is mine to delete. Onix's words are the
+    // run's record, offered to nobody, though its bot is mine too.
+    routing.addMsg(cache, message(127, MY_BOT, 10, "build passed"));
+    routing.addMsg(cache, message(128, AGENT, 5, "I read the logs"));
+    feed.drawLane();
+    assert.equal(await offersDelete(127), true);
+    assert.equal(await offersDelete(128), false);
+    events.onDelete({type: "delete_message", message_ids: [127, 128]});
+
+    // Only administrators may delete their own now: not I ...
+    realmChanges({can_delete_own_message_group: ADMINS});
+    assert.equal(await offersDelete(124), false);
+    // ... unless the channel lets its members delete theirs, by a group
+    // of its own: in a channel, its rule is enough. The limit still holds.
+    channelChanges("can_delete_own_message_group", {
+        direct_members: [],
+        direct_subgroups: [MEMBERS],
+    });
+    assert.equal(await offersDelete(124), true);
+    assert.equal(await offersDelete(120), false);
+    // The realm's limit lifted: my old message too.
+    events.onRealm({
+        type: "realm",
+        op: "update",
+        property: "message_content_delete_limit_seconds",
+        value: null,
+    });
+    assert.equal(await offersDelete(120), true);
+
+    // Moderators may delete anything; I become one: Iago's message too.
+    realmChanges({can_delete_any_message_group: MODERATORS});
+    assert.equal(await offersDelete(125), false);
+    events.onUserGroup({
+        type: "user_group",
+        op: "add_members",
+        group_id: MODERATORS,
+        user_ids: [ME],
+    });
+    assert.equal(await offersDelete(125), true);
+    // As a guest, the realm's rule never lets me delete others' messages,
+    // whatever group holds me ...
+    events.onRealmUser({type: "realm_user", op: "update", person: {user_id: ME, role: 600}});
+    assert.equal(await offersDelete(125), false);
+    // ... but a channel's rule may.
+    channelChanges("can_delete_any_message_group", {direct_members: [ME], direct_subgroups: []});
+    assert.equal(await offersDelete(125), true);
+
+    events.onRealmUser({type: "realm_user", op: "update", person: {user_id: ME, role: 400}});
+    events.onUserGroup({
+        type: "user_group",
+        op: "remove_members",
+        group_id: MODERATORS,
+        user_ids: [ME],
+    });
+    beta_state.state.realm = {...REALM};
+    beta_state.streams.set(10, {...DEVEL});
+    assert.equal(await offersDelete(125), false);
+    // Nothing was asked of the server: the rules are the page's to read.
+    assert.deepEqual(requests, []);
+});
+
+run_test("a delete the server refuses leaves the message and says why", async () => {
+    serve([
+        [
+            "DELETE",
+            /^\/json\/messages\/124$/,
+            () => refusal("The time limit for deleting this message has passed"),
+        ],
+    ]);
+    said.length = 0;
+    sounds.length = 0;
+    refused.length = 0;
+    const before = shown(124);
+    // More, Delete; the dialog stands on Cancel, and Tab goes to Delete.
+    choose(await openMore(124), "Delete");
+    assert.ok(find('[role="dialog"]'));
+    dom.press("Tab");
+    assert.equal(document.activeElement.textContent, "Delete");
+    dom.press("Enter");
+    await settle();
+    assert.deepEqual(
+        requests.map((r) => [r.method, r.url]),
+        [["DELETE", "/json/messages/124"]],
+    );
+    // The message is as it was, in the conversation and in the page's
+    // cache ...
+    assert.equal(find('[role="dialog"]'), null);
+    assert.equal(shown(124), before);
+    assert.ok(beta_state.state.P.byId.has(124));
+    // ... and the page says why, as it says a refused edit.
+    assert.deepEqual(said, ["Not deleted: The time limit for deleting this message has passed"]);
+    assert.deepEqual(sounds.slice(-1), ["nope"]);
+    assert.equal(refused.length, 1);
+    assert.equal(document.activeElement, field);
+
+    // A delete that cannot reach the server says that.
+    serve([["DELETE", /^\/json\/messages\/124$/, () => "unreachable"]]);
+    said.length = 0;
+    choose(await openMore(124), "Delete");
+    dom.press("Tab");
+    dom.press("Enter");
+    await settle();
+    assert.equal(shown(124), before);
+    assert.deepEqual(said, ["Not deleted: The server cannot be reached"]);
+});
+
+run_test("an edit saved with no words asks to delete only when I may", async () => {
+    serve();
+    write("");
+    said.length = 0;
+    // Mine to delete: emptied and saved, the edit asks to delete it.
+    choose(await openMore(124), "Edit");
+    await settle();
+    write("");
+    send.send({at: 0});
+    assert.ok(find('[role="dialog"]'));
+    dom.press("Escape");
+    assert.equal(find('[role="dialog"]'), null);
+
+    // Not mine to delete: no dialog; the edit stays open and the page
+    // says why.
+    realmChanges({can_delete_own_message_group: NOBODY});
+    choose(await openMore(124), "Edit");
+    await settle();
+    write("");
+    send.send({at: 0});
+    assert.equal(find('[role="dialog"]'), null);
+    assert.deepEqual(said, ["Not deleted: You don't have permission to delete this message"]);
+    assert.deepEqual(sounds.slice(-1), ["nope"]);
+    assert.equal(hover.editing.m.id, 124);
+    assert.equal(verb(), "Save");
+    hover.endEdit();
+    beta_state.state.realm = {...REALM};
+    assert.deepEqual(
+        requests.filter((r) => r.method !== "GET"),
+        [],
+    );
 });
 
 run_test("Up edits my latest message only inside the limit", async () => {

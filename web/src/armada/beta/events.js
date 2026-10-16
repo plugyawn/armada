@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): what each live event does to the page. */
 
 import {$, $$, esc, T} from "./util.js";
-import {marks, msgIndex, places, state, stats, streams, topicsOf, unread} from "./state.js";
+import {groups, marks, msgIndex, people, places, state, stats, streams, topicsOf, unread} from "./state.js";
 import {now} from "./time.js";
 import {api} from "./connection.js";
 import {addMsg, dkey, placeOfMsg, refreshCtx, tkey} from "./routing.js";
@@ -78,13 +78,34 @@ function onFlags(ev) { if (ev.flag !== "read" || ev.op !== "add") return; if (ev
 function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let redraw = false; for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); c.msgs = c.msgs.filter((x) => x !== m); if (c === state.P) redraw = true; } if (redraw) drawLane({keep: !state.pinned}); }
 function onTyping(ev) { const key = ev.message_type === "stream" ? tkey(ev.stream_id, ev.topic || "") : dkey((ev.recipients || []).map((u) => u.user_id).filter((i) => i !== state.ME)), c = places.get(key), id = ev.sender.user_id; if (!c || id === state.ME || isOnix(id)) return;   /* Onix's own sign that it is working is its mark, not a typing bubble */
   clearTimeout(c.typers.get(id)); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === state.P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === state.P) drawTyping(); }
-/* the realm's rules for editing, changed by an administrator: the next Up or More reads them (hover.js, canEdit) */
-function onRealm(ev) { const d = ev.op === "update_dict" && ev.data; if (!d) return;
+/* the realm's rules for editing and deleting, changed by an administrator: the next Up or More reads them (hover.js, canEdit
+   and canDelete). The server writes the delete limit as one property, the rest as a dict. */
+function onRealm(ev) { if (ev.op === "update" && ev.property === "message_content_delete_limit_seconds") { state.realm.deleteLimit = ev.value; return; }
+  const d = ev.op === "update_dict" && ev.data; if (!d) return;
   if ("allow_message_editing" in d) state.realm.allowEdit = d.allow_message_editing;
-  if ("message_content_edit_limit_seconds" in d) state.realm.editLimit = d.message_content_edit_limit_seconds; }
+  if ("message_content_edit_limit_seconds" in d) state.realm.editLimit = d.message_content_edit_limit_seconds;
+  if ("can_delete_any_message_group" in d) state.realm.deleteAny = d.can_delete_any_message_group;
+  if ("can_delete_own_message_group" in d) state.realm.deleteOwn = d.can_delete_own_message_group; }
+/* who is in which group, as the server changes it (canDelete reads it). A deactivated group comes as "remove": the page
+   registers without deactivated groups. */
+function onUserGroup(ev) { const g = groups.get(ev.group_id);
+  if (ev.op === "add") groups.set(ev.group.id, {members: new Set(ev.group.members), subgroups: new Set(ev.group.direct_subgroup_ids)});
+  else if (ev.op === "remove") groups.delete(ev.group_id);
+  else if (!g) return;
+  else if (ev.op === "add_members") for (const i of ev.user_ids) g.members.add(i);
+  else if (ev.op === "remove_members") for (const i of ev.user_ids) g.members.delete(i);
+  else if (ev.op === "add_subgroups") for (const i of ev.direct_subgroup_ids) g.subgroups.add(i);
+  else if (ev.op === "remove_subgroups") for (const i of ev.direct_subgroup_ids) g.subgroups.delete(i); }
+/* a channel's own rules for deleting, changed by whoever administers it (canDelete reads them from the subscription) */
+function onStream(ev) { const s = ev.op === "update" && streams.get(ev.stream_id);
+  if (s && (ev.property === "can_delete_any_message_group" || ev.property === "can_delete_own_message_group")) s[ev.property] = ev.value; }
+/* my role (a guest's rights are fewer) and a bot's owner (who may delete its messages), changed (canDelete reads them) */
+function onRealmUser(ev) { const p = ev.op === "update" && ev.person; if (!p) return;
+  if ("role" in p && p.user_id === state.ME) state.realm.guest = p.role === 600;
+  if ("bot_owner_id" in p && people.has(p.user_id)) people.get(p.user_id).owner = p.bot_owner_id; }
 function onWorkspaceChanged(ev) { if (state.P && state.P.ctx && state.P.ctx.workspace_uuid === ev.workspace_id) refreshCtx(state.P); }
 function drawTyping() { const ids = [...state.P.typers.keys()], ty = band.ty, on = ids.length > 0, sig = ids.join(","); if (ty._sig === sig) return; ty._sig = sig;
   if (on) { ty.innerHTML = (ids.length > 1 ? `<span class="avs">${ids.map((i) => faceOf(i)).join("")}</span>` : faceOf(ids[0])) + `<p class="tyb${ids.length === 1 ? " s-" + stoneOf(ids[0]) : ""}" id="tyb">${dots()}</p><span class="nm">${esc(ids.map((i) => nameOf(i).split(/[ ,]/)[0]).join(" and "))}</span>`; }
   ty.classList.toggle("chip", on && !band.run.classList.contains("off")); show(ty, on); }
 
-export {drawTyping, onDelete, onFlags, onMessage, onReaction, onRealm, onRun, onTyping, onUpdate, onWorkspaceChanged};
+export {drawTyping, onDelete, onFlags, onMessage, onReaction, onRealm, onRealmUser, onRun, onStream, onTyping, onUpdate, onUserGroup, onWorkspaceChanged};

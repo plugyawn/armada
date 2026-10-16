@@ -14,7 +14,10 @@ const state = {
   ME: 0, meName: "", queue: null, lastEvent: -1, skew: 0,
   dms: [], presences: {}, place: null, P: null, tab: "Chat", localSeq: 0, agentMention: "@**Onix**",
   runtimeCfg: null,                                        /* the server's runtime settings, from armada/runs: the service tier is server-wide */
-  realm: {allowEdit: true, editLimit: null},               /* the realm's rules for editing a message's words (register, then the realm event); null: no limit */
+  /* the realm's rules for changing and deleting a message (register, then the realm event): a limit of null is none; a
+     group setting is as the server writes it, a group's id or {direct_members, direct_subgroups}, read against `groups`.
+     `guest`: I am a guest, whom the realm's can_delete_any_message_group never holds. */
+  realm: {allowEdit: true, editLimit: null, deleteLimit: null, deleteAny: null, deleteOwn: null, guest: false},
   muted: new Set(),                                        /* the people I muted: receipts do not count them */
   hd: null,                                                /* the header, drawn again whole when what it says changes */
   pinned: true, lastSet: 0,                                /* the feed: whether it keeps to its end, and where it was last scrolled to */
@@ -28,8 +31,9 @@ const worktrees = new Map();                               /* stream id -> Set o
 const unread = new Map();                                  /* place key -> Set of message ids */
 const marks = new Map();                                   /* place key -> "needs" | "live" | "queued" | "failed" | "paused": a run's mark in the nav */
 const places = new Map();                                  /* place key -> what is known of it */
+const groups = new Map();                                  /* user group id -> {members, subgroups}: Sets of ids, the subgroups direct */
 const msgIndex = new Map();                                /* message id -> its place's cache */
 const expanded = new Set(JSON.parse(store.get("open") || "[]")), allKids = new Set();
 
-export {allKids, armadaBots, DATA, expanded, LIVE_RUN_IDS, marks, msgIndex, people, places, QUESTION_TIMEOUT,
+export {allKids, armadaBots, DATA, expanded, groups, LIVE_RUN_IDS, marks, msgIndex, people, places, QUESTION_TIMEOUT,
   repoStreams, state, stats, streams, topicsOf, unread, worktrees};

@@ -3064,6 +3064,36 @@ class ArmadaEmbeddedBotHandler:
         ).run()
 
 
+class ArmadaAssistantText:
+    """The assistant item being streamed: the item's id and its text so far.
+
+    Codex sends the answer a token at a time. The chunks are kept in a list
+    and joined only when the text is read, and whether the text has any
+    visible character is decided per chunk, so a delta costs the same at
+    the end of a long answer as at its start."""
+
+    def __init__(self) -> None:
+        self.item_id: str | None = None
+        self.chunks: list[str] = []
+        self.has_visible_text = False
+
+    def reset(self, item_id: str | None, text: str = "") -> None:
+        self.item_id = item_id
+        self.chunks = [text] if text else []
+        self.has_visible_text = bool(text.strip())
+
+    def append(self, chunk: str) -> None:
+        self.chunks.append(chunk)
+        if not self.has_visible_text and chunk.strip():
+            self.has_visible_text = True
+
+    @property
+    def text(self) -> str:
+        if len(self.chunks) > 1:
+            self.chunks = ["".join(self.chunks)]
+        return self.chunks[0] if self.chunks else ""
+
+
 class ArmadaWorkerTurn:
     """A single agent run: transcript streaming, same-turn steering
     segments, and settlement for one request.
@@ -3112,8 +3142,7 @@ class ArmadaWorkerTurn:
         self.started_progress_posted = False
         self.result_message_id = progress_message_id
         self.transcript_events: list[ArmadaWorkerTranscriptEvent] = []
-        self.current_assistant_item_id: str | None = None
-        self.current_assistant_text = ""
+        self.assistant_text = ArmadaAssistantText()
         self.live_operation: ArmadaLiveRunOperation | None = None
         self.task = armada_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
@@ -3179,7 +3208,7 @@ class ArmadaWorkerTurn:
         if not force and current_time - self.last_transcript_flush_at < flush_interval:
             return False
         if status in {"queued", "running"}:
-            content_to_update = armada_visible_assistant_text(self.current_assistant_text)
+            content_to_update = armada_visible_assistant_text(self.assistant_text.text)
             if not content_to_update:
                 content_to_update = ARMADA_WORKING_MESSAGE
         else:
@@ -3214,7 +3243,7 @@ class ArmadaWorkerTurn:
             self.message_id,
             status=status,
             operation=self.live_operation,
-            has_visible_assistant_text=bool(self.current_assistant_text.strip()),
+            has_visible_assistant_text=self.assistant_text.has_visible_text,
         )
 
     def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:
@@ -3451,16 +3480,14 @@ class ArmadaWorkerTurn:
             item_id = event.get("item_id")
             if not isinstance(item_id, str):
                 item_id = ""
-            if item_id != self.current_assistant_item_id:
-                self.current_assistant_item_id = item_id
-                self.current_assistant_text = ""
-            self.current_assistant_text += body
+            if item_id != self.assistant_text.item_id:
+                self.assistant_text.reset(item_id)
+            self.assistant_text.append(body)
         else:
             self.transcript_events.append(event)
             if event_kind == "assistant":
                 item_id = event.get("item_id")
-                self.current_assistant_item_id = item_id if isinstance(item_id, str) else None
-                self.current_assistant_text = body
+                self.assistant_text.reset(item_id if isinstance(item_id, str) else None, body)
         if not streaming_assistant:
             self.handler.record_worker_event(
                 self.bot_handler,
@@ -3499,9 +3526,7 @@ class ArmadaWorkerTurn:
             "tool",
         }
         if event_kind == "assistant":
-            has_visible_assistant_text = bool(
-                armada_visible_assistant_text(self.current_assistant_text).strip()
-            )
+            has_visible_assistant_text = self.assistant_text.has_visible_text
             force_flush = not self.assistant_persistent_flush_seen or (
                 has_visible_assistant_text and not self.assistant_visible_event_seen
             )

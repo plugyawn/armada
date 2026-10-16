@@ -1,4 +1,6 @@
+import itertools
 import re
+import time
 from collections import OrderedDict
 from typing import Any
 from unittest import mock
@@ -10,6 +12,8 @@ from django.utils.html import escape
 from pyoembed.providers import get_provider
 from requests.exceptions import ConnectionError
 from typing_extensions import override
+from urllib3.exceptions import ProtocolError
+from urllib3.response import HTTPResponse
 
 from zerver.actions.message_delete import do_delete_messages
 from zerver.lib.cache import cache_delete, cache_get, preview_url_cache_key
@@ -17,6 +21,14 @@ from zerver.lib.camo import get_camo_url
 from zerver.lib.queue import queue_json_publish_rollback_unsafe
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
+from zerver.lib.url_preview.fetch import (
+    CHUNK_BYTES,
+    FETCH_SECONDS,
+    MAX_BYTES,
+    MAX_REDIRECTS,
+    PreviewSession,
+    fetch,
+)
 from zerver.lib.url_preview.oembed import get_oembed_data, strip_cdata
 from zerver.lib.url_preview.parsers import GenericParser, OpenGraphParser
 from zerver.lib.url_preview.preview import get_link_embed_data
@@ -161,6 +173,41 @@ class OembedTestCase(ZulipTestCase):
         )
         data = get_oembed_data(url)
         self.assertIsNone(data)
+
+    @responses.activate
+    def test_answer_that_is_not_oembed(self) -> None:
+        url = "http://instagram.com/p/BLtI2WdAymy"
+        endpoint = reconstruct_url(url)
+        answers: list[dict[str, Any]] = [
+            # Not a format oEmbed has, not JSON, not a type it has, not
+            # the fields its type needs.
+            {"body": "title: NASA", "content_type": "text/plain"},
+            {"body": "{invalid json}", "content_type": "application/json"},
+            {"json": {"type": "hologram", "version": "1.0"}},
+            {"json": {"type": "photo", "title": "NASA"}},
+        ]
+        for answer in answers:
+            responses.reset()
+            responses.add(responses.GET, endpoint, **answer)
+            self.assertIsNone(get_oembed_data(url))
+
+    @responses.activate
+    def test_known_provider_is_not_asked_again_for_its_page(self) -> None:
+        # A site pyoembed knows, whose endpoint fails: the page's own
+        # tags make the preview, and the endpoint is asked once.
+        url = "http://instagram.com/p/BLtI2WdAymy"
+        endpoint = reconstruct_url(url)
+        responses.add(responses.GET, endpoint, status=404)
+        responses.add(
+            responses.GET,
+            url,
+            body='<html><head><meta property="og:title" content="NASA" /></head></html>',
+            content_type="text/html",
+        )
+        data = get_link_embed_data(url)
+        assert data is not None
+        self.assertEqual(data.title, "NASA")
+        self.assertTrue(responses.assert_call_count(endpoint, 1))
 
     def test_oembed_html(self) -> None:
         html = '<iframe src="//www.instagram.com/embed.js"></iframe>'
@@ -973,7 +1020,7 @@ class PreviewTestCase(ZulipTestCase):
 
     @responses.activate
     @override_settings(INLINE_URL_EMBED_PREVIEW=True)
-    def test_valid_content_type_error_get_data(self) -> None:
+    def test_page_network_error_get_data(self) -> None:
         url = "http://test.org/"
         with mock_queue_publish("zerver.actions.message_send.queue_event_on_commit"):
             msg_id = self.send_personal_message(
@@ -991,16 +1038,7 @@ class PreviewTestCase(ZulipTestCase):
 
         self.create_mock_response(url, body=ConnectionError())
 
-        with (
-            mock.patch(
-                "zerver.lib.url_preview.preview.get_oembed_data",
-                side_effect=lambda *args, **kwargs: None,
-            ),
-            mock.patch(
-                "zerver.lib.url_preview.preview.valid_content_type", side_effect=lambda k: True
-            ),
-            self.settings(TEST_SUITE=False),
-        ):
+        with self.settings(TEST_SUITE=False):
             with self.assertLogs(level="INFO") as info_logs:
                 FetchLinksEmbedData().consume(event)
             self.assertTrue(
@@ -1178,3 +1216,168 @@ class PreviewTestCase(ZulipTestCase):
         msg.refresh_from_db()
         expected_content = f"""<p><a href="https://www.youtube.com/watch?v=eSJTXC7Ixgg">YouTube link</a></p>\n<div class="youtube-video message_inline_image"><a data-id="eSJTXC7Ixgg" href="https://www.youtube.com/watch?v=eSJTXC7Ixgg"><img src="{get_camo_url("https://i.ytimg.com/vi/eSJTXC7Ixgg/mqdefault.jpg")}"></a></div>"""
         self.assertEqual(expected_content, msg.rendered_content)
+
+
+class PreviewFetchTestCase(ZulipTestCase):
+    """Every request for a preview is made by fetch(), through the
+    preview session (the outgoing proxy in production), and is bounded
+    in time and size."""
+
+    page = """<html><head>
+        <title>Test title</title>
+        <meta property="og:title" content="The Rock" />
+        <meta property="og:image" content="http://ia.media-imdb.com/images/rock.jpg" />
+        {head}
+    </head><body><p>Description text</p></body></html>"""
+
+    @responses.activate
+    def test_page_read_is_capped(self) -> None:
+        url = "http://test.org/huge"
+        body = self.page.format(head="").encode() + b"x" * (3 * MAX_BYTES)
+        responses.add(responses.GET, url, body=body, content_type="text/html")
+        page = fetch(url)
+        assert page is not None
+        self.assert_length(page.body, MAX_BYTES)
+
+        # The tags in its head still make the preview.
+        data = get_link_embed_data(url)
+        assert data is not None
+        self.assertEqual(data.title, "The Rock")
+
+    @responses.activate
+    def test_page_read_stops_at_the_deadline(self) -> None:
+        url = "http://test.org/slow"
+        responses.add(responses.GET, url, body=b"y" * (4 * CHUNK_BYTES), content_type="text/html")
+        # The clock when the deadline is set, before the request, before
+        # the first read, and past the deadline before the second.
+        with mock.patch("zerver.lib.url_preview.fetch.time") as clock:
+            clock.monotonic.side_effect = [0, 0, 0, FETCH_SECONDS + 1]
+            page = fetch(url)
+        assert page is not None
+        self.assert_length(page.body, CHUNK_BYTES)
+
+        # A link's requests share one deadline: once it has passed, no
+        # more are made.
+        self.assertIsNone(fetch(url, until=time.monotonic() - 1))
+        self.assertTrue(responses.assert_call_count(url, 1))
+
+    @responses.activate
+    def test_redirects_are_followed_within_the_limits(self) -> None:
+        url = "http://test.org/moved"
+        here = "http://test.org/here"
+        responses.add(responses.GET, url, status=301, headers={"Location": "/here"})
+        responses.add(responses.GET, here, body=self.page.format(head=""), content_type="text/html")
+        page = fetch(url)
+        assert page is not None
+        self.assertEqual(page.url, here)
+
+        # A redirect is not followed once the deadline has passed: the
+        # clock when the deadline is set, before the request, and at
+        # the redirect.
+        with mock.patch("zerver.lib.url_preview.fetch.time") as clock:
+            clock.monotonic.side_effect = [0, 0, FETCH_SECONDS + 1]
+            self.assertIsNone(fetch(url))
+        self.assertTrue(responses.assert_call_count(here, 1))
+
+        # Nor is a chain of more than MAX_REDIRECTS followed to its end.
+        hops = [f"http://test.org/hop/{n}" for n in range(MAX_REDIRECTS + 2)]
+        for hop, next_hop in itertools.pairwise(hops):
+            responses.add(responses.GET, hop, status=302, headers={"Location": next_hop})
+        responses.add(
+            responses.GET, hops[-1], body=self.page.format(head=""), content_type="text/html"
+        )
+        self.assertIsNone(fetch(hops[0]))
+        self.assertTrue(responses.assert_call_count(hops[MAX_REDIRECTS], 1))
+        self.assertTrue(responses.assert_call_count(hops[-1], 0))
+
+    @responses.activate
+    def test_page_read_that_breaks_keeps_what_arrived(self) -> None:
+        url = "http://test.org/broken"
+        responses.add(responses.GET, url, body=b"unused", content_type="text/html")
+        with mock.patch.object(
+            HTTPResponse,
+            "read1",
+            side_effect=[
+                b"<html><head><title>What arrived</title>",
+                ProtocolError("Connection broken"),
+            ],
+        ):
+            data = get_link_embed_data(url)
+        assert data is not None
+        self.assertEqual(data.title, "What arrived")
+
+    @responses.activate
+    def test_other_content_is_refused_before_its_body_is_read(self) -> None:
+        url = "http://test.org/song.mp3"
+        responses.add(responses.GET, url, body=b"ID3", content_type="audio/mpeg")
+        with mock.patch.object(HTTPResponse, "read1", side_effect=AssertionError("read")):
+            self.assertIsNone(get_link_embed_data(url))
+        self.assertTrue(responses.assert_call_count(url, 1))
+
+    @responses.activate
+    def test_page_is_requested_once(self) -> None:
+        url = "http://test.org/once"
+        responses.add(responses.GET, url, body=self.page.format(head=""), content_type="text/html")
+        data = get_link_embed_data(url)
+        assert data is not None
+        self.assertEqual(data.title, "The Rock")
+        self.assertTrue(responses.assert_call_count(url, 1))
+
+    @responses.activate
+    def test_discovered_oembed_goes_through_the_preview_session(self) -> None:
+        url = "http://test.org/video"
+        endpoint = "http://test.org/oembed?url=http%3A%2F%2Ftest.org%2Fvideo&format=json"
+        link = f'<link rel="alternate" type="application/json+oembed" href="{endpoint}" />'
+        responses.add(
+            responses.GET, url, body=self.page.format(head=link), content_type="text/html"
+        )
+        responses.add(
+            responses.GET,
+            endpoint + "&maxwidth=640&maxheight=480",
+            json={
+                "type": "video",
+                "version": "1.0",
+                "title": "The Rock, the film",
+                "html": '<iframe src="http://test.org/player"></iframe>',
+                "thumbnail_url": "http://test.org/still.jpg",
+                "width": 640,
+                "height": 360,
+            },
+        )
+        # pyoembed's own requests went out with requests.get, with no
+        # timeout and with no proxy but the environment's.
+        with mock.patch("requests.get", side_effect=AssertionError("requests.get")):
+            data = get_link_embed_data(url)
+        assert isinstance(data, UrlOEmbedData)
+        self.assertEqual(data.type, "video")
+        self.assertEqual(data.title, "The Rock, the film")
+        self.assertEqual(data.image, "http://test.org/still.jpg")
+        self.assertTrue(responses.assert_call_count(url, 1))
+
+    @responses.activate
+    def test_known_provider_photo_needs_no_page(self) -> None:
+        url = "http://imgur.com/photo/158727223"
+        responses.add(
+            responses.GET,
+            reconstruct_url(url),
+            json={
+                "type": "photo",
+                "version": "1.0",
+                "url": "https://i.imgur.com/158727223.jpg",
+                "width": 640,
+                "height": 426,
+                "title": "A photo",
+            },
+        )
+        with mock.patch("requests.get", side_effect=AssertionError("requests.get")):
+            data = get_link_embed_data(url)
+        assert isinstance(data, UrlOEmbedData)
+        self.assertEqual(data.image, "https://i.imgur.com/158727223.jpg")
+        self.assertTrue(responses.assert_call_count(url, 0))
+
+    def test_preview_session_goes_through_the_outgoing_proxy(self) -> None:
+        with self.settings(DEVELOPMENT=False):
+            session = PreviewSession()
+        self.assertEqual(
+            session.proxies, {"http": "http://localhost:4750", "https": "http://localhost:4750"}
+        )

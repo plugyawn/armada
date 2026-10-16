@@ -57,10 +57,16 @@ function soundTable() { return Object.keys(RECIPE).map((n) => { const b = render
   return {name: n, set: RECIPE[n][2], tier: RECIPE[n][0], rms100: +(20 * Math.log10(loudest100(b))).toFixed(1), peak: +(20 * Math.log10(peak)).toFixed(1), ms: Math.round(last / SR * 1000)}; }); }
 let AC = null, BUF = {}, soundOn = false, sends = [], exch = [], recent = [], LOG = [], lastSend = 0, hushed = false;
 const MINE = {send: 1, steer: 1, queue: 1, nope: 1, react: 1}, LATE = 30;
+/* the engine runs only while sound is on: off suspends it (an audio context left running processes silence for as long as
+   the tab lives), on resumes it, and the page going away closes it */
 function setSound(on) { soundOn = on;
   if (on && !AC) { AC = new AudioContext({sampleRate: SR}); for (const n in RECIPE) { const d = renderSound(n), b = AC.createBuffer(1, d.length, SR); b.copyToChannel(d, 0); BUF[n] = b; } }
-  if (on && AC.state !== "running") AC.resume();
-  if (on) play("send"); }
+  if (!AC) return;
+  if (!on) { if (AC.state === "running") AC.suspend(); return; }
+  if (AC.state !== "running") AC.resume();
+  play("send"); }
+addEventListener("pagehide", (e) => { if (!AC) return; if (e.persisted) AC.suspend(); else { AC.close(); AC = null; BUF = {}; } });
+addEventListener("pageshow", (e) => { if (e.persisted && AC && soundOn) AC.resume(); });
 const note = (name, why, x = {}) => { LOG.push({name, t: Math.round(performance.now()), played: !why, why: why || "", ...x}); if (LOG.length > 400) LOG.shift(); return !why; };
 /* play(name, delay s, at): `at` is the time of the event that caused it (performance.now()); the sound starts at at + delay or not at all */
 function play(name, delay = 0, at = performance.now()) {

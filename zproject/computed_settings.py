@@ -8,6 +8,7 @@ from copy import deepcopy
 from typing import Any, Final, Literal
 from urllib.parse import urljoin
 
+from scripts.lib.armada_worker_slots import get_armada_worker_slots
 from scripts.lib.zulip_tools import get_tornado_ports
 from zerver.lib.db import TimeTrackingConnection, TimeTrackingCursor
 from zerver.lib.types import AnalyticsDataUploadLevel
@@ -1280,6 +1281,10 @@ MOBILE_NOTIFICATIONS_SHARDS = int(
     get_config("application_server", "mobile_notification_shards", "1")
 )
 USER_ACTIVITY_SHARDS = int(get_config("application_server", "user_activity_shards", "1"))
+# How many agent runs go at once: one armada_worker process, with a queue
+# of its own, per slot.  Only zulip.conf sets it, since puppet starts the
+# processes from the same key (scripts/lib/armada_worker_slots.py).
+ARMADA_WORKER_SLOTS = get_armada_worker_slots(config_file)
 
 TWO_FACTOR_PATCH_ADMIN = False
 

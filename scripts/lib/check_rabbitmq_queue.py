@@ -11,11 +11,21 @@ from typing import Any
 ZULIP_PATH = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 sys.path.append(ZULIP_PATH)
+from scripts.lib.armada_worker_slots import (
+    armada_worker_slot_queue_names,
+    armada_worker_slot_statistics_file,
+    get_armada_worker_slots,
+)
 from scripts.lib.zulip_tools import atomic_nagios_write, get_config, get_config_file
 
+armada_worker_slots = get_armada_worker_slots(get_config_file())
+ARMADA_WORKER_QUEUE_NAMES = armada_worker_slot_queue_names(armada_worker_slots)
+ARMADA_WORKER_STATS_FILES = tuple(
+    armada_worker_slot_statistics_file(slot) for slot in range(armada_worker_slots)
+)
+
 normal_queues = [
-    "armada_worker",
-    "armada_worker_1",
+    *ARMADA_WORKER_QUEUE_NAMES,
     "deferred_work",
     "deferred_email_senders",
     "digest_emails",
@@ -30,9 +40,6 @@ normal_queues = [
     "user_activity",
     "user_activity_interval",
 ]
-
-ARMADA_WORKER_QUEUE_NAMES = ("armada_worker", "armada_worker_1")
-ARMADA_WORKER_STATS_FILES = ("armada_worker-0.stats", "armada_worker-1.stats")
 
 mobile_notification_shards = int(
     get_config(get_config_file(), "application_server", "mobile_notification_shards", "1")

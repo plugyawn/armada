@@ -3,7 +3,7 @@
 # it named are renamed (armada_* on the server, legacy_* in the old
 # interface); these Zulip files only follow them.
 kept puppet/zulip/manifests/profile/rabbitmq.pp  # sets the consumer-timeout policy of the agent's armada_* queues
-kept scripts/lib/check_rabbitmq_queue.py  # the agent's queues and stats files are armada_*; its pool check counts each queue's consumers
+kept scripts/lib/check_rabbitmq_queue.py  # the agent's queues and stats files are armada_*, one of each per [armada] worker_slots slot; its pool check counts each queue's consumers
 kept tools/run-dev  # runs the deploy directory's production_assets.py by its new path
 kept web/src/compose_recipient.ts  # follows the renamed modules: their paths, armada_* names and wire names
 kept web/src/compose_setup.ts  # follows the renamed modules: their paths, armada_* names and wire names

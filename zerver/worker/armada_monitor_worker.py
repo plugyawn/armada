@@ -50,11 +50,12 @@ def run_armada_monitor_tick_pass() -> int:
 class ArmadaMonitorWorker(ArmadaWorker):
     OWNED_SESSION_KINDS = ("monitor",)
     # This queue still uses QueueProcessingWorker's ordinary consume/ack
-    # contract; only the two manual-ack chat slots rethrow for broker retry.
+    # contract; only the chat slots, which acknowledge by hand, rethrow for
+    # broker retry.
     RERAISE_CONSUME_EXCEPTIONS = False
     # Monitor work deliberately stays on its dedicated queue; it must never
     # participate in the chat worker pool inherited from ArmadaWorker.
-    POOL_QUEUE_NAMES: tuple[str, ...] = ()
+    IN_SLOT_POOL = False
 
     @override
     def setup(self) -> None:

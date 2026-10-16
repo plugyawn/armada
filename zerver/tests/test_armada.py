@@ -128,11 +128,11 @@ from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
 from zerver.lib.armada_worker import (
     ARMADA_ADDRESSING_QUEUE_NAME,
     ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS,
-    ARMADA_WORKER_QUEUE_NAMES,
     ArmadaQueueWorkerDispatcher,
     armada_provision_codex_skills,
     armada_worker_home_slot,
     armada_worker_queue_name,
+    armada_worker_queue_names,
 )
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.queue import QueueEventDiscardError, SimpleQueueClient
@@ -347,6 +347,35 @@ class ArmadaComputedSettingsEnvTest(TestCase):
             armada_computed_settings._ARMADA_ENV_OVERRIDES["ARMADA_WORKER_FAST_MODE"](
                 "ARMADA_WORKER_FAST_MODE"
             )
+
+
+class ConsumerPriorityBroker:
+    """RabbitMQ's delivery rule for consumer priorities, over each slot's
+    subscriptions ({slot: {queue: priority}}): a delivery goes to the
+    highest-priority consumer of its queue whose channel has room, here one
+    unacknowledged delivery per slot, and waits while none has
+    (https://www.rabbitmq.com/docs/consumer-priority). The tests drive it
+    with the slots' real subscriptions."""
+
+    def __init__(self, subscriptions: dict[int, dict[str, int]]) -> None:
+        self.subscriptions = subscriptions
+        self.busy: set[int] = set()
+
+    def deliver(self, queue_name: str) -> int | None:
+        ready = [
+            (priorities[queue_name], slot)
+            for slot, priorities in self.subscriptions.items()
+            if queue_name in priorities and slot not in self.busy
+        ]
+        if not ready:
+            return None
+        best = max(priority for priority, _slot in ready)
+        slot = min(slot for priority, slot in ready if priority == best)
+        self.busy.add(slot)
+        return slot
+
+    def finish(self, slot: int) -> None:
+        self.busy.remove(slot)
 
 
 class ArmadaSessionDefaultsTest(TestCase):
@@ -5338,33 +5367,127 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(event["message"]["content"], "@Onix what's up, bot?")
         self.assertEqual(message["content"], "what's up, bot?")
 
-    def test_worker_queue_affinity_is_stable_and_bounded(self) -> None:
-        first = armada_worker_queue_name(17, stream="devel", topic="one")
-        self.assertEqual(first, armada_worker_queue_name(17, stream="devel", topic="one"))
-        self.assertIn(first, ARMADA_WORKER_QUEUE_NAMES)
+    def test_worker_queues_follow_the_slot_setting(self) -> None:
+        self.assertEqual(settings.ARMADA_WORKER_SLOTS, 2)
+        for slots, queue_names in (
+            (1, ("armada_worker",)),
+            (2, ("armada_worker", "armada_worker_1")),
+            (8, ("armada_worker", *(f"armada_worker_{slot}" for slot in range(1, 8)))),
+        ):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                self.assertEqual(armada_worker_queue_names(), queue_names)
+
+    def test_worker_queue_affinity_is_stable_and_spread_over_every_slot(self) -> None:
+        for slots in (1, 2, 8):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                home = armada_worker_home_slot(17, stream="devel", topic="one")
+                self.assertEqual(home, armada_worker_home_slot(17, stream="Devel", topic="ONE"))
+                self.assertEqual(
+                    armada_worker_queue_name(17, stream="devel", topic="one"),
+                    armada_worker_queue_names()[home],
+                )
+                homes = {
+                    armada_worker_home_slot(17, stream="devel", topic=f"topic {number}")
+                    for number in range(200)
+                }
+                self.assertEqual(homes, set(range(slots)))
+
+    def test_every_slot_consumes_every_queue_and_prefers_its_own(self) -> None:
+        for slots in (1, 2, 8):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                for slot, own_queue in enumerate(armada_worker_queue_names()):
+                    self.assertEqual(
+                        armada_worker_module.armada_worker_consumer_priorities(slot),
+                        {
+                            name: 10 if name == own_queue else 0
+                            for name in armada_worker_queue_names()
+                        },
+                    )
+
+    def test_a_busy_home_slot_hands_its_runs_to_the_idle_slots(self) -> None:
+        for slots in (1, 2, 8):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                broker = ConsumerPriorityBroker(
+                    {
+                        slot: armada_worker_module.armada_worker_consumer_priorities(slot)
+                        for slot in range(slots)
+                    }
+                )
+                home_queue = armada_worker_queue_name(17, stream="devel", topic="busy")
+                home = armada_worker_home_slot(17, stream="devel", topic="busy")
+                # An idle home slot takes its topic's run, where the runtime is warm.
+                self.assertEqual(broker.deliver(home_queue), home)
+                # While it is busy, every run with the same home starts at once
+                # on another slot, until no slot is idle.
+                others = [broker.deliver(home_queue) for _ in range(slots - 1)]
+                self.assertEqual(sorted(others), sorted(set(range(slots)) - {home}))
+                self.assertIsNone(broker.deliver(home_queue))
+                # The home slot's next idle moment goes to its own queue again.
+                broker.finish(home)
+                self.assertEqual(broker.deliver(home_queue), home)
 
     def test_armada_worker_uses_priority_affinity_and_one_global_inflight_event(self) -> None:
-        worker = object.__new__(armada_worker_module.ArmadaWorker)
-        worker.worker_slot = 1
-        worker.q = Mock(spec=SimpleQueueClient)
+        for slots, slot in ((2, 1), (8, 3)):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                worker = object.__new__(armada_worker_module.ArmadaWorker)
+                worker.worker_slot = slot
+                worker.q = Mock(spec=SimpleQueueClient)
 
-        with patch.object(worker, "initialize_statistics"):
-            worker.start()
+                with patch.object(worker, "initialize_statistics"):
+                    worker.start()
 
-        worker.q.start_json_consumers.assert_called_once()
-        priorities, callback = worker.q.start_json_consumers.call_args.args
-        self.assertEqual(
-            priorities, {ARMADA_WORKER_QUEUE_NAMES[1]: 10, ARMADA_WORKER_QUEUE_NAMES[0]: 0}
-        )
-        self.assertTrue(worker.q.start_json_consumers.call_args.kwargs["annotate_redelivery"])
-        self.assertTrue(callable(callback))
+                worker.q.start_json_consumers.assert_called_once()
+                priorities, callback = worker.q.start_json_consumers.call_args.args
+                self.assertEqual(
+                    priorities, armada_worker_module.armada_worker_consumer_priorities(slot)
+                )
+                self.assertEqual(sorted(priorities), sorted(armada_worker_queue_names()))
+                self.assertEqual(priorities[armada_worker_queue_names()[slot]], 10)
+                self.assertTrue(
+                    worker.q.start_json_consumers.call_args.kwargs["annotate_redelivery"]
+                )
+                self.assertTrue(callable(callback))
 
     def test_armada_worker_statistics_are_slot_specific(self) -> None:
         worker = object.__new__(armada_worker_module.ArmadaWorker)
         worker.queue_name = "armada_worker"
-        worker.worker_num = 1
+        for worker_num, file_name in (
+            (None, "armada_worker-0.stats"),
+            (1, "armada_worker-1.stats"),
+            (7, "armada_worker-7.stats"),
+        ):
+            worker.worker_num = worker_num
+            self.assertEqual(worker.statistics_file_name(), file_name)
 
-        self.assertEqual(worker.statistics_file_name(), "armada_worker-1.stats")
+    def test_armada_worker_slot_must_be_a_configured_slot(self) -> None:
+        for slots, worker_num, worker_slot in (
+            (1, None, 0),
+            (1, 1, None),
+            (2, 1, 1),
+            (2, 2, None),
+            (8, 7, 7),
+            (8, 8, None),
+        ):
+            worker = object.__new__(armada_worker_module.ArmadaWorker)
+            worker.queue_name = "armada_worker"
+            worker.worker_num = worker_num
+            with (
+                self.subTest(slots=slots, worker_num=worker_num),
+                override_settings(ARMADA_WORKER_SLOTS=slots),
+                patch.object(QueueProcessingWorker, "setup"),
+                patch.object(armada_worker_module, "reap_stale_armada_worker_runs"),
+                patch.object(threading.Thread, "start"),
+            ):
+                if worker_slot is None:
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"^invalid worker slot: {worker_num}, with {slots} slots"
+                        r" \(\[armada\] worker_slots\)$",
+                    ):
+                        worker.setup()
+                else:
+                    worker.setup()
+                    self.assertEqual(worker.worker_slot, worker_slot)
 
     def test_armada_worker_discards_forged_streamless_shared_event(self) -> None:
         worker = object.__new__(armada_worker_module.ArmadaWorker)
@@ -5419,27 +5542,18 @@ class ArmadaSessionDefaultsTest(TestCase):
         get_runtime.assert_not_called()
 
     def test_only_the_home_worker_keeps_a_topic_warm(self) -> None:
-        home_slot = armada_worker_home_slot(
-            17,
-            stream="devel",
-            topic="warm",
-        )
-        self.assertTrue(
-            armada_worker_module.armada_worker_slot_should_warm(
-                home_slot,
-                17,
-                stream="devel",
-                topic="warm",
-            )
-        )
-        self.assertFalse(
-            armada_worker_module.armada_worker_slot_should_warm(
-                1 - home_slot,
-                17,
-                stream="devel",
-                topic="warm",
-            )
-        )
+        for slots in (1, 2, 8):
+            with self.subTest(slots=slots), override_settings(ARMADA_WORKER_SLOTS=slots):
+                home_slot = armada_worker_home_slot(17, stream="devel", topic="warm")
+                self.assertEqual(
+                    [
+                        armada_worker_module.armada_worker_slot_should_warm(
+                            slot, 17, stream="devel", topic="warm"
+                        )
+                        for slot in range(slots)
+                    ],
+                    [slot == home_slot for slot in range(slots)],
+                )
 
     def test_monitor_worker_keeps_its_dedicated_queue(self) -> None:
         from zerver.worker.armada_monitor_worker import ArmadaMonitorWorker

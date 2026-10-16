@@ -10,6 +10,10 @@ from django.conf import settings
 from django.db import close_old_connections, reset_queries
 from typing_extensions import override
 
+from scripts.lib.armada_worker_slots import (
+    armada_worker_slot_queue_name,
+    armada_worker_slot_statistics_file,
+)
 from zerver.lib.armada import (
     ArmadaEmbeddedBotHandler,
     ArmadaWorkerLeaseLostError,
@@ -22,12 +26,12 @@ from zerver.lib.armada_agent import ArmadaProcessIsolation
 from zerver.lib.armada_monitor import armada_apply_monitor_setup_result
 from zerver.lib.armada_worker import (
     ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS,
-    ARMADA_WORKER_QUEUE_NAMES,
     ArmadaDatabaseWorkerRunStore,
     armada_topic_process_isolation,
     armada_worker_home_slot,
     armada_worker_model_for_workspace,
     armada_worker_process_isolation_error,
+    armada_worker_queue_names,
     armada_worker_reasoning_effort_for_workspace,
     armada_worker_sandbox_for_workdir,
     armada_worker_workdir_for_workspace,
@@ -51,6 +55,7 @@ logger = logging.getLogger(__name__)
 
 ARMADA_WORKER_RUNTIME_CACHE_LIMIT = 4
 ARMADA_SIDE_PUMP_INTERVAL_SECONDS = 0.2
+ARMADA_WORKER_HOME_QUEUE_PRIORITY = 10
 ArmadaWorkerRuntimeKey = tuple[str, str, str]
 # The warm runtimes of this worker process, one per worktree, least recently
 # used first. A turn checks its runtime out for its whole length, so the idle
@@ -61,6 +66,22 @@ armada_worker_runtime_lock = threading.Lock()
 armada_worker_runtimes: OrderedDict[ArmadaWorkerRuntimeKey, ArmadaWorkerRuntime] = OrderedDict()
 armada_worker_runtime_last_used: dict[ArmadaWorkerRuntimeKey, float] = {}
 armada_worker_runtimes_in_use: set[ArmadaWorkerRuntimeKey] = set()
+
+
+def armada_worker_consumer_priorities(worker_slot: int) -> dict[str, int]:
+    """The RabbitMQ consumer priority of each queue one slot consumes.
+
+    Every slot consumes every slot's queue, with one delivery in flight
+    across all of them (start_json_consumers), and RabbitMQ hands a
+    delivery to the highest-priority consumer that has room. So a run
+    goes to its home slot when that slot is idle, where its worktree's
+    runtime is warm, and otherwise at once to any idle slot: as many runs
+    go at once as there are slots, wherever their homes are."""
+    own_queue = armada_worker_slot_queue_name(worker_slot)
+    return {
+        own_queue: ARMADA_WORKER_HOME_QUEUE_PRIORITY,
+        **{queue_name: 0 for queue_name in armada_worker_queue_names() if queue_name != own_queue},
+    }
 
 
 def armada_worker_slot_should_warm(
@@ -224,7 +245,8 @@ class ArmadaWorker(QueueProcessingWorker):
     MAX_CONSUME_SECONDS = None
     RERAISE_CONSUME_EXCEPTIONS = True
     PREFETCH = 1
-    POOL_QUEUE_NAMES: tuple[str, ...] = ARMADA_WORKER_QUEUE_NAMES
+    # One of the ARMADA_WORKER_SLOTS processes that share the agent's runs.
+    IN_SLOT_POOL = True
 
     # The session kinds this consumer owns; boot reaping must never
     # touch the other consumer's RUNNING rows.
@@ -232,20 +254,23 @@ class ArmadaWorker(QueueProcessingWorker):
 
     @override
     def statistics_file_name(self) -> str:
-        if not self.POOL_QUEUE_NAMES:
+        if not self.IN_SLOT_POOL:
             return super().statistics_file_name()
         worker_slot = self.worker_num if self.worker_num is not None else 0
-        return f"{self.queue_name}-{worker_slot}.stats"
+        return armada_worker_slot_statistics_file(worker_slot)
 
     @override
     def setup(self) -> None:
-        if self.POOL_QUEUE_NAMES:
+        if self.IN_SLOT_POOL:
             worker_slot = self.worker_num if self.worker_num is not None else 0
-            if worker_slot < 0 or worker_slot >= len(self.POOL_QUEUE_NAMES):
-                raise ValueError(f"invalid worker slot: {worker_slot}")
+            if not 0 <= worker_slot < settings.ARMADA_WORKER_SLOTS:
+                raise ValueError(
+                    f"invalid worker slot: {worker_slot}, with"
+                    f" {settings.ARMADA_WORKER_SLOTS} slots ([armada] worker_slots)"
+                )
             self.worker_slot = worker_slot
         super().setup()
-        # The two worker slots share ownership.  Startup therefore obeys the
+        # The worker slots share ownership.  Startup therefore obeys the
         # heartbeat lease instead of declaring another slot's fresh run dead.
         reap_stale_armada_worker_runs(session_kinds=self.OWNED_SESSION_KINDS)
         self.active_run_id: int | None = None
@@ -264,19 +289,14 @@ class ArmadaWorker(QueueProcessingWorker):
         self.run_liveness_thread.start()
 
     @override
-    def start(self) -> None:  # nocoverage
-        if not self.POOL_QUEUE_NAMES:
+    def start(self) -> None:
+        if not self.IN_SLOT_POOL:
             super().start()
             return
         assert isinstance(self.q, SimpleQueueClient)
-        own_queue = self.POOL_QUEUE_NAMES[self.worker_slot]
-        priorities = {
-            own_queue: 10,
-            **{queue_name: 0 for queue_name in self.POOL_QUEUE_NAMES if queue_name != own_queue},
-        }
         self.initialize_statistics()
         self.q.start_json_consumers(
-            priorities,
+            armada_worker_consumer_priorities(self.worker_slot),
             lambda events: self.consume_single_event(events[0]),
             annotate_redelivery=True,
         )
@@ -523,7 +543,7 @@ class ArmadaWorker(QueueProcessingWorker):
         )
         keep_runtime_warm = (
             side_runtime is not None
-            or not self.POOL_QUEUE_NAMES
+            or not self.IN_SLOT_POOL
             or (
                 armada_worker_slot_should_warm(
                     self.worker_slot,

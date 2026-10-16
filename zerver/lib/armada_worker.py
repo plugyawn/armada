@@ -24,6 +24,10 @@ from django.db.models import Q
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
+from scripts.lib.armada_worker_slots import (
+    armada_worker_slot_queue_name,
+    armada_worker_slot_queue_names,
+)
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
     ARMADA_DEFAULT_RESPONSE_POLICY,
@@ -69,8 +73,6 @@ from zerver.models import Message, Realm, Stream
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
 from zerver.models.users import UserProfile
 
-ARMADA_WORKER_QUEUE_NAME = "armada_worker"
-ARMADA_WORKER_QUEUE_NAMES = (ARMADA_WORKER_QUEUE_NAME, "armada_worker_1")
 ARMADA_MONITOR_WORKER_QUEUE_NAME = "armada_monitor_worker"
 ARMADA_ADDRESSING_QUEUE_NAME = "armada_addressing"
 ARMADA_PRESENTATION_QUEUE_NAME = "armada_presentation"
@@ -96,18 +98,26 @@ ARMADA_RUN_LEGAL_TRANSITIONS: dict[str, frozenset[ArmadaWorkerRunStatus]] = {
 }
 
 
+def armada_worker_queue_names() -> tuple[str, ...]:
+    """Every agent slot's queue, slot 0's first (ARMADA_WORKER_SLOTS)."""
+    return armada_worker_slot_queue_names(settings.ARMADA_WORKER_SLOTS)
+
+
 def armada_worker_home_slot(user_profile_id: int, *, stream: str, topic: str) -> int:
-    """Return a stable home slot without creating a second ownership store."""
+    """The slot a topic's runs are sent to, so that the next turn finds the
+    worktree's runtime still warm there; a stable hash, so nothing stores
+    it.  It is a preference: when the home slot is busy, any idle slot takes
+    the run (ArmadaWorker.start)."""
     stream, topic = armada_topic_scope(stream, topic)
     affinity_key = f"{user_profile_id}\0{stream}\0{topic}".encode()
     digest = hashlib.blake2s(affinity_key, digest_size=2).digest()
-    return int.from_bytes(digest, "big") % len(ARMADA_WORKER_QUEUE_NAMES)
+    return int.from_bytes(digest, "big") % settings.ARMADA_WORKER_SLOTS
 
 
 def armada_worker_queue_name(user_profile_id: int, *, stream: str, topic: str) -> str:
-    return ARMADA_WORKER_QUEUE_NAMES[
+    return armada_worker_slot_queue_name(
         armada_worker_home_slot(user_profile_id, stream=stream, topic=topic)
-    ]
+    )
 
 
 def armada_referenced_conversations(content: str) -> list[tuple[str, str | None]]:

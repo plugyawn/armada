@@ -1930,7 +1930,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             heartbeat_at=timezone_now(),
         )
 
-        # Either slot may boot while the other is running.  A fresh shared
+        # Any slot may boot while another is running.  A fresh shared
         # heartbeat lease must therefore survive every startup reap.
         self.assertEqual(reap_stale_armada_worker_runs(), 0)
         run.refresh_from_db()

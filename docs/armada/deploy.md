@@ -1101,7 +1101,8 @@ estimates, not load tests; only the figures marked measured were measured.
   and both agent slots, as a process of its own.
 - **Disk: 25 to 40 GB.** Zulip asks for 10 GB free beyond the system; each
   repository is stored once, as a bare clone, plus one full checkout per
-  topic with a worktree, plus whatever agents build in them, plus about
+  topic with a worktree (a finished topic's goes after a week:
+  `operations.md`, disk), plus whatever agents build in them, plus about
   2 GB per kept upgrade.
 
 Two runs go at once, one per slot; the rest wait in the queue.

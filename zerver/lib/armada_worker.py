@@ -1509,10 +1509,18 @@ def ensure_armada_workspace_node(
         isolation_username=existing_isolation_username,
     )
     effective_branch_name = armada_topic_branch_name(effective_branch)
+    provisioned_fields = []
     if effective_branch_name and workspace_node.branch_name != effective_branch_name:
         workspace_node.branch_name = effective_branch_name
+        provisioned_fields.append("branch_name")
+    if workspace_node.lifecycle_status == Workspace.ARCHIVED:
+        # Its worktree was removed once the topic was done
+        # (armada_worktree_retention); it is back.
+        workspace_node.lifecycle_status = Workspace.ACTIVE
+        provisioned_fields.append("lifecycle_status")
+    if provisioned_fields:
         workspace_node.date_updated = timezone_now()
-        workspace_node.save(update_fields=["branch_name", "date_updated"])
+        workspace_node.save(update_fields=[*provisioned_fields, "date_updated"])
     return workspace_node
 
 

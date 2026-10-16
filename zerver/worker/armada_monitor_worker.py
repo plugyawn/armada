@@ -13,6 +13,7 @@ from django.db.utils import InterfaceError, OperationalError
 from typing_extensions import override
 
 from zerver.lib.armada_monitor import armada_run_due_monitor_ticks
+from zerver.lib.armada_worktree_retention import maybe_reap_retired_armada_worktrees
 from zerver.worker.armada_worker import ArmadaWorker
 from zerver.worker.base import assign_queue
 
@@ -28,12 +29,19 @@ def run_armada_monitor_tick_pass() -> int:
     close_old_connections()
     try:
         try:
-            return armada_run_due_monitor_ticks()
+            ticked = armada_run_due_monitor_ticks()
         except (InterfaceError, OperationalError):
             # Dropped since the last pass: close it and run the pass again
             # on a new connection.
             connection.close()
-            return armada_run_due_monitor_ticks()
+            ticked = armada_run_due_monitor_ticks()
+        # The housekeeping of worktrees rides this thread, at most once an
+        # hour; a failure there must not stop the ticks.
+        try:
+            maybe_reap_retired_armada_worktrees()
+        except Exception:
+            logger.exception("Worktree retention pass failed.")
+        return ticked
     finally:
         reset_queries()
 

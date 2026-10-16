@@ -192,6 +192,18 @@ Certbot renews on its own; under 21 days means renewal is failing.
 `du -sh /srv/armada/worktrees/* /home/zulip/deployments/*` finds the
 largest; `scripts/purge-old-deployments` removes old releases.
 
+Finished topics' worktrees go by themselves. Once an hour the monitor
+worker removes the worktree of a topic that is resolved, deleted, or
+merged into its channel's base branch (or never changed from it), once
+nothing has used it for `ARMADA_WORKTREE_RETENTION_DAYS` (7 by default; 0
+keeps every worktree). It removes one only when that loses nothing: no run
+or live monitor in it, no uncommitted or untracked file (ignored build
+outputs go), and every commit in the channel's repository, where it pushes
+the topic branch first. The topic's Files view then says the worktree was
+removed, and its next run brings it back on its branch. `workers.log` has
+a line for each one removed ("Removed the worktree of ..."). It leaves
+alone worktrees owned by a topic's OS user (os-user isolation).
+
 ### database-backup
 
 WAL archiving is failing, or there was no base backup in 26 hours.

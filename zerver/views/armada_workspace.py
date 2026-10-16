@@ -227,6 +227,15 @@ def _snapshot_or_error(
     *,
     force: bool = False,
 ) -> WorkspaceSnapshot | HttpResponse:
+    if node.lifecycle_status == Workspace.ARCHIVED:
+        return _workspace_error(
+            code="workspace_archived",
+            message=_(
+                "This topic is done, so its worktree was removed. It comes back with the next run here."
+            ),
+            status=409,
+            revision=int(node.content_revision),
+        )
     try:
         recovered_snapshot = _reconcile_interrupted_entry_mutations(node)
         if recovered_snapshot is not None:

@@ -933,6 +933,12 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = True
 ## A topic's Codex app-server (about 185 MB) is closed once no turn has
 ## used it for this long; the next turn starts it again.
 # ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 300
+## A finished topic's worktree (resolved, deleted, or merged into the
+## channel's base branch) is removed once nothing has used it for this
+## many days, when that loses nothing: no uncommitted file, and its
+## branch saved in the channel's repository. Its next run brings it
+## back. 0 keeps every worktree.
+# ARMADA_WORKTREE_RETENTION_DAYS = 7
 ## The longest reply or error text, in characters, the agent posts
 ## before cutting it with "[truncated]".
 # ARMADA_WORKER_OUTPUT_LIMIT = 50000

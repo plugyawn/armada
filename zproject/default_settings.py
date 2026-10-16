@@ -846,6 +846,11 @@ ARMADA_WORKER_TIMEOUT_SECONDS = 19800
 # this long, then is closed; the next turn starts it again.  A quiet
 # server holds none.
 ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 5 * 60
+# A finished topic's worktree (resolved, deleted, or merged into the
+# channel's base branch) is removed once nothing has used it for this
+# many days, if that loses nothing; its next run provisions it again
+# (zerver/lib/armada_worktree_retention.py).  0 keeps every worktree.
+ARMADA_WORKTREE_RETENTION_DAYS = 7
 ARMADA_WORKER_OUTPUT_LIMIT = 50000
 ARMADA_WORKER_CODEX_EPHEMERAL = False
 # Codex's memories feature.  Every topic's agent shares one CODEX_HOME,

@@ -4,12 +4,14 @@ from copy import deepcopy
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import markdown
 import yaml
 from django.http import HttpResponse
 from django.urls import URLPattern
 from django.utils import regex_helper
 from pydantic import TypeAdapter
 
+from zerver.lib.markdown import api_return_values_table_generator
 from zerver.lib.request import arguments_map
 from zerver.lib.rest import rest_dispatch
 from zerver.lib.test_classes import ZulipTestCase
@@ -1002,6 +1004,27 @@ class OpenAPIAttributesTest(ZulipTestCase):
                         assert validate_against_openapi_schema(
                             schema["example"], path, method, status_code
                         )
+
+    def test_return_values_tables_render(self) -> None:
+        """
+        Every documented response renders as its /api/ page draws it. A
+        property without a description takes the whole page down with a
+        500, and the docs tests only load the pages linked in the sidebar.
+        """
+        md_engine = markdown.Markdown(
+            extensions=[api_return_values_table_generator.makeExtension()]
+        )
+        paths = openapi_spec.openapi()["paths"]
+        for path, path_item in paths.items():
+            for method, operation in path_item.items():
+                content = operation["responses"].get("200", {}).get("content", {})
+                if "properties" not in content.get("application/json", {}).get("schema", {}):
+                    continue
+                md_engine.reset()
+                html = md_engine.convert(
+                    f"{{generate_return_values_table|zulip.yaml|{path}:{method}}}"
+                )
+                self.assertNotIn("generate_return_values_table", html, f"{method} {path}")
 
 
 class OpenAPIRegexTest(ZulipTestCase):

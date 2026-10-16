@@ -1,0 +1,5 @@
+# Armada everywhere (BRIEF statement 47): sessions last until the person
+# logs out; Zulip's name, look and legal links leave every page, email,
+# server-sent message and document people see. zerver/openapi/zulip.yaml's
+# line is R1.txt's.
+kept zerver/tests/test_openapi.py  # every documented response's return values render, as /api/ draws them

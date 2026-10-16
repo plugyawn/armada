@@ -3117,6 +3117,10 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "--config",
                 "tools.update_plan={enabled=true}",
                 "--config",
+                "features.default_mode_request_user_input=true",
+                "--config",
+                "suppress_unstable_features_warning=true",
+                "--config",
                 'model_reasoning_effort="medium"',
             ],
         )

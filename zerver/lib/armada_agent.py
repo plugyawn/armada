@@ -1517,6 +1517,13 @@ class ArmadaCodexAppServerToolRunner:
         # the checklist the topic shows live; the instructions ask for it.
         # Explicit, so a config.toml in CODEX_HOME cannot take it away.
         args.extend(["--config", "tools.update_plan={enabled=true}"])
+        # The question tool (`request_user_input`, the source of
+        # item/tool/requestUserInput) is refused in Default collaboration
+        # mode unless this feature is on; `tools.experimental_request_user_input`
+        # does not lift that. The feature is under development, and Codex
+        # warns about it on every thread, which would reach the transcript.
+        args.extend(["--config", "features.default_mode_request_user_input=true"])
+        args.extend(["--config", "suppress_unstable_features_warning=true"])
         if self.reasoning_effort:
             args.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         return args

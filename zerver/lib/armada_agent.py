@@ -1,9 +1,12 @@
+import contextlib
 import json
 import logging
 import os
 import queue
+import signal
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
@@ -1424,6 +1427,68 @@ class ArmadaAppServerTurnContext:
 
 ARMADA_APP_SERVER_ACTIVITY: Final = object()
 ARMADA_APP_SERVER_STEER_REPLY_TIMEOUT_SECONDS: Final = 30
+ARMADA_APP_SERVER_STOP_GRACE_SECONDS = 2
+
+
+def armada_process_group_exists(process_group_id: int) -> bool:
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # A member runs as another user (a topic's isolation user under
+        # sudo): it exists, though only sudo can signal it.
+        return True
+    return True
+
+
+def armada_signal_process_group(process_group_id: int, signal_number: int) -> None:
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process_group_id, signal_number)
+
+
+def armada_stop_app_server_process(
+    process: subprocess.Popen[str], *, stdin_closed: bool = False
+) -> None:
+    """Stop an app-server and every process it started, and reap it.
+
+    The app-server leads its own process group, so one signal reaches
+    Codex's native binary and whatever it runs, even when the direct
+    child is a launcher or sudo, which cannot pass SIGKILL on: before,
+    a SIGKILL to the launcher orphaned the binary. SIGTERM first, so
+    Codex can finish writing its rollout; SIGKILL to the whole group for
+    whatever is left after the grace period. Before any signal, a
+    caller that closed stdin lets Codex exit by itself: it does so at
+    once when its stdio transport ends.
+    """
+    process_group_id = getattr(process, "pid", None)
+    if not isinstance(process_group_id, int):
+        # A scripted transport in tests has no OS process to signal.
+        process.terminate()
+        return
+    grace_seconds = ARMADA_APP_SERVER_STOP_GRACE_SECONDS
+    if stdin_closed:
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=grace_seconds)
+    deadline = time.monotonic() + grace_seconds
+    if process.poll() is None or armada_process_group_exists(process_group_id):
+        armada_signal_process_group(process_group_id, signal.SIGTERM)
+    while armada_process_group_exists(process_group_id):
+        # Reap the leader as soon as it exits, or it stays a zombie member
+        # of its own group.
+        process.poll()
+        if time.monotonic() >= deadline:
+            armada_signal_process_group(process_group_id, signal.SIGKILL)
+            break
+        time.sleep(0.02)
+    if process.poll() is None:
+        # Not a group leader after all (a popen_command that made no new
+        # session): it at least must not survive.
+        process.kill()
+    try:
+        process.wait(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        logger.warning("Codex app-server %s did not exit after SIGKILL.", process_group_id)
 
 
 class ArmadaCodexAppServerToolRunner:
@@ -1554,6 +1619,9 @@ class ArmadaCodexAppServerToolRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 bufsize=1,
+                # Its own process group, so stopping it reaches every
+                # process it started (armada_stop_app_server_process).
+                start_new_session=True,
             )
         except FileNotFoundError as error:
             raise ArmadaAgentRuntimeError(
@@ -1817,22 +1885,34 @@ class ArmadaCodexAppServerToolRunner:
             response_waiter.put(None)
         for turn_context in turn_contexts:
             turn_context.messages.put(None)
-        if process is not None and process.poll() is None:
-            process.terminate()
-            wait = getattr(process, "wait", None)
-            if callable(wait):
-                try:
-                    wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    kill = getattr(process, "kill", None)
-                    if callable(kill):
-                        kill()
+        if process is not None:
+            armada_stop_app_server_process(process, stdin_closed=self.close_process_stdin(process))
         if (
             reader_thread is not None
             and reader_thread is not threading.current_thread()
             and reader_thread.is_alive()
         ):
-            reader_thread.join(timeout=2)
+            reader_thread.join(timeout=ARMADA_APP_SERVER_STOP_GRACE_SECONDS)
+            if reader_thread.is_alive():
+                logger.warning("The Codex app-server's reader thread outlived its process.")
+
+    def close_process_stdin(self, process: subprocess.Popen[str]) -> bool:
+        """End Codex's stdio transport, its own signal to exit. A write
+        blocked on a full pipe holds the send lock; then the signals in
+        armada_stop_app_server_process do the work instead."""
+        stdin = getattr(process, "stdin", None)
+        close = getattr(stdin, "close", None)
+        if not callable(close) or not self.send_lock.acquire(
+            timeout=ARMADA_APP_SERVER_STOP_GRACE_SECONDS
+        ):
+            return False
+        try:
+            close()
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.send_lock.release()
+        return True
 
     def next_id(self) -> int:
         with self.state_lock:
@@ -3016,8 +3096,16 @@ class ArmadaCodexAppServerToolRunner:
         self.transport_abort_error = error
         messages.put(None)
         self.signal_transport_closed()
-        if process is not None and process.poll() is None:
-            process.terminate()
+        if process is not None:
+            # Stopping waits up to the grace period; the caller must not.
+            # The process is reaped there, never left a zombie until this
+            # runtime is next used.
+            threading.Thread(
+                target=armada_stop_app_server_process,
+                args=(process,),
+                name="armada-codex-app-server-stop",
+                daemon=True,
+            ).start()
 
     def codex_thread_id(self) -> str:
         return self.loaded_thread_id or ""

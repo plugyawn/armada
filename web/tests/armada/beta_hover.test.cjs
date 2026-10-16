@@ -520,10 +520,12 @@ run_test("an edit gives back the draft the field held, saved or refused", async 
 
 run_test("a card opened from More gives focus back to More when Esc closes it", async () => {
     serve();
-    // Iago's message, reached from the keyboard; More, then Card, its last item.
+    // Iago's message, reached from the keyboard; More, then Card, its last
+    // item after Reply, Later, Copy text and Copy link.
     await openMore(125);
     const more = document.activeElement;
     assert.equal(more.getAttribute("aria-label"), "More");
+    dom.press("ArrowDown");
     dom.press("ArrowDown");
     dom.press("ArrowDown");
     dom.press("ArrowDown");
@@ -545,7 +547,7 @@ run_test("a card opened from More gives focus back to More when Esc closes it", 
 
 run_test("More's arrows go round: Up from the first item, Down from the last", async () => {
     serve();
-    // Iago's message: Reply, Copy text, Copy link, Card. Up from Reply is Card.
+    // Iago's message: Reply, Later, Copy text, Copy link, Card. Up from Reply is Card.
     await openMore(125);
     const more = document.activeElement;
     dom.press("ArrowUp");

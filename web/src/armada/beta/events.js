@@ -19,6 +19,7 @@ import {drawRunState} from "./band.js";
 import {drawSide} from "./column.js";
 import {drawHomeRow, mentions, questionOf} from "./home.js";
 import {hopOnce} from "./partners.js";
+import {onStarred} from "./later.js";
 import {drawLab} from "./lab.js";
 import {forgetReceipts} from "./receipts.js";
 
@@ -76,7 +77,8 @@ function onRun(ev) {
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
 function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); }
-function onFlags(ev) { if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); mentions.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const i of ids) mentions.delete(i);   /* a mention read is not Home's any more */ for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }
+function onFlags(ev) { if (ev.flag === "starred") { onStarred(ev); return; }   /* Later's "Just keep it" (later.js) */
+  if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); mentions.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const i of ids) mentions.delete(i);   /* a mention read is not Home's any more */ for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }
 /* a deleted message leaves its place's rows in place: the rest of the conversation is not drawn again */
 function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let here = false;
   for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); forgetReceipts(id); c.msgs = c.msgs.filter((x) => x !== m); removeRow(c, id);

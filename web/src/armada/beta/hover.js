@@ -16,6 +16,7 @@ import {fillFromWire, holdReply, restoreReply, startReply, takeReply} from "./me
 import {fieldEmpty, splitQuoteWire} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 import {openCard} from "./partner_card.js";
+import {openLater} from "./later.js";
 
 /* ---------- the message's controls: the hover overlay, its menu, edit and delete ----------
    One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or at the
@@ -85,10 +86,11 @@ function act(name, t, btn, kbd) { const m = msgOf(t); if (!m) return;   /* from 
   else if (name === "thread") { overHide(); openThread(m.thread_root_message_id || m.id, false, {focus: true}); }
   else if (name === "copy") { try { navigator.clipboard.writeText(plainText(t.matches(".b") ? t : t)).catch(() => {}); } catch (e) {} M.say(btn, "Copied", 1200); if (!kbd) ready(); }
   else if (name === "more") openMenu(m, btn); }
-/* More: what can be done to this message. Any sent one can be replied to; mine can be edited, and any deleted, while the realm
-   allows it; any can be linked or copied. */
+/* More: what can be done to this message. Any sent one can be replied to and put off until later (later.js: Later is here,
+   not a fifth control on the overlay); mine can be edited, and any deleted, while the realm allows it; any can be linked or
+   copied. */
 function openMenu(m, btn) { closeMenu(); const items = [];
-  if (typeof m.id === "number") items.push(["reply", "Reply", "R"]);
+  if (typeof m.id === "number") items.push(["reply", "Reply", "R"], ["later", "Later", "L"]);
   if (canEdit(m)) items.push(["edit", "Edit", "E"]); if (canDelete(m)) items.push(["delete", "Delete", ""]);
   items.push(["copy", "Copy text", "C"], ["link", "Copy link", ""]); if (RECEIPTS && typeof m.id === "number") items.push(["info", "Info", "I"]);
   if (m.sender_id > 0 && m.sender_id !== state.ME && !isOnix(m.sender_id)) items.push(["card", "Card", ""]);   /* the sender's card, which a face opens to the pointer */
@@ -100,7 +102,7 @@ function openMenu(m, btn) { closeMenu(); const items = [];
     const hot = items.findIndex(([, , key]) => key && key.toLowerCase() === e.key.toLowerCase()); if (hot >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); $$(".mi", menu)[hot].click(); return true; } return false; };
   menu._t = overAt;
   press(menu, ".mi", (b, e, ptr) => { const k = b.dataset.mi, t = menu._t; closeMenu(); overHide();
-    if (k === "reply") startReply(m); else if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr); else if (k === "card") openCard(m.sender_id, t);
+    if (k === "reply") startReply(m); else if (k === "later") openLater(m, btn.getBoundingClientRect()); else if (k === "edit") startEdit(m); else if (k === "delete") confirmDelete(m); else if (k === "info") openInfo(m.id, t, !ptr); else if (k === "card") openCard(m.sender_id, t);
     else if (k === "copy") { try { navigator.clipboard.writeText(plainText(t)).catch(() => {}); } catch (e) {} note("Copied"); ready(); }
     else if (k === "link") { const p = state.place, u = p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; try { navigator.clipboard.writeText(u).catch(() => {}); } catch (e) {} note("Link copied"); ready(); } });
   M.release(menu, {y: -(T["pane-rise"] || 4)}, "touch"); }

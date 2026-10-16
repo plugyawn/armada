@@ -40,12 +40,14 @@ import {wireMentions} from "./mentions.js";
 import {wireCaret} from "./caret.js";
 import {onPresence, startPresence} from "./presence.js";
 import {onPost, wirePages} from "./pages.js";
+import {loadLater, onReminders, wireLater} from "./later.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
+on("reminders", onReminders);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -74,7 +76,7 @@ async function boot() {
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
   addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home" && state.place.kind !== "page") f.forEach(upload); });   /* the editor takes its own drops (pages.js) */
   tx.addEventListener("focus", () => { state.threadTx = null; });
-  buildOver(); wireMentions(); wireCaret();
+  buildOver(); wireMentions(); wireCaret(); wireLater();
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
   cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret"); go.classList.remove("armed");
@@ -178,7 +180,7 @@ async function boot() {
   setTimeout(momentDue, 3000);   /* an evolution ready at load plays after the first idle 3 s */
   poll(); startPresence();
   /* Home needs every worktree's runs and my unread mentions: asked once, after the first place is drawn, then kept by events */
-  setTimeout(() => { scanAll(); if (!state.place || state.place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */
+  setTimeout(() => { scanAll(); loadLater(); if (!state.place || state.place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */
 }
 window.armadaBeta = {get partners() { return partners; }, get pack() { return !!pack; }, applyPartners, openCard, openPicker, playMoment, get moment() { return moment; }, hopOnce, stats, get place() { return state.place; }, get pinned() { return state.pinned; }, get cache() { return state.P; }, openPlace: (k) => openPlace(placeFromKey(k)), tkey, dkey, streams, send, stop, setTab, marks, unread, runsSeen, palette, togglePicker, openThread, startEdit, confirmDelete, get verb() { return verb; }, get atts() { return state.atts; }, QUESTION_TIMEOUT, sweepAsks, handle, redraw: () => { if (state.place && state.place.kind !== "home") { drawRunState(true); drawAsks(); } drawNav(); drawHomeRow(); }};   /* for checks from a driver */
 document.addEventListener("DOMContentLoaded", boot);

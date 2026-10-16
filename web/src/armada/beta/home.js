@@ -12,6 +12,7 @@ import {loadTopics} from "./nav.js";
 import {runsSeen, scanLive} from "./runs.js";
 import {drawHeader} from "./header.js";
 import {drawSide} from "./column.js";
+import {backHTML, laterHTML} from "./later.js";
 
 const mentions = new Map();                                 /* message id -> message: unread mentions of me, for Home */
 
@@ -29,9 +30,9 @@ function homeRows() { const needs = [], ment = [], news = [];
 /* the question's own words: the first "**header** — question" line of Onix's message */
 function questionOf(m) { tpl.innerHTML = m.content || ""; const p = [...tpl.content.querySelectorAll("p")].find((x) => x.querySelector("strong") && / — /.test(x.textContent)); return p ? p.textContent.split(" — ").slice(1).join(" — ").trim() : ""; }
 const hrowHTML = (r) => `<div class="hrow${r.verb ? " act" : ""}" role="button" tabindex="${r.verb ? -1 : 0}" data-k="${esc(r.k)}"><span class="g">${r.g}</span><span class="tx"><p>${esc(r.text)}</p><span class="wh">${esc(r.where)}</span></span>${r.verb ? `<span class="v"><button class="${r.go ? "go" : "lk"}" data-k="${esc(r.k)}"${r.verb === "Answer" ? " data-answer" : ""}>${r.verb}</button></span>` : r.time ? `<time>${hhmm(r.time)}</time>` : ""}</div>`;
-function drawHome() { if (!state.place || state.place.kind !== "home") return; const box = $("#home"), {needs, ment, news} = homeRows(); let h = '<div class="home">';
+function drawHome() { if (!state.place || state.place.kind !== "home") return; const box = $("#home"), {needs, ment, news} = homeRows(); let h = '<div class="home">' + backHTML();   /* what came back from Later stands first; the Later list is last (later.js) */
   if (needs.length) h += needs.map(hrowHTML).join(""); h += `<div class="gh">Mentions of you</div>` + (ment.length ? ment.map(hrowHTML).join("") : '<p class="note">No unread mentions.</p>');
-  h += `<div class="gh">New in worktrees</div>` + (news.length ? news.map(hrowHTML).join("") : '<p class="note">Nothing new.</p>');
+  h += `<div class="gh">New in worktrees</div>` + (news.length ? news.map(hrowHTML).join("") : '<p class="note">Nothing new.</p>') + laterHTML();
   if (!homeScanned) h += '<p class="note">Looking at every worktree\'s runs</p>'; h += "</div>"; if (box._sig === h) return; box._sig = h; box.innerHTML = h; host(box);
   const n = needs.filter((x) => x.verb === "Answer").length, sum = n ? `${n === 1 ? "One question waits" : n + " questions wait"} for you.` : needs.length ? "A run failed." : "Nothing waits for you.";
   const say = $(".hd .say, .hd .l2 .s"); if (say && say.textContent !== sum) { state.hd._sig = ""; drawHeader(); } drawHomeTrail(); }

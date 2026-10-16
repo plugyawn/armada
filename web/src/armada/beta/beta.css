@@ -364,4 +364,9 @@ a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent
 .cl.me > button.rq { align-self: flex-end; }
 .cl > button.rq + .bl { margin-top: var(--gap-same); }
 
+/* Later (later.js): its times, the More menu's rows with a time at their end */
+.later-menu .mi .k { font: var(--t-caption); font-variant-numeric: tabular-nums; }
+/* Home: what came back first, the Later list last; when it comes back, then Done */
+#home .later-row .v { align-items: center; gap: var(--s-1); }
+
 }   /* @layer zulip.armada-beta */

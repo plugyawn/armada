@@ -18,8 +18,8 @@ import {cardEl, moreEl, takeCards} from "./previews.js";
    A block is: a code block (div.codehilite or pre), a table, pictures (div.message_inline_image; consecutive previews are
    one block, and a Markdown image is lifted out of its words first: media.js), a spoiler, display maths. Everything else is
    prose: paragraphs, lists, quotes, headings. A link that only names a picture shown below it is that picture's label, not
-   words (media.js, dropNames). A link's preview (a page's, div.message_embed; a video's) is a card under the run of prose
-   that holds its link (previews.js).
+   words (media.js, dropNames). A link's preview (a page's, div.message_embed; a video's), and a link whose preview the server
+   is still fetching, are cards under the run of prose that holds the link (previews.js).
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
@@ -112,7 +112,10 @@ function setAns(ans, html) { ans.innerHTML = html; for (const c of ans.children)
    server's rendering will be cut into (a fenced block is a block, a list or a quote stays in its bubble), so the
    server's copy replaces it without changing its shape. The server's rendering replaces it only where it differs. */
 /* a mention or a place link is echoed as the server renders it; never inside code */
-const inlineEcho = (t) => esc(t).split(/(`[^`\n]+`)/).map((x, i) => (i % 2 ? `<code>${x.slice(1, -1)}</code>` : echoRefs(x, refLook).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]\n]+)\]\((\/user_uploads\/[^)\s]+|https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>'))).join("");
+/* a bare address is a link, as the server makes it, so that my echo already holds the links whose previews will come */
+const BARE_URL = /(<a [^>]*>[\s\S]*?<\/a>)|(https?:\/\/(?:(?!&quot;|&#39;|&lt;|&gt;)[^\s<>"])+)/g;
+const autolink = (h) => h.replace(BARE_URL, (all, a, u) => { if (a) return a; const t = /[.,;:!?)\]]+$/.exec(u), url = t ? u.slice(0, -t[0].length) : u; return `<a href="${url}">${url}</a>${t ? t[0] : ""}`; });
+const inlineEcho = (t) => esc(t).split(/(`[^`\n]+`)/).map((x, i) => (i % 2 ? `<code>${x.slice(1, -1)}</code>` : autolink(echoRefs(x, refLook).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>").replace(/\[([^\]\n]+)\]\((\/user_uploads\/[^)\s]+|https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')))).join("");
 function echoHTML(text) {
   const out = [], lines = text.replace(/\r/g, "").split("\n"); let i = 0;
   const para = (ls) => { if (!ls.length) return; let k = 0; while (k < ls.length) { const blk = [];

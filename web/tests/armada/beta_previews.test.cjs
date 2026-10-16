@@ -2,12 +2,20 @@
 
 // The interim beta's link previews (web/src/armada/beta/previews.js), with
 // a real DOM and a stand-in server: a page's preview is a card under the
-// bubble that holds its link, and a video is a still that opens the video.
-// Deleted with web/src/armada/beta/.
+// bubble that holds its link, three at most and "+N more" for the rest; a
+// link the server marks as being fetched keeps the card's place from the
+// first draw (my echo guesses which), and the preview fills that place
+// without replacing anything around it; the worker's rendering without a
+// preview closes it; a video is a still that opens the video. jsdom lays
+// nothing out, so "moves nothing" is read as the conversation's elements:
+// the same ones, in the same order, before and after the preview arrives.
+// The measured layout is in
+// var/armada-overhaul/build/dogfood/link-previews.md. Deleted with
+// web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
-const {mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
+const {clock, mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
 const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
 
@@ -160,6 +168,7 @@ const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const feed = zrequire("armada/beta/feed.js");
 const events = zrequire("armada/beta/events.js");
+const send = zrequire("armada/beta/send.js");
 const previews = zrequire("armada/beta/previews.js");
 
 beta_state.state.ME = ME;
@@ -180,12 +189,24 @@ for (const [id, name, bot] of [
         owner: null,
     });
 }
+// This realm previews links and pictures, as the box's dev realm does.
+beta_state.state.realm = {
+    ...beta_state.state.realm,
+    urlPreviews: true,
+    imagePreviews: true,
+    serverUrlPreviews: true,
+    serverImagePreviews: true,
+};
 beta_state.streams.set(10, {stream_id: 10, name: "devel"});
 
 // The markup the box's server wrote for each kind of link (read from
 // #devel > "link previews: samples" on 16 October).
 const GITHUB = "https://github.com/pallets/click";
 const words_with = (words, href, text = href) => `<p>${words} <a href="${href}">${text}</a></p>`;
+// The same, as the server first renders it: the link is marked while its
+// preview is fetched.
+const pending = (words, href) =>
+    `<p>${words} <a data-preview="pending" href="${href}">${href}</a></p>`;
 const embed = (href, image, title, description) =>
     `<div class="message_embed"><a class="message_embed_image" href="${href}" style="background-image: url(&quot;${image}&quot;)"></a>` +
     `<div class="data-container"><div class="message_embed_title"><a href="${href}" title="${title}">${title}</a></div>` +
@@ -229,6 +250,16 @@ routing.addMsg(cache, message(1002, IAGO, 3600, "<p>the old decision: cards are 
 feed.drawLane();
 previews.wirePreviews();
 
+async function settle() {
+    for (let i = 0; i < 50; i += 1) {
+        await Promise.resolve();
+    }
+    // A frame and the task after it: a quote's request waits for both.
+    clock.tick(20);
+    for (let i = 0; i < 50; i += 1) {
+        await Promise.resolve();
+    }
+}
 // A message arriving live, and the embed worker's later rendering of it, as
 // the server sends them to everyone.
 const deliver = (m) => events.onMessage({type: "message", message: m, flags: ["read"]});
@@ -243,6 +274,9 @@ const render = (id, rendered_content) =>
     });
 const cards = (id) => [...lane.querySelectorAll(`.pv[data-mid="${id}"]`)];
 const bubble = (id) => lane.querySelector(`.bl[data-mid="${id}"]`);
+// What the conversation is made of: every turn and every part of a
+// message, in order. An element replaced or inserted changes it.
+const anatomy = () => [...lane.querySelectorAll(":scope > section, [data-part]")];
 
 run_test("a page's preview is a card under the bubble that holds its link", async () => {
     serve();
@@ -327,6 +361,159 @@ run_test("a bubble shows three cards, and +N more opens the rest under them", as
     assert.equal(document.activeElement, cards(2061)[3]);
 });
 
+run_test("a link being fetched keeps its card's place, and the preview fills it", async () => {
+    serve();
+    deliver(message(2010, IAGO, 5, pending("have a look:", GITHUB)));
+    const [held] = cards(2010);
+    assert.ok(held.hasAttribute("data-wait"), "the card's place is kept from the first draw");
+    assert.equal(held.querySelector(".pvh").textContent, "github.com");
+    assert.equal(held.getAttribute("href"), GITHUB);
+    deliver(message(2011, IAGO, 4, "<p>and the next message, under it</p>"));
+    const first = anatomy();
+    const words = bubble(2010).querySelector(".b");
+
+    appeared.length = 0;
+    render(2010, words_with("have a look:", GITHUB) + "\n" + GITHUB_EMBED);
+    // The same elements, in the same order: the bubble was not drawn again
+    // (a selection in it survives), the card took the preview in its own box,
+    // and nothing came between it and the next message.
+    assert.deepEqual(anatomy(), first);
+    assert.equal(bubble(2010).querySelector(".b"), words);
+    assert.ok(!held.hasAttribute("data-wait"));
+    assert.match(held.querySelector(".pvh").textContent, /^GitHub - pallets\/click/);
+    assert.ok(held.querySelector(".tn > img"));
+    // Only the arrived words fade in.
+    assert.ok(appeared.length > 0 && appeared.every((e) => held.contains(e)));
+});
+
+run_test("the worker's rendering without a preview closes the place", async () => {
+    serve();
+    deliver(message(2020, IAGO, 5, pending("a page without a picture:", "https://example.com/")));
+    assert.equal(cards(2020).length, 1);
+    render(2020, words_with("a page without a picture:", "https://example.com/"));
+    assert.equal(cards(2020).length, 0);
+    assert.equal(bubble(2020).querySelector("a").getAttribute("href"), "https://example.com/");
+    // A rendering that still carries the mark is not the embed worker's
+    // (the thumbnail worker's keeps the words as they were): the place stays.
+    const upload =
+        '<div class="message_inline_image"><a href="/user_uploads/2/ab/shot.png"><img class="image-loading-placeholder" data-original-dimensions="1440x900" src="/static/images/loading/loader-black.svg"></a></div>';
+    const thumbnail =
+        '<div class="message_inline_image"><a href="/user_uploads/2/ab/shot.png"><img data-original-dimensions="1440x900" src="/user_uploads/thumbnail/2/ab/shot.png/840x560.webp"></a></div>';
+    deliver(message(2021, IAGO, 5, pending("a shot and", GITHUB) + "\n" + upload));
+    assert.equal(cards(2021).length, 1);
+    render(2021, pending("a shot and", GITHUB) + "\n" + thumbnail);
+    assert.ok(cards(2021)[0].hasAttribute("data-wait"));
+    render(2021, words_with("a shot and", GITHUB) + "\n" + thumbnail + "\n" + GITHUB_EMBED);
+    assert.ok(!cards(2021)[0].hasAttribute("data-wait"));
+});
+
+run_test("the server's marks say which links keep a place, for a while", async () => {
+    serve();
+    // A marked link keeps its card's place; an unmarked one, none.
+    deliver(
+        message(
+            2022,
+            IAGO,
+            5,
+            `<p>see <a data-preview="pending" href="${GITHUB}">${GITHUB}</a> and <a href="https://example.org/x">x</a></p>`,
+        ),
+    );
+    assert.deepEqual(
+        cards(2022).map((c) => [c.getAttribute("href"), c.hasAttribute("data-wait")]),
+        [[GITHUB, true]],
+    );
+    // A message loaded with the conversation, ten seconds old, keeps it too;
+    // a mark on one sent long ago was left behind, and keeps nothing.
+    routing.addMsg(cache, message(2023, IAGO, 10, pending("fresh:", "https://example.org/fresh")));
+    routing.addMsg(cache, message(2024, IAGO, 600, pending("old:", "https://example.org/old")));
+    feed.drawLane();
+    assert.equal(cards(2023).length, 1);
+    assert.equal(cards(2024).length, 0);
+});
+
+run_test("my echo guesses the links the server will fetch", async () => {
+    const tpl = document.createElement("template");
+    const held = (sender, content) => {
+        tpl.innerHTML = content;
+        return previews.fetchedLinks(tpl.content, sender);
+    };
+    assert.deepEqual(held(IAGO, words_with("see", GITHUB)), [GITHUB]);
+    // The agent's own posts are previewed; another bot's are not.
+    assert.deepEqual(held(AGENT, words_with("see", GITHUB)), [GITHUB]);
+    assert.deepEqual(held(NOTICE_BOT, words_with("see", GITHUB)), []);
+    // A YouTube link is fetched for its title.
+    assert.deepEqual(held(IAGO, words_with("see", YOUTUBE)), [YOUTUBE]);
+    // Inside a quote, to this server, relative, a picture by its name,
+    // Dropbox: none.
+    assert.deepEqual(held(IAGO, `<blockquote>${words_with("see", GITHUB)}</blockquote>`), []);
+    assert.deepEqual(held(IAGO, words_with("see", "http://zulip.zulipdev.com/help/")), []);
+    assert.deepEqual(held(IAGO, words_with("see", "/user_uploads/2/ab/notes.txt")), []);
+    assert.deepEqual(held(IAGO, words_with("see", "https://example.com/cat.png")), []);
+    assert.deepEqual(held(IAGO, words_with("see", "https://www.dropbox.com/s/abc/plan")), []);
+    // A message with more than 24 links is previewed not at all.
+    const many = Array.from(
+        {length: 25},
+        (_, i) => `<a href="https://example.com/${i}">${i}</a>`,
+    ).join(" ");
+    assert.deepEqual(held(IAGO, `<p>${many}</p>`), []);
+    // With the realm's previews off, nothing is fetched.
+    beta_state.state.realm.urlPreviews = false;
+    assert.deepEqual(held(IAGO, words_with("see", GITHUB)), []);
+    beta_state.state.realm.urlPreviews = true;
+});
+
+run_test("+N more opens the rest in place, under the cards that stay", async () => {
+    serve();
+    const pages = ["a", "b", "c", "d", "e"].map((x) => `https://example.org/w${x}`);
+    deliver(
+        message(
+            2025,
+            IAGO,
+            5,
+            `<p>${pages.map((h) => `<a data-preview="pending" href="${h}">${h}</a>`).join(" ")}</p>`,
+        ),
+    );
+    const shown = cards(2025);
+    assert.equal(shown.length, 3);
+    const words = bubble(2025).querySelector(".b");
+    dom.click(lane.querySelector('.pvm[data-mid="2025"]'));
+    assert.equal(cards(2025).length, 5);
+    assert.deepEqual(cards(2025).slice(0, 3), shown);
+    assert.equal(bubble(2025).querySelector(".b"), words);
+});
+
+run_test("my echo keeps my links' places, and the server's copy keeps them", async () => {
+    serve();
+    field.textContent = `have a look at ${GITHUB}.`;
+    field.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+    send.send({at: 0});
+    // At once: the address is a link, as the server will make it, and its
+    // card's place is there.
+    const local = beta_state.state.P.msgs.at(-1);
+    assert.ok(local.local);
+    const [held] = cards(local.id);
+    assert.ok(held.hasAttribute("data-wait"));
+    assert.equal(bubble(local.id).querySelector("a").getAttribute("href"), GITHUB);
+    await settle();
+    // The server's copy, then its rendering with the preview.
+    const server = message(
+        5000,
+        ME,
+        0,
+        `<p>have a look at <a data-preview="pending" href="${GITHUB}">${GITHUB}</a>.</p>`,
+    );
+    events.onMessage({
+        type: "message",
+        message: server,
+        flags: ["read"],
+        local_message_id: local.id,
+    });
+    assert.deepEqual(cards(5000), [held]);
+    render(5000, `<p>have a look at <a href="${GITHUB}">${GITHUB}</a>.</p>\n${GITHUB_EMBED}`);
+    assert.deepEqual(cards(5000), [held]);
+    assert.ok(!held.hasAttribute("data-wait"));
+});
+
 run_test("a video is a still that opens the video, under the link as it was typed", async () => {
     serve();
     // The server's first rendering: the link as typed, the still inlined.
@@ -339,7 +526,19 @@ run_test("a video is a still that opens the video, under the link as it was type
     assert.equal(lane.querySelector("iframe, .youtube-video"), null);
     // Its title arrives as the link's new words; the bubble keeps the link as
     // typed and the title goes to the card.
+    const words = bubble(2030).querySelector(".b");
     render(2030, youtube("YouTube - Never Gonna Give You Up"));
+    assert.equal(bubble(2030).querySelector(".b"), words);
     assert.equal(bubble(2030).querySelector("a").textContent, YOUTUBE);
-    assert.equal(cards(2030)[0].querySelector(".pvh").textContent, "Never Gonna Give You Up");
+    assert.equal(cards(2030)[0], card);
+    assert.equal(card.querySelector(".pvh").textContent, "Never Gonna Give You Up");
+});
+
+run_test("a place the server does not answer in time closes", async () => {
+    serve();
+    deliver(message(2050, IAGO, 1, pending("slow page:", "https://slow.example.org/")));
+    assert.equal(cards(2050).length, 1);
+    clock.tick(previews.WAIT_LIMIT + 1);
+    assert.equal(cards(2050).length, 0);
+    assert.ok(bubble(2050));
 });

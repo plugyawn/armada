@@ -62,8 +62,8 @@ function newSection(c, m, kind, o) {
   return cl;
 }
 /* a turn's bubbles: the first keeps its lower inner corner square, the last its upper one; the turn's time stands on its last bubble.
-   A link's card belongs to the words above it, so the time stays with them, and a preview that arrives never moves it
-   (previews.js) */
+   A link's card belongs to the words above it, so the time stays with them: a preview that arrives, or a reserved card
+   that closes, never moves the time (previews.js) */
 function finish(cl) { if (cl.classList.contains("onix")) return; const bs = $$(":scope > .bl > .b", cl); bs.forEach((b, i) => { b.classList.toggle("u", i < bs.length - 1); b.classList.toggle("t", i > 0); });
   $$(":scope > .bl > time, :scope > .bl > .rt, :scope > .rcpt.at", cl).forEach((t) => { for (const b of t.matches(".rt") ? [t] : $$(".rt", t)) untick(b); t.remove(); }); const all = $$(":scope > [data-part]", cl); let lastPart = all.pop(); while (lastPart && /^pv/.test(lastPart.dataset.part) && all.length) lastPart = all.pop(); if (!lastPart || cl.dataset.pending) return;
   const edited = (mid) => { const c = msgIndex.get(+mid), x = c && c.byId.get(+mid); return !!(x && (x.edited || x.last_edit_timestamp)); };

@@ -7,6 +7,7 @@ const QUESTION_TIMEOUT = +DATA.questionTimeout || 600;    /* how long a run wait
 const fromData = (json, none) => { try { return json ? JSON.parse(json) : none; } catch (e) { return none; } };
 const LIVE_RUN_IDS = fromData(DATA.liveRunIds, []);       /* the live runs in my channels at load: where Home starts */
 const RULES = fromData(DATA.editAndDelete, {});            /* the realm's rules for editing and deleting, as register's realm bundle writes them */
+const PREVIEWS = fromData(DATA.linkPreviews, {});          /* the realm's and the server's settings for previews of links and pictures, likewise */
 /* the page's own measurements, which the Lab and the checks read: each list keeps its newest 600 entries, as the event log does */
 class Recent extends Array { static get [Symbol.species]() { return Array; } push(...x) { super.push(...x); if (this.length > 600) this.splice(0, this.length - 600); return this.length; } }
 const stats = {sends: new Recent(), firstWords: new Recent(), runs: new Recent(), events: 0, api: 0, log: []};
@@ -20,9 +21,12 @@ const state = {
   runtimeCfg: null,                                        /* the server's runtime settings, from armada/runs: the service tier is server-wide */
   /* the realm's rules for changing and deleting a message (the page's data, then the realm event): a limit of null is
      none; a group setting is as the server writes it, a group's id or {direct_members, direct_subgroups}, read against
-     `groups`. `guest`: I am a guest (register), whom the realm's can_delete_any_message_group never holds. */
+     `groups`. `guest`: I am a guest (register), whom the realm's can_delete_any_message_group never holds. Which links
+     the server previews (previews.js) also come with the page, as register's realm bundle writes them. */
   realm: {allowEdit: RULES.allow_message_editing !== false, editLimit: RULES.message_content_edit_limit_seconds ?? null, deleteLimit: RULES.message_content_delete_limit_seconds ?? null,
-    deleteAny: RULES.can_delete_any_message_group ?? null, deleteOwn: RULES.can_delete_own_message_group ?? null, guest: false},
+    deleteAny: RULES.can_delete_any_message_group ?? null, deleteOwn: RULES.can_delete_own_message_group ?? null, guest: false,
+    urlPreviews: !!PREVIEWS.realm_inline_url_embed_preview, imagePreviews: PREVIEWS.realm_inline_image_preview !== false,
+    serverUrlPreviews: PREVIEWS.server_inline_url_embed_preview !== false, serverImagePreviews: PREVIEWS.server_inline_image_preview !== false},
   muted: new Set(),                                        /* the people I muted: receipts do not count them */
   hd: null,                                                /* the header, drawn again whole when what it says changes */
   pinned: true, lastSet: 0,                                /* the feed: whether it keeps to its end, and where it was last scrolled to */

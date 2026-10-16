@@ -13,7 +13,7 @@
 </script>
 {{ csrf_input }}
 {# What the page cannot ask the server for: how long a run waits for an answer, the live runs Home starts from, whether the organization shows read receipts, and the version of the partner pack (empty when this server has none); and what it would otherwise register for whole bundles to learn: the agent's user ids, the rules for editing and deleting, and how often to report presence and when a person counts as gone. #}
-<div id="beta-data" hidden data-question-timeout="{{ question_timeout_seconds }}" data-live-run-ids="{{ live_run_ids }}" data-read-receipts="{{ 'on' if read_receipts else 'off' }}" data-sprite-version="{{ sprite_version }}" data-agent-user-ids="{{ agent_user_ids }}" data-edit-and-delete="{{ edit_and_delete }}" data-presence-ping="{{ presence_ping_interval_seconds }}" data-presence-offline="{{ presence_offline_threshold_seconds }}"></div>
+<div id="beta-data" hidden data-question-timeout="{{ question_timeout_seconds }}" data-live-run-ids="{{ live_run_ids }}" data-read-receipts="{{ 'on' if read_receipts else 'off' }}" data-sprite-version="{{ sprite_version }}" data-agent-user-ids="{{ agent_user_ids }}" data-edit-and-delete="{{ edit_and_delete }}" data-link-previews="{{ link_previews }}" data-presence-ping="{{ presence_ping_interval_seconds }}" data-presence-offline="{{ presence_offline_threshold_seconds }}"></div>
 <div class="feed" id="pane"><div class="clip"><div class="lane" id="col"></div></div></div>
 <aside class="side" id="side"><div class="out" id="outline"></div></aside>
 <div class="pane cutb float" data-pane="Home" hidden><div class="lane" id="home"></div></div>

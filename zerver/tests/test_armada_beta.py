@@ -309,12 +309,14 @@ class ArmadaBetaTest(ZulipTestCase):
     def test_the_page_brings_what_the_page_does_not_register_for(self) -> None:
         # The page registers without the realm bundle and the realm's bots
         # (web/src/armada/beta/connection.js): the agent's user ids, the
-        # rules for editing and deleting and the presence intervals come
-        # with it, written as register writes them, a named group by its id
-        # and an anonymous one by its members and subgroups.
+        # rules for editing and deleting, which links the server previews
+        # and the presence intervals come with it, written as register
+        # writes them, a named group by its id and an anonymous one by its
+        # members and subgroups.
         hamlet = self.example_user("hamlet")
         realm = hamlet.realm
         do_set_realm_property(realm, "message_content_delete_limit_seconds", 600, acting_user=None)
+        do_set_realm_property(realm, "inline_url_embed_preview", True, acting_user=None)
         moderators = NamedUserGroup.objects.get(
             name=SystemGroups.MODERATORS, realm_for_sharding=realm, is_system_group=True
         )
@@ -354,6 +356,20 @@ class ArmadaBetaTest(ZulipTestCase):
             },
         )
         self.assertIsInstance(rules["can_delete_any_message_group"], int)
+        previews = orjson.loads(data["link-previews"])
+        self.assertEqual(
+            previews,
+            {
+                name: state[name]
+                for name in [
+                    "realm_inline_url_embed_preview",
+                    "realm_inline_image_preview",
+                    "server_inline_url_embed_preview",
+                    "server_inline_image_preview",
+                ]
+            },
+        )
+        self.assertTrue(previews["realm_inline_url_embed_preview"])
         self.assertEqual(int(data["presence-ping"]), state["server_presence_ping_interval_seconds"])
         self.assertEqual(
             int(data["presence-offline"]), state["server_presence_offline_threshold_seconds"]

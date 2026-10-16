@@ -88,8 +88,8 @@ function morphAns(ans, html, head) {
    ResizeObserver below, which follows them; nothing here reads layout. */
 function updateMessage(c, m, firstWordsAt) {
   if (c !== state.P) return; const cl = sectionOf(m.id); if (!cl) return;   /* a reply in a thread that is not open */
-  if (!cl.classList.contains("onix")) {   /* a person's edit: that message's parts are rebuilt in place */
-    const write = () => { const old = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), parts = partsOf(m).map((p) => partEl(p, m)); if (old.length) { old[0].before(...parts); old.forEach((x) => x.remove()); } else cl.append(...parts); drawReactions(cl, m); finish(cl); hush(cl); toHug.add(cl); };
+  if (!cl.classList.contains("onix")) {   /* a person's edit, or the server's later rendering (a link's preview): that message's parts are redrawn in place */
+    const write = () => { morphParts(cl, m); drawReactions(cl, m); finish(cl); hush(cl); toHug.add(cl); };
     if (cl.closest(".thr-in")) { write(); hugAll(); } else grown(write, "move"); return; }
   const s = liveText.get(m.id); if (s && s.base && msgLive(c, m)) { if (cl._stream !== s || s.dirty) writeStream(cl, m, s); return; }
   const hadWords = !!cl.querySelector(".ans") && cl.querySelector(".ans").textContent.trim().length > 0;
@@ -219,6 +219,17 @@ function extend(o, n, head, depth = 0) {
   if (depth < 4 && /^(UL|OL|LI)$/.test(o.tagName) && o.childNodes.length === ok.length + (head && head.parentNode === o ? 1 : 0) && nk.length >= ok.length && ok.length && ok.slice(0, -1).every((x, i) => srcOf(x, head) === nk[i].innerHTML && x.tagName === nk[i].tagName) && ok[ok.length - 1].tagName === nk[ok.length - 1].tagName) {
     extend(ok[ok.length - 1], nk[ok.length - 1], head, depth + 1); for (const x of nk.slice(ok.length)) { x._src = x.innerHTML; o.append(x); } o._src = nh; return; }
   if (head && o.contains(head)) head.remove(); o.innerHTML = nh; o._src = nh;
+}
+/* a person's message drawn again: a part drawn the same stays the element it was (a selection in it survives, nothing in
+   it moves), a card takes what arrived in its own box (previews.js), and only what changed is replaced or added in its
+   place; nothing that stays is moved in the DOM */
+function morphParts(cl, m) {
+  const old = $$(`:scope > [data-part][data-mid="${m.id}"]`, cl), first = old[0] || null, kept = new Set();
+  const next = partsOf(m).map((p, i) => { const o = old[i]; if (o && o.dataset.part === p.t && o._src === p.html) { kept.add(o); return o; }
+    if (o && o.dataset.part === "pv" && p.t === "pv") { fillCard(o, p); kept.add(o); return o; } return partEl(p, m); });
+  if (!first) { cl.append(...next); return; }
+  const after = first.previousSibling; old.forEach((o) => { if (!kept.has(o)) o.remove(); });
+  let prev = after; for (const e of next) { if (!kept.has(e)) { if (prev) prev.after(e); else cl.prepend(e); } prev = e; }
 }
 /* a pinned feed follows the stream, never by more than a line's spring, until the answer's first line would leave the
    top; then it holds, and Jump to latest says there is more */

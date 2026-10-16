@@ -110,6 +110,18 @@ def edit_and_delete_rules(realm: Realm) -> dict[str, object]:
     }
 
 
+def link_preview_settings(realm: Realm) -> dict[str, bool]:
+    """Which links and pictures the server previews, as register's realm
+    bundle writes it: my echo keeps a place for a link's card by the
+    renderer's rule before the server has rendered the message."""
+    return {
+        "realm_inline_url_embed_preview": realm.inline_url_embed_preview,
+        "realm_inline_image_preview": realm.inline_image_preview,
+        "server_inline_url_embed_preview": settings.INLINE_URL_EMBED_PREVIEW,
+        "server_inline_image_preview": settings.INLINE_IMAGE_PREVIEW,
+    }
+
+
 def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     """The new design on this server's real data, for the signed-in
     person: what / serves them (zerver/views/home.py) and /beta/ too. It
@@ -120,8 +132,9 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
     the version of the partner pack, so that its species.json can be
     kept for good under each version; and the little it would otherwise
     register for whole bundles to learn: the agent's user ids (from
-    realm_bot), the rules for editing and deleting, and how often to
-    report presence and when a person counts as gone (from realm)."""
+    realm_bot), the rules for editing and deleting, which links the
+    server previews, and how often to report presence and when a person
+    counts as gone (from realm)."""
     pack = load_pack()
     return render(
         request,
@@ -136,6 +149,7 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
                 armada_bot_user_ids_for_realm(user_profile.realm)
             ).decode(),
             "edit_and_delete": orjson.dumps(edit_and_delete_rules(user_profile.realm)).decode(),
+            "link_previews": orjson.dumps(link_preview_settings(user_profile.realm)).decode(),
             "presence_ping_interval_seconds": settings.PRESENCE_PING_INTERVAL_SECS,
             "presence_offline_threshold_seconds": settings.OFFLINE_THRESHOLD_SECS,
         },

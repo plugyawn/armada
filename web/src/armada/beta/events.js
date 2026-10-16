@@ -88,8 +88,11 @@ function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let here 
 function onTyping(ev) { const key = ev.message_type === "stream" ? tkey(ev.stream_id, ev.topic || "") : dkey((ev.recipients || []).map((u) => u.user_id).filter((i) => i !== state.ME)), c = places.get(key), id = ev.sender.user_id; if (!c || id === state.ME || isOnix(id)) return;   /* Onix's own sign that it is working is its mark, not a typing bubble */
   clearTimeout(c.typers.get(id)); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === state.P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === state.P) drawTyping(); }
 /* the realm's rules for editing and deleting, changed by an administrator: the next Up or More reads them (hover.js, canEdit
-   and canDelete). The server writes the delete limit as one property, the rest as a dict. */
+   and canDelete). The server writes the delete limit as one property, the rest as a dict. Its previews of links and
+   pictures, turned on or off: my next echo reads them (previews.js). */
 function onRealm(ev) { if (ev.op === "update" && ev.property === "message_content_delete_limit_seconds") { state.realm.deleteLimit = ev.value; return; }
+  if (ev.op === "update" && ev.property === "inline_url_embed_preview") { state.realm.urlPreviews = !!ev.value; return; }   /* which links the server previews (previews.js) */
+  if (ev.op === "update" && ev.property === "inline_image_preview") { state.realm.imagePreviews = !!ev.value; return; }
   const d = ev.op === "update_dict" && ev.data; if (!d) return;
   if ("allow_message_editing" in d) state.realm.allowEdit = d.allow_message_editing;
   if ("message_content_edit_limit_seconds" in d) state.realm.editLimit = d.message_content_edit_limit_seconds;

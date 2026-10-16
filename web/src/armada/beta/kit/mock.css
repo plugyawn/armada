@@ -216,8 +216,8 @@ em { font-style: italic; } strong, b { font-weight: 500; }
 .sm:not([data-s="live"]) > .star :is(.spin, svg) { animation-play-state: paused; }
 .sm > .tick .s { stroke-dasharray: 1; stroke-dashoffset: 1; transition: stroke-dashoffset var(--settle-t) ease-out; }
 .sm[data-s="done"] > .tick .s { stroke-dashoffset: 0; }
-.sm > :is(.x, .bar) { opacity: 0; transition: opacity var(--move-t) linear; }
-.sm[data-s="failed"] > .x, .sm[data-s="cancelled"] > .bar { opacity: 1; }
+.sm > :is(.x, .bar, .dash) { opacity: 0; transition: opacity var(--move-t) linear; }
+.sm[data-s="failed"] > .x, .sm[data-s="cancelled"] > .bar, .sm[data-s="queued"] > .dash { opacity: 1; }   /* queued: in hand when its run ended unfinished */
 .head { display: inline-block; width: 0; height: 0; position: relative; vertical-align: baseline; }
 .head > .mk { position: absolute; left: 6px; top: -13px; }
 .head.first > .mk { left: 0; }

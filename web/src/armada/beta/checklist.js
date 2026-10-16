@@ -10,7 +10,13 @@ function progOf(c) { const run = planRun(c); if (!run) return {title: "Checklist
   const marksOf = steps.map((s) => stepMark(s, run)), done = marksOf.filter((x) => x === "done").length;
   return {marks: marksOf, cap: live || done < steps.length ? `${done} of ${steps.length}` : `Finished ${hhmm(run.date_finished || run.date_updated || run.date_created)}`}; }
 const planRun = (c) => { const l = liveRun(c); if (l && l.plan && l.plan.length) return l; return c.runs.find((r) => r.plan && r.plan.length) || null; };
-const stepMark = (s, run) => (s.status === "completed" ? "done" : s.status === "in_progress" ? (run.status === "failed" ? "failed" : run.status === "cancelled" ? "cancelled" : run.status === "done" ? "done" : "live") : run.status === "cancelled" ? "cancelled" : "left");
+/* a step's mark: a tick only for a step Codex marked completed, so the marks agree with the count ("1 of 4" counts completed
+   steps). The step in hand takes the star while its run lives; when the run ends with it unfinished, the cross if the run
+   failed, the bar if it was stopped, and else the dashed ring: it waits for a next turn. Steps not reached keep the ring
+   ("left"), or take the bar in a run that was stopped. */
+const stepMark = (s, run) => { if (s.status === "completed") return "done"; const live = run.status === "queued" || run.status === "running";
+  if (s.status === "in_progress") return live ? "live" : run.status === "failed" ? "failed" : run.status === "cancelled" ? "cancelled" : "queued";
+  return run.status === "cancelled" ? "cancelled" : "left"; };
 function drawProg() { const cfg = progOf(state.P); const a = $("#prog", state.hd), b = $("#prog-side"); const sig = JSON.stringify(cfg); if (drawProg.sig === sig + state.place.key) return; drawProg.sig = sig + state.place.key;
   if (a) { const t = el("template"); t.innerHTML = progHTML(cfg, "prog"); a.replaceWith(t.content.firstElementChild); host(state.hd); } if (b) { const t = el("template"); t.innerHTML = progHTML(cfg, "prog-side"); b.replaceWith(t.content.firstElementChild); host(side); } if (state.hd) state.hd._sig = ""; }
 

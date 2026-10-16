@@ -28,9 +28,9 @@
   // the working mark: the star, turning, at the head of the stream and in the band. One element for the life of an answer.
   window.wk = (live = true, cls) => starHTML(`mk wk star${live ? " live" : ""} ${cls || ""}`, ` aria-hidden="true"${live ? ' data-m="live"' : ""}`);
   // a step's mark in a checklist followed live: one element for the life of the step, its state in data-s (left, live,
-  // done, failed, cancelled). A step that starts shrinks its ring into the dot the star grows from; a step that finishes
-  // folds its star into a tick that draws itself (mock.css).
-  window.smk = (s, cls) => `<span class="mk sm ${cls || ""}" data-s="${s}" aria-hidden="true">${layer("ring", BETA_MARKS.left)}${starHTML("star live")}${layer("tick", BETA_MARKS.done.replace("<path ", '<path pathLength="1" '))}${layer("x", BETA_MARKS.failed)}${layer("bar", BETA_MARKS.cancelled)}</span>`;
+  // done, failed, cancelled, and queued for a step in hand when its run ended unfinished). A step that starts shrinks its
+  // ring into the dot the star grows from; a step that finishes folds its star into a tick that draws itself (mock.css).
+  window.smk = (s, cls) => `<span class="mk sm ${cls || ""}" data-s="${s}" aria-hidden="true">${layer("ring", BETA_MARKS.left)}${layer("dash", BETA_MARKS.queued)}${starHTML("star live")}${layer("tick", BETA_MARKS.done.replace("<path ", '<path pathLength="1" '))}${layer("x", BETA_MARKS.failed)}${layer("bar", BETA_MARKS.cancelled)}</span>`;
   // Onix's mark: three faceted stones, smallest to largest. Statement 28 took it out of the conversation; the field's
   // switch still draws it, solid when Onix will answer and an outline ("field-off") when it will not, and a list draws it
   // in a flint disc where a person shows a face.

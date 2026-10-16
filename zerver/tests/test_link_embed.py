@@ -940,9 +940,33 @@ class PreviewTestCase(ZulipTestCase):
         assert cached_data is not None
         self.assertIsNotNone(cached_data.title)
         self.assertIsNone(cached_data.image)
+        # A page with a title and no image is previewed by its words.
         msg = Message.objects.select_related("sender").get(id=msg_id)
         self.assertEqual(
-            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>',
+            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>\n'
+            '<div class="message_embed"><div class="data-container"><div class="message_embed_title">'
+            '<a href="http://test.org/foo.html" title="The Rock">The Rock</a></div>'
+            '<div class="message_embed_description">Description text</div></div></div>',
+            msg.rendered_content,
+        )
+
+    @responses.activate
+    @override_settings(INLINE_URL_EMBED_PREVIEW=True)
+    def test_link_preview_no_title_no_image(self) -> None:
+        user = self.example_user("hamlet")
+        self.login_user(user)
+        url = "http://test.org/bare.html"
+        with mock_queue_publish("zerver.actions.message_send.queue_event_on_commit") as patched:
+            msg_id = self.send_stream_message(user, "Denmark", topic_name="foo", content=url)
+            event = patched.call_args[0][1]
+
+        # A page with neither a title nor an image has no preview.
+        self.create_mock_response(url, body="<html><body><div>words</div></body></html>")
+        with self.settings(TEST_SUITE=False), self.assertLogs(level="INFO"):
+            FetchLinksEmbedData().consume(event)
+        msg = Message.objects.select_related("sender").get(id=msg_id)
+        self.assertEqual(
+            '<p><a href="http://test.org/bare.html">http://test.org/bare.html</a></p>',
             msg.rendered_content,
         )
 
@@ -981,9 +1005,13 @@ class PreviewTestCase(ZulipTestCase):
         assert cached_data is not None
         self.assertIsNotNone(cached_data.title)
         self.assertIsNone(cached_data.image)
+        # A page with a title and no image is previewed by its words.
         msg = Message.objects.select_related("sender").get(id=msg_id)
         self.assertEqual(
-            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>',
+            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>\n'
+            '<div class="message_embed"><div class="data-container"><div class="message_embed_title">'
+            '<a href="http://test.org/foo.html" title="The Rock">The Rock</a></div>'
+            '<div class="message_embed_description">Description text</div></div></div>',
             msg.rendered_content,
         )
 
@@ -1018,9 +1046,13 @@ class PreviewTestCase(ZulipTestCase):
         assert cached_data is not None
         self.assertIsNotNone(cached_data.title)
         self.assertIsNone(cached_data.image)
+        # A page with a title and no image is previewed by its words.
         msg = Message.objects.select_related("sender").get(id=msg_id)
         self.assertEqual(
-            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>',
+            '<p><a href="http://test.org/foo.html">http://test.org/foo.html</a></p>\n'
+            '<div class="message_embed"><div class="data-container"><div class="message_embed_title">'
+            '<a href="http://test.org/foo.html" title="The Rock">The Rock</a></div>'
+            '<div class="message_embed_description">Description text</div></div></div>',
             msg.rendered_content,
         )
 

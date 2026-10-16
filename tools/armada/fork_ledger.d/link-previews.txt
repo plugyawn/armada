@@ -1,12 +1,13 @@
 # Link previews (statement 41). Every request a preview makes goes
 # through the preview session (the outgoing proxy) with a deadline and a
 # size cap, and the page is read once; the agent's own posts are
-# previewed. Two Zulip files changed here keep their lines in other
-# packages' files: zerver/lib/markdown/__init__.py (dogfood-pages.txt)
-# and tools/linter_lib/custom_check.py (F1.txt; the style= rule exempts
+# previewed, and so is a page with a title and no image. Two Zulip
+# files changed here keep their lines in other packages' files:
+# zerver/lib/markdown/__init__.py (dogfood-pages.txt) and
+# tools/linter_lib/custom_check.py (F1.txt; the style= rule exempts
 # web/tests/armada/beta_previews.test.cjs, which carries the server's
 # markup).
 kept zerver/lib/url_preview/oembed.py  # oEmbed through fetch(): known providers' endpoints, and discovery read from the page already fetched
 kept zerver/lib/url_preview/preview.py  # one bounded fetch of the page; the session and its limits moved to url_preview/fetch.py
-kept zerver/tests/test_link_embed.py  # the bounded fetch, discovery through the session, refused oEmbed answers, the agent's posts
+kept zerver/tests/test_link_embed.py  # the bounded fetch, discovery through the session, refused oEmbed answers, the agent's posts, title-only previews
 kept tools/test-backend  # url_preview/preview.py is fully covered now

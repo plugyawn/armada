@@ -230,6 +230,20 @@ g(
     means="sounds off",
 )
 
+# plugins (design/r9/plugins): a plugin's face, and its rows, use any glyph of the sprite
+g(
+    "Plugins",
+    "gpu",
+    R(1.5, 3.5, 13, 8, 1.5) + C(8, 7.5, 2.5) + P("M4.5 11.5v2M11.5 11.5v2"),
+    means="GPUs; a machine's graphics cards",
+)
+g(
+    "Plugins",
+    "plugin",
+    R(2.5, 2.5, 4, 4, 1) + R(9.5, 2.5, 4, 4, 1) + R(2.5, 9.5, 4, 4, 1) + P("M11.5 9v5M9 11.5h5"),
+    means="plugins; the store",
+)
+
 # ---------------------------------------------------------------- the agent's marks: pixels, 7 x 7 cells of 2 px
 PX: dict[str, list[str]] = {
     "done": [".......", "......#", ".....##", "#...##.", "##.##..", ".###...", "..#...."],

@@ -67,8 +67,8 @@ run_test("every control in the showroom has a name", () => {
 });
 
 run_test("the sprite's names are the design's sets", () => {
-    assert.equal(names.glyph_groups.length, 8);
-    assert.equal(names.glyph_groups.flatMap((group) => group.glyphs).length, 49);
+    assert.equal(names.glyph_groups.length, 9);
+    assert.equal(names.glyph_groups.flatMap((group) => group.glyphs).length, 51);
     assert.deepEqual(names.mark_names, [
         "done",
         "live",

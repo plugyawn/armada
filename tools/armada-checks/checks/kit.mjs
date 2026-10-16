@@ -392,11 +392,11 @@ async function sprite(ctx) {
         };
     });
     ctx.assert("sprite.bytes", found.bytes, "<=", 16384, {unit: " B"});
-    ctx.assert("sprite.glyphs", found.glyphs, "==", 49);
+    ctx.assert("sprite.glyphs", found.glyphs, "==", 51);
     ctx.assert("sprite.marks", found.marks, "==", 7);
     ctx.assert("sprite.sigils", found.sigils, "==", 4);
     ctx.assert("sprite.working-mark-and-dot", found.working && found.dot, "==", 1);
-    ctx.assert("sprite.glyphs-drawn-at-16px", found.drawn, "==", 49, {
+    ctx.assert("sprite.glyphs-drawn-at-16px", found.drawn, "==", 51, {
         note: `stroke ${found.weight} at 1x`,
     });
     const unexpected = found.soft.filter((glyph) => !LIGHTER_DIAGONALS.has(glyph));

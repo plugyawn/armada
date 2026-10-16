@@ -239,6 +239,19 @@ export const glyph_groups = [
             },
         ],
     },
+    {
+        group: "Plugins",
+        glyphs: [
+            {
+                name: "gpu",
+                means: "GPUs; a machine's graphics cards",
+            },
+            {
+                name: "plugin",
+                means: "plugins; the store",
+            },
+        ],
+    },
 ] as const;
 
 export type GlyphName = (typeof glyph_groups)[number]["glyphs"][number]["name"];

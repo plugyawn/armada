@@ -7,7 +7,7 @@
 Writes web/src/armada/kit/icons/sprite.svg, one <symbol> a drawing, and
 names.ts, the typed names a component uses them by. The drawings are data
 in icons_gen.py. Two systems that borrow nothing from each other: strokes
-for what people use (49 glyphs, 16 px box, one weight on whole device
+for what people use (51 glyphs, 16 px box, one weight on whole device
 pixels), pixels for what the agent is doing (seven marks, the working mark
 as one sprite of four steps, the sigil at 20, 28 and 64 with its outline at
 20). A person's typing dot is the one round thing.

@@ -1,15 +1,15 @@
 # Roles and permissions
 
-Zulip offers several levels of permissions based on a
-[user's role](/help/user-roles) in a Zulip organization.
+Armada offers several levels of permissions based on a
+[user's role](/help/user-roles) in an organization.
 
 Here are some important details to note when working with these
-roles and permissions in Zulip's API:
+roles and permissions in the API:
 
 ## A user's role
 
 A user's account data include a `role` property, which contains the
-user's role in the Zulip organization. These roles are encoded as:
+user's role in the organization. These roles are encoded as:
 
 * Organization owner: 100
 
@@ -69,7 +69,7 @@ event](/api/get-events#realm_user-add), and the
 
 ## Permission levels
 
-Many areas of Zulip are customizable by the roles
+Many areas of Armada are customizable by the roles
 above, such as (but not limited to) [restricting message editing and
 deletion](/help/restrict-message-editing-and-deletion) and various
 permissions for different [channel types](/help/channel-permissions).
@@ -95,7 +95,7 @@ specified ability or access. For example, a permission level documented
 as 'moderators only' includes organization moderators, administrators,
 and owners.
 
-Note that specific settings and policies in the Zulip API that use these
+Note that specific settings and policies in the API that use these
 permission levels will likely support a subset of those listed above.
 
 ## Group-based permissions
@@ -105,7 +105,7 @@ Some settings have been migrated to a more flexible system based on
 
 ## Determining if a user is a full member
 
-When a Zulip organization has set up a [waiting period before new members
+When an organization has set up a [waiting period before new members
 turn into full members](/help/restrict-permissions-of-new-members),
 clients will need to determine if a user's account has aged past the
 organization's waiting period threshold.

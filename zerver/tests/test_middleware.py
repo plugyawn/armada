@@ -86,10 +86,10 @@ class OpenGraphTest(ZulipTestCase):
     def test_index_pages(self) -> None:
         self.check_title_and_description(
             "/api/",
-            "Zulip API documentation",
+            "Armada API documentation",
             [
                 (
-                    "Zulip's APIs allow you to integrate other services with Zulip. This "
+                    "Armada's APIs allow you to integrate other services with Armada. This "
                     "guide should help you find the API you need:"
                 )
             ],
@@ -102,10 +102,10 @@ class OpenGraphTest(ZulipTestCase):
         self.check_title_and_description(
             "/api/not-a-real-page",
             # Probably we should make this "Zulip help center"
-            "No such article. | Zulip API documentation",
+            "No such article. | Armada API documentation",
             [
                 "No such article.",
-                "Your feedback helps us make Zulip better for everyone! Please contact us",
+                "Your feedback helps us make Armada better for everyone! Please contact us",
             ],
             [],
             # Test that our open graph logic doesn't throw a 500

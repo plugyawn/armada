@@ -208,7 +208,7 @@ class MarkdownDirectoryView(ApiURLView):
                 sidebar_index = sidebar_article.article_path
             else:
                 sidebar_index = None
-            title_base = "Zulip terms and policies"
+            title_base = "Terms and policies"
             # We don't add a rel-canonical link to self-hosted server policies docs.
             if settings.CORPORATE_ENABLED:
                 add_canonical_link_context(context, self.request)
@@ -218,7 +218,7 @@ class MarkdownDirectoryView(ApiURLView):
             context["doc_root_title"] = "API documentation"
             sidebar_article = self.get_path("sidebar_index")
             sidebar_index = sidebar_article.article_path
-            title_base = "Zulip API documentation"
+            title_base = "Armada API documentation"
             add_canonical_link_context(context, self.request)
         else:
             raise AssertionError("Invalid documentation view type")
@@ -334,23 +334,23 @@ class MarkdownDirectoryView(ApiURLView):
 def add_integrations_open_graph_context(context: dict[str, Any], request: HttpRequest) -> None:
     path_name = request.path.rstrip("/").split("/")[-1]
     description = (
-        "Zulip comes with over a hundred native integrations out of the box, "
+        "Armada comes with over a hundred native integrations out of the box, "
         "and integrates with Zapier and IFTTT to provide hundreds more. "
-        "Connect the apps you use every day to Zulip."
+        "Connect the apps you use every day to Armada."
     )
 
     if path_name in INTEGRATIONS:
         integration = INTEGRATIONS[path_name]
-        context["PAGE_TITLE"] = f"{integration.display_name} | Zulip integrations"
+        context["PAGE_TITLE"] = f"{integration.display_name} | Armada integrations"
         context["PAGE_DESCRIPTION"] = description
 
     elif path_name in CATEGORIES:
         category = CATEGORIES[path_name]
-        context["PAGE_TITLE"] = f"{category} | Zulip integrations"
+        context["PAGE_TITLE"] = f"{category} | Armada integrations"
         context["PAGE_DESCRIPTION"] = description
 
     elif path_name == "integrations":
-        context["PAGE_TITLE"] = "Zulip integrations"
+        context["PAGE_TITLE"] = "Armada integrations"
         context["PAGE_DESCRIPTION"] = description
 
 

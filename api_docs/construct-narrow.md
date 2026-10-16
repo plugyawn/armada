@@ -1,13 +1,13 @@
 # Construct a narrow
 
-A **narrow** is a set of filters for Zulip messages, that can be based
+A **narrow** is a set of filters for messages, that can be based
 on many different factors (like sender, channel, topic, search
-keywords, etc.). Narrows are used in various places in the Zulip
+keywords, etc.). Narrows are used in various places in the
 API (most importantly, in the API for fetching messages).
 
 It is simplest to explain the algorithm for encoding a search as a
 narrow using a single example. Consider the following search query
-(written as it would be entered in the Zulip web app's search box).
+(written as it would be entered in the web app's search box).
 It filters for messages sent to channel `announce`, not sent by
 `iago@zulip.com`, and containing the words `cool` and `sunglasses`:
 
@@ -15,7 +15,7 @@ It filters for messages sent to channel `announce`, not sent by
 channel:announce -sender:iago@zulip.com cool sunglasses
 ```
 
-This query would be JSON-encoded for use in the Zulip API using JSON
+This query would be JSON-encoded for use in the API using JSON
 as a list of simple objects, as follows:
 
 ```json
@@ -36,9 +36,9 @@ as a list of simple objects, as follows:
 ]
 ```
 
-The Zulip help center article on [searching for messages](/help/search-for-messages)
+The help center article on [searching for messages](/help/search-for-messages)
 documents the majority of the search/narrow options supported by the
-Zulip API.
+API.
 
 Note that many narrows, including all that lack a `channel` or `channels`
 operator, search the current user's personal message history. See

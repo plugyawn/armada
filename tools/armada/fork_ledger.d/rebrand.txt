@@ -32,3 +32,27 @@ kept web/templates/stream_settings/copy_email_address_modal.hbs  # the old inter
 kept web/templates/stream_settings/first_stream_created_modal.hbs  # the old interface: Zulip's name leaves the text
 kept web/tests/gear_menu_util.test.cjs  # the version line's new wording
 kept web/tests/message_view.test.cjs  # the notes-to-self banner's new wording
+bridged:D3 api_docs/api-keys.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/changelog.md  # /api/: Zulip's name leaves the introduction and the entries; release headings stay
+bridged:D3 api_docs/client-libraries.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/configuring-python-bindings.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/construct-narrow.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/create-stream.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/group-setting-values.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/http-headers.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/include/curl-auth-credentials.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/index.md  # /api/: the page is "The Armada API" until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/installation-instructions.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/message-formatting.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/mobile-notifications.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/outgoing-webhook-payload.md  # /api/: the native webhook format is Armada's until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/real-time-events.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/rest-error-handling.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/rest.md  # /api/: the page is "The Armada REST API" until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/roles-and-permissions.md  # /api/: Zulip's name leaves the prose until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/sidebar_index.md  # /api/: the URLs page is "Armada URLs" until D3 cuts the API docs (S-03)
+bridged:D3 api_docs/zulip-urls.md  # /api/: the page is "Armada URLs" until D3 cuts the API docs (S-03)
+kept templates/zerver/documentation_main.html  # the /api/ and /policies/ shell: "Back to Armada", and the footer names no Zulip
+kept zerver/views/documentation.py  # the API docs', policies' and integrations' page titles name Armada or no product
+kept zerver/tests/test_docs.py  # the API docs' and integrations' new titles
+kept zerver/tests/test_middleware.py  # the /api/ page's new title and description

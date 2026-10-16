@@ -1,9 +1,9 @@
 # Message formatting
 
-Zulip supports an extended version of Markdown for messages, as well as
-some HTML level special behavior. The Zulip help center article on [message
+Armada supports an extended version of Markdown for messages, as well as
+some HTML level special behavior. The help center article on [message
 formatting](/help/format-your-message-using-markdown) is the primary
-documentation for Zulip's markup features. This article is currently a
+documentation for Armada's markup features. This article is currently a
 changelog for updates to these features.
 
 The [render a message](/api/render-message) endpoint can be used to get
@@ -41,9 +41,9 @@ features.
 
 ## Links to channels, topics, and messages
 
-Zulip's markup supports special readable Markdown syntax for [linking
+Armada's markup supports special readable Markdown syntax for [linking
 to channels, topics, and
-messages](/help/link-to-a-message-or-conversation). See also [Zulip
+messages](/help/link-to-a-message-or-conversation). See also [Armada
 URLs](/api/zulip-urls)
 
 Sample HTML formats are as follows:
@@ -141,15 +141,15 @@ can override that default based on `web_channel_default_view` setting.
 
 ## Emoji
 
-Zulip's [emoji][help-emoji] support includes standard Unicode emoji, a
-built-in Zulip custom emoji like `:zulip:` and [custom realm
+Armada's [emoji][help-emoji] support includes standard Unicode emoji, a
+built-in custom emoji like `:zulip:` and [custom realm
 emoji][help-custom-emoji]. To maximize legibility, emoji should be
 displayed inline with text, at the maximum size that does not
 interfere with line spacing.
 
 **Large emoji**. Clients are recommended to display single-paragraph
 messages that contain only emoji elements with a greatly increased
-size. For example, Zulip the web app scales large emoji to be 2x the
+size. For example, the web app scales large emoji to be 2x the
 size of other message emoji.
 
 Unicode emoji, such as `:smiling_face:` (☺️ / `263a`), are represented
@@ -171,7 +171,7 @@ mapping between Unicode codepoints and emoji names.
 
 Custom emoji are represented in the HTML by image tags that also use
 the `.emoji` class. The `src` URL should be resolved with respect to
-the Zulip server's hostname:
+the server's hostname:
 
 ```html
 <-- Configured realm-specific custom emoji -->
@@ -187,7 +187,7 @@ the Zulip server's hostname:
 
 ## Images
 
-When a Zulip message is sent with a link to an uploaded image, Zulip will
+When a message is sent with a link to an uploaded image, the server will
 also insert an image preview element with the following format:
 
 ``` html
@@ -205,9 +205,9 @@ attribute starting with `/user_uploads/thumbnail/`.  The `href` will
 always link to the originally-uploaded file, at its original
 resolution.
 
-When a Zulip message is sent referencing an **uploaded image** in Markdown
+When a message is sent referencing an **uploaded image** in Markdown
 image syntax, (e.g.,`![example image](/user_uploads/path/to/example.png)`),
-Zulip will generate an image element with the following format:
+the server will generate an image element with the following format:
 
 ```html
 <img alt="example image" class="inline-image"
@@ -406,8 +406,8 @@ attribute to images that have been thumbnailed, containing the
 dimensions of the full-size version of the image. Thumbnailing itself
 was reintroduced at feature level 275.
 
-Previously, with the exception of Zulip servers that used the beta
-Thumbor-based implementation years ago, all image previews in Zulip
+Previously, with the exception of servers that used the beta
+Thumbor-based implementation years ago, all image previews in
 messages were not thumbnailed; the `a` tag and the `img` tag would both
 point to the original image.
 
@@ -420,7 +420,7 @@ available.
 
 ## Video embeddings and previews
 
-When a Zulip message is sent linking to an uploaded video, Zulip may
+When a message is sent linking to an uploaded video, the server may
 generate a video preview element with the following format. Supported
 MIME types are `video/mp4`, `video/quicktime` (i.e., `.mov` files), and
 `video/webm`. Because `video/quicktime` is not supported in every
@@ -441,7 +441,7 @@ surrounding `a` tag remains available.
 ## Audio Players
 
 When the Markdown media syntax is used with an uploaded file with an
-audio `Content-Type`, Zulip will generate an HTML5 `<audio>` player
+audio `Content-Type`, the server will generate an HTML5 `<audio>` player
 element. Supported MIME types are currently `audio/aac`, `audio/flac`,
 `audio/mpeg`, and `audio/wav` (and its `audio/x-wav` and
 `audio/vnd.wave` variants).
@@ -454,8 +454,8 @@ For example, `![file.mp3](/user_uploads/path/to/file.mp3)` renders as:
 </audio>
 ```
 
-If the Zulip server has rewritten the URL of the audio file, it will
-provide the URL in a `data-original-url` parameter. The Zulip server
+If the server has rewritten the URL of the audio file, it will
+provide the URL in a `data-original-url` parameter. The server
 does this for all non-uploaded file audio URLs.
 
 ``` html
@@ -468,14 +468,14 @@ does this for all non-uploaded file audio URLs.
 Clients that cannot render an audio player are recommended to convert
 audio elements into a link to the original URL.
 
-The Zulip server does not validate whether uploaded files with an
+The server does not validate whether uploaded files with an
 audio `Content-Type` are actually playable.
 
 **Changes**: New in Zulip 11.0 (feature level 405).
 
 ## Mentions and silent mentions
 
-Zulip markup supports [mentioning](/help/mention-a-user-or-group)
+Armada's markup supports [mentioning](/help/mention-a-user-or-group)
 users, user groups, and a few special "wildcard" mentions (the three
 spellings of a channel wildcard mention: `@**all**`, `@**everyone**`,
 `@**channel**` and the topic wildcard mention `@**topic**`).
@@ -585,9 +585,9 @@ features.
 
 ### Removed legacy Dropbox link preview markup
 
-In Zulip 11.0 (feature level 395), the Zulip server stopped generating
+In Zulip 11.0 (feature level 395), the server stopped generating
 legacy Dropbox link previews. Dropbox links are now previewed just
-like standard Zulip image/link previews. However, some legacy Dropbox
+like standard image/link previews. However, some legacy Dropbox
 previews may exist in existing messages.
 
 Clients are recommended to prune these previews from message HTML;

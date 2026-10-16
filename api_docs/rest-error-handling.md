@@ -1,6 +1,6 @@
 # Error handling
 
-Zulip's API will always return a JSON format response.
+The API will always return a JSON format response.
 The HTTP status code indicates whether the request was successful
 (200 = success, 4xx = user error, 5xx = server error).
 
@@ -49,14 +49,14 @@ endpoints:
 
 ## Ignored Parameters
 
-In JSON success responses, all Zulip REST API endpoints may return
+In JSON success responses, all REST API endpoints may return
 an array of parameters sent in the request that are not supported
 by that specific endpoint.
 
 While this can be expected, e.g., when sending both current and legacy
-names for a parameter to a Zulip server of unknown version, this often
+names for a parameter to a server of unknown version, this often
 indicates either a bug in the client implementation or an attempt to
-configure a new feature while connected to an older Zulip server that
+configure a new feature while connected to an older server that
 does not support said feature.
 
 {generate_code_example|/settings:patch|fixture}

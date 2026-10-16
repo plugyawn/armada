@@ -1,22 +1,22 @@
 # API changelog
 
-This page documents changes to the Zulip Server API over time. See
+This page documents changes to the Armada server API over time. See
 also the [Zulip release lifecycle][release-lifecycle] for background
 on why this API changelog is important, and the [Zulip server
 changelog][server-changelog].
 
 The API feature levels system used in this changelog is designed to
-make it possible to write API clients, such as the Zulip mobile and
-terminal apps, that work with a wide range of Zulip server
-versions. Every change to the Zulip API is recorded briefly here and
+make it possible to write API clients, such as the mobile and
+terminal apps, that work with a wide range of server
+versions. Every change to the API is recorded briefly here and
 with full details in **Changes** entries in the API documentation for
 the modified endpoint(s).
 
-When using an API endpoint whose behavior has changed, Zulip API
+When using an API endpoint whose behavior has changed, API
 clients should check the `zulip_feature_level` field, present in the
 [`GET /server_settings`](/api/get-server-settings) and [`POST
 /register`](/api/register-queue) responses, to determine the API
-format used by the Zulip server that they are interacting with.
+format used by the server that they are interacting with.
 
 ## Changes in Zulip 13.0
 
@@ -415,7 +415,7 @@ No changes; API feature level used for the Zulip 12.0 release.
 **Feature level 461**
 
 * [`GET /events`](/api/get-events): `realm_bot` update events are
-  now sent when a bot's Zulip display email address is changed.
+  now sent when a bot's display email address is changed.
 
 **Feature level 460**
 
@@ -972,9 +972,9 @@ No changes; API feature level used for the Zulip 11.0 release.
 
 * [Markdown message
   formatting](/api/message-formatting#removed-features): Previously,
-  Zulip's Markdown syntax had special support for previewing Dropbox
+  the Markdown syntax had special support for previewing Dropbox
   albums. Dropbox albums no longer exist, and links to Dropbox folders
-  now consistently use Zulip's standard open graph preview markup.
+  now consistently use the standard open graph preview markup.
 
 **Feature level 394**
 
@@ -2084,7 +2084,7 @@ No changes; feature level used for Zulip 10.0 release.
 
 * [`POST /users/{user_id}/subscription`](/api/subscribe): In the response,
   users are identified by their numeric user ID rather than by their
-  Zulip API email address.
+  API email address.
 
 **Feature level 288**
 
@@ -2122,7 +2122,7 @@ No changes; feature level used for Zulip 10.0 release.
 
 * [`GET /events`](/api/get-events), [`GET /messages`](/api/get-messages),
   [`GET /messages/{message_id}`](/api/get-message),
-  [outgoing webhook payloads](/api/outgoing-webhook-payload#zulip-format):
+  [outgoing webhook payloads](/api/outgoing-webhook-payload#armada-format):
   Removed the `prev_rendered_content_version` field from the `edit_history`
   object within message objects and the `update_message` event type as it
   is an internal server implementation detail not used by any client.
@@ -2363,8 +2363,8 @@ No changes; feature level used for Zulip 9.0 release.
   to be displayed to clients is sent. Onboarding step now has one-time
   notices as the only valid type. Prior to this, both hotspots and
   one-time notices were valid types of onboarding steps. There is no compatibility
-  support, as we expect that only official Zulip clients will interact with
-  this data. Currently, no client other than the Zulip web app uses this.
+  support, as we expect that only official clients will interact with
+  this data. Currently, no client other than the web app uses this.
 
 **Feature level 258**
 
@@ -2396,7 +2396,7 @@ No changes; feature level used for Zulip 9.0 release.
 
 **Feature level 255**
 
-* "Stream" was renamed to "Channel" across strings in the Zulip API
+* "Stream" was renamed to "Channel" across strings in the API
   and UI. Clients supporting a range of server versions are encouraged
   to use different strings based on the server's API feature level for
   consistency. Note that feature level marks the strings transition
@@ -2507,7 +2507,7 @@ No changes; feature level used for Zulip 9.0 release.
 * [`POST /register`](/api/register-queue), [`POST /events`](/api/get-events),
   `PATCH /realm`: Added `zulip_update_announcements_stream_id` realm setting,
   which is the ID of the of the stream to which automated messages announcing
-  new features or other end-user updates about the Zulip software are sent.
+  new features or other end-user updates about the software are sent.
 
 **Feature level 241**
 
@@ -2572,7 +2572,7 @@ No changes; feature level used for Zulip 8.0 release.
   existing users) and hotspots (which are used in new user tutorials).
   This endpoint marks both types of onboarding steps, i.e. `hotspot`
   and `one_time_notice`, as read by the user. There is no compatibility
-  support for `/users/me/hotspots` as no client other than the Zulip
+  support for `/users/me/hotspots` as no client other than the
   web app used the endpoint prior to these changes.
 
 **Feature level 232**
@@ -2772,7 +2772,7 @@ No changes; feature level used for Zulip 8.0 release.
   optional parameter, `stream_id`. Now, `to` is used only for `"direct"` type.
   In the case of `"stream"` type, `stream_id` and `topic` are used.
 
-* Note that stream typing notifications were not enabled in any Zulip client
+* Note that stream typing notifications were not enabled in any client
   prior to feature level 215.
 
 **Feature level 214**
@@ -2810,7 +2810,7 @@ No changes; feature level used for Zulip 8.0 release.
   This replaces the use of `"result": "partially_completed"` (introduced
   in feature levels 154 and 153), so that these endpoints now send a
   `result` string of either `"success"` or `"error"`, like the rest of
-  the Zulip API.
+  the API.
 
 **Feature level 210**
 
@@ -3105,7 +3105,7 @@ No changes; feature level used for Zulip 7.0 release.
   The `dm` operator replaces and deprecates the `pm-with` operator.
   The `is:dm` filter replaces and deprecates the `is:private` filter.
   The `dm-including` operator replaces and deprecates the `group-pm-with`
-  operator. Because existing Zulip messages may have links with these
+  operator. Because existing messages may have links with these
   legacy filters, they are still supported for backwards-compatibility.
 
 **Feature level 176**
@@ -3537,7 +3537,7 @@ user's profile.
 * [`POST /register`](/api/register-queue),
   [`GET /events`](/api/get-events), `PATCH /realm`: Added realm setting
   `want_advertise_in_communities_directory` for organizations to give
-  permission to be advertised in the Zulip communities directory.
+  permission to be advertised in the communities directory.
 
 **Feature level 128**
 
@@ -3866,7 +3866,7 @@ No changes; feature level used for Zulip 5.0 release.
   field to the `restart` event.
 * [`GET /server_settings`](/api/get-server-settings): Added
   `zulip_merge_base` to the responses which can be used to
-  make "About Zulip" widgets in clients.
+  make "About" widgets in clients.
 
 **Feature level 87**
 
@@ -4324,7 +4324,7 @@ No changes; feature level used for Zulip 3.0 release.
 **Feature level 23**
 
 * `GET/PUT/POST /users/me/pointer`: Removed.  Zulip 3.0 removes the
-  `pointer` concept from Zulip; this legacy data structure was
+  `pointer` concept; this legacy data structure was
   replaced by tracking unread messages and loading views centered on
   the first unread message.
 
@@ -4339,7 +4339,7 @@ No changes; feature level used for Zulip 3.0 release.
   relevant).
 * [`GET /invites`](/api/get-invites): Now encodes the user ID of the person
    who created the invitation as `invited_by_user_id`, replacing the previous
-   `ref` field (which had that user's Zulip display email address).
+   `ref` field (which had that user's display email address).
 * [`POST /register`](/api/register-queue): The encoding of an
   unlimited `realm_message_retention_days` in the response was changed
   from `null` to `-1`.
@@ -4377,7 +4377,7 @@ No changes; feature level used for Zulip 3.0 release.
 **Feature level 16**
 
 * [`GET /users/me`](/api/get-own-user): Removed `pointer` from the response,
-  as the "pointer" concept is being removed in Zulip.
+  as the "pointer" concept is being removed.
 * Changed the rendered HTML markup for mentioning a time to use the
   `<time>` HTML tag.  It is OK for clients to ignore the previous time
   mention markup, as the feature was not advertised before this change.
@@ -4436,7 +4436,7 @@ No changes; feature level used for Zulip 3.0 release.
 * [`POST /users/me/subscriptions`](/api/subscribe), [`DELETE
   /users/me/subscriptions`](/api/unsubscribe): Other users to
   subscribe/unsubscribe, declared in the `principals` parameter, can
-  now be referenced by user_id, rather than Zulip display email
+  now be referenced by user_id, rather than display email
   address.
 * [`PATCH /messages/{message_id}`](/api/update-message): Added
   `send_notification_to_old_thread` and
@@ -4493,7 +4493,7 @@ No changes; feature level used for Zulip 3.0 release.
   `server_inline_url_embed_preview`, `server_avatar_changes_disabled` and
   `server_name_changes_disabled` fields are now available via
   `POST /register` to make them accessible to all the clients;
-  they were only internally available to Zulip's web app prior to this.
+  they were only internally available to the web app prior to this.
 
 **Feature level 3**
 
@@ -4552,7 +4552,7 @@ No changes; feature level used for Zulip 3.0 release.
 * [`GET /user_uploads/{realm_id_str}/{filename}`](/api/get-file-temporary-url):
   New endpoint added for requesting a temporary URL for an uploaded
   file that does not require authentication to access (e.g., for passing
-  from a Zulip desktop, mobile, or terminal app to the user's default
+  from a desktop, mobile, or terminal app to the user's default
   browser).
 * [`POST /register`](/api/register-queue), [`GET /events`](/api/get-events),
   `PATCH /realm`: Nobody added as an option for the realm setting

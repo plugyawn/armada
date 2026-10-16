@@ -1,10 +1,10 @@
 # Outgoing webhook payloads
 
-Zulip supports [outgoing webhooks](/help/outgoing-webhooks) in a clean,
-native [Zulip format](#zulip-format), as well as in a [Slack-compatible
+Armada supports [outgoing webhooks](/help/outgoing-webhooks) in a clean,
+native [Armada format](#armada-format), as well as in a [Slack-compatible
 format](#slack-compatible-format).
 
-## Zulip format
+## Armada format
 
 {generate_code_example|/zulip-outgoing-webhook:post|fixture}
 
@@ -17,10 +17,10 @@ format](#slack-compatible-format).
 This webhook format is compatible with [Slack's outgoing webhook
 API](https://api.slack.com/custom-integrations/outgoing-webhooks),
 which can help with porting an existing Slack integration to work with
-Zulip, and allows immediate integration with many third-party systems
+Armada, and allows immediate integration with many third-party systems
 that already support Slack outgoing webhooks.
 
-The following table details how the Zulip server translates a Zulip
+The following table details how the server translates a
 message into the Slack-compatible webhook format.
 
 <table class="table">
@@ -38,11 +38,11 @@ message into the Slack-compatible webhook format.
         </tr>
         <tr>
             <td><code>team_id</code></td>
-            <td>ID of the Zulip organization prefixed by "T".</td>
+            <td>ID of the organization prefixed by "T".</td>
         </tr>
         <tr>
             <td><code>team_domain</code></td>
-            <td>Hostname of the Zulip organization</td>
+            <td>Hostname of the organization</td>
         </tr>
         <tr>
             <td><code>channel_id</code></td>

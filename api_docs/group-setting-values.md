@@ -1,6 +1,6 @@
 # Group-setting values
 
-Settings defining permissions in Zulip are increasingly represented
+Settings defining permissions in Armada are increasingly represented
 using [user groups](/help/user-groups), which offer much more flexible
 configuration than the older [roles](/api/roles-and-permissions) system.
 
@@ -37,13 +37,13 @@ ID to the integer format.
 
 ## System groups
 
-The Zulip server maintains a collection of system groups that
+The server maintains a collection of system groups that
 correspond to the users with a given role; this makes it convenient to
 store concepts like "all administrators" in a group-setting
 value. These use a special naming convention and can be recognized by
 the `is_system_group` property on their group object.
 
-The following system groups are maintained by the Zulip server:
+The following system groups are maintained by the server:
 
 - `role:internet`: Everyone on the Internet has this permission; this
   is used to configure the [public access
@@ -71,7 +71,7 @@ directly mutable.
 
 ## Updating group-setting values
 
-The Zulip API uses a special format for modifying an existing setting
+The API uses a special format for modifying an existing setting
 using a group-setting value.
 
 A **group-setting update** is an object with a `new` field and an

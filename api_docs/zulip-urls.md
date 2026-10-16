@@ -1,7 +1,7 @@
-# Zulip URLs
+# Armada URLs
 
 This page details how to properly construct and parse the URLs that
-the Zulip web app uses for various types of views.
+the Armada web app uses for various types of views.
 
 Because other clients needs to be able to resolve and process these
 links in order to implement equivalent behavior that navigates
@@ -10,12 +10,12 @@ specification of exactly how these URLs work.
 
 Essentially all of the data is encoded in the URL fragment (`#`) part
 of a URL; the protocol, host and path will just be the canonical URL
-for the Zulip server (In these examples,
+for the server (In these examples,
 `https://zulip.example.com/`).
 
 ## Message feed views
 
-Most links in Zulip are to message feed views, and for that reason
+Most links in Armada are to message feed views, and for that reason
 these have the most developed syntax and legacy behavior.
 
 Message feed URLs always start with `#narrow/`, follow by one or more
@@ -31,7 +31,7 @@ their meaning.
 
 See also the relevant [message formatting
 documentation](/api/message-formatting) for details on Markdown
-representations of Zulip-internal links that will be translated into
+representations of internal links that will be translated into
 HTML containing links that use these URLs.
 
 Here, we describe some special encoding rules.
@@ -59,7 +59,7 @@ supported formats:
   channel ID to look up the channel, which is of course not guaranteed
   to be accessible to the acting user or even exist.
 - `42-channel-name`. The ID of the channel, with a human-readable hint
-  of the channel name. Clients generating Zulip URLs are recommended
+  of the channel name. Clients generating these URLs are recommended
   to include channel name hints where there is a readable URL-encoding
   of the channel name, but to skip doing so for channel names written
   in non-ascii languages or where otherwise the slug would not make
@@ -69,7 +69,7 @@ supported formats:
   that the string have anything to do with the channel name;
   functionally, it just an optional hint.
 
-These two formats allow Zulip URLs to stably refer to a specific
+These two formats allow these URLs to stably refer to a specific
 channel, even though channels can be renamed, while still allowing the
 URLs to have user-friendly name hints most of the time.
 
@@ -87,15 +87,15 @@ Clients are not recommended to ever generate this legacy format.
 
 ## zulip:// links for mobile login
 
-Zulip's single-sign on login process for the mobile app ends with a
+The single-sign on login process for the mobile app ends with a
 redirect to `zulip://login` with the following query parameters:
 
 - `email`: The email address for the authenticated account.
 - `otp_encrypted_api_key`: The API key for the client, encrypted using
   the `mobile_flow_otp` that the client provided when initiating the
   login attempt.
-- `realm`: The full URL of the Zulip organization.
-- `user_id`: The Zulip user ID for the authenticated account.
+- `realm`: The full URL of the organization.
+- `user_id`: The user ID for the authenticated account.
 
 **Changes**: The `user_id` field was added to the set of included
 query parameters in Zulip 5.0 (feature level 128).

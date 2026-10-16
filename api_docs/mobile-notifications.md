@@ -1,8 +1,8 @@
 # Mobile notifications
 
 Zulip Server 11.0+ supports end-to-end encryption (E2EE) for mobile
-push notifications. Mobile push notifications sent by all Zulip
-servers go through Zulip's mobile push notifications service, which
+push notifications. Mobile push notifications sent by all
+servers go through the mobile push notifications service, which
 then delivers the notifications through the appropriate
 platform-specific push notification service (Google's FCM or Apple's
 APNs). E2EE push notifications ensure that mobile notification message
@@ -10,7 +10,7 @@ content and metadata is not visible to intermediaries.
 
 Mobile clients that have [registered an E2EE push
 device](/api/register-push-device) will receive mobile notifications
-end-to-end encrypted by their Zulip server.
+end-to-end encrypted by their server.
 
 This page documents the format of the encrypted JSON-format payloads
 that the client will receive through this protocol. The same encrypted
@@ -126,9 +126,9 @@ Sample JSON data that gets encrypted:
 
 **Changes**: New in Zulip 11.0 (feature level 420).
 
-### Data sent to Zulip's push notifications service
+### Data sent to the push notifications service
 
-Sample JSON data sent by a self-hosted server to the Zulip's push notifications service:
+Sample JSON data sent by a self-hosted server to the push notifications service:
 ```json
 {
   "realm_uuid": "e502dde1-74fc-44b3-9e3a-114c41ed3ea4",
@@ -171,7 +171,7 @@ New in Zulip 11.0 (feature level 413).
 
 ### Data sent to FCM
 
-Zulip's push notifications service uses [Firebase Admin Python SDK](https://github.com/firebase/firebase-admin-python)
+The push notifications service uses [Firebase Admin Python SDK](https://github.com/firebase/firebase-admin-python)
 to access FCM.
 
 A sample `messages` argument, which is internally used by the SDK to prepare payload for FCM,
@@ -197,7 +197,7 @@ New in Zulip 11.0 (feature level 413).
 
 ### Data sent to APNs
 
-Zulip's push notifications service uses [aioapns](https://github.com/Fatal1ty/aioapns) to access APNs.
+The push notifications service uses [aioapns](https://github.com/Fatal1ty/aioapns) to access APNs.
 
 A sample `request` argument, which is internally used by the library to prepare payload for APNs,
 passed to [`aioapns.APNs.send_notification`](https://github.com/Fatal1ty/aioapns/blob/96831003ec5a8986206cde77e59fdb4b5a3c4b24/aioapns/client.py):

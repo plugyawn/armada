@@ -1,6 +1,6 @@
 # HTTP headers
 
-This page documents the HTTP headers used by the Zulip API.
+This page documents the HTTP headers used by the Armada API.
 
 !!! tip ""
 
@@ -21,7 +21,7 @@ Otherwise, to authenticate an API request:
   This means sending an HTTP header named `Authorization`, with your
   credentials [in a certain format][mdn-basic-auth].
 
-- For `Basic` authentication credentials in the Zulip API, a "username"
+- For `Basic` authentication credentials in the API, a "username"
   takes the form of an email address, and a "password" takes the form of
   an API key. In the `curl` example for each endpoint, this is shown as:
   `-u EMAIL_ADDRESS:API_KEY`.
@@ -40,25 +40,25 @@ highly recommend doing so when writing an integration. It's easy to do
 and it can help save time when debugging issues related to an API
 client.
 
-If provided, the Zulip server will parse the `User-Agent` HTTP header
+If provided, the server will parse the `User-Agent` HTTP header
 in order to identify specific clients and integrations. This
 information is used by the server for logging, [usage
 statistics](/help/analytics), and on rare occasions, for
 backwards-compatibility logic to preserve support for older versions
 of official clients.
 
-Official Zulip clients and integrations use a `User-Agent` that starts
+Official clients and integrations use a `User-Agent` that starts
 with something like `ZulipMobile/20.0.103 `, encoding the name of the
 application and it's version.
 
-Zulip's official API bindings have reasonable defaults for
-`User-Agent`. For example, the official Zulip Python bindings have a
+The official API bindings have reasonable defaults for
+`User-Agent`. For example, the official Python bindings have a
 default `User-Agent` starting with `ZulipPython/{version}`, where
 `version` is the version of the library.
 
 You can give your bot/integration its own name by passing the `client`
 parameter when initializing the Python bindings. For example, the
-official Zulip Nagios integration is initialized like this:
+official Nagios integration is initialized like this:
 
 ``` python
 client = zulip.Client(
@@ -73,7 +73,7 @@ community](https://zulip.com/development-community/).
 
 ## Rate-limiting response headers
 
-To help clients avoid exceeding rate limits, Zulip sets the following
+To help clients avoid exceeding rate limits, the server sets the following
 HTTP headers in all API responses:
 
 * `X-RateLimit-Remaining`: The number of additional requests of this
@@ -86,14 +86,14 @@ HTTP headers in all API responses:
   have any rate limits applied to it (and thus could do a burst of
   `X-RateLimit-Limit` requests).
 
-[Zulip's rate limiting rules are configurable][rate-limiting-rules],
+[The server's rate limiting rules are configurable][rate-limiting-rules],
 and can vary by server and over time. The default configuration
 currently limits:
 
 * Every user is limited to 200 total API requests per minute.
 * Separate, much lower limits for authentication/login attempts.
 
-When the Zulip server has configured multiple rate limits that apply
+When the server has configured multiple rate limits that apply
 to a given request, the values returned will be for the strictest
 limit.
 

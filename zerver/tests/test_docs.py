@@ -173,7 +173,7 @@ class DocPageTest(ZulipTestCase):
         assert "" in endpoint_list
 
         content = {
-            "/api/": "The Zulip API",
+            "/api/": "The Armada API",
             "/api/api-keys": "be careful with it",
             "/api/create-user": "zuliprc-admin",
             "/api/delete-queue": "Delete a previously registered queue",
@@ -531,24 +531,24 @@ class DocPageTest(ZulipTestCase):
         )
 
     def test_integration_pages_open_graph_metadata(self) -> None:
-        og_description = '<meta property="og:description" content="Zulip comes with over'
+        og_description = '<meta property="og:description" content="Armada comes with over'
 
         # Test a particular integration page
         url = "/integrations/github"
-        title = '<meta property="og:title" content="GitHub | Zulip integrations" />'
-        description = '<meta property="og:description" content="Zulip comes with over'
+        title = '<meta property="og:title" content="GitHub | Armada integrations" />'
+        description = '<meta property="og:description" content="Armada comes with over'
         self._test(url, [title, description, get_canonical_url(url)])
 
         # Test category pages
         for category in CATEGORIES:
             url = f"/integrations/category/{category}"
-            title = f"<title>{CATEGORIES[category]} | Zulip integrations</title>"
-            og_title = f'<meta property="og:title" content="{CATEGORIES[category]} | Zulip integrations" />'
+            title = f"<title>{CATEGORIES[category]} | Armada integrations</title>"
+            og_title = f'<meta property="og:title" content="{CATEGORIES[category]} | Armada integrations" />'
             self._test(url, [title, og_title, og_description, get_canonical_url(url)])
 
         # Test integrations index page
         url = "/integrations/"
-        og_title = '<meta property="og:title" content="Zulip integrations" />'
+        og_title = '<meta property="og:title" content="Armada integrations" />'
         self._test(url, [og_title, og_description, get_canonical_url(url)])
 
     def test_integration_404s(self) -> None:
@@ -920,10 +920,10 @@ class PrivacyTermsTest(ZulipTestCase):
         # line of the test would change if we were to adjust the
         # design.
         response = self.client_get("/policies/terms")
-        self.assert_not_in_success_response(["Back to Zulip"], response)
+        self.assert_not_in_success_response(["Back to Armada"], response)
 
         response = self.client_get("/policies/terms", {"nav": "no"})
-        self.assert_not_in_success_response(["Back to Zulip"], response)
+        self.assert_not_in_success_response(["Back to Armada"], response)
 
         response = self.client_get("/policies/privacy", {"nav": "no"})
-        self.assert_not_in_success_response(["Back to Zulip"], response)
+        self.assert_not_in_success_response(["Back to Armada"], response)

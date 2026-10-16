@@ -137,3 +137,13 @@ class ParallelQueueStatsTest(TestCase):
                 "queue armada_worker_1 problem: CRITICAL:expected 2 consumers, found 1",
             ),
         )
+
+    def test_check_calls_a_slot_without_statistics_critical(self) -> None:
+        idle = {"armada_worker": (0, 2), "armada_worker_1": (0, 2)}
+        self.assertEqual(
+            run_queue_check(idle, [fresh_slot_stats()]),
+            (
+                "critical",
+                "queue armada_worker-1.stats problem: CRITICAL:missing or invalid stats data",
+            ),
+        )

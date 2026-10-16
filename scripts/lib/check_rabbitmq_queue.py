@@ -287,11 +287,13 @@ def check_rabbitmq_queues() -> None:
                     loaded_stats.append(json.load(f))
                 except json.decoder.JSONDecodeError:
                     loaded_stats.append({})
-        queue_stats[queue] = (
-            aggregate_parallel_queue_stats(loaded_stats)
-            if queue in ARMADA_WORKER_QUEUE_NAMES
-            else loaded_stats[0]
-        )
+        if queue not in ARMADA_WORKER_QUEUE_NAMES:
+            queue_stats[queue] = loaded_stats[0]
+        elif pool_stats := aggregate_parallel_queue_stats(loaded_stats):
+            queue_stats[queue] = pool_stats
+        # Otherwise a slot has no statistics, which armada_worker_health_results
+        # reports as CRITICAL; an UNKNOWN for each of the pool's queues would
+        # outrank it, and the check would end as a warning.
 
     for queue_name, stats in queue_stats.items():
         results.append(analyze_queue_stats(queue_name, stats, queue_counts_rabbitmqctl[queue_name]))

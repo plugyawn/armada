@@ -88,4 +88,63 @@ aside.side > .wd { flex: 1; min-height: 0; display: flex; flex-direction: column
 .av.pf { background: var(--p-flint); color: var(--p-flint-ink); }
 .av.pf .ic { color: inherit; }
 
+/* ---------- Plugins, the store: a place like Home ---------- */
+#plugins .store { padding: var(--s-3) 0 var(--s-10); }
+#plugins .store > h2 { font: var(--t-strong); color: var(--ink-1); padding-left: var(--pad-x); height: var(--h-m); display: flex; align-items: center; margin-top: var(--s-5); }
+#plugins .store > h2:first-child { margin-top: 0; }
+#plugins .store > .note { font: var(--t-text); color: var(--ink-2); padding-left: var(--pad-x); min-height: var(--h-m); display: flex; align-items: center; }
+#plugins .plg { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-4); align-items: center; min-height: 56px; padding: 0 var(--pad-x); border-radius: var(--r-block); position: relative; width: 100%; text-align: left; }
+#plugins .plg + .plg { margin-top: var(--s-1); }
+#plugins .plg > .g { position: absolute; left: calc(-1 * var(--gutter)); top: 14px; }
+#plugins .plg .tx { min-width: 0; }
+#plugins .plg .nm { font: var(--t-talk); color: var(--ink-1); display: flex; align-items: baseline; gap: var(--s-2); white-space: nowrap; }
+#plugins .plg .nm .by { font: var(--t-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; }
+#plugins .plg .ds { font: var(--t-text); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+#plugins .plg .v { display: flex; justify-content: flex-end; align-items: center; gap: var(--s-2); min-width: 64px; }
+#plugins .plg .v .st { font: var(--t-caption); color: var(--ink-2); }
+#plugins .plg .v .st.c-fail { color: var(--failure); }
+
+/* ---------- a plugin's page: what it adds, what it may do, its settings ---------- */
+#plugins .set { padding: var(--s-3) 0 var(--s-10) var(--pad-x); }
+#plugins .set > .lead { font: var(--t-talk); color: var(--ink-1); max-width: var(--prose); }
+#plugins .set h2 { font: var(--t-strong); color: var(--ink-1); margin-top: var(--s-6); height: var(--h-m); display: flex; align-items: center; }
+#plugins .set > h2:first-child { margin-top: 0; }
+#plugins .set h2 .m { font: var(--t-caption); color: var(--ink-2); margin-left: var(--s-2); }
+#plugins .set .ls > li { min-height: var(--h-m); }
+#plugins .set .ls > li > .t { white-space: normal; }
+#plugins .set .ls > li > .t b { font-weight: 400; color: var(--ink-1); }
+#plugins .set .ls > li > .t code { font: var(--t-code); color: var(--ink-1); }
+#plugins .set .ls > li > .ic { color: var(--ink-2); }
+#plugins .set .ls > li > .e .switch { margin: 0; }
+#plugins .set .rows { display: flex; flex-direction: column; }
+#plugins .set .r { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s-6); align-items: center; min-height: 56px; }
+#plugins .set .r .l { font: var(--t-text); color: var(--ink-1); }
+#plugins .set .r .l code { font: var(--t-code); }
+#plugins .set .r .x { font: var(--t-caption); color: var(--ink-2); }
+#plugins .set .r .x.c-fail { color: var(--failure); }
+#plugins .set .r .seg { margin-right: calc(-1 * var(--s-3)); }
+#plugins .set .r .seg button { font: var(--t-text); }
+#plugins .set .r > .switch { justify-self: end; }
+#plugins .set .r .val { font: var(--t-text); color: var(--ink-2); display: inline-flex; align-items: center; gap: var(--s-4); }
+#plugins .set .r .val .lk { margin: 0 calc(-1 * var(--s-2)) 0 0; }
+#plugins .set .r .val .key { display: inline-flex; align-items: center; gap: var(--s-2); }
+#plugins .set .r .val .key code { font: var(--t-code); }
+#plugins .set .r .pick { font: var(--t-text); color: var(--ink-1); height: var(--h-m); padding: 0 var(--s-1) 0 var(--s-3); margin-right: calc(-1 * var(--s-1)); border-radius: var(--r-ctl); display: inline-flex; align-items: center; gap: var(--s-1); }
+#plugins .set .r .pick .ic { color: var(--ink-2); }
+#plugins .set .r .pick code { font: var(--t-code); }
+#plugins .set .lk.add { margin-top: var(--s-1); }
+/* a setting's field: a raised well with its edge, 28 high, one width; a secret shows as dots and never comes back */
+#plugins .inp { height: var(--h-m); width: 264px; padding: 0 var(--s-2); border-radius: var(--r-ctl); background: var(--raised); box-shadow: 0 0 0 1px var(--edge); font: var(--t-text); color: var(--ink-1); border: 0; outline: none; }
+#plugins .inp:focus { box-shadow: 0 0 0 1px var(--edge-2); }
+#plugins .inp.code { font: var(--t-code); }
+#plugins textarea.inp { height: auto; min-height: var(--h-m); padding: var(--s-1) var(--s-2); resize: vertical; font: var(--t-code); }
+#plugins select.inp { appearance: none; }
+.pw { height: 8px; display: block; fill: var(--ink-2); flex: none; }
+#plugins .set .go-row { display: flex; align-items: center; gap: var(--s-4); margin-top: var(--s-6); }
+#plugins .set .go-row .cap { font: var(--t-caption); color: var(--ink-2); }
+#plugins .set .go-row .cap.c-fail { color: var(--failure); }
+.lk.danger { color: var(--failure); }
+aside.side .rm { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); min-height: var(--h-m); font: var(--t-caption); color: var(--ink-2); }
+aside.side .rm .lk { margin-right: 0; padding-right: 0; }
+
 }   /* @layer zulip.armada-beta */

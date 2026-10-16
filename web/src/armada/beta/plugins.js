@@ -6,17 +6,20 @@
    the widget's sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), a plugin's
    words on the plane, and the place for its commands in Jump to. The list's rows and those commands are the chunk's,
    fetched when the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav,
-   and an item that borrows the column. An update patches what is drawn in place: a figure rolls in its cell, a mark
-   changes into another, and nothing else moves. */
+   an item that borrows the column, and the Plugins place with each plugin's page. An update patches what is drawn in
+   place: a figure rolls in its cell, a mark changes into another, and nothing else moves. */
 
 import {$, $$, esc, press} from "./util.js";
-import {pluginBots, state} from "./state.js";
+import {pluginBots, state, streams} from "./state.js";
 import {hhmm, now} from "./time.js";
 import {api} from "./connection.js";
 import {main, nav, outline, side} from "./frame.js";
 import {send} from "./send.js";
 import {chunk, loadedChunk} from "./chunks.js";
 import {drawSide} from "./column.js";
+import {openPlace, placeFromKey} from "./routing.js";
+import {drawHeader} from "./header.js";
+import {faceOf} from "./faces.js";
 import {closeArtifact, dataAt, isObj, text} from "./artifacts.js";
 
 /* ---------- what the server holds ---------- */
@@ -154,9 +157,9 @@ const setOpenWidget = (id) => { openWidget = id; for (const r of $$(".row.wg", g
 /* what the chunk is handed when it arrives (chunks.js hands it the page's helpers; this, the store and its reading): an
    artifact's blocks are drawn by the artifact's own chunk (and a scene by the scene's), which arrive with it */
 const pluginsPage = () => ({installs, widgets, scopeOf, rowsOf, listsOf, markOf, rowOn, figureText, glyphOf, staleOf, restOf, navWidgets, linkHere,
-  setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawSide, drawWidgets,
+  setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawWidgets, refreshPlace,
   artifactView: () => loadedChunk("artifact"), sceneView: () => loadedChunk("scene"),
-  api, press, send, side, main, closeArtifact});
+  api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf});
 /* the chunk's view, made once it has arrived (null before: a press then waits for it, and does nothing if another press,
    Esc or leaving the place came first, as chunks.js says for every chunk) */
 let viewApi = null;
@@ -174,7 +177,7 @@ const pluginWho = (id) => { const x = pluginBots.get(id); return x ? `${ic(glyph
 function onPluginEvent(ev) {
   const id = ev.op === "remove" ? ev.install_id : ev.plugin && ev.plugin.id; if (!id) return;
   if (ev.op === "remove") { dropInstall(id); const v = view(); if (v) v.forget(id); } else keepInstall(ev.plugin);
-  drawWidgets(); watchStale(); if (state.place && state.place.kind === "topic") drawSide();
+  drawWidgets(); watchStale(); if (state.place && state.place.kind === "topic") drawSide(); refreshPlace();
 }
 function onWidgetEvent(ev) {
   const scope = scopeOf(ev.install_id, ev.widget, ev.link_id, ev.item);
@@ -182,6 +185,18 @@ function onWidgetEvent(ev) {
   if (!ev.link_id && !ev.item) drawWidgets(); else if (!ev.item) patchColumn(scope);
   const v = view(); if (v) v.update(scope); watchStale();
 }
+/* the Plugins place in view, drawn again when an install changes */
+function refreshPlace() { if (!state.place || state.place.kind !== "plugins") return; const v = view(); if (v) v.refresh(); }
+
+/* ---------- the Plugins place and a plugin's page: keys, addresses, the header and the column ---------- */
+function pluginPlaceFromKey(key) { if (key === "plugins") return {key, kind: "plugins", view: "store", install_id: 0, repo: false};
+  const m = /^plugin:(\d+)$/.exec(key); return m ? {key, kind: "plugins", view: "page", install_id: +m[1], repo: false} : null; }
+const pluginHash = (p) => (p.view === "store" ? "#plugins" : `#plugin/${p.install_id}`);
+function pluginPlaceFromHash(h) { if (h === "#plugins") return pluginPlaceFromKey("plugins"); const m = /^#plugin\/(\d+)$/.exec(h); return m ? pluginPlaceFromKey(`plugin:${m[1]}`) : null; }
+/* routing.js has drawn the frame for the place and hidden the field; the place's pane is drawn once its chunk is here */
+function openPlugins(p) { withView((v) => { if (state.place === p) { v.openPlace(p); drawHeader(); drawSide(); } }); }
+function pluginsHead() { const v = view(); return v ? v.head(state.place) : {kind: "plain", title: "Plugins", say: "", checklist: {title: state.place.view === "store" ? "Installed" : "Recent"}}; }
+function pluginsSideHTML() { const v = view(); return v ? v.sideHTML(state.place) : ""; }
 
 /* Jump to: Plugins, each plugin by name, and one command a widget in the nav ("Show GPUs"), from the plugin chunk,
    which is fetched when the page is idle; until it is here, none */
@@ -202,5 +217,6 @@ function wirePlugins() {
     e.preventDefault(); const r = rows[Math.max(0, Math.min(rows.length - 1, to))]; M.focusKbd(r); });
 }
 
-export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onWidgetEvent, pluginItems, pluginSectionsHTML, pluginWho, restOf, rowsOf, view as pluginView, widgets,
+export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onWidgetEvent, openPlugins, pluginHash, pluginItems,
+  pluginPlaceFromHash, pluginPlaceFromKey, pluginsHead, pluginSectionsHTML, pluginsSideHTML, pluginWho, restOf, rowsOf, view as pluginView, widgets,
   wirePlugins};

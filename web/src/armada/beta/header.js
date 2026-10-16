@@ -12,11 +12,13 @@ import {homeRows} from "./home.js";
 import {me_} from "./partners.js";
 import {pick, pickerHead} from "./partner_picker.js";
 import {pageHead} from "./pages.js";
+import {pluginsHead} from "./plugins.js";
 
 /* ---------- the header: the repository's facts, from the worktree's real state ---------- */
 function repoPath(url, fallback) { const m = /([^/:]+\/[^/]+?)(?:\.git)?\/?$/.exec(url || ""); return m ? m[1] : fallback; }
 function headCfg() { const p = state.place, c = state.P;
   if (p.kind === "page") return pageHead();
+  if (p.kind === "plugins") return pluginsHead();
   if (p.kind === "partner") return {kind: "plain", path: esc(state.meName), title: "Choose your partner", say: "", checklist: {title: "Your partner"}, seg: pick.seg, has: !!(me_() && me_().species)};
   if (p.kind === "home") { const {needs} = homeRows(), n = needs.filter((x) => x.verb === "Answer").length, live = [...runsSeen.values()].filter((rs) => rs.some((r) => (r.status === "queued" || r.status === "running") && !r.waiting)).length;
     return {kind: "plain", title: "Home", say: (n ? `${n === 1 ? "One question waits" : n + " questions wait"} for you.` : needs.length ? "A run failed." : "Nothing waits for you.") + (live ? ` ${live === 1 ? "One run is" : live + " runs are"} live.` : ""), checklist: {title: "Running"}}; }

@@ -6,14 +6,17 @@
    - the rows of a list a plugin links to a place, in the slots plugins.js keeps for it in the column, and the
      commands Jump to lists for plugins;
    - an item opened from a row, which borrows the column as an artifact does and gives it back on Close (below 1408, where
-     there is no column, a raised sheet).
+     there is no column, a raised sheet);
+   - the Plugins place (a store, like Home) and a plugin's page: what it adds and may do, its settings drawn from its
+     manifest's schema (secrets written, never read back), its links, where its widgets show, its tools for Onix, Recent
+     and Remove.
    The other blocks of a document (copy, metric, meter, series, log, key_value, scene) are drawn by the artifact's chunk,
    which arrives with this one. */
 
 /* What it uses of the page is handed in when it arrives (chunks.js); plugins.js hands in the store and its seams. */
-export default function pluginViewChunk({$, $$, el, esc, T, hhmm, ready, isObj, text}) {
+export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf, ready, isObj, text}) {
   return function bindPluginView(P) {
-    const {api, press, send, side, main, closeArtifact} = P;
+    const {api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf} = P;
 
     /* ---------- a sparkline: the values in a fixed 64 × 20 cell, the latest point a dot ---------- */
     /* a figure on a fixed scale (a percentage) gives its domain, so an idle machine is a flat line at the foot and not its
@@ -88,13 +91,13 @@ export default function pluginViewChunk({$, $$, el, esc, T, hhmm, ready, isObj, 
     function openSheet(id, kbd) {
       const x = navEntry(id); if (!x) return; closeSheet(true);
       const rows = $$("nav .row.wg"), below = rows.length - 1 - rows.findIndex((r) => r.dataset.w === id);
-      const e = el("div", "wsheet raised", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.w.label)}</span></div><div class="wb">${sheetBodyHTML(x)}</div>`);
+      const e = el("div", "wsheet raised", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.w.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`);
       e.setAttribute("role", "dialog"); e.setAttribute("aria-label", x.w.label); e.tabIndex = -1; e.dataset.w = id; e.style.setProperty("--below", String(Math.max(0, below)));
       document.body.append(e); sheet = {id, el: e, install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")}; P.setOpenWidget(id);
       if (x.s && x.s.document) mountBlocks(e, x.s.document); else host(e);
       M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6);
       addEventListener("pointerdown", outside, true);
-      if (kbd) ($(".wb button, .wb [tabindex]", e) || e).focus(); else ready();
+      if (kbd) ($("[data-wopen], .wb button, .wb [tabindex]", e) || e).focus(); else ready();
     }
     /* a press anywhere but the sheet and the widgets' rows closes it, and the press goes on */
     const outside = (e) => { if (!sheet || (e.target.closest && e.target.closest(".wsheet, nav .row.wg, .dlg"))) return; closeSheet(true); };
@@ -174,10 +177,11 @@ export default function pluginViewChunk({$, $$, el, esc, T, hhmm, ready, isObj, 
       const d = $(".e .d", li), f = P.figureText(row.figure), cell = $(":scope > .fig", d);
       if (cell && f) M.figure(cell, f); else if (f) d.innerHTML = `<span class="fig">${fig(f)}</span>`; else d.textContent = "";
     }
-    /* Jump to: one command a widget in the nav ("Show GPUs") */
+    /* Jump to: Plugins, each plugin by name, and one command a widget in the nav ("Show GPUs") */
     function items() {
-      const out = [];
+      const out = [{key: "plugins", label: "Plugins", glyph: ic("plugin"), cap: ""}];
       for (const x of P.navWidgets()) out.push({cmd: () => P.showWidget(x.id, true), label: `Show ${x.w.label}`, glyph: ic(P.glyphOf(x.p.glyph)), cap: x.p.name});
+      for (const p of P.installs.values()) if (p.state !== "draft") out.push({key: `plugin:${p.id}`, label: p.name, glyph: ic(P.glyphOf(p.glyph)), cap: "Plugin"});
       return out;
     }
     /* a row of a linked list: an item opened in the column, or the address it names (in a tab of its own) */
@@ -234,6 +238,8 @@ export default function pluginViewChunk({$, $$, el, esc, T, hhmm, ready, isObj, 
       return {target: null, doc: null};
     }
     const rootOf = (b) => b.closest(".wsheet, .wd");
+    /* a sheet's Open goes to the plugin's page */
+    press(document.body, ".wsheet [data-wopen]", () => { const id = sheet && sheet.install_id; closeSheet(true); if (id) openPlace(placeFromKey(`plugin:${id}`)); });
     press(document.body, ".wd [data-wclose]", () => closeItem(false));
     press(document.body, ":is(.wsheet, .wd) [data-wact]", (b) => { const {target, doc} = actionTarget(rootOf(b)); const a = doc && (doc.actions || [])[+b.dataset.wact]; if (target && a) runAction(target, a, {index: JSON.stringify(+b.dataset.wact)}, b); });
     press(document.body, ":is(.wsheet, .wd) .wl > li:is([data-open], [data-act])", (li, e, ptr) => {
@@ -246,14 +252,197 @@ export default function pluginViewChunk({$, $$, el, esc, T, hhmm, ready, isObj, 
       if (sheet) { e.preventDefault(); e.stopPropagation(); closeSheet(false, true); return; }
       if (item && item.el.contains(document.activeElement)) { e.preventDefault(); e.stopPropagation(); closeItem(false); } }, true);
 
+    /* ---------- the Plugins place ---------- */
+    /* the team's installs in full, as their pages need them (GET armada/plugins): settings, whether each secret is set, links, tools turned off */
+    const full = new Map(); let loaded = false, failed = "";
+    async function load() { try { const r = await api("GET", "armada/plugins"); full.clear(); for (const x of r.plugins) full.set(x.id, x); loaded = true; failed = ""; } catch (e) { failed = e.message; } }
+    /* ---- what waits for the server (PL3, PL6): each is a seam the server's route fills, and says so until it does ---- */
+    /* Recent: the install's audit lines (RealmAuditLog), newest first; GET armada/plugins/<id>/recent is not served yet */
+    const recent = new Map();
+    async function loadRecent(id) { try { recent.set(id, (await api("GET", `armada/plugins/${id}/recent`)).recent); } catch (e) { recent.set(id, null); } }
+    /* Tools for Onix: what the plugin's MCP server lists; GET armada/plugins/<id>/tools is not served yet */
+    const tools = new Map();
+    async function loadTools(id) { try { tools.set(id, (await api("GET", `armada/plugins/${id}/tools`)).tools); } catch (e) { tools.set(id, null); } }
+    /* the store's index (plugyawn/armada-plugins, PL6): its entries are what can be installed; there are none until it is read */
+    const INDEX = {name: "plugyawn/armada-plugins", entries: []};
+    /* ---- end of what waits for the server ---- */
+
+    const inView = () => (state.place && state.place.kind === "plugins" ? state.place : null);
+    const pane = () => $("#plugins");
+    const face = (glyph, size = 20) => `<i class="av pf s${size}">${ic(P.glyphOf(glyph))}</i>`;
+    const count = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const longDay = (ts) => new Date(ts * 1000).toLocaleDateString("en-GB", {day: "numeric", month: "short"});
+    /* what a plugin adds, as a store row's caption says it */
+    function addsOf(m) { const pv = (m && m.provides) || {}, w = pv.widgets || [], out = [];
+      if (w.some((x) => x.in.includes("nav"))) out.push("nav"); if (w.some((x) => x.in.includes("column"))) out.push("column"); if (pv.tools) out.push("tools for Onix"); if (pv.posts) out.push("posts"); return out.join(", "); }
+    const STATE_WORDS = {waiting: "Waiting for its settings", starting: "Starting", running: "Installed", failed: "Failed", draft: "Draft", removed: "Removed"};
+    const stateOf = (x) => (x.date_removed ? "removed" : x.disabled ? "off" : x.state);
+    function storeRow(x) { const st = stateOf(x), m = x.manifest || {};
+      const verb = st === "removed" ? `<button class="lk" data-wrestore="${x.id}">Undo</button>` : `<span class="st${st === "failed" ? " c-fail" : ""}">${st === "off" ? "Off" : STATE_WORDS[st] || ""}</span>`;
+      return `<div class="plg" tabindex="0" role="link" data-k="plugin:${x.id}"><span class="g">${face(m.glyph, 28)}</span><span class="tx"><span class="nm">${esc(x.name)}<span class="by">${esc([m.author, addsOf(m)].filter(Boolean).join(" · "))}</span></span><span class="ds">${esc(m.description || "")}</span></span><span class="v">${verb}</span></div>`; }
+    function storeHTML() {
+      if (!loaded) return `<div class="store"><p class="note">${failed ? esc(failed) : "Loading"}</p></div>`;
+      const all = [...full.values()].filter((x) => x.state !== "draft"), live = all.filter((x) => !x.date_removed), gone = all.filter((x) => x.date_removed);
+      return `<div class="store">${live.length ? live.map(storeRow).join("") : '<p class="note">Nothing is installed yet.</p>'}${INDEX.entries.length ? INDEX.entries.map(indexRow).join("") : ""}${gone.length ? `<h2>Recently removed</h2>${gone.map(storeRow).join("")}` : ""}</div>`;
+    }
+    const indexRow = (en) => `<div class="plg" tabindex="0" role="link" data-index="${esc(en.id)}"><span class="g">${face(en.manifest.glyph, 28)}</span><span class="tx"><span class="nm">${esc(en.manifest.name)}<span class="by">${esc([en.manifest.author, addsOf(en.manifest)].filter(Boolean).join(" · "))}</span></span><span class="ds">${esc(en.manifest.description)}</span></span><span class="v"><button class="lk" data-index-open="${esc(en.id)}">Install</button></span></div>`;
+    const sourcesHTML = () => `<section class="sec"><div class="sh"><span>Sources</span></div><ul class="ls"><li data-tip="The store's index is not in the beta yet">${ic("globe")}<span class="t"><code>${esc(INDEX.name)}</code></span><span class="e"><span class="d">${INDEX.entries.length || ""}</span></span></li><li data-tip="Installing from an address is not in the beta yet">${ic("plus")}<span class="t">Install from an address</span><span class="e"></span></li></ul></section>`;
+
+    /* ---- a plugin's page ---- */
+    const pw = (n) => `<svg class="pw" viewBox="0 0 ${n * 10} 8" style="width:${n * 10}px" aria-label="Hidden">${Array.from({length: n}, (_, i) => `<circle cx="${i * 10 + 4}" cy="4" r="3"/>`).join("")}</svg>`;
+    const r = (l, x, ctl, attrs = "") => `<div class="r"${attrs}><div><div class="l">${l}</div><div class="x">${x}</div></div>${ctl}</div>`;
+    let replacing = null;   /* the secret whose field is open to be replaced */
+    function secretRow(x, sec) {
+      const who = sec.set_by ? nameOf(sec.set_by) : "";
+      if (sec.set && replacing !== sec.name) return r(esc(sec.title), `Set${who ? ` by ${esc(who)}` : ""}${sec.date_set ? ` on ${esc(longDay(sec.date_set))}` : ""}. Only this plugin's process sees it.`, `<span class="val"><span class="key">${pw(4)}${sec.hint ? `<code>${esc(sec.hint)}</code>` : ""}</span><button class="lk" data-replace="${esc(sec.name)}">Replace</button></span>`);
+      const help = ((x.manifest.secrets || {})[sec.name] || {}).help;
+      return r(esc(sec.title), `${help ? esc(help) + " " : ""}Only this plugin's process sees it.`, `<input class="inp" type="password" autocomplete="off" spellcheck="false" data-secret="${esc(sec.name)}" aria-label="${esc(sec.title)}">`);
+    }
+    /* one setting's control, from its schema: a choice of up to three is a segmented control, of more a menu; a switch; a
+       number; a list, one a line; else words */
+    function controlHTML(key, sch, value) {
+      const v = value === undefined ? sch.default : value, name = esc(sch.title);
+      if (Array.isArray(sch.enum) && sch.enum.length <= 3) return `<div class="seg" role="radiogroup" aria-label="${name}">${sch.enum.map((o) => `<button role="radio" aria-checked="${o === v}" class="${o === v ? "on" : ""}" data-set="${esc(key)}" data-v="${esc(JSON.stringify(o))}">${esc(String(o)[0].toUpperCase() + String(o).slice(1))}</button>`).join("")}</div>`;
+      if (Array.isArray(sch.enum)) return `<select class="inp" data-set="${esc(key)}" aria-label="${name}">${sch.enum.map((o) => `<option value="${esc(JSON.stringify(o))}"${o === v ? " selected" : ""}>${esc(String(o))}</option>`).join("")}</select>`;
+      if (sch.type === "boolean") return `<button class="switch${v ? " on" : ""}" role="switch" aria-checked="${!!v}" aria-label="${name}" data-set="${esc(key)}" data-v="${esc(JSON.stringify(!v))}"></button>`;
+      if (sch.type === "integer" || sch.type === "number") return `<input class="inp" type="number" data-set="${esc(key)}" data-kind="number" aria-label="${name}" value="${v === undefined ? "" : esc(String(v))}">`;
+      if (sch.type === "array") return `<textarea class="inp" rows="3" spellcheck="false" data-set="${esc(key)}" data-kind="lines" aria-label="${name}">${esc((Array.isArray(v) ? v : []).join("\n"))}</textarea>`;
+      return `<input class="inp code" type="text" spellcheck="false" data-set="${esc(key)}" aria-label="${name}" value="${v === undefined ? "" : esc(String(v))}">`;
+    }
+    /* the settings a plugin's manifest declares, with the secrets first (its account); the setting named posts, for a
+       plugin that posts, says where it shows, so it stands under Where it shows */
+    const settingKeys = (m) => Object.keys(((m.settings || {}).properties) || {});
+    const isPostsSetting = (m, k) => k === "posts" && !!(m.provides && m.provides.posts);
+    function accountHTML(x) { const m = x.manifest, props = (m.settings || {}).properties || {}, keys = settingKeys(m).filter((k) => !isPostsSetting(m, k));
+      if (!x.secrets.length && !keys.length) return "";
+      return `<h2>Account</h2><div class="rows">${x.secrets.map((s) => secretRow(x, s)).join("")}${keys.map((k) => r(esc(props[k].title), esc(props[k].description || ""), controlHTML(k, props[k], x.settings[k]))).join("")}</div>`; }
+    const placeName = (l) => { const s = streams.get(l.stream_id); return l.topic != null ? esc(l.topic) : `${ic("repo")}${esc(s ? s.name : "a channel")}`; };
+    let linking = false, installing = null;   /* the link being made; an index entry whose page stands in the store's place */
+    function linksHTML(x) { const kinds = Object.entries((x.manifest.provides || {}).links || {}); if (!kinds.length) return ""; const [kind, decl] = kinds[0];
+      const rows = x.links.map((l) => r(`<code>${esc(l.value)}</code>`, l.topic != null ? "On one worktree only." : "On every worktree of the channel.", `<span class="val"><span class="pick">${placeName(l)}</span><button class="c sq" data-unlink="${l.id}" aria-label="Unlink" data-tip="Unlink">${ic("x")}</button></span>`)).join("");
+      const form = linking ? `<div class="rows">${r(esc(decl.title), "What to link, and where.", `<span class="val"><input class="inp code" data-link-value placeholder="${esc(decl.title)}" aria-label="${esc(decl.title)}"><select class="inp" data-link-stream aria-label="Channel">${[...streams.values()].map((s) => `<option value="${s.stream_id}">${esc(s.name)}</option>`).join("")}</select>${decl.to.includes("topic") ? '<input class="inp" data-link-topic placeholder="Every worktree" aria-label="Worktree">' : ""}<button class="go" data-link-go>Link</button></span>`, ` data-kind="${esc(kind)}"`)}</div>` : "";
+      return `<h2>Links</h2><div class="rows">${rows}</div>${form}${linking ? "" : `<button class="lk add" data-link-add>${ic("plus")}Link a ${esc(decl.title.toLowerCase())}</button>`}`; }
+    function showsHTML(x) { const m = x.manifest, out = [], props = (m.settings || {}).properties || {}, shown = ((m.provides || {}).widgets || []).filter((w) => w.in.includes("nav") || w.in.includes("column")), many = shown.length > 1;
+      for (const w of shown) { const d = x.widget_defaults[w.key] || {nav: w.team_default || "shown", column: true};
+        if (w.in.includes("nav")) out.push(r(`In the nav${many ? `: ${esc(w.label)}` : ""}`, d.nav === "offered" ? `${esc(w.label)} is offered to the team, not shown.` : `${esc(w.label)}, in everyone's nav.`, `<button class="switch${d.nav === "shown" ? " on" : ""}" role="switch" aria-checked="${d.nav === "shown"}" aria-label="${esc(`${w.label} in the nav`)}" data-shows="${esc(w.key)}" data-where="nav"></button>`));
+        if (w.in.includes("column")) out.push(r(`In the column${many ? `: ${esc(w.label)}` : ""}`, `${count(w.column_slots || 3, "row", "rows")} on the worktrees of the places it is linked to.`, `<button class="switch${d.column !== false ? " on" : ""}" role="switch" aria-checked="${d.column !== false}" aria-label="${esc(`${w.label} in the column`)}" data-shows="${esc(w.key)}" data-where="column"></button>`)); }
+      for (const k of settingKeys(m).filter((k2) => isPostsSetting(m, k2))) out.push(r(esc(props[k].title), esc(props[k].description || "When something happens in a place it is linked to."), controlHTML(k, props[k], x.settings[k])));
+      return out.length ? `<h2>Where it shows</h2><div class="rows">${out.join("")}</div>` : ""; }
+    function toolsHTML(x) { const pv = x.manifest.provides || {}; if (!pv.tools) return ""; const list = tools.get(x.id), off = new Set(x.disabled_tools || []);
+      const rows = list ? list.map((t) => `<li>${ic("term")}<span class="t"><code>${esc(t.name)}</code> ${esc(t.description || "")}</span><span class="e"><button class="switch${off.has(t.name) ? "" : " on"}" role="switch" aria-checked="${!off.has(t.name)}" aria-label="${esc(t.name)}" data-tool="${esc(t.name)}"></button></span></li>`).join("")
+        : `<li>${ic("term")}<span class="t">${list === null ? "Its tools are listed here once Armada asks the plugin for them, which the beta does not yet." : "Asking the plugin for its tools"}</span><span class="e"></span></li>`;
+      return `<h2>Tools for Onix<span class="m">given to Codex as an MCP server</span></h2><ul class="ls">${rows}</ul>`; }
+    function failHTML(x) { if (x.state !== "failed" && x.state !== "waiting") return "";
+      return `<div class="rows">${r(x.state === "failed" ? `${mk("failed")} Stopped` : "Waiting", esc(x.detail || (x.state === "failed" ? "It stopped five times in a row." : "A setting or a secret it needs is missing.")), x.state === "failed" ? '<button class="lk" data-retry-plugin>Retry</button>' : "")}</div>`; }
+    function pageHTML(p) {
+      if (!loaded) return `<article class="set"><p class="lead">${failed ? esc(failed) : "Loading"}</p></article>`;
+      const x = full.get(p.install_id); if (!x) return '<article class="set"><p class="lead">This plugin is not installed here.</p></article>';
+      return `<article class="set">${failHTML(x)}${accountHTML(x)}${linksHTML(x)}${showsHTML(x)}${toolsHTML(x)}</article>`;
+    }
+    function pageSideHTML(x) {
+      const list = recent.get(x.id);
+      const lines = list ? list.slice(0, 12).map((ln) => `<li>${ln.acting_user_id ? faceOf(ln.acting_user_id, "s20") : face(x.manifest.glyph)}<span class="t">${esc(ln.text || ln.type)}</span><span class="e"><span class="d">${esc(hhmm(ln.time))}</span></span></li>`).join("")
+        : `<li>${ic("trace")}<span class="t">${list === null ? "Not in the beta yet" : "Loading"}</span><span class="e"></span></li>`;
+      const rm = x.date_removed ? `<div class="rm"><span>Removed. Its settings are kept for 7 days.</span><button class="lk" data-wrestore>Undo</button></div>` : `<div class="rm"><span>Takes back everything it added.</span><button class="lk danger" data-wremove>Remove</button></div>`;
+      return `<section class="sec" id="sec-recent"><ul class="ls">${lines}</ul></section><section class="sec"><div class="sh"><span>Version</span></div><ul class="ls"><li>${ic("commit")}<span class="t"><b>${esc(x.version)}</b>${x.sha ? ` <code>${esc(x.sha.slice(0, 7))}</code>` : ""}</span><span class="e"></span></li></ul></section><section class="sec foot">${rm}</section>`;
+    }
+    function head(p) {
+      if (p.view === "store" && installing) { const m = installing.manifest; return {kind: "plain", path: "Plugins", title: esc(m.name), say: esc([m.author, m.version, installing.repository].filter(Boolean).join(" · ")), checklist: {title: "Versions"}}; }
+      if (p.view === "store") { const n = [...full.values()].filter((x) => x.state !== "draft" && !x.date_removed).length; return {kind: "plain", title: "Plugins", say: "Anyone here can install one. It runs on this server, beside Armada.", checklist: {title: "Installed", cap: loaded ? String(n) : ""}}; }
+      const x = full.get(p.install_id) || P.installs.get(p.install_id), who = x && x.installed_by ? nameOf(x.installed_by) : "";
+      return {kind: "plain", path: "Plugins", title: esc(x ? x.name : "Plugin"), say: x ? esc([x.version, x.date_installed ? `installed${who ? ` by ${who}` : ""} on ${longDay(x.date_installed)}` : ""].filter(Boolean).join(" · ")) : "", checklist: {title: "Recent"}};
+    }
+    function sideHTML(p) {
+      if (p.view === "store" && installing) return installSideHTML(installing);
+      if (p.view === "store") { const live = [...full.values()].filter((x) => x.state !== "draft" && !x.date_removed);
+        return `<section class="sec" id="sec-installed"><ul class="ls">${live.map((x) => `<li data-k="plugin:${x.id}">${face(x.manifest.glyph)}<span class="t">${esc(x.name)}</span><span class="e">${x.state === "failed" ? mk("failed") : ""}</span></li>`).join("") || `<li>${ic("plugin")}<span class="t">${loaded ? "None yet" : "Loading"}</span><span class="e"></span></li>`}</ul></section>${sourcesHTML()}`; }
+      const x = full.get(p.install_id); return x ? pageSideHTML(x) : "";
+    }
+    /* the place opened: its pane drawn, then what it needs asked for, and drawn again */
+    async function openPluginsPlace(p) {
+      const box = pane(); box.parentElement.scrollTop = 0; replacing = null; linking = false; installing = null; draw();
+      await load(); if (inView() !== p) return; draw(); drawHeader(); drawSide();
+      if (p.view === "page" && full.has(p.install_id)) { await Promise.all([loadRecent(p.install_id), loadTools(p.install_id)]); if (inView() === p) { draw(); drawSide(); } }
+    }
+    function draw() { const p = inView(), box = pane(); if (!p || !box) return; const h = p.view === "store" ? (installing ? installHTML(installing) : storeHTML()) : pageHTML(p); if (box._sig === h) return; box._sig = h; box.innerHTML = h; host(box); }
+    /* an install changed (an event): what is in view is asked again */
+    let again = 0;
+    function refresh() { clearTimeout(again); again = setTimeout(async () => { const p = inView(); if (!p) return; await load(); if (inView() === p) { draw(); if (state.hd) state.hd._sig = ""; drawHeader(); drawSide(); } }, 250); }
+
+    /* ---- the page's controls: each writes the whole of what it changes, then the page is drawn from the server's answer ---- */
+    const pageInstall = () => { const p = inView(); return p && p.view === "page" ? full.get(p.install_id) : null; };
+    async function write(x, params, from) {
+      try { const res = await api("PATCH", `armada/plugins/${x.id}`, params); full.set(x.id, res.plugin); draw(); drawSide(); }
+      catch (e) { M.say(from && from.isConnected ? from : main, e.message, 2400); draw(); }
+    }
+    const settingValue = (input) => { const kind = input.dataset.kind; if (kind === "number") return input.value === "" ? undefined : Number(input.value); if (kind === "lines") return input.value.split("\n").map((s) => s.trim()).filter(Boolean); return input.value; };
+    function saveSetting(x, key, value, from) { const next = {...x.settings}; if (value === undefined) delete next[key]; else next[key] = value; if (JSON.stringify(next) === JSON.stringify(x.settings)) return; x.settings = next; write(x, {settings: JSON.stringify(next)}, from); }
+    function wire(box) {
+      press(box, ".plg[data-k]", (row, e) => { if (e.target.closest("[data-wrestore]")) return; openPlace(placeFromKey(row.dataset.k)); });
+      press(box, "[data-wrestore]", async (b) => { const id = +b.dataset.wrestore; try { await api("POST", `armada/plugins/${id}/restore`); await load(); draw(); drawSide(); } catch (e) { M.say(b, e.message, 2400); } });
+      press(box, "[data-replace]", (b) => { replacing = b.dataset.replace; draw(); const f = $(`[data-secret="${replacing}"]`, box); if (f) f.focus(); });
+      press(box, "[data-set]:is(button)", (b) => { const x = pageInstall(); if (x) saveSetting(x, b.dataset.set, JSON.parse(b.dataset.v), b); });
+      /* the server keeps what it is not given (armada_plugins.py _widget_defaults), so only the switch pressed is sent */
+      press(box, "[data-shows]", (b) => { const x = pageInstall(); if (!x) return; const key = b.dataset.shows, d = x.widget_defaults[key] || {nav: "shown", column: true};
+        const change = b.dataset.where === "nav" ? {nav: d.nav === "shown" ? "off" : "shown"} : {column: d.column === false};
+        x.widget_defaults = {...x.widget_defaults, [key]: {...d, ...change}}; write(x, {widget_defaults: JSON.stringify({[key]: change})}, b); });
+      press(box, "[data-tool]", (b) => { const x = pageInstall(); if (!x) return; const off = new Set(x.disabled_tools || []); if (off.has(b.dataset.tool)) off.delete(b.dataset.tool); else off.add(b.dataset.tool); x.disabled_tools = [...off]; write(x, {disabled_tools: JSON.stringify([...off])}, b); });
+      press(box, "[data-link-add]", () => { linking = true; draw(); const f = $("[data-link-value]", box); if (f) f.focus(); });
+      press(box, "[data-link-go]", async (b) => { const x = pageInstall(); if (!x) return; const row = b.closest("[data-kind]"), topic = $("[data-link-topic]", row);
+        try { await api("POST", `armada/plugins/${x.id}/links`, {kind: row.dataset.kind, value: $("[data-link-value]", row).value.trim(), stream_id: $("[data-link-stream]", row).value, ...(topic && topic.value.trim() ? {topic: topic.value.trim()} : {})}); linking = false; await load(); draw(); }
+        catch (e) { M.say(b, e.message, 2400); } });
+      press(box, "[data-unlink]", async (b) => { const x = pageInstall(); if (!x) return; try { await api("DELETE", `armada/plugins/${x.id}/links/${b.dataset.unlink}`); await load(); draw(); } catch (e) { M.say(b, e.message, 2400); } });
+      press(box, "[data-retry-plugin]", async (b) => { const x = pageInstall(); if (!x) return; try { full.set(x.id, (await api("POST", `armada/plugins/${x.id}/retry`)).plugin); draw(); } catch (e) { M.say(b, e.message, 2400); } });
+      box.addEventListener("change", (e) => { const x = pageInstall(), t = e.target; if (!x || !t.matches("[data-set]")) return; saveSetting(x, t.dataset.set, t.tagName === "SELECT" ? JSON.parse(t.value) : settingValue(t), t); });
+      box.addEventListener("keydown", (e) => { const t = e.target;
+        if ((e.key === "Enter" || e.key === " ") && t.matches && t.matches(".plg[data-k]") && e.target === t) { e.preventDefault(); t.click(); return; }
+        if (e.key !== "Enter" || !t.matches || t.tagName === "TEXTAREA") return;
+        if (t.matches("[data-secret]") && t.value) { e.preventDefault(); const x = pageInstall(); if (!x) return; const name = t.dataset.secret, value = t.value; t.value = ""; replacing = null; write(x, {secrets: JSON.stringify({[name]: value})}, t); }
+        else if (t.matches("input[data-set]")) { e.preventDefault(); t.blur(); } });
+      /* the column's verbs */
+      if (!side) return;
+      press(side, "[data-wremove]", async (b) => { const x = pageInstall(); if (!x) return; try { await api("DELETE", `armada/plugins/${x.id}`); await load(); draw(); drawSide(); const u = $("[data-wrestore]", side); if (u) u.focus({preventScroll: true}); } catch (e) { M.say(b, e.message, 2400); } });
+      press(side, "[data-wrestore]", async (b) => { const x = pageInstall(); if (!x) return; try { await api("POST", `armada/plugins/${x.id}/restore`); await load(); draw(); drawSide(); } catch (e) { M.say(b, e.message, 2400); } });
+      press(side, "#sec-installed li[data-k]", (li) => openPlace(placeFromKey(li.dataset.k)));
+    }
+    if (pane()) wire(pane());
+
+    /* ---- the install page (05), for an entry of the store's index, which PL6 reads; the Plugins place lists none until then ---- */
+    function installHTML(en) { const m = en.manifest, props = (m.settings || {}).properties || {}, pv = m.provides || {}, adds = [];
+      for (const w of pv.widgets || []) { if (w.in.includes("nav")) adds.push(`<li>${ic("nav")}<span class="t"><b>A line in the nav</b>, ${esc(w.label)}</span></li>`); if (w.in.includes("column")) adds.push(`<li>${ic("panel")}<span class="t"><b>A list in the column</b> of every worktree on a channel you link</span></li>`); }
+      if (pv.tools) adds.push(`<li>${ic("term")}<span class="t"><b>Tools for Onix</b>${pv.tools.instructions ? `: ${esc(pv.tools.instructions)}` : ""}</span></li>`);
+      if (pv.posts) adds.push(`<li>${ic("thread")}<span class="t"><b>A line in the topic</b> when something happens in a place it is linked to</span></li>`);
+      const can = [...(m.reaches || []).map((h) => `<li>${ic("globe")}<span class="t">Reach <code>${esc(h)}</code></span></li>`), pv.posts ? `<li>${ic("person")}<span class="t">Post as <b>${esc(m.name)}</b> in the channels you link, and read them</span></li>` : "", m.run ? `<li>${ic("term")}<span class="t">Run on this server, with the access Onix's runs have</span></li>` : ""].join("");
+      const secrets = Object.entries(m.secrets || {}).map(([k, s]) => r(esc(s.title), `${s.help ? esc(s.help) + " " : ""}Only this plugin's process sees it.`, `<input class="inp" type="password" autocomplete="off" data-install-secret="${esc(k)}" aria-label="${esc(s.title)}">`)).join("");
+      const settings = Object.entries(props).map(([k, sch]) => r(esc(sch.title), esc(sch.description || ""), controlHTML(k, sch, undefined).replace(/data-set=/g, "data-install-set="))).join("");
+      return `<article class="set"><p class="lead">${esc(m.description)}</p><h2>What it adds</h2><ul class="ls">${adds.join("")}</ul>${can ? `<h2>What it can do</h2><ul class="ls">${can}</ul>` : ""}${secrets || settings ? `<h2>Set it up</h2><div class="rows">${secrets}${settings}</div>` : ""}<div class="go-row"><button class="go" data-install="${esc(en.id)}">Install</button><span class="cap">It starts in a few seconds. Remove it whenever you like.</span></div></article>`; }
+    async function install(en, b) {
+      const box = pane(), secrets = {}, settings = {}; for (const f of $$("[data-install-secret]", box)) if (f.value) secrets[f.dataset.installSecret] = f.value;
+      for (const f of $$("input[data-install-set], textarea[data-install-set]", box)) { const v = settingValue(f); if (v !== undefined && v !== "") settings[f.dataset.installSet] = v; }
+      for (const f of $$("select[data-install-set]", box)) settings[f.dataset.installSet] = JSON.parse(f.value);
+      for (const f of $$("button[data-install-set][aria-checked='true']", box)) settings[f.dataset.installSet] = f.getAttribute("role") === "switch" ? true : JSON.parse(f.dataset.v);
+      try { const res = await api("POST", "armada/plugins", {manifest: JSON.stringify(en.manifest), source_kind: "github", source: en.repository, sha: en.commit, settings: JSON.stringify(settings), secrets: JSON.stringify(secrets)}); full.set(res.plugin.id, res.plugin); openPlace(placeFromKey(`plugin:${res.plugin.id}`)); }
+      catch (e) { const cap = $(".go-row .cap", box); if (cap) { cap.textContent = e.message; cap.classList.add("c-fail"); } M.say(b, e.message, 2400); }
+    }
+    /* an entry's page stands in the store's place until it is installed or the place is left: its header and column say which */
+    const installSideHTML = (en) => `<section class="sec" id="sec-versions"><ul class="ls"><li>${ic("commit")}<span class="t"><b>${esc(en.manifest.version)}</b> <code>${esc(String(en.commit).slice(0, 7))}</code></span><span class="e"></span></li></ul></section><section class="sec"><div class="sh"><span>Source</span></div><ul class="ls"><li>${ic("globe")}<span class="t"><code>${esc(en.repository)}</code></span><span class="e"><span class="d">${esc(en.manifest.license || "")}</span></span></li></ul></section>`;
+    if (pane()) press(pane(), "[data-index-open]", (b) => { const en = INDEX.entries.find((x) => x.id === b.dataset.indexOpen); if (!en) return; installing = en; pane().parentElement.scrollTop = 0; draw(); if (state.hd) state.hd._sig = ""; drawHeader(); drawSide(); });
+    /* before it is installed, a choice is kept in the form: the segment pressed, a switch turned */
+    if (pane()) press(pane(), "button[data-install-set]", (b) => { if (b.getAttribute("role") === "switch") { const on = b.getAttribute("aria-checked") !== "true"; b.setAttribute("aria-checked", String(on)); b.classList.toggle("on", on); return; }
+      for (const o of $$("button", b.parentElement)) { o.setAttribute("aria-checked", String(o === b)); o.classList.toggle("on", o === b); } });
+    if (pane()) press(pane(), "[data-install]", (b) => { const en = INDEX.entries.find((x) => x.id === b.dataset.install); if (en) install(en, b); });
+
     return {
       openSheet, closeSheet, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
       /* a new document for a scope: what is open of it changes in place */
       update(scope) { if (sheet && sheet.scope === scope) updateSheet(); if (item) updateItem(scope); },
       /* an install removed: what is open of it closes */
-      forget(id) { if (sheet && sheet.install_id === id) closeSheet(true); if (item && item.target.install_id === id) closeItem(true); },
+      forget(id) { if (sheet && sheet.install_id === id) closeSheet(true); if (item && item.target.install_id === id) closeItem(true); full.delete(id); },
       /* leaving the place: the column it borrowed is given back, and the sheet closes */
       leave() { closeSheet(true); closeItem(true); },
+      openPlace: openPluginsPlace, refresh, head, sideHTML,
+      /* the store's index, which PL6 fills */
+      setIndex(entries) { INDEX.entries = entries; draw(); },
     };
   };
 }

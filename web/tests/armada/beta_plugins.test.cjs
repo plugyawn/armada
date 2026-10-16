@@ -9,8 +9,9 @@
 // a nav row whose one trailing thing follows the nav's priority; pressed,
 // it opens as a sheet beside the nav; linked to a place, it adds a list to
 // that place's column; an item opened from a row borrows the column; an
-// update changes what is drawn in place; and a plugin's bot speaks on the
-// plane. Deleted with web/src/armada/beta/.
+// update changes what is drawn in place; a plugin's bot speaks on the
+// plane; and a plugin's page draws its settings from its manifest. Deleted
+// with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -32,6 +33,7 @@ const dom = real_dom.make_real_dom(`
     <div id="ty" class="off"></div><button id="jump" class="off">Jump to latest</button>
   </div></div>
   <div id="pane"><div id="col"></div></div>
+  <div class="pane" data-pane="Plugins"><div class="lane" id="plugins"></div></div>
   <aside class="side" id="side"><div class="out" id="outline"></div></aside>
   <div class="dock"><div class="cz"><div class="sh">
     <span class="txw"><div class="tx" contenteditable="true"></div><span class="ph"></span></span>
@@ -160,6 +162,8 @@ mock_esm("../../src/armada/beta/frame.js", {
     ph: find(".ph"),
     panes: {},
 });
+// The header is drawn whole from the place; here it has nowhere to go.
+mock_esm("../../src/armada/beta/header.js", {drawHeader: noop});
 
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
@@ -470,8 +474,7 @@ run_test(
         // Its foot stands level with its row's: one row (Training) above GPUs,
         // none below it.
         assert.equal(s.style.getPropertyValue("--below"), "0");
-        // From the keyboard, the first row that does something has focus.
-        assert.equal(document.activeElement.dataset.row, "nlscale-c");
+        assert.equal(document.activeElement.textContent, "Open");
         // Machines and Jobs, each row with its second line and figure; a
         // machine's load is a sparkline.
         const lists = [...s.querySelectorAll("section.sec")];
@@ -852,3 +855,166 @@ run_test("a plugin's words are on the plane: no bubble, its glyph before its nam
     beta_state.state.tab = tab;
     set_global("S", {play: noop});
 });
+
+run_test(
+    "Plugins and a plugin's page: the settings drawn from the schema, a secret written and never read back",
+    async () => {
+        const full = {
+            ...wandb(),
+            manifest: WANDB_MANIFEST,
+            settings: {entity: "runix", posts: "both"},
+            secrets: [
+                {
+                    name: "api_key",
+                    title: "API key",
+                    required: true,
+                    set: true,
+                    hint: "7f3a",
+                    set_by: ME,
+                    // Noon (UTC) on 14 October 2026.
+                    date_set: 1_791_979_200,
+                },
+            ],
+            detail: "",
+            installed_by: ME,
+            disabled_tools: ["compare_runs"],
+            date_installed: seconds(),
+            date_removed: null,
+            sha: "9b1f0c4a",
+        };
+        answers.set("GET /json/armada/plugins", {result: "success", plugins: [full]});
+        answers.set("GET /json/armada/plugins/8/tools", {
+            result: "success",
+            tools: [
+                {name: "compare_runs", description: "two runs, metric by metric"},
+                {name: "link_run", description: "link a run to a worktree"},
+            ],
+        });
+        answers.set("PATCH /json/armada/plugins/8", (body) => ({
+            result: "success",
+            plugin: {
+                ...full,
+                ...(body.settings ? {settings: JSON.parse(body.settings)} : {}),
+                ...(body.widget_defaults
+                    ? {widget_defaults: JSON.parse(body.widget_defaults)}
+                    : {}),
+            },
+        }));
+        const store = plugins.pluginPlaceFromKey("plugins");
+        beta_state.state.place = store;
+        plugins.openPlugins(store);
+        await settle();
+        const box = find("#plugins");
+        assert.match(
+            box.textContent,
+            /Weights & Biases\s*plugyawn · nav, column, tools for Onix, posts/,
+        );
+        assert.match(plugins.pluginsSideHTML(), /Install from an address/);
+        assert.equal(plugins.pluginsHead().checklist.cap, "1");
+
+        const page = plugins.pluginPlaceFromKey("plugin:8");
+        beta_state.state.place = page;
+        plugins.openPlugins(page);
+        await settle();
+        // The secret: who set it, four dots and its last four, never its value.
+        assert.match(box.textContent, /API keySet by Iago on 14 Oct\./);
+        assert.equal(box.querySelector(".key code").textContent, "7f3a");
+        // Entity is words; Lines in the topic, a choice of three, stands under
+        // Where it shows.
+        assert.equal(box.querySelector('input[data-set="entity"]').value, "runix");
+        const shows = [...box.querySelectorAll("h2")].find(
+            (h) => h.textContent === "Where it shows",
+        ).nextElementSibling;
+        assert.ok(
+            shows.querySelector('[data-set="posts"][aria-checked="true"]').textContent === "Both",
+        );
+        // The tools Onix is given, compare_runs turned off.
+        assert.equal(
+            box.querySelector('[data-tool="compare_runs"]').getAttribute("aria-checked"),
+            "false",
+        );
+
+        // A setting saved whole; a secret written, then shown as set.
+        const entity = box.querySelector('input[data-set="entity"]');
+        entity.value = "runix-ml";
+        entity.dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+        await settle();
+        assert.deepEqual(JSON.parse(requests.at(-1).body.settings), {
+            entity: "runix-ml",
+            posts: "both",
+        });
+        await pressOn(box.querySelector("[data-replace]"));
+        const field = box.querySelector('input[data-secret="api_key"]');
+        assert.equal(field.type, "password");
+        field.value = "sk-new-key";
+        dom.press("Enter", {target: field});
+        await settle();
+        assert.deepEqual(JSON.parse(requests.at(-1).body.secrets), {api_key: "sk-new-key"});
+        assert.doesNotMatch(box.innerHTML, /sk-new-key/);
+        // Where it shows: the nav switch writes the team's defaults whole.
+        await pressOn(box.querySelector('[data-shows="runs"][data-where="nav"]'));
+        assert.deepEqual(JSON.parse(requests.at(-1).body.widget_defaults), {runs: {nav: "off"}});
+        // An entry of the store's index (PL6 reads it): its page, and Install
+        // with what was set up.
+        const store_again = plugins.pluginPlaceFromKey("plugins");
+        beta_state.state.place = store_again;
+        plugins.openPlugins(store_again);
+        await settle();
+        plugins.pluginView().setIndex([
+            {
+                id: "wandb",
+                repository: "plugyawn/armada-wandb",
+                commit: "3c51a9e",
+                manifest: WANDB_MANIFEST,
+            },
+        ]);
+        await pressOn(box.querySelector("[data-index-open]"));
+        assert.match(box.textContent, /What it adds.*A line in the nav, Training/);
+        assert.match(box.textContent, /Reach api\.wandb\.ai/);
+        // It stands in the store's place: its name in the header, its source in the column.
+        assert.equal(plugins.pluginsHead().title, "Weights &amp; Biases");
+        assert.match(plugins.pluginsSideHTML(), /plugyawn\/armada-wandb/);
+        box.querySelector('input[data-install-secret="api_key"]').value = "sk-wandb";
+        box.querySelector('input[data-install-set="entity"]').value = "runix";
+        const crashes = [...box.querySelectorAll('[data-install-set="posts"]')].find(
+            (b) => b.textContent === "Crashes",
+        );
+        await pressOn(crashes);
+        assert.equal(crashes.getAttribute("aria-checked"), "true");
+        answers.set("POST /json/armada/plugins", {
+            result: "error",
+            msg: "Weights & Biases is installed here already.",
+            code: "BAD_REQUEST",
+        });
+        await pressOn(box.querySelector("[data-install]"));
+        const install = requests.at(-1).body;
+        assert.equal(JSON.parse(install.manifest).id, "wandb");
+        assert.deepEqual(
+            [
+                install.source,
+                install.sha,
+                JSON.parse(install.settings),
+                JSON.parse(install.secrets),
+            ],
+            [
+                "plugyawn/armada-wandb",
+                "3c51a9e",
+                {entity: "runix", posts: "crashes"},
+                {api_key: "sk-wandb"},
+            ],
+        );
+        assert.equal(
+            box.querySelector(".go-row .cap").textContent,
+            "Weights & Biases is installed here already.",
+        );
+        answers.delete("POST /json/armada/plugins");
+        for (const key of [
+            "GET /json/armada/plugins",
+            "GET /json/armada/plugins/8/tools",
+            "PATCH /json/armada/plugins/8",
+        ]) {
+            answers.delete(key);
+        }
+        beta_state.state.place = place;
+    },
+);

@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): people and their faces: names, initials, stones, presence. */
 
-import {armadaBots, people, state} from "./state.js";
+import {armadaBots, DATA, people, state} from "./state.js";
 import {now} from "./time.js";
 import {brokenSprites, partnerOf, svFace, svSrc} from "./partners.js";
 
@@ -16,7 +16,10 @@ const graphemes = (t) => { try { return [...new Intl.Segmenter(undefined, {granu
 const initials = (name) => { const w = name.replace(/[^\p{L}\p{N}\p{M} ]/gu, "").split(/\s+/).filter(Boolean); if (!w.length) return "?"; const g = graphemes(w[0]);
   if (!/^[\p{Script=Latin}0-9]/u.test(w[0])) return g[0];   /* another script: one letter, which fills the disc as two Latin letters do */
   return w.length > 1 && /^\p{Lu}/u.test(w[1]) ? g[0].toUpperCase() + graphemes(w[1])[0] : g[0].toUpperCase() + (g[1] && /^[\p{Script=Latin}0-9]/u.test(g[1]) ? g[1] : ""); };
-const presOf = (id) => { const p = state.presences[person(id).email], a = p && p.aggregated; if (!a || now() / 1000 - a.timestamp > 300) return ""; return a.status === "active" ? "on" : a.status === "idle" ? "away" : ""; };
+/* here ("on") while the person was last active within the server's offline threshold, away while they were last idle within it
+   (presence.js keeps state.presences: by user id, the last times each was active and idle) */
+const OFFLINE_S = +DATA.presenceOffline || 200;
+const presOf = (id) => { const p = state.presences[id]; if (!p) return ""; const t = now() / 1000; return t - (p.active_timestamp || 0) < OFFLINE_S ? "on" : t - (p.idle_timestamp || 0) < OFFLINE_S ? "away" : ""; };
 /* a face (the r5 round-four study, sv.html): a gradient circle in the colour of the partner's type with its Scarlet/Violet
    icon standing whole on it, head over the rim, wherever one is drawn at 18 px or more; else initials on the stone. Onix
    has no face: in the gutter nothing is drawn (its words start at the edge), and in a list an empty cell keeps the names

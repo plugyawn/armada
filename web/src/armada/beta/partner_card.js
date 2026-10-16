@@ -30,7 +30,7 @@ function drawMeRow() { const r = $(".row.me", nav); if (!r) return; const me = m
 /* what the card says, as plain values: kept apart from the drawing so tests can read them */
 /* whether they are here: the presence the page holds, in words */
 function presenceWords(uid, pres = presOf(uid), presences = state.presences, at = now()) { if (uid === state.ME || pres === "on") return "Active now"; if (pres === "away") return "Away";
-  const p = presences[person(uid).email], ts = p && p.aggregated && p.aggregated.timestamp; if (!ts || at / 1000 - ts >= 86400 * 14) return "Offline"; const a = age(ts); return a === "now" ? "Active now" : `Active ${a} ago`; }
+  const p = presences[uid], ts = p && (p.active_timestamp || p.idle_timestamp); if (!ts || at / 1000 - ts >= 86400 * 14) return "Offline"; const a = age(ts); return a === "now" ? "Active now" : `Active ${a} ago`; }
 /* their clock: the time where they are, and the place their time zone names ("14:20 in Kolkata"); "" when they set none */
 function localTime(tz, at = now()) { if (!tz) return ""; try { const t = new Intl.DateTimeFormat(undefined, {hour: "numeric", minute: "2-digit", timeZone: tz}).format(new Date(at));
   const city = tz.split("/").pop().replace(/_/g, " "); return /^(UTC|GMT|Etc)/.test(tz) ? t + " " + tz : `${t} in ${city}`; } catch (e) { return ""; } }

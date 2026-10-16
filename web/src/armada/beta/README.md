@@ -41,6 +41,7 @@ into the engineered client deletes the module it replaces.
 | `routing.js` | place keys and addresses, the place caches and what fills them, `openPlace()`, marking read | connection |
 | `outbox.js` | a message on its way (`transmit`), the server's copy taking its place (`adopt`), a local row dropped | connection |
 | `faces.js` | names, initials, stones, presence, `faceOf()` | faces |
+| `presence.js` | presence reported as the old interface reports it (active or idle, on the server's interval), and heard | faces |
 | `partners.js` | the sprite pack, the team's partners, faces redrawn, the evolution caption | faces |
 | `partner_picker.js` | the partner picker, a place (`#partner`) | faces |
 | `partner_card.js` | a person's card (any face opens it; mine from the account row) and the evolution moment | faces |

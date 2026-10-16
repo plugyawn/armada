@@ -38,13 +38,14 @@ import {card, closeCard, cutMoment, faceAt, holdMoment, moment, momentDue, openC
 import {buildLab, lab} from "./lab.js";
 import {wireMentions} from "./mentions.js";
 import {wireCaret} from "./caret.js";
+import {onPresence, startPresence} from "./presence.js";
 import {onPost, wirePages} from "./pages.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
-on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser);
+on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -175,7 +176,7 @@ async function boot() {
   bootEl.remove();
   if (p) openPlace(p, {replace: true}); else drawNav();
   setTimeout(momentDue, 3000);   /* an evolution ready at load plays after the first idle 3 s */
-  poll();
+  poll(); startPresence();
   /* Home needs every worktree's runs and my unread mentions: asked once, after the first place is drawn, then kept by events */
   setTimeout(() => { scanAll(); if (!state.place || state.place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */
 }

@@ -310,7 +310,7 @@ run_test("the card's words", () => {
     assert.equal(card.presenceWords(ME), "Active now");
     assert.equal(card.presenceWords(IAGO, "on"), "Active now");
     assert.equal(card.presenceWords(IAGO, "away"), "Away");
-    const seen = {"5@example.com": {aggregated: {status: "idle", timestamp: NOW / 1000 - 7200}}};
+    const seen = {[IAGO]: {active_timestamp: NOW / 1000 - 7200, idle_timestamp: NOW / 1000 - 7200}};
     assert.equal(card.presenceWords(IAGO, "", seen, NOW), "Active 2h ago");
     assert.equal(card.presenceWords(IAGO, "", {}, NOW), "Offline");
     assert.match(

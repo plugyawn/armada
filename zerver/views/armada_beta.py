@@ -121,7 +121,8 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
     the version of the partner pack, so that its species.json can be
     kept for good under each version; and the little it would otherwise
     register for whole bundles to learn: the agent's user ids (from
-    realm_bot) and the rules for editing and deleting (from realm)."""
+    realm_bot), the rules for editing and deleting, and how often to
+    report presence and when a person counts as gone (from realm)."""
     pack = load_pack()
     return render(
         request,
@@ -136,6 +137,8 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
                 armada_bot_user_ids_for_realm(user_profile.realm)
             ).decode(),
             "edit_and_delete": orjson.dumps(edit_and_delete_rules(user_profile.realm)).decode(),
+            "presence_ping_interval_seconds": settings.PRESENCE_PING_INTERVAL_SECS,
+            "presence_offline_threshold_seconds": settings.OFFLINE_THRESHOLD_SECS,
         },
     )
 

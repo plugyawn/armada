@@ -308,10 +308,10 @@ class ArmadaBetaTest(ZulipTestCase):
 
     def test_the_page_brings_what_the_page_does_not_register_for(self) -> None:
         # The page registers without the realm bundle and the realm's bots
-        # (web/src/armada/beta/connection.js): the agent's user ids and the
-        # rules for editing and deleting come with it, written as register
-        # writes them, a named group by its id and an anonymous one by its
-        # members and subgroups.
+        # (web/src/armada/beta/connection.js): the agent's user ids, the
+        # rules for editing and deleting and the presence intervals come
+        # with it, written as register writes them, a named group by its id
+        # and an anonymous one by its members and subgroups.
         hamlet = self.example_user("hamlet")
         realm = hamlet.realm
         do_set_realm_property(realm, "message_content_delete_limit_seconds", 600, acting_user=None)
@@ -354,6 +354,10 @@ class ArmadaBetaTest(ZulipTestCase):
             },
         )
         self.assertIsInstance(rules["can_delete_any_message_group"], int)
+        self.assertEqual(int(data["presence-ping"]), state["server_presence_ping_interval_seconds"])
+        self.assertEqual(
+            int(data["presence-offline"]), state["server_presence_offline_threshold_seconds"]
+        )
 
     def test_read_receipts_off_is_written_into_the_page(self) -> None:
         hamlet = self.example_user("hamlet")

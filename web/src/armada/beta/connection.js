@@ -33,8 +33,8 @@ const link = createLink({
      fetched; their few facts come with the page (#beta-data) and their events keep them current. The page draws no
      avatars, so none are sent. */
   registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_user_groups"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm", "user_group", "stream", "realm_user"], apply_markdown: true, client_gravatar: true,
-    client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: true, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true}}),
+    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm", "user_group", "stream", "realm_user", "presence"], apply_markdown: true, client_gravatar: true,
+    client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: true, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true, simplified_presence_events: true}}),
   onRegister: applyRegister,
   onEvent: handle,
   onResync: resync,
@@ -57,7 +57,7 @@ function handle(ev, at) {
 /* at load: register (waiting out a server that is restarting), then say whose session this tab holds */
 async function register() { const r = await link.connect(); tell({type: "session", user_id: state.ME, csrf_token: link.csrf}); return r; }
 function applyRegister(r) {
-  state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {};
+  state.skew = r.server_timestamp * 1000 - Date.now(); state.ME = r.user_id; state.meName = r.full_name; state.presences = r.presences || {}; state.presenceId = r.presence_last_update_id ?? -1;
   people.clear(); for (const u of [...(r.realm_users || []), ...(r.cross_realm_bots || [])]) people.set(u.user_id, {id: u.user_id, name: u.full_name, email: u.email, bot: u.is_bot, active: u.is_active !== false, owner: u.bot_owner_id ?? null});
   state.muted = new Set((r.muted_users || []).map((u) => u.id));
   /* the groups the realm's rules for deleting name ("realm_user_groups"; the rules came with the page) */

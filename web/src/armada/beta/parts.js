@@ -9,6 +9,7 @@ import {echoRefs, quoteOf} from "./mention_text.js";
 import {quoteHTML, refLook} from "./mentions.js";
 import {tkey} from "./routing.js";
 import {dropNames, liftInline, loadPics, localSize, picHTML, picsOf} from "./media.js";
+import {widgetPart} from "./widgets.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
@@ -61,6 +62,7 @@ const JUMBO = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|[\u{1f1e
 function partsOf(m) {
   const onix = isOnix(m.sender_id), out = []; let run = [];
   if (onix && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
+  const wdg = widgetPart(m); if (wdg) return [wdg];   /* a poll or a to-do list stands in place of the words that made it (widgets.js) */
   tpl.innerHTML = m.content || ""; const root = clean(tpl.content); liftInline(root); dropNames(root);
   $$("code", root).forEach((x) => { if (x.closest("pre")) return; x.dir = "ltr"; if (x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
   if (onix) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
@@ -93,6 +95,7 @@ function partEl(p, m) {
   else if (p.t === "tbl") e = el("div", "blk tbl", p.html);
   else if (p.t === "ask") e = el("div", "blk ask", p.html);
   else if (p.t === "pic") e = el("div", "blk pic", p.html);
+  else if (p.t === "wdg") e = el("div", "blk wdg", p.html);
   else if (p.t === "rq") { e = el("button", "rq", p.html); e.dataset.quote = p.ref; e.setAttribute("aria-label", "Go to the message this replies to"); }
   else e = el("div", "blk", p.html);
   e.dataset.mid = m.id; e.dataset.part = p.t; e._src = p.html; loadPics(e); return e;

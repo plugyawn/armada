@@ -1,0 +1,36 @@
+/* INTERIM BETA (README.md): polls and to-do lists (widgets.js). Tokens only. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* a widget is a block: the block's fill, its radius and insets, the lane's width (a person's: the blocks' measure). Its head is
+   one line, the question or title in Strong and a caption at its end in a cell that does not push it; then a row a choice;
+   then the verb that adds one. Inside a block nothing has a resting fill; a row lights on hover and on the press. */
+.blk.wdg { padding: var(--s-2) var(--pad-x) var(--s-2); }
+.cl.me > .blk.wdg { align-self: flex-end; }
+.blk.wdg > .wh { display: flex; align-items: center; gap: var(--s-4); min-height: var(--h-m); }
+.blk.wdg .wq { flex: 1; min-width: 0; font: var(--t-strong); text-align: left; overflow-wrap: anywhere; }
+.blk.wdg button.wq { margin: 0 calc(-1 * var(--s-2)); padding: var(--s-1) var(--s-2); border-radius: var(--r-ctl); }
+.blk.wdg button.wq:hover { background: var(--fill-1); }
+.blk.wdg .wq > .ph { color: var(--ink-2); font: var(--t-text); }
+.blk.wdg .wc { flex: none; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.blk.wdg > .wl { display: flex; flex-direction: column; margin: var(--s-1) calc(-1 * var(--s-2)) 0; }
+.blk.wdg .wr { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; align-items: center; column-gap: var(--s-2); min-height: var(--h-k); padding: var(--s-1) var(--s-2); border-radius: var(--r-ctl); font: var(--t-text); text-align: left; cursor: pointer; transition: background-color var(--fade-out) linear; }
+.blk.wdg .wr:hover { background: var(--fill-1); transition-duration: var(--fade-in); }
+.blk.wdg .wr:active { background: var(--fill-press); transition-duration: 0s; }
+.blk.wdg .wr > .wt { min-width: 0; overflow-wrap: anywhere; }
+.blk.wdg .wr > .wt > .wd { color: var(--ink-2); }
+.blk.wdg .wr > .wt > .wd::before { content: " — "; }
+.blk.wdg .wr[role="checkbox"][data-on="true"] > .wt { color: var(--ink-2); }
+/* who chose an option: up to three faces, overlapping, in a cell three faces wide; the count in a cell as wide as 888 */
+.blk.wdg .wr > .wf { display: flex; justify-content: flex-end; width: 46px; }
+.blk.wdg .wr > .wf > * + * { margin-left: -4px; }
+.blk.wdg .wr > .wf > .av { box-shadow: 0 0 0 2px var(--block); border-radius: var(--r-round); }
+.blk.wdg .wr > .wn { width: 3ch; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.blk.wdg > .wa { margin-top: var(--s-1); }
+/* adding, or the author changing the question or title: a field in the control's own row, of the row's height */
+.blk.wdg .wi { display: block; width: calc(100% + 2 * var(--s-2)); height: var(--h-k); margin: var(--s-1) calc(-1 * var(--s-2)) 0; padding: 0 var(--s-2); border: 0; border-radius: var(--r-ctl); background: var(--raised); box-shadow: 0 0 0 1px var(--edge-2); font: var(--t-text); color: var(--ink-1); outline: none; }
+.blk.wdg > .wh > .wi { margin-top: 0; font: var(--t-strong); }
+/* a person's poll or list carries the message's controls as a bubble does */
+.cl > .blk.wdg > .over { top: 2px; left: calc(100% + 6px); right: auto; }
+.cl.me > .blk.wdg > .over { left: auto; right: calc(100% + 6px); }
+
+}   /* @layer zulip.armada-beta */

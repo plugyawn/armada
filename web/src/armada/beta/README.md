@@ -58,6 +58,7 @@ into the engineered client deletes the module it replaces.
 | `feed.js` | the conversation: its scroll, its turns, `drawLane()` | feed |
 | `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words (`agent_stream` events, written once a frame, a block at a time) followed in place | feed |
 | `reactions.js` | reactions | feed |
+| `widgets.js` | polls and to-do lists: the `widget` submessages replayed with mine not yet confirmed on top (`widgetOf`), drawn in place of the words that made them (`widgetPart`) and changed row by row (`drawWidget`), the `submessage` event (`onSubmessage`), my echo's widget (`localSubmessages`); its sheet is `widgets.css`; node tests in `web/tests/armada/beta_widgets.test.cjs` | feed |
 | `receipts.js` | read receipts, the ticks and Info | feed |
 | `threads.js` | threads, opened in place, with their own field | feed |
 | `hover.js` | the message's controls: the hover overlay, More, edit, delete | feed |

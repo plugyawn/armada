@@ -21,6 +21,7 @@ import {drawHomeRow} from "./home.js";
 import {hopOnce} from "./partners.js";
 import {choosePick} from "./partner_picker.js";
 import {drawLab} from "./lab.js";
+import {localSubmessages} from "./widgets.js";
 
 /* ---------- sending ---------- */
 /* the failed mark's undoing, when a retry starts or when the message's own event shows it arrived after all */
@@ -46,7 +47,7 @@ function send(o = {}) {
   if (inView && toOnix && o.text == null) text = withPath(text, inView, state.agentMention);
   if (o.text == null) text = takeReply() + text;   /* a reply: its one-line quote goes first */
   const raw = text, shown = echoHTML(text);
-  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: shown, raw, toOnix, reactions: []};
+  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: shown, raw, toOnix, reactions: [], submessages: localSubmessages(text)};   /* a /poll or /todo shows as one at once (widgets.js) */
   let ph = null; if (starts) ph = {id: "O" + state.localSeq, local: true, onix: true, sender_id: [...armadaBots][0], timestamp: m.timestamp, content: "", reactions: [], is_agent_message: true, for: m.id};
   state.pinned = true; haltLane();
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); addMsg(c, m); const r = appendMessage(lane, m); if (o.text == null) { tx.textContent = ""; state.atts = []; drawAtts(); } syncField(); if (ph) { addMsg(c, ph); r.onix = appendMessage(lane, ph); } return r; }, "touch", {clamp: {y: 240}});

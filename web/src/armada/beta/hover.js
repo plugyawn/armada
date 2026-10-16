@@ -30,7 +30,7 @@ const msgOf = (t) => { const n = t && t.closest("[data-mid]"); if (!n) return nu
 function buildOver() {
   over = el("span", "over", Object.keys(OVER).map((n) => `<button class="c" aria-label="${OVER[n]}" data-act="${n}" data-tip="${OVER[n]}">${ic(n)}</button>`).join("")); host(over); over.inert = true;
   feed.addEventListener("pointermove", (e) => { if (menu) return; if (e.target.closest && e.target.closest(".rcs, .cz, .blk.ask")) return;
-    let t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl:not(.onix) > .blk.pic, .cl.onix")); if (t && t !== overAt && t.matches(".cl.onix") && !onWords(t, e.clientX, e.clientY)) t = null;
+    let t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl:not(.onix) > :is(.blk.pic, .blk.wdg), .cl.onix")); if (t && t !== overAt && t.matches(".cl.onix") && !onWords(t, e.clientX, e.clientY)) t = null;
     if (!t || !msgOf(t)) { if (!e.target.closest(".over")) { clearTimeout(overTimer); overWant = null; } return; }
     if (t === overAt && !over.inert) return; if (!over.inert) { overShow(t); return; }
     if (t === overWant && Math.hypot(e.clientX - px_, e.clientY - py_) < 40) return; overWant = t; px_ = e.clientX; py_ = e.clientY; clearTimeout(overTimer); overTimer = setTimeout(() => { if (overWant === t) overShow(t); }, 120); }, {passive: true});
@@ -66,8 +66,8 @@ function wordsOf(cl) { if (cl._words && cl._words.v === wordsVer) return cl._wor
 function onWords(cl, x, y) { const base = cl.getBoundingClientRect(), px = x - base.left, py = y - base.top;
   return wordsOf(cl).rects.some((r) => px >= r.l - 8 && px <= r.r + 8 && py >= r.t - 4 && py <= r.b + 4); }
 let door = null;
-/* a person's pictures are a stop of their own: a message that is only a picture has no bubble */
-const doors = () => $$(".bl > .b, .cl:not(.onix) > .blk.pic, .cl.onix[data-mid]", lane).filter((t) => !t.closest(".cz"));
+/* a person's pictures, poll or to-do list are a stop of their own: such a message has no bubble */
+const doors = () => $$(".bl > .b, .cl:not(.onix) > :is(.blk.pic, .blk.wdg), .cl.onix[data-mid]", lane).filter((t) => !t.closest(".cz"));
 function syncDoor() { const all = doors(); if (!door || !door.isConnected || !all.includes(door)) door = all[all.length - 1] || null;
   for (const x of $$("[data-door]", lane)) if (x !== door) { x.removeAttribute("tabindex"); delete x.dataset.door; }
   if (door && !door.dataset.door) { door.tabIndex = 0; door.dataset.door = "1"; } }

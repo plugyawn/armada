@@ -40,7 +40,7 @@ const link = createLink({
      fetched; their few facts come with the page (#beta-data) and their events keep them current. The page draws no
      avatars, so none are sent. */
   registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_user_groups", "scheduled_messages", "reminders", "starred_messages"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "realm", "user_group", "stream", "realm_user", "presence", "scheduled_messages", "reminders"], apply_markdown: true, client_gravatar: true,
+    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "submessage", "realm", "user_group", "stream", "realm_user", "presence", "scheduled_messages", "reminders"], apply_markdown: true, client_gravatar: true,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: true, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true, simplified_presence_events: true}}),
   onRegister: applyRegister,
   onEvent: handle,

@@ -1,3 +1,4 @@
+import dataclasses
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +50,7 @@ from zerver.lib.armada import (
     write_armada_live_run_state,
 )
 from zerver.lib.armada_agent import ArmadaCodexAppServerToolRunner, ArmadaProcessIsolation
+from zerver.lib.armada_background_read import ArmadaBackgroundRead
 from zerver.lib.armada_gate import (
     armada_selected_bot_cache_key,
     get_armada_followup_service_bot_event,
@@ -122,14 +124,13 @@ from zerver.models.realms import get_realm
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
     ARMADA_MODEL_CATALOG_CACHE_SECONDS,
-    ArmadaModelCatalogCache,
+    armada_model_catalog,
     armada_worker_run_summary_events,
     armada_workspace_isolation_username,
     build_armada_git_context,
     build_armada_runtime_config_payload,
     ensure_armada_configured_bot,
     extract_armada_codex_model_catalog,
-    refresh_armada_model_catalog,
     serialize_armada_worker_run,
     serialize_armada_workspace_context,
     update_armada_run_control_event,
@@ -6335,14 +6336,28 @@ class HeldCodexDebugModels:
         return subprocess.CompletedProcess(command, 0, stdout=self.answer)
 
 
+def new_model_catalog(
+    value: list[dict[str, object]] | None = None, checked_at: float | None = None
+) -> ArmadaBackgroundRead[list[dict[str, object]]]:
+    """A fresh copy of the server's model catalog, as a process starts with."""
+    return dataclasses.replace(
+        armada_model_catalog,
+        value=value or [],
+        checked_at=checked_at,
+        refresh=None,
+        failing=False,
+        lock=threading.Lock(),
+    )
+
+
 class ArmadaModelCatalogTest(ZulipTestCase):
     @contextmanager
     def codex_on_path(
-        self, cache: ArmadaModelCatalogCache, codex: HeldCodexDebugModels
+        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexDebugModels
     ) -> Iterator[None]:
         self.addCleanup(codex.release.set)
         with (
-            patch("zerver.views.armada.armada_model_catalog_cache", cache),
+            patch("zerver.views.armada.armada_model_catalog", cache),
             patch("zerver.views.armada.which", return_value="/usr/local/bin/codex"),
             patch("zerver.views.armada.subprocess.run", side_effect=codex),
             self.settings(
@@ -6355,7 +6370,9 @@ class ArmadaModelCatalogTest(ZulipTestCase):
     def served_models(self) -> list[str]:
         return cast(list[str], build_armada_runtime_config_payload()["model_choices"])
 
-    def finish_refresh(self, cache: ArmadaModelCatalogCache, codex: HeldCodexDebugModels) -> None:
+    def finish_refresh(
+        self, cache: ArmadaBackgroundRead[list[dict[str, object]]], codex: HeldCodexDebugModels
+    ) -> None:
         refresh = cache.refresh
         assert refresh is not None
         codex.release.set()
@@ -6367,8 +6384,8 @@ class ArmadaModelCatalogTest(ZulipTestCase):
         user = self.example_user("hamlet")
         self.subscribe(user, ARMADA_DEFAULT_STREAM)
         self.login_user(user)
-        cache = ArmadaModelCatalogCache(
-            catalog=extract_armada_codex_model_catalog(
+        cache = new_model_catalog(
+            value=extract_armada_codex_model_catalog(
                 orjson.loads(codex_debug_models_output(["gpt-old"]))
             ),
             checked_at=time.monotonic() - ARMADA_MODEL_CATALOG_CACHE_SECONDS,
@@ -6394,7 +6411,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
         self.assertEqual(codex.callers, ["armada-model-catalog"])
 
     def test_cold_start_serves_the_configured_models(self) -> None:
-        cache = ArmadaModelCatalogCache()
+        cache = new_model_catalog()
         codex = HeldCodexDebugModels(
             codex_debug_models_output(["gpt-6-sol", "gpt-6-astra", "gpt-new"])
         )
@@ -6404,7 +6421,7 @@ class ArmadaModelCatalogTest(ZulipTestCase):
             self.assertEqual(self.served_models(), ["gpt-6-sol", "gpt-6-astra", "gpt-new"])
 
     def test_only_one_refresh_runs_at_a_time(self) -> None:
-        cache = ArmadaModelCatalogCache()
+        cache = new_model_catalog()
         codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
         with self.codex_on_path(cache, codex):
             self.served_models()
@@ -6423,17 +6440,17 @@ class ArmadaModelCatalogTest(ZulipTestCase):
         # The refresh thread's body runs here, in the test's own thread,
         # where test-backend's coverage can see it; checked_at keeps the
         # requests below from starting refreshes of their own.
-        cache = ArmadaModelCatalogCache(checked_at=time.monotonic())
+        cache = new_model_catalog(checked_at=time.monotonic())
         codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
         codex.release.set()
         warning = "Could not refresh Codex's model catalog; keeping the last one"
         with self.codex_on_path(cache, codex):
-            refresh_armada_model_catalog(cache)
+            cache.refresh_now()
 
             failure = subprocess.CalledProcessError(1, ["codex", "debug", "models"])
             codex.answer = failure
-            with self.assertLogs("zerver.views.armada", level="WARNING") as logs:
-                refresh_armada_model_catalog(cache)
+            with self.assertLogs("zerver.lib.armada_background_read", level="WARNING") as logs:
+                cache.refresh_now()
             self.assertEqual([record.getMessage() for record in logs.records], [warning])
             exc_info = logs.records[0].exc_info
             assert exc_info is not None
@@ -6442,21 +6459,21 @@ class ArmadaModelCatalogTest(ZulipTestCase):
 
             # Still failing, now by listing no models: kept, and not logged again.
             codex.answer = codex_debug_models_output([])
-            with self.assertNoLogs("zerver.views.armada"):
-                refresh_armada_model_catalog(cache)
+            with self.assertNoLogs("zerver.lib.armada_background_read"):
+                cache.refresh_now()
             self.assertEqual(self.served_models(), ["gpt-new", "gpt-6-astra", "gpt-6-sol"])
 
             # A refresh that succeeds ends the run; the next failure is logged.
             codex.answer = codex_debug_models_output(["gpt-newer"])
-            refresh_armada_model_catalog(cache)
+            cache.refresh_now()
             codex.answer = subprocess.TimeoutExpired(["codex", "debug", "models"], 5)
-            with self.assertLogs("zerver.views.armada", level="WARNING") as logs:
-                refresh_armada_model_catalog(cache)
+            with self.assertLogs("zerver.lib.armada_background_read", level="WARNING") as logs:
+                cache.refresh_now()
             self.assertEqual([record.getMessage() for record in logs.records], [warning])
             self.assertEqual(self.served_models(), ["gpt-newer", "gpt-6-astra", "gpt-6-sol"])
 
     def test_no_refresh_without_codex(self) -> None:
-        cache = ArmadaModelCatalogCache()
+        cache = new_model_catalog()
         codex = HeldCodexDebugModels(codex_debug_models_output(["gpt-new"]))
         with (
             self.codex_on_path(cache, codex),

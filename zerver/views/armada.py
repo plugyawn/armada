@@ -1,10 +1,6 @@
 import json
-import logging
 import subprocess
-import threading
-import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 from shutil import which
 from types import SimpleNamespace
@@ -54,6 +50,7 @@ from zerver.lib.armada_agent_threads import (
     load_armada_agent_thread_events,
     serialize_armada_agent_threads,
 )
+from zerver.lib.armada_background_read import ArmadaBackgroundRead
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.armada_monitor import (
     ARMADA_MONITOR_MAX_CADENCE_SECONDS,
@@ -119,25 +116,6 @@ ARMADA_RUN_TRACE_LIMIT = 50
 ARMADA_RUN_TRACE_MAX_LIMIT = 100
 ARMADA_MODEL_SLUG_LIMIT = 100
 ARMADA_MODEL_CATALOG_CACHE_SECONDS = 300
-
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ArmadaModelCatalogCache:
-    # Codex's catalog from the last refresh that succeeded; empty until one has.
-    catalog: list[dict[str, object]] = field(default_factory=list)
-    # When the last refresh started (time.monotonic()), or when one was
-    # skipped because there is no Codex to ask.
-    checked_at: float | None = None
-    # The refresh running now, if any; at most one runs in a process.
-    refresh: threading.Thread | None = None
-    # Whether the last refresh failed, so that a run of failures logs once.
-    failing: bool = False
-    lock: threading.Lock = field(default_factory=threading.Lock)
-
-
-armada_model_catalog_cache = ArmadaModelCatalogCache()
 
 
 def armada_worker_runtime_dependency_status(worker_agent_runtime: str) -> tuple[bool, str]:
@@ -395,27 +373,14 @@ def read_armada_codex_model_catalog() -> list[dict[str, object]]:
     return catalog
 
 
-def refresh_armada_model_catalog(cache: ArmadaModelCatalogCache) -> None:
-    """Runs in the thread that build_armada_codex_model_catalog starts.
-    A refresh that fails keeps the last catalog; only the first of a run
-    of failures is logged, so that a broken Codex is not logged every
-    five minutes in every process."""
-    catalog: list[dict[str, object]] = []
-    error: Exception | None = None
-    try:
-        catalog = read_armada_codex_model_catalog()
-    except Exception as exception:
-        error = exception
-    with cache.lock:
-        cache.refresh = None
-        first_failure = error is not None and not cache.failing
-        cache.failing = error is not None
-        if error is None:
-            cache.catalog = catalog
-    if first_failure:
-        logger.warning(
-            "Could not refresh Codex's model catalog; keeping the last one", exc_info=error
-        )
+armada_model_catalog = ArmadaBackgroundRead[list[dict[str, object]]](
+    name="armada-model-catalog",
+    description="Codex's model catalog",
+    read=read_armada_codex_model_catalog,
+    value=[],
+    max_age_seconds=ARMADA_MODEL_CATALOG_CACHE_SECONDS,
+    available=lambda: which(settings.ARMADA_WORKER_CODEX_BIN) is not None,
+)
 
 
 def build_armada_codex_model_catalog(model_choices: list[str]) -> list[dict[str, object]]:
@@ -425,26 +390,7 @@ def build_armada_codex_model_catalog(model_choices: list[str]) -> list[dict[str,
     Asking Codex takes up to a second, so no request waits for it: a
     request that finds the catalog stale starts a refresh in a
     background thread and is answered with what is there now."""
-    cache = armada_model_catalog_cache
-    with cache.lock:
-        catalog = [dict(entry) for entry in cache.catalog]
-        now = time.monotonic()
-        if cache.refresh is None and (
-            cache.checked_at is None or now - cache.checked_at >= ARMADA_MODEL_CATALOG_CACHE_SECONDS
-        ):
-            cache.checked_at = now
-            if which(settings.ARMADA_WORKER_CODEX_BIN) is not None:
-                refresh = threading.Thread(
-                    target=refresh_armada_model_catalog,
-                    args=(cache,),
-                    name="armada-model-catalog",
-                    daemon=True,
-                )
-                # Recorded once started, so that a thread that cannot
-                # start blocks no later refresh; the thread clears it only
-                # after this lock is released.
-                refresh.start()
-                cache.refresh = refresh
+    catalog = [dict(entry) for entry in armada_model_catalog.get()]
 
     slugs = {str(entry["slug"]) for entry in catalog}
     for entry in fallback_armada_model_catalog(model_choices):

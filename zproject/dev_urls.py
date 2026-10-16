@@ -104,6 +104,15 @@ urls = [
     path("flush_caches", remove_caches),
     # Redirect camo URLs for development
     path("external_content/<digest>/<received_url>", handle_camo_url),
+    # What nginx answers /favicon.ico with in production (zulip-include-frontend/app).
+    path(
+        "favicon.ico",
+        serve,
+        {
+            "path": "armada-favicon.png",
+            "document_root": os.path.join(settings.DEPLOY_ROOT, "static/images"),
+        },
+    ),
     # Endpoints for Showroom components.
     path("devtools/buttons/", showroom_component_buttons),
     path("devtools/banners/", showroom_component_banners),

@@ -27,6 +27,13 @@ location /static/ {
     }
 }
 
+# Browsers ask for /favicon.ico whatever the page links, and for every
+# page that is not HTML: answer with the icon the pages link, from the
+# static files, rather than a 404 from Django.
+location = /favicon.ico {
+    rewrite ^ /static/images/armada-favicon.png last;
+}
+
 # Canonical URL for the root is /help/.
 location = /help {
     return 301 /help/;

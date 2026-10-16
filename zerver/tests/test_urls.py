@@ -1,6 +1,7 @@
 import os
 from unittest import mock
 
+from django.conf import settings
 from django.test import Client
 
 from zerver.lib.test_classes import ZulipTestCase
@@ -63,6 +64,18 @@ class PublicURLTest(ZulipTestCase):
             result = self.client_get(url)
             self.assertEqual(result.status_code, 200)
             self.assert_in_success_response([expected_content], result)
+
+    def test_favicon_ico_is_the_armada_icon(self) -> None:
+        # Browsers ask for /favicon.ico for pages that are not HTML; in
+        # development Django answers with the icon the pages link, as nginx
+        # does in production.
+        result = self.client_get("/favicon.ico")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result["Content-Type"], "image/png")
+        with open(
+            os.path.join(settings.DEPLOY_ROOT, "static/images/armada-favicon.png"), "rb"
+        ) as f:
+            self.assertEqual(result.getvalue(), f.read())
 
     def test_public_urls(self) -> None:
         """

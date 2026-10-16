@@ -1,0 +1,3 @@
+# The idle, presence and network items of the performance audit (var/armada-overhaul/build/perf/idle.md).
+kept puppet/zulip/files/nginx/zulip-include-frontend/app  # /favicon.ico answered with the static icon, not a 404 from Django
+kept zerver/tests/test_urls.py  # the development server's /favicon.ico

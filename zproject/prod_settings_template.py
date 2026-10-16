@@ -922,7 +922,9 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = True
 ## The user ids, once the accounts exist (docs/armada/deploy.md, step 5).
 # ARMADA_WORKER_TRUSTED_USER_IDS = []
 ## Concurrent runs: per topic, and per organization (each running
-## topic keeps its own Codex app-server process).
+## topic keeps its own Codex app-server process). How many runs go at
+## once on the server is [armada] worker_slots in /etc/zulip/zulip.conf,
+## not a setting here (docs/armada/deploy.md, "Agent slots").
 # ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
 # ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
 

@@ -308,7 +308,7 @@ least 25 GB on the Mac before starting; 40 GB to be comfortable.** Do not
 start with less: a full Mac disk stops both VMs.
 
 **Memory.** The Mac has 24 GB and the dev VM takes 10 GB. Give the beta VM
-6 GB (Zulip needs more than 3.8 GB to run each queue, and both agent slots,
+6 GB (Zulip needs more than 3.8 GB to run each queue, and each agent slot,
 as a process of its own) and 2 GB of swap inside it; 8 GB if you stop the
 dev VM while the beta serves.
 
@@ -533,17 +533,17 @@ The queue workers Armada adds run under supervisor like Zulip's own, in the
 group `zulip-workers` (`puppet/zulip/templates/supervisor/zulip.conf.template.erb`).
 `supervisorctl status` names them:
 
-| Program                                                                                          | What it does                                                                                                        |
-| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `zulip-workers:zulip_events_armada_worker_slot0`, `…_slot1`                                      | Agent runs. Two slots, each consuming queues `armada_worker` and `armada_worker_1`, so two topics' runs go at once. |
-| `zulip-workers:zulip_events_armada_monitor_worker`                                               | Monitors (standing checks in a topic), on their own consumer.                                                       |
-| `zulip-workers:zulip_events_armada_addressing`, `zulip-workers:zulip_events_armada_presentation` | The optional Gemini router and live summaries; idle when those are off.                                             |
-| `zulip-workers:zulip_events_embedded_bots`                                                       | Delivers messages to the agent's bot account.                                                                       |
+| Program                                                                                          | What it does                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zulip-workers:zulip_events_armada_worker_slot0`, `…_slot1`, …                                   | Agent runs: one program per agent slot, two unless `[armada] worker_slots` says otherwise ([Agent slots](#agent-slots)). Each runs one run at a time, so that many runs go at once. |
+| `zulip-workers:zulip_events_armada_monitor_worker`                                               | Monitors (standing checks in a topic), on their own consumer.                                                                                                                       |
+| `zulip-workers:zulip_events_armada_addressing`, `zulip-workers:zulip_events_armada_presentation` | The optional Gemini router and live summaries; idle when those are off.                                                                                                             |
+| `zulip-workers:zulip_events_embedded_bots`                                                       | Delivers messages to the agent's bot account.                                                                                                                                       |
 
 These separate programs exist only on a machine with more than 3.8 GB of
 memory; below that, Zulip runs every queue as threads of one program,
-`zulip-workers:zulip_events`, and only one agent slot runs. Logs are
-`/var/log/zulip/events_armada_*.log`.
+`zulip-workers:zulip_events`, which takes every slot's queue, so one run
+goes at a time. Logs are `/var/log/zulip/events_armada_*.log`.
 
 Puppet sets `HOME=/home/zulip` and `CODEX_HOME=/home/zulip/.codex` for the
 web server and every queue program, so the agent finds the Codex login of 6.3
@@ -863,13 +863,15 @@ do by hand). Check it once the workers have started (6.7):
 rabbitmqctl list_queues name effective_policy_definition | grep armada
 ```
 
-`armada_worker`, `armada_worker_1` and `armada_monitor_worker` must show
+Every slot's queue (`armada_worker`, `armada_worker_1` and so on, one per
+[agent slot](#agent-slots)) and `armada_monitor_worker` must show
 `consumer-timeout` 21600000. Tested on the dev VM's RabbitMQ (3.12.1, the
 version Ubuntu 24.04 installs), in a vhost of its own: the script sets the
-policy once and then leaves it alone, its pattern reaches those three
-queues and not `armada_addressing`, and the same policy with five seconds
-cut off a consumer that held a message at the broker's next one-minute
-check ("Timeout used: 5000 ms"). A run that keeps working for more than
+policy once and then leaves it alone, its pattern reaches `armada_worker`,
+`armada_worker_1` and `armada_monitor_worker` and not `armada_addressing`
+(it takes `armada_worker_` followed by any number, so every slot's queue),
+and the same policy with five seconds cut off a consumer that held a
+message at the broker's next one-minute check ("Timeout used: 5000 ms"). A run that keeps working for more than
 six hours is cut off and tried again once.
 
 ### 6.7 Turn it on
@@ -879,7 +881,8 @@ su zulip -c '/home/zulip/deployments/current/scripts/restart-server'
 supervisorctl status | grep armada
 ```
 
-Expect `zulip-workers:zulip_events_armada_worker_slot0` and `…_slot1`,
+Expect one `zulip-workers:zulip_events_armada_worker_slotN` per agent slot
+(`…_slot0` and `…_slot1` with the default two),
 `zulip-workers:zulip_events_armada_monitor_worker`, and the two Gemini
 programs, all `RUNNING`. Then create the agent's bot account, once, as an
 organization administrator. Your API key is in the old interface (`/legacy/`)
@@ -1025,6 +1028,11 @@ the `npm install` line of 6.2 and a new version number.
 
 ### Upgrade notes
 
+- **17 October 2026: the number of agent slots is a setting.** Nothing to
+  do: without `[armada] worker_slots`, a server keeps two slots, with the
+  same program, queue and log names. To run more at once, set it after the
+  upgrade ([Agent slots](#agent-slots)); setting it before the upgrade is
+  harmless, since older versions ignore it, and saves the second restart.
 - **15 October 2026: the old code name was taken out.** The settings,
   environment variables, queues and default paths that were named after
   the agent's old code name were renamed. Upgrade when nobody is mid-run,
@@ -1147,21 +1155,128 @@ estimates, not load tests; only the figures marked measured were measured.
 
 - **CPU: 4 vCPU.** Zulip, plus the commands agents run in their worktrees
   (tests, builds), which is where the load comes from.
-- **Memory: 6 to 8 GB, plus 2 to 4 GB swap.** Each agent slot keeps up to
-  four Codex app-servers warm for 5 minutes after their topic's last turn
-  (`ARMADA_WORKER_RUNTIME_IDLE_SECONDS`; about 185 MB each, the native
-  binary measured on the hosted beta), two slots and the monitor worker can each hold four, a quiet
-  server holds none, and a running agent's commands can need gigabytes. More than 3.8 GB is also what makes Zulip run each queue,
-  and both agent slots, as a process of its own.
+- **Memory: 6 to 8 GB, plus 2 to 4 GB swap**, for the default two agent
+  slots. Each slot keeps up to four Codex app-servers warm for 5 minutes
+  after their topic's last turn (`ARMADA_WORKER_RUNTIME_IDLE_SECONDS`;
+  about 185 MB each for the native binary, 230 MB with its node launcher,
+  measured on the hosted beta), the monitor worker can hold four more, a
+  quiet server holds none, and a running agent's commands can need
+  gigabytes. More slots need more ([Agent slots](#agent-slots)). More than
+  3.8 GB is also what makes Zulip run each queue, and each agent slot, as
+  a process of its own.
 - **Disk: 25 to 40 GB.** Zulip asks for 10 GB free beyond the system; each
   repository is stored once, as a bare clone, plus one full checkout per
   topic with a worktree (a finished topic's goes after a week:
   `operations.md`, disk), plus whatever agents build in them, plus about
   2 GB per kept upgrade.
 
-Two runs go at once, one per slot; the rest wait in the queue.
-`ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM` is how many runs may be queued or
-running at once in the organization; beyond it a new request is refused.
+### Agent slots
+
+An agent slot is one `armada_worker` process, which runs one agent run at
+a time. The number of slots is how many runs go at once, server-wide. It
+is `[armada] worker_slots` in `/etc/zulip/zulip.conf`, 2 when unset, and it
+is set only there:
+
+- puppet starts one program per slot (`…_slot0` upwards);
+- the server sends each run to a slot's queue (`armada_worker`,
+  `armada_worker_1`, …; `ARMADA_WORKER_SLOTS`, which `settings.py` cannot
+  set);
+- Zulip's queue check (`scripts/nagios/check-rabbitmq-queue`) expects a
+  consumer on each queue from every slot, and a statistics file from each.
+
+A value that is not a whole number of at least 1 stops the puppet run and
+the server's start.
+
+**Where a run goes.** Each topic has a home slot, a hash of the agent, the
+channel and the topic, so that its next turn finds its Codex app-server
+still warm. That is a preference: every slot consumes every slot's queue,
+its own first. A run starts on its home slot when that slot is free, and
+otherwise at once on any free slot, cold there: that slot starts an
+app-server and resumes the topic's thread, and closes it after the turn.
+A run waits only when every slot is busy. On RabbitMQ 3.12 with
+eight slots, nine runs with one home started eight within 4 ms and the
+ninth when the first finished; a topic's turns, one after another, all
+ran on its home slot.
+
+**What else limits runs.**
+
+- `ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM` (3 in step 4's settings; with
+  the puppet module, `[armada] max_active_runs_per_realm`, 4 unless set):
+  how many runs may be queued or running at once in one organization;
+  beyond it a new request is refused. Set it at least as high as the
+  slots, or an organization never uses them all; above them, the extra
+  runs wait for a slot instead of being refused.
+- `ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC` (1): a topic runs one run at a
+  time; what people say during it steers it or queues behind it inside it.
+- `ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN` (5) and
+  `ARMADA_WORKER_MAX_RUN_DEPTH` (2): how many runs in other topics one run
+  may start, and how deep such runs nest. Each run started that way is a
+  run of its own: it takes a slot and counts in the organization's limit.
+- Not slots: monitors and their setup runs have their own worker; a side
+  question (`/btw`) during a run is answered in that run's app-server; and
+  Codex's subagents are threads of the run's own app-server, which Codex
+  itself caps (with the catalog's models, at most three subagents open at
+  once in a run: `features.multi_agent_v2.max_concurrent_threads_per_session`,
+  4 counting the run's own thread, in Codex 0.157.1).
+
+**Memory.** Each slot is a Zulip queue process of about 170 MB. Each keeps
+up to four app-servers warm, 185 to 230 MB each (up to 380 MB at a busy
+moment), for 5 minutes after their topic's last turn; a slot keeps only its
+home topics' warm, and the monitor worker keeps up to four more. For eight
+slots: about 1.4 GB of slot processes, 1.9 GB of app-servers with eight runs
+going, and at most 36 app-servers, about 8.3 GB (14 GB at peak), when 32
+topics have run in the last five minutes, before what the agents
+themselves run: builds, tests and the agent's browser. A 125 GB machine has
+room for that many times over; on a small one, count it before raising the
+slots.
+
+**Changing it on a running server.** As root, when nobody is mid-run (the
+restart cuts runs off; each is tried again once):
+
+```bash
+crudini --set /etc/zulip/zulip.conf armada worker_slots 8
+/home/zulip/deployments/current/scripts/zulip-puppet-apply -f
+su zulip -c '/home/zulip/deployments/current/scripts/restart-server'
+```
+
+Puppet rewrites supervisor's configuration, and supervisor restarts the
+slot programs with the new number. `restart-server` then restarts
+everything else, which routes over the new number of homes from then on.
+In between, a process with the old number may still send a run to an old
+slot's queue: when raising, those queues still have every slot consuming
+them; when lowering, see below. Then check:
+
+```bash
+/home/zulip/deployments/current/scripts/get-django-setting ARMADA_WORKER_SLOTS
+supervisorctl status | grep armada_worker_slot     # one RUNNING line per slot
+rabbitmqctl list_queues name messages consumers | grep '^armada_worker'
+rabbitmqctl list_queues name effective_policy_definition | grep '^armada_worker'
+```
+
+Each slot's queue has one consumer per slot, and each has the six-hour
+`consumer-timeout` (6.6). Raise `max_active_runs_per_realm` too if it is
+below the slots.
+
+**Lowering it** leaves the queues of the removed slots in RabbitMQ: the
+runs that were waiting there, the runs a removed slot had in hand (RabbitMQ
+puts them back), and any that a process with the old number sends during
+the restart. Nothing is stranded: at start, each slot looks for the queues
+of slots beyond the setting (`armada_worker_N` upwards, to the first
+missing one), consumes them as it consumes the other slots' queues, and
+names them in its log ("Slot 0 also consumes armada_worker_2, …"). They
+can stay. To remove them, once `restart-server` has finished, so that no
+process still sends to them, and they show 0 messages:
+
+```bash
+for n in 2 3 4 5 6 7; do rabbitmqctl delete_queue "armada_worker_$n" --if-empty; done
+```
+
+with the old slot numbers in place of `2 3 4 5 6 7`. Remove all of them or
+none: the slots stop looking at the first missing number. Deleting a queue
+whose slots are consuming it is safe; they keep consuming the others (tried
+on RabbitMQ 3.12). Do not delete one before the restart has finished: a
+process that still has the old number would send runs into a queue that no
+longer exists, and RabbitMQ would drop them.
 
 ## Troubleshooting
 
@@ -1182,7 +1297,8 @@ running at once in the organization; beyond it a new request is refused.
   6.6 (check the policy is in effect; as root,
   `/home/zulip/deployments/current/scripts/setup/configure-armada-rabbitmq-policy`
   sets it again).
-- Runs stay queued: `supervisorctl status | grep armada_worker`; both slots
-  must be `RUNNING`.
+- Runs stay queued: `supervisorctl status | grep armada_worker`; every slot
+  must be `RUNNING`. If they are and runs still wait, every slot is busy
+  ([Agent slots](#agent-slots)).
 - Nobody can reach the server: the Mac is asleep or the VM is stopped
   (`limactl list`), or the Tailscale rule does not let them in.

@@ -575,6 +575,7 @@ ARMADA_WORKER_MODEL = "gpt-6-astra"
 ARMADA_WORKER_MODEL_CHOICES = ["gpt-6-astra", "gpt-6-sol", "gpt-5.6-sol"]
 ARMADA_WORKER_SERVICE_TIER = "ultrafast"
 ARMADA_WORKER_REASONING_EFFORT = "medium"
+ARMADA_WORKER_BROWSER_DIR = "/opt/armada-browser"   # the agent's browser, 6.9
 ```
 
 `workspace-write` lets an agent change files only inside its topic's
@@ -904,6 +905,52 @@ bot is called Onix.
   allowed to start Onix's runs."
 - Signed in, `/` loads the new interface; signed out, it sends you to
   `/login/`. Nothing in either interface links to the other.
+
+### 6.9 The agent's browser
+
+_Untested on Linux: the module that installs it has not run on a server
+yet, and the agent's use of it was tried only on a Mac, with Codex 0.157.1
+and the Mac's Chrome._ Codex's own browser comes with the ChatGPT desktop
+app and does not exist on a server ("Browser isn't available in Codex
+CLI", in Codex's manual). The agent drives a headless Chromium through
+Playwright's MCP server instead, which the server starts beside each
+Codex thread when `ARMADA_WORKER_BROWSER_DIR` names this install
+(`zerver/lib/armada_agent.py`). The puppet module does all of this
+(`puppet/armada/manifests/agent_runtime.pp`); by hand, as root:
+
+```bash
+apt-get install -y libasound2t64 libatk-bridge2.0-0t64 libatk1.0-0t64 \
+    libatspi2.0-0t64 libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 \
+    libglib2.0-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
+    libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
+    libfontconfig1 libfreetype6 fonts-freefont-ttf fonts-ipafont-gothic \
+    fonts-liberation fonts-noto-color-emoji fonts-tlwg-loma-otf \
+    fonts-unifont fonts-wqy-zenhei
+HOME=/root npm install -g --prefix /opt/armada-browser playwright@1.62.1
+PLAYWRIGHT_BROWSERS_PATH=/opt/armada-browser/browsers \
+    /opt/armada-browser/bin/playwright install --no-shell chromium
+```
+
+That is Playwright's own list of what its Chromium needs on Ubuntu 24.04,
+less Xvfb and the X bitmap fonts: 47 packages with their dependencies on
+the beta's droplet, 79 MB to download and 289 MB installed (Mesa's
+`libgbm1` brings LLVM). Playwright is 18.5 MB; its Chrome for Testing 151
+is a 193 MB download. Playwright 1.62.1 is the version Codex's own desktop
+runtime bundles. Ubuntu's `chromium-browser` is a snap, whose confinement
+keeps it away from the worktrees, so it is not used. Chrome's sandbox is
+off: Playwright turns it off for Chrome for Testing on Linux, and the
+agent's commands are already in Codex's.
+
+Each topic's browser keeps its screenshots and page snapshots in
+`/home/zulip/.cache/armada-browser/<worktree>`, up to 100 MB each (older
+files go first), outside the worktree, so they never show among a topic's
+changes. Check that the browser runs as the agent's user and draws a page:
+
+```bash
+sudo -u zulip -H env PLAYWRIGHT_BROWSERS_PATH=/opt/armada-browser/browsers \
+    /opt/armada-browser/bin/playwright screenshot --channel chromium \
+    https://example.com /tmp/example.png
+```
 
 ## Fonts
 

@@ -16,6 +16,7 @@ class armada::settings {
     'worker_model_choices'      => zulipconf('armada', 'worker_model_choices', 'gpt-6-astra, gpt-6-sol, gpt-5.6-sol'),
     'worker_service_tier'       => zulipconf('armada', 'worker_service_tier', 'ultrafast'),
     'worker_reasoning_effort'   => zulipconf('armada', 'worker_reasoning_effort', 'medium'),
+    'browser_dir'               => zulipconf('armada', 'browser_dir', '/opt/armada-browser'),
   }
 
   file { '/usr/local/sbin/armada-settings-apply':

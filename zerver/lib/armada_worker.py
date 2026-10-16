@@ -385,7 +385,7 @@ def set_armada_workspace_paused(
         return
     stream, topic = armada_topic_scope(stream, topic)
     with transaction.atomic(savepoint=False):
-        workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+        workspace_node = armada_workspace_node_record(user_profile, stream=stream, topic=topic)
         workspace_node = Workspace.objects.select_for_update().get(id=workspace_node.id)
         if workspace_node.is_paused == is_paused:
             return
@@ -424,7 +424,7 @@ def set_armada_workspace_response_policy(
         return
     stream, topic = armada_topic_scope(stream, topic)
     clean_response_policy = normalize_armada_response_policy(response_policy)
-    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+    workspace_node = armada_workspace_node_record(user_profile, stream=stream, topic=topic)
     if workspace_node.response_policy == clean_response_policy:
         return
     workspace_node.response_policy = clean_response_policy
@@ -1396,17 +1396,36 @@ def armada_write_text_path(
     return completed.returncode == 0
 
 
-def ensure_armada_workspace_node(
+def armada_workspace_node_for_topic(
     user_profile: UserProfile,
     *,
     stream: str,
     topic: str,
-) -> Workspace:
+) -> Workspace | None:
+    """The topic's Workspace row, if it has one; one query, no git."""
     stream, topic = armada_topic_scope(stream, topic)
-    project = armada_project_for_stream(user_profile, stream=stream)
+    return Workspace.objects.filter(
+        realm=user_profile.realm,
+        stream_name__iexact=stream,
+        topic_name__iexact=topic,
+    ).first()
+
+
+def armada_workspace_node_record(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+    project: Repository | None = None,
+) -> Workspace:
+    """The topic's Workspace row, made or repaired from the database
+    alone: no git and no file system. ensure_armada_workspace_node adds
+    the worktree on disk; only a turn about to run in it needs that."""
+    stream, topic = armada_topic_scope(stream, topic)
+    if project is None:
+        project = armada_project_for_stream(user_profile, stream=stream)
     if project is None:
         raise JsonableError(_("Could not create a repository for this channel."))
-    origin = ensure_armada_project_origin(user_profile, project)
     branch_name = armada_workspace_node_default_branch(
         project=project,
         topic=topic,
@@ -1456,6 +1475,26 @@ def ensure_armada_workspace_node(
     if update_fields:
         workspace_node.date_updated = timezone_now()
         workspace_node.save(update_fields=[*update_fields, "date_updated"])
+    return workspace_node
+
+
+def ensure_armada_workspace_node(
+    user_profile: UserProfile,
+    *,
+    stream: str,
+    topic: str,
+) -> Workspace:
+    """The topic's Workspace row and its worktree on disk: the channel's
+    repository, the topic branch checked out, a git identity. About ten
+    git processes, so a turn does this once, when it starts."""
+    stream, topic = armada_topic_scope(stream, topic)
+    project = armada_project_for_stream(user_profile, stream=stream)
+    if project is None:
+        raise JsonableError(_("Could not create a repository for this channel."))
+    origin = ensure_armada_project_origin(user_profile, project)
+    workspace_node = armada_workspace_node_record(
+        user_profile, stream=stream, topic=topic, project=project
+    )
     existing_isolation_username = (
         workspace_node.isolation_username
         if workspace_node.isolation_username
@@ -2401,8 +2440,10 @@ def build_armada_workspace_context(
     stream: str,
     topic: str,
 ) -> ArmadaWorkspaceContext:
-    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
-    workdir = workspace_node.workdir.strip() or armada_default_worker_workdir()
+    # The turn provisioned the worktree before it loads its session; the
+    # addressing worker only needs the labels.
+    workspace_node = armada_workspace_node_record(user_profile, stream=stream, topic=topic)
+    workdir = armada_worker_workdir_for_workspace(workspace_node)
     project = workspace_node.project
     workspace_repo = project.repository_url.strip() if project is not None else ""
     repository = armada_logical_repository_label(
@@ -2489,6 +2530,22 @@ def armada_logical_worktree_label(*, stream: str, topic: str, fallback: str) -> 
     return fallback
 
 
+def armada_worker_model_for_workspace(workspace_node: Workspace | None) -> str:
+    if workspace_node is not None and workspace_node.model.strip():
+        return workspace_node.model.strip()
+    return armada_default_worker_model()
+
+
+def armada_worker_reasoning_effort_for_workspace(workspace_node: Workspace | None) -> str:
+    if workspace_node is not None and workspace_node.reasoning_effort.strip():
+        return workspace_node.reasoning_effort.strip()
+    return armada_default_worker_reasoning_effort()
+
+
+def armada_worker_workdir_for_workspace(workspace_node: Workspace) -> str:
+    return workspace_node.workdir.strip() or armada_default_worker_workdir()
+
+
 def armada_worker_model_for_topic(
     user_profile: UserProfile,
     *,
@@ -2497,10 +2554,9 @@ def armada_worker_model_for_topic(
 ) -> str:
     if not stream:
         return armada_default_worker_model()
-    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
-    if workspace_node.model.strip():
-        return workspace_node.model.strip()
-    return armada_default_worker_model()
+    return armada_worker_model_for_workspace(
+        armada_workspace_node_for_topic(user_profile, stream=stream, topic=topic)
+    )
 
 
 def armada_worker_reasoning_effort_for_topic(
@@ -2511,10 +2567,9 @@ def armada_worker_reasoning_effort_for_topic(
 ) -> str:
     if not stream:
         return armada_default_worker_reasoning_effort()
-    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
-    if workspace_node.reasoning_effort.strip():
-        return workspace_node.reasoning_effort.strip()
-    return armada_default_worker_reasoning_effort()
+    return armada_worker_reasoning_effort_for_workspace(
+        armada_workspace_node_for_topic(user_profile, stream=stream, topic=topic)
+    )
 
 
 def armada_worker_workdir_for_topic(
@@ -2525,8 +2580,9 @@ def armada_worker_workdir_for_topic(
 ) -> str:
     if not stream:
         return armada_default_worker_workdir()
-    workspace_node = ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
-    return workspace_node.workdir.strip() or armada_default_worker_workdir()
+    return armada_worker_workdir_for_workspace(
+        ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+    )
 
 
 def armada_worker_sandbox_for_topic(
@@ -3068,15 +3124,7 @@ class ArmadaDatabaseWorkerRunStore:
                         source_topic_name=topic if source_message_id is not None else "",
                         source_message_id=source_message_id,
                         status=AgentRun.QUEUED,
-                        runtime_label=self._runtime_label(),
-                        model=self._model_label(user_profile, stream=stream, topic=topic),
-                        sandbox=self._sandbox_label(
-                            user_profile,
-                            stream=stream,
-                            topic=topic,
-                        ),
-                        approval_policy=self._approval_policy_label(),
-                        workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
+                        **self._runtime_labels(workspace_node),
                     )
                     self._record_event(
                         run,
@@ -3182,11 +3230,7 @@ class ArmadaDatabaseWorkerRunStore:
                         source_message_id=source_message_id,
                         status=AgentRun.QUEUED,
                         summary="Queued threaded side conversation.",
-                        runtime_label=self._runtime_label(),
-                        model=self._model_label(user_profile, stream=stream, topic=topic),
-                        sandbox=self._sandbox_label(user_profile, stream=stream, topic=topic),
-                        approval_policy=self._approval_policy_label(),
-                        workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
+                        **self._runtime_labels(workspace_node),
                     )
                 else:
                     if not self._update_run(
@@ -3295,15 +3339,7 @@ class ArmadaDatabaseWorkerRunStore:
                         status=AgentRun.RUNNING,
                         attempts=1,
                         heartbeat_at=current_time,
-                        runtime_label=self._runtime_label(),
-                        model=self._model_label(user_profile, stream=stream, topic=topic),
-                        sandbox=self._sandbox_label(
-                            user_profile,
-                            stream=stream,
-                            topic=topic,
-                        ),
-                        approval_policy=self._approval_policy_label(),
-                        workdir=self._workdir_label(user_profile, stream=stream, topic=topic),
+                        **self._runtime_labels(workspace_node),
                     )
                     self._remember_claimed_attempt(run)
                     self._record_event(
@@ -3356,6 +3392,7 @@ class ArmadaDatabaseWorkerRunStore:
                         run,
                         stream=stream,
                         topic=topic,
+                        workspace_node=workspace_node,
                         current_time=current_time,
                         stale_reclaim=False,
                     )
@@ -3403,6 +3440,7 @@ class ArmadaDatabaseWorkerRunStore:
                         run,
                         stream=stream,
                         topic=topic,
+                        workspace_node=workspace_node,
                         current_time=current_time,
                         stale_reclaim=True,
                     )
@@ -3447,6 +3485,7 @@ class ArmadaDatabaseWorkerRunStore:
                             run,
                             stream=stream,
                             topic=topic,
+                            workspace_node=workspace_node,
                             current_time=current_time,
                             stale_reclaim=True,
                         )
@@ -3539,15 +3578,7 @@ class ArmadaDatabaseWorkerRunStore:
                     "status": status,
                     "result_message_id": result_message_id,
                     "error": error,
-                    "runtime_label": self._runtime_label(),
-                    "model": self._model_label(user_profile, stream=stream, topic=topic),
-                    "sandbox": self._sandbox_label(
-                        user_profile,
-                        stream=stream,
-                        topic=topic,
-                    ),
-                    "approval_policy": self._approval_policy_label(),
-                    "workdir": self._workdir_label(user_profile, stream=stream, topic=topic),
+                    **self._runtime_labels(workspace_node),
                 },
             )
             self._require_worker_attempt(
@@ -3591,6 +3622,7 @@ class ArmadaDatabaseWorkerRunStore:
         *,
         stream: str,
         topic: str,
+        workspace_node: Workspace | None,
         current_time: datetime,
         stale_reclaim: bool,
     ) -> bool:
@@ -3607,7 +3639,12 @@ class ArmadaDatabaseWorkerRunStore:
         run.attempts += 1
         run.heartbeat_at = current_time
         run.date_updated = current_time
-        run.save(update_fields=["attempts", "heartbeat_at", "date_updated"])
+        # The topic's model or effort may have changed while the run waited
+        # in the queue; it runs with today's.
+        labels = self._runtime_labels(workspace_node)
+        for field_name, value in labels.items():
+            setattr(run, field_name, value)
+        run.save(update_fields=["attempts", "heartbeat_at", "date_updated", *labels])
         self._remember_claimed_attempt(run)
         self._record_event(
             run,
@@ -3720,8 +3757,6 @@ class ArmadaDatabaseWorkerRunStore:
             if isinstance(ambient_triggered, bool):
                 run.ambient_triggered = ambient_triggered
                 update_fields.append("ambient_triggered")
-            context_stream = run.stream_name
-            context_topic = run.topic_name
             source_stream = metadata.get("source_stream")
             if isinstance(source_stream, str):
                 run.source_stream_name = source_stream
@@ -3734,23 +3769,6 @@ class ArmadaDatabaseWorkerRunStore:
             if isinstance(source_message_id, int):
                 run.source_message_id = source_message_id
                 update_fields.append("source_message_id")
-            run.model = self._model_label(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            run.sandbox = self._sandbox_label(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            run.approval_policy = self._approval_policy_label()
-            run.workdir = self._workdir_label(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            update_fields.extend(["model", "sandbox", "approval_policy", "workdir"])
             current_time = timezone_now()
             run.date_updated = current_time
             self._apply_heartbeat_if_due(
@@ -4131,35 +4149,21 @@ class ArmadaDatabaseWorkerRunStore:
     def _runtime_label(self) -> str:
         return armada_setting_text(settings.ARMADA_WORKER_AGENT_RUNTIME, "")
 
-    def _model_label(
-        self,
-        user_profile: UserProfile,
-        *,
-        stream: str,
-        topic: str,
-    ) -> str:
-        return armada_worker_model_for_topic(user_profile, stream=stream, topic=topic)
-
-    def _sandbox_label(
-        self,
-        user_profile: UserProfile,
-        *,
-        stream: str,
-        topic: str,
-    ) -> str:
-        return armada_worker_sandbox_for_topic(user_profile, stream=stream, topic=topic)
-
-    def _approval_policy_label(self) -> str:
-        return armada_setting_text(settings.ARMADA_WORKER_APPROVAL_POLICY, "")
-
-    def _workdir_label(
-        self,
-        user_profile: UserProfile,
-        *,
-        stream: str,
-        topic: str,
-    ) -> str:
-        return armada_worker_workdir_for_topic(user_profile, stream=stream, topic=topic)
+    def _runtime_labels(self, workspace_node: Workspace | None) -> dict[str, str]:
+        """What a run records about where and how it runs, read from its
+        topic's row: no git, so it is cheap under any lock."""
+        workdir = (
+            armada_worker_workdir_for_workspace(workspace_node)
+            if workspace_node is not None
+            else armada_default_worker_workdir()
+        )
+        return {
+            "runtime_label": self._runtime_label(),
+            "model": armada_worker_model_for_workspace(workspace_node),
+            "sandbox": armada_worker_sandbox_for_workdir(workdir),
+            "approval_policy": armada_setting_text(settings.ARMADA_WORKER_APPROVAL_POLICY, ""),
+            "workdir": workdir,
+        }
 
     def _workspace_node_for_topic(
         self,
@@ -4170,7 +4174,7 @@ class ArmadaDatabaseWorkerRunStore:
     ) -> Workspace | None:
         if not stream:
             return None
-        return ensure_armada_workspace_node(user_profile, stream=stream, topic=topic)
+        return armada_workspace_node_record(user_profile, stream=stream, topic=topic)
 
 
 class ArmadaQueueWorkerDispatcher:

@@ -26,12 +26,14 @@ from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     armada_topic_process_isolation,
     armada_worker_home_slot,
-    armada_worker_model_for_topic,
+    armada_worker_model_for_workspace,
     armada_worker_process_isolation_error,
-    armada_worker_reasoning_effort_for_topic,
+    armada_worker_reasoning_effort_for_workspace,
     armada_worker_sandbox_for_workdir,
-    armada_worker_workdir_for_topic,
+    armada_worker_workdir_for_workspace,
+    armada_workspace_node_record,
     build_armada_worker_runtime_from_settings,
+    ensure_armada_workspace_node,
     load_armada_active_session_from_zulip,
     maintain_armada_worker_run_liveness,
     reap_stale_armada_worker_runs,
@@ -495,19 +497,21 @@ class ArmadaWorker(QueueProcessingWorker):
         else:
             self.active_side_run_attempt = active_run_attempt
             self.active_side_run_id = active_run_id
-        model = armada_worker_model_for_topic(
-            user_profile, stream=context_stream, topic=context_topic
-        )
-        reasoning_effort = armada_worker_reasoning_effort_for_topic(
-            user_profile,
-            stream=context_stream,
-            topic=context_topic,
-        )
-        workdir = armada_worker_workdir_for_topic(
-            user_profile,
-            stream=context_stream,
-            topic=context_topic,
-        )
+        if side_runtime is None:
+            # The turn's one provisioning: the worktree on disk, on its topic
+            # branch. Nothing later in the turn runs git for it.
+            workspace_node = ensure_armada_workspace_node(
+                user_profile, stream=context_stream, topic=context_topic
+            )
+        else:
+            # A side conversation runs in its parent's live worktree, which
+            # must not be switched under the parent's turn.
+            workspace_node = armada_workspace_node_record(
+                user_profile, stream=context_stream, topic=context_topic
+            )
+        model = armada_worker_model_for_workspace(workspace_node)
+        reasoning_effort = armada_worker_reasoning_effort_for_workspace(workspace_node)
+        workdir = armada_worker_workdir_for_workspace(workspace_node)
         process_isolation = armada_topic_process_isolation(
             user_profile,
             stream=context_stream,

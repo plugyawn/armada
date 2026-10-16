@@ -5,19 +5,22 @@ database connection."""
 import os
 import platform
 import stat
+import subprocess
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.db import connection
 from django.db.utils import InterfaceError
 from typing_extensions import override
 
 from zerver.lib import armada_agent
+from zerver.lib.armada import ARMADA_DEFAULT_STREAM, ARMADA_EMBEDDED_BOT_SERVICE
 from zerver.lib.armada_agent import (
     ARMADA_CODEX_NPM_PLATFORM_PACKAGES,
     ArmadaCodexAppServerToolRunner,
@@ -25,6 +28,15 @@ from zerver.lib.armada_agent import (
     armada_process_group_exists,
 )
 from zerver.lib.armada_monitor import armada_run_due_monitor_ticks
+from zerver.lib.armada_worker import (
+    ArmadaDatabaseWorkerRunStore,
+    armada_git_current_branch_name,
+    armada_worker_sandbox_for_workdir,
+    build_armada_workspace_context,
+    ensure_armada_workspace_node,
+)
+from zerver.lib.test_classes import ZulipTestCase
+from zerver.models import AgentRun, UserProfile
 from zerver.worker.armada_monitor_worker import run_armada_monitor_tick_pass
 
 # A Codex stand-in that answers every request. With "wedged" in its file
@@ -283,3 +295,100 @@ class ArmadaMonitorTickConnectionTest(TestCase):
             self.assertEqual(run_armada_monitor_tick_pass(), 0)
 
         self.run_on_own_thread(work)
+
+
+class ArmadaTurnProvisioningTest(ZulipTestCase):
+    """A turn provisions its topic's worktree once, when it starts. Before,
+    every transcript event provisioned it three times while holding the
+    run's row lock: about 42 git processes an event, 21,000 for a run of
+    500 events."""
+
+    def git_spawns(self, spawn: Mock) -> int:
+        return sum(
+            1
+            for spawn_call in spawn.call_args_list
+            if "git" in [str(argument) for argument in spawn_call.args[0]]
+        )
+
+    def test_a_run_spawns_git_only_to_provision_its_worktree(self) -> None:
+        owner = self.example_user("hamlet")
+        bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(bot, ARMADA_DEFAULT_STREAM)
+        bot_handler = SimpleNamespace(user_profile=bot)
+        topic = "provision once"
+
+        with (
+            TemporaryDirectory() as topic_root,
+            self.settings(ARMADA_TOPIC_WORKDIR_ROOT=topic_root, ARMADA_WORKER_MODEL="gpt-6-astra"),
+            patch("subprocess.run", wraps=subprocess.run) as spawn,
+        ):
+            # An earlier turn made the channel's repository and the worktree.
+            ensure_armada_workspace_node(bot, stream=ARMADA_DEFAULT_STREAM, topic=topic)
+            spawn.reset_mock()
+
+            store = ArmadaDatabaseWorkerRunStore()
+            self.assertTrue(
+                store.claim_for_run(bot_handler, 9876, stream=ARMADA_DEFAULT_STREAM, topic=topic)
+            )
+            self.assertEqual(self.git_spawns(spawn), 0)
+
+            # The turn's one provisioning.
+            workspace_node = ensure_armada_workspace_node(
+                bot, stream=ARMADA_DEFAULT_STREAM, topic=topic
+            )
+            provisioning_spawns = self.git_spawns(spawn)
+            self.assertLessEqual(provisioning_spawns, 10)
+            spawn.reset_mock()
+
+            build_armada_workspace_context(bot, stream=ARMADA_DEFAULT_STREAM, topic=topic)
+            for event in range(500):
+                store.update_metadata(bot_handler, 9876, current_activity=f"Ran command {event}.")
+            store.record(bot_handler, 9876, "done", stream=ARMADA_DEFAULT_STREAM, topic=topic)
+            self.assertEqual(self.git_spawns(spawn), 0)
+
+        run = AgentRun.objects.get(bot_profile=bot, trigger_message_id=9876)
+        self.assertEqual(run.status, AgentRun.DONE)
+        self.assertEqual(run.current_activity, "Ran command 499.")
+        self.assertEqual(run.model, "gpt-6-astra")
+        self.assertEqual(run.workdir, workspace_node.workdir)
+        self.assertEqual(run.sandbox, armada_worker_sandbox_for_workdir(workspace_node.workdir))
+
+    def test_an_agent_may_switch_branches_during_its_turn(self) -> None:
+        owner = self.example_user("hamlet")
+        bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(bot, ARMADA_DEFAULT_STREAM)
+        bot_handler = SimpleNamespace(user_profile=bot)
+        topic = "agent branches"
+
+        with (
+            TemporaryDirectory() as topic_root,
+            self.settings(ARMADA_TOPIC_WORKDIR_ROOT=topic_root),
+        ):
+            store = ArmadaDatabaseWorkerRunStore()
+            self.assertTrue(
+                store.claim_for_run(bot_handler, 9877, stream=ARMADA_DEFAULT_STREAM, topic=topic)
+            )
+            workdir = ensure_armada_workspace_node(
+                bot, stream=ARMADA_DEFAULT_STREAM, topic=topic
+            ).workdir
+            # Codex checks out a branch of its own mid-turn; the next events
+            # once switched the worktree back under it.
+            subprocess.run(
+                ["git", "-C", workdir, "switch", "--quiet", "-c", "codex/experiment"],
+                check=True,
+            )
+            store.update_metadata(bot_handler, 9877, current_activity="Ran tests.")
+            self.assertEqual(armada_git_current_branch_name(Path(workdir)), "codex/experiment")

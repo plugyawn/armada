@@ -1,10 +1,9 @@
 /* INTERIM BETA (README.md): partners: the sprite pack, the team's partners, faces redrawn. */
 
 import {$$, el, esc, T} from "./util.js";
-import {DATA, msgIndex, state} from "./state.js";
+import {armadaBots, DATA, msgIndex, places, state} from "./state.js";
 import {api} from "./connection.js";
 import {faceOf, faceSize, isOnix, stoneOf} from "./faces.js";
-import {drawNav} from "./nav.js";
 import {drawSide} from "./column.js";
 import {drawPicker, drawPickerBand} from "./partner_picker.js";
 import {card, drawCard, drawMeRow, momentDue} from "./partner_card.js";
@@ -87,19 +86,25 @@ function refreshPartners(o = {}) { if (!pack) return; clearTimeout(partnerTimer)
 function onPartner(ev) { if (!pack || !partners || ev.op !== "update") return; const {user_id: id, ...row} = ev.partner;
   if (id === state.ME) { fetchPartners(false); return; }
   applyPartners({...partners, partners: {...partners.partners, [id]: row}}); }
-function applyPartners(st) { if (!st || !st.on || !pack) return; const before = JSON.stringify(partners && partners.partners) + JSON.stringify(partners && partners.agent); partners = st; partnersAt = performance.now();
-  if (before !== JSON.stringify(st.partners) + JSON.stringify(st.agent)) refreshFaces();
+function applyPartners(st) { if (!st || !st.on || !pack) return; const was = partners; partners = st; partnersAt = performance.now();
+  if (!was) refreshFaces(); else { const who = new Set(), them = {...was.partners, ...st.partners};   /* the people whose partner changed: theirs are the only faces drawn again */
+    for (const id of Object.keys(them)) if (JSON.stringify(was.partners[id]) !== JSON.stringify(st.partners[id])) who.add(+id);
+    if (JSON.stringify(was.agent) !== JSON.stringify(st.agent)) for (const id of armadaBots) who.add(id);
+    if (who.size) refreshFaces(who); }
   drawMeRow(); if (card) drawCard(); if (state.place && state.place.kind === "partner") { drawPicker(); drawSide(); drawPickerBand(); } momentDue(); }
 const me_ = () => (partners && partners.me) || null;
-/* every face on the page that is out of date is redrawn where it stands (same box), on the fade; bubbles take the new stone */
-function refreshFaces() {
-  for (const f of $$("[data-uid][data-fs]")) { if (!(+f.dataset.uid > 0)) continue; const uid = +f.dataset.uid, cls = f.getAttribute("class") || "", size = f.matches(".pk") ? +((/\bs(\d+)\b/.exec(cls) || [])[1] || 28) : faceSize(cls);
+const stoneClass = (f) => [...f.classList].find((c) => c.startsWith("p-")) || "";
+/* the faces of these people (every face when none are named) are redrawn where they stand (same box), on the fade, on the
+   page and in the rows of places left; their bubbles take the new stone. Nothing else is drawn again. */
+function refreshFaces(who) { const ids = who ? [...who] : null, roots = [document, ...[...places.values()].map((c) => c.park).filter(Boolean)];
+  const faces = ids ? ids.map((i) => `[data-uid="${i}"][data-fs]`).join(", ") : "[data-uid][data-fs]", turns = ids ? ids.map((i) => `.cl.them[data-sid="${i}"]`).join(", ") : ".cl.them[data-sid]";
+  for (const root of roots) for (const f of root.querySelectorAll(faces)) { if (!(+f.dataset.uid > 0)) continue; const uid = +f.dataset.uid, cls = f.getAttribute("class") || "", size = f.matches(".pk") ? +((/\bs(\d+)\b/.exec(cls) || [])[1] || 28) : faceSize(cls);
     const pres = /\bon\b/.test(cls) ? "on" : /\baway\b/.test(cls) ? "away" : "", keep = cls.split(/\s+/).filter((c) => /^s\d+$/.test(c)).join(" ");
-    const t = el("template"); t.innerHTML = faceOf(uid, keep || (size === 28 ? "" : "s" + size), pres); const neu = t.content.firstElementChild; if (!neu || neu.dataset.fs === f.dataset.fs) continue;
+    const t = el("template"); t.innerHTML = faceOf(uid, keep || (size === 28 ? "" : "s" + size), pres); const neu = t.content.firstElementChild; if (!neu || (neu.dataset.fs === f.dataset.fs && stoneClass(neu) === stoneClass(f))) continue;   /* initials keep their data-fs; their stone is a class */
     for (const c of cls.split(/\s+/)) if (c && !/^(av|pk|on|away|s\d+|p-\w+|ty-\w+|big)$/.test(c) && !neu.classList.contains(c)) neu.classList.add(c);
-    f.replaceWith(neu); if (!M.reduced()) M.appear(neu, 0, T["fade-in"]); }
-  for (const cl of $$(".cl.them[data-sid]")) { const want = "s-" + stoneOf(+cl.dataset.sid); if (!cl.classList.contains(want)) { [...cl.classList].filter((c) => c.startsWith("s-")).forEach((c) => cl.classList.remove(c)); cl.classList.add(want); } }
-  drawNav(); if (state.P && state.place && state.place.kind !== "home" && state.place.kind !== "partner") drawSide(); }
+    f.replaceWith(neu); if (!M.reduced() && neu.isConnected) M.appear(neu, 0, T["fade-in"]); }
+  for (const root of roots) for (const cl of root.querySelectorAll(turns)) { const want = "s-" + stoneOf(+cl.dataset.sid); if (!cl.classList.contains(want)) { [...cl.classList].filter((c) => c.startsWith("s-")).forEach((c) => cl.classList.remove(c)); cl.classList.add(want); } }
+  if (state.P && state.place && state.place.kind !== "home" && state.place.kind !== "partner") drawSide(); }
 
 /* ----- the caption the team sees: my next bubble after an evolution carries one line, laid out with that bubble ----- */
 function evoCaption(m) { if (typeof m.sender_id !== "number" || isOnix(m.sender_id)) return null; const p = partnerOf(m.sender_id); if (!p || !p.evolved_at) return null;

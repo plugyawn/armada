@@ -17,8 +17,8 @@ const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
 
 const dom = real_dom.make_real_dom(`
-<div id="beta-data" data-read-receipts="on"></div>
-<nav><div class="fixed"></div><div class="scroll"></div></nav>
+<div id="beta-data" data-read-receipts="on" data-sprite-version="1"></div>
+<nav><div class="fixed"></div><div class="scroll"></div><button class="row me"></button></nav>
 <main>
   <header class="hd"></header>
   <div class="band"><div class="lane">
@@ -57,6 +57,8 @@ set_global(
         postMessage() {}
     },
 );
+// A face hops when its person's message lands (partners.js, hopOnce).
+dom.window.Element.prototype.animate = () => ({finished: Promise.resolve(), cancel() {}});
 Object.defineProperty(document, "fonts", {
     value: {addEventListener() {}, ready: Promise.resolve()},
 });
@@ -148,6 +150,22 @@ set_global(
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
 );
 
+// The partners' pack: two forms of one line, each with its icon.
+const form = (num, name, prevo, evos) => ({
+    num,
+    name,
+    types: ["Fire"],
+    line: "4",
+    prevo,
+    evos,
+    first: prevo === null,
+    sprite: {regular: `${num}.png`, shiny: null, size: [68, 56], box: [0, 0, 68, 56]},
+    sv: {path: `sv/${num}.png`, size: [96, 96], box: [0, 0, 96, 96]},
+});
+const PACK = {species: {4: form(4, "Charmander", null, ["5"]), 5: form(5, "Charmeleon", "4", [])}};
+const partner = (species) => ({species, shiny: false, level: 5, stone: "rose"});
+const PARTNERS = {result: "success", on: true, partners: {}, agent: null, me: null};
+
 // The stand-in server answers every request with success and nothing in
 // it; a message sent is given the next id.
 const requests = [];
@@ -155,6 +173,12 @@ let next_id = 9000;
 set_global("fetch", async (url, init = {}) => {
     const method = init.method ?? "GET";
     requests.push({method, url: url.split("?")[0]});
+    if (url.startsWith("/beta/sprites/species.json")) {
+        return {ok: true, status: 200, json: async () => PACK};
+    }
+    if (url.split("?")[0] === "/json/armada/partners") {
+        return {ok: true, status: 200, json: async () => PARTNERS};
+    }
     const sent = {};
     if (method === "POST" && url.split("?")[0] === "/json/messages") {
         sent.id = next_id;
@@ -208,9 +232,12 @@ const events = zrequire("armada/beta/events.js");
 const send = zrequire("armada/beta/send.js");
 const receipts = zrequire("armada/beta/receipts.js");
 const connection = zrequire("armada/beta/connection.js");
+const partners = zrequire("armada/beta/partners.js");
+const nav = zrequire("armada/beta/nav.js");
 
 const ME = 3;
 const IAGO = 5;
+const KING = 7;
 const AGENT = 9;
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
@@ -218,6 +245,7 @@ beta_state.armadaBots.add(AGENT);
 for (const [id, name] of [
     [ME, "Shiva"],
     [IAGO, "Iago"],
+    [KING, "King Hamlet"],
     [AGENT, "Onix"],
 ]) {
     beta_state.people.set(id, {
@@ -641,4 +669,38 @@ run_test("a lost queue forgets the messages it will ask for again", () => {
     open_with("resync", many(7000, 5, "resync"));
     connection.resync();
     assert.ok(!beta_state.msgIndex.has(7000));
+});
+
+run_test("a partner that changes redraws that person's faces, and nothing else", async () => {
+    PARTNERS.partners = {[IAGO]: partner("4"), [KING]: partner("4")};
+    await partners.loadPartners();
+    assert.ok(partners.pack);
+    // Iago's and King's faces: in the nav's direct messages, in a lane, and
+    // in the rows of a place left.
+    beta_state.state.dms = [{user_ids: [IAGO]}, {user_ids: [KING]}];
+    open_with("faces left", [message(9500, IAGO, "faces left"), message(9501, KING, "faces left")]);
+    await routing.openPlace(place_of("faces"));
+    for (const m of [message(9510, IAGO, "faces"), message(9511, KING, "faces")]) {
+        events.onMessage({message: m, flags: ["read"]});
+    }
+    nav.drawNav();
+    const nav_rows = [...document.querySelectorAll("nav .row")];
+    const kings = [...document.querySelectorAll(`[data-uid="${KING}"]`)];
+    const parked = beta_state.places.get(routing.tkey(10, "faces left")).park;
+    const iago_left = () => parked.querySelector(`[data-uid="${IAGO}"]`).dataset.fs;
+    assert.equal(iago_left(), "sv:4");
+    // Iago's partner evolves.
+    partners.applyPartners({...PARTNERS, partners: {[IAGO]: partner("5"), [KING]: partner("4")}});
+    assert.ok(
+        nav_rows.every((r) => r.isConnected),
+        "the nav was drawn again",
+    );
+    assert.ok(
+        kings.every((f) => f.isConnected),
+        "a face whose partner did not change was drawn again",
+    );
+    for (const f of document.querySelectorAll(`[data-uid="${IAGO}"][data-fs]`)) {
+        assert.equal(f.dataset.fs, "sv:5");
+    }
+    assert.equal(iago_left(), "sv:5");
 });

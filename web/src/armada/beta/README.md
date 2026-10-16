@@ -73,7 +73,7 @@ into the engineered client deletes the module it replaces.
 | `checklist.js` | the run's checklist, in the header and the column | feed |
 | `column.js` | the column: the checklist's standing home, Changes, Runs, People | feed |
 | `nav.js` | the nav: channels, topics, direct messages, their trailing marks and counts | none this sprint |
-| `channels.js` | New, from the nav's "+": a raised surface under it that makes a channel (`POST channels/create`, which refuses a name that is taken); the channels I join and leave, kept in the nav by the `subscription` event, a repository's as a repository; its sheet is `channels.css`; tested by `web/tests/armada/beta_channels.test.cjs` | channels |
+| `channels.js` | New, from the nav's "+": a raised surface under it that makes a channel (`POST channels/create`, which refuses a name that is taken) and lists the public channels I am not in (`GET streams`, asked when it opens), each joined with one press; the channels I join and leave, kept in the nav by the `subscription` event, a repository's as a repository; its sheet is `channels.css`; tested by `web/tests/armada/beta_channels.test.cjs` | channels |
 | `header.js` | the header: the repository's facts | none this sprint |
 | `band.js` | the band: what the run is doing, its clock, Stop | none this sprint |
 | `views.js` | the views: README, Files, Changes | none this sprint |

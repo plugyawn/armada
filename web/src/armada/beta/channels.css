@@ -1,4 +1,4 @@
-/* INTERIM BETA (README.md): New, from the nav's "+" (channels.js). Tokens only, as beta.css.
+/* INTERIM BETA (README.md): New, from the nav's "+", and the channels to join (channels.js). Tokens only, as beta.css.
    A raised surface under the "+" (the nav's top row is 52; the "+" ends at 42), its left edge on the nav's 8 px inset and
    as wide as another person's card (264), so it covers the nav and none of the conversation. Its text edge is 16 in, and
    what has a fill is outdented to stand 8 in: the fields, the selected choice and Create. */
@@ -20,5 +20,17 @@
 /* the caption: what the choice means, or why Create was refused. Two lines are kept for it, so a refusal moves nothing */
 .chn .chn-say { font: var(--t-caption); color: var(--ink-2); min-height: calc(2 * 16px); margin-top: var(--s-2); }
 .chn .chn-say[data-bad] { color: var(--failure); }
+/* the channels I am not in: a list row a channel, its glyph on the text edge, its name, and its verb at the row's end in a
+   cell as wide as "Joining", so the verb's changes move nothing. Six and a half rows at most, a row cut in half saying
+   there are more; the list scrolls inside itself */
+.chn .chn-ls { position: relative; max-height: calc(6.5 * var(--h-m)); margin: 0 calc(-1 * var(--s-2)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.chn .chn-row, .chn .chn-none { height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-2); color: var(--ink-2); }
+.chn .chn-row[data-state="joined"] { color: var(--ink-1); }
+.chn .chn-g { flex: none; display: flex; }
+.chn .chn-row > .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chn .chn-row > .lk { display: inline-grid; justify-items: end; }
+.chn .chn-row > .lk > * { grid-area: 1 / 1; }
+.chn .chn-row > .lk > i { visibility: hidden; font-style: normal; }
+.chn .chn-row[data-state="joining"] > .lk { color: var(--ink-2); }
 
 }

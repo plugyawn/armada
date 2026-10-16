@@ -10,7 +10,11 @@
 // first place opens then, whichever of the answer and the event comes
 // first. A channel I leave leaves the nav. Esc and a press outside close
 // the surface and give focus back to where it was; Tab goes round its
-// fields; Return creates. Deleted with web/src/armada/beta/.
+// fields; Return creates. Under the form, the surface lists the public
+// channels I am not in, asked for (GET streams) only when it opens. Join
+// is one press: the row says Joining at once and Open once I am in, and
+// keeps its place; the nav takes the channel when the event comes; Open
+// opens its first place. Deleted with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -59,6 +63,7 @@ set_global(
     },
 );
 const noop = () => {};
+const said = [];
 set_global("M", {
     T: {},
     release: noop,
@@ -66,6 +71,11 @@ set_global("M", {
     current: () => [{}, {}],
     halt: noop,
     refuse: noop,
+    appear: noop,
+    // What the page tells the person beside a control, kept for the tests.
+    say(_target, text) {
+        said.push(text);
+    },
     focusKbd(element) {
         element.focus();
     },
@@ -91,8 +101,12 @@ const requests = [];
 let answers = [];
 set_global("fetch", async (url, init = {}) => {
     const method = init.method ?? "GET";
-    const path = url.split("?")[0];
-    requests.push({method, url: path, body: Object.fromEntries(init.body ?? [])});
+    const [path, query] = url.split("?");
+    requests.push({
+        method,
+        url: path,
+        body: Object.fromEntries(init.body ?? new URLSearchParams(query)),
+    });
     const answer = answers.find(([m, pattern]) => m === method && pattern.test(path));
     assert.ok(answer, `no stand-in answer for ${method} ${path}`);
     const reply = await answer[2]();
@@ -100,10 +114,15 @@ set_global("fetch", async (url, init = {}) => {
 });
 const success = (data = {}) => ({result: "success", msg: "", ...data});
 let create_answer;
+let join_answer;
+let streams_answer;
 function serve() {
     requests.length = 0;
+    streams_answer = () => success({streams: []});
     answers = [
         ["POST", /^\/json\/channels\/create$/, () => create_answer()],
+        ["GET", /^\/json\/streams$/, () => streams_answer()],
+        ["POST", /^\/json\/users\/me\/subscriptions$/, () => join_answer()],
         [
             "GET",
             /^\/json\/users\/me\/\d+\/topics$/,
@@ -112,16 +131,21 @@ function serve() {
         ["GET", /^\/json\/messages$/, () => success({messages: [], found_oldest: true})],
     ];
 }
-// An answer the test lets go of when it chooses.
-function held(reply) {
+// An answer the test lets go of when it chooses (Create's, unless it says).
+function held(
+    reply,
+    answer_with = (answer) => {
+        create_answer = answer;
+    },
+) {
     let release;
     const waiting = new Promise((resolve) => {
         release = resolve;
     });
-    create_answer = async () => {
+    answer_with(async () => {
         await waiting;
         return reply;
-    };
+    });
     return release;
 }
 const created = () =>
@@ -465,4 +489,181 @@ run_test("the nav follows the channels I join and leave", () => {
         user_ids: [5],
     });
     assert.deepEqual(nav_rows(), before);
+});
+
+// The public channels the server knows: #general and #ops are mine; it
+// would never send a private one I cannot see or an archived one, and if
+// it did they would not be offered.
+const PUBLIC_CHANNELS = [
+    {stream_id: 10, name: "general", invite_only: false},
+    {stream_id: 20, name: "ops", invite_only: false},
+    {stream_id: 42, name: "releases", description: "What ships, and when", invite_only: false},
+    {stream_id: 41, name: "deploys", description: "", invite_only: false},
+    {stream_id: 43, name: "support", invite_only: false},
+    {stream_id: 44, name: "secret", invite_only: true},
+    {stream_id: 45, name: "old", invite_only: false, is_archived: true},
+];
+const the_list = () => surface().querySelector('[aria-label="Channels to join"]');
+const listed = () =>
+    [...the_list().querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
+const join_button = (name) =>
+    [...the_list().querySelectorAll("button")].find((b) =>
+        b.getAttribute("aria-label").includes(name),
+    );
+const verb_of = (button) => button.firstElementChild.textContent;
+const asked_streams = () => requests.filter((r) => r.method === "GET" && r.url === "/json/streams");
+const joins = () =>
+    requests
+        .filter((r) => r.method === "POST" && r.url === "/json/users/me/subscriptions")
+        .map((r) => r.body);
+
+run_test("it lists the public channels I am not in, asked for when it opens", async () => {
+    serve();
+    streams_answer = () => success({streams: PUBLIC_CHANNELS});
+    assert.deepEqual(asked_streams(), []);
+    open_new();
+    assert.equal(the_list().textContent, "Loading");
+
+    await settle();
+    assert.deepEqual(listed(), ["Join deploys", "Join releases", "Join support"]);
+    assert.deepEqual(
+        asked_streams().map((r) => r.body),
+        [{include_public: "true", include_subscribed: "false", exclude_archived: "true"}],
+    );
+    // The form keeps the caret.
+    assert.equal(document.activeElement, name_field());
+
+    // Asked again each time it opens.
+    close_new();
+    open_new();
+    await settle();
+    assert.equal(asked_streams().length, 2);
+    close_new();
+});
+
+run_test("Join is one press; the row keeps its place; Open opens the channel", async () => {
+    serve();
+    streams_answer = () => success({streams: PUBLIC_CHANNELS});
+    const release = held(success({subscribed: {[ME]: ["releases"]}}), (answer) => {
+        join_answer = answer;
+    });
+    open_new();
+    await settle();
+    const rows = [...the_list().children];
+    const releases = join_button("releases");
+
+    press_on(releases);
+    assert.equal(verb_of(releases), "Joining");
+    assert.deepEqual(joins(), [{subscriptions: JSON.stringify([{name: "releases"}])}]);
+    // A second press while it goes sends nothing more.
+    press_on(releases);
+    assert.equal(joins().length, 1);
+
+    release();
+    await settle();
+    assert.equal(verb_of(releases), "Open");
+    assert.equal(releases.getAttribute("aria-label"), "Open releases, joined");
+    assert.deepEqual([...the_list().children], rows);
+    // The nav takes it when the server says I am in it.
+    assert.ok(!nav_rows().includes("releases"));
+    channels.onSubscription({
+        type: "subscription",
+        op: "add",
+        subscriptions: [{stream_id: 42, name: "releases"}],
+    });
+    assert.ok(nav_rows().includes("releases"));
+    assert.deepEqual([...the_list().children], rows);
+
+    press_on(releases);
+    await settle();
+    assert.equal(surface(), null);
+    assert.equal(beta_state.state.place.key, routing.tkey(42, "channel events"));
+});
+
+run_test("a refused join is said beside Join, which comes back", async () => {
+    serve();
+    streams_answer = () => success({streams: PUBLIC_CHANNELS});
+    join_answer = () => ({
+        status: 400,
+        result: "error",
+        msg: "Unable to access channel (deploys).",
+    });
+    open_new();
+    await settle();
+    const deploys = join_button("deploys");
+
+    press_on(deploys);
+    await settle();
+    assert.deepEqual(said.splice(0), ["Not joined: Unable to access channel (deploys)."]);
+    assert.deepEqual(sounds.splice(0), ["nope"]);
+    assert.equal(verb_of(deploys), "Join");
+    assert.ok(surface());
+    close_new();
+});
+
+run_test("Tab reaches the list, Up and Down move along it, Return joins", async () => {
+    serve();
+    streams_answer = () => success({streams: PUBLIC_CHANNELS});
+    join_answer = () => success({subscribed: {[ME]: ["support"]}});
+    open_new();
+    await settle();
+
+    for (let i = 0; i < 4; i += 1) {
+        dom.press("Tab");
+    }
+    assert.equal(document.activeElement, join_button("deploys"));
+    dom.press("ArrowUp");
+    assert.equal(document.activeElement, join_button("deploys"));
+    dom.press("ArrowDown");
+    dom.press("ArrowDown");
+    dom.press("ArrowDown");
+    assert.equal(document.activeElement, join_button("support"));
+    // Round to the form and back: the list keeps the row I left.
+    dom.press("Tab");
+    assert.equal(document.activeElement, name_field());
+    dom.press("Tab", {shiftKey: true});
+    assert.equal(document.activeElement, join_button("support"));
+
+    dom.press("Enter");
+    await settle();
+    assert.deepEqual(joins(), [{subscriptions: JSON.stringify([{name: "support"}])}]);
+    assert.deepEqual(created(), []);
+    assert.equal(verb_of(join_button("support")), "Open");
+
+    // Open before the server says I am in it: the place opens when it does.
+    dom.press("Enter");
+    assert.equal(surface(), null);
+    channels.onSubscription({
+        type: "subscription",
+        op: "add",
+        subscriptions: [{stream_id: 43, name: "support"}],
+    });
+    await settle();
+    assert.equal(beta_state.state.place.key, routing.tkey(43, "channel events"));
+});
+
+run_test("a channel joined elsewhere says Open; none left, or none loaded, is said", async () => {
+    serve();
+    streams_answer = () => success({streams: PUBLIC_CHANNELS});
+    open_new();
+    await settle();
+    channels.onSubscription({
+        type: "subscription",
+        op: "add",
+        subscriptions: [{stream_id: 41, name: "deploys"}],
+    });
+    assert.equal(verb_of(join_button("deploys")), "Open");
+    close_new();
+
+    streams_answer = () => success({streams: PUBLIC_CHANNELS.slice(0, 2)});
+    open_new();
+    await settle();
+    assert.equal(the_list().textContent, "No other public channels.");
+    close_new();
+
+    streams_answer = () => ({status: 400, result: "error", msg: "Something went wrong"});
+    open_new();
+    await settle();
+    assert.equal(the_list().textContent, "Not loaded: Something went wrong");
+    close_new();
 });

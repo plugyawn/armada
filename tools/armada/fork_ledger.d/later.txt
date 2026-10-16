@@ -1,0 +1,7 @@
+# Later and Send when (BRIEF statement 41): a scheduled message or a
+# reminder can wait for an agent run's end instead of a time. The wait is
+# Armada's own table (AgentRunWait, zerver/lib/armada_later.py) beside
+# Zulip's ScheduledMessage, which keeps its schema; zerver/models/bots.py
+# and zerver/models/__init__.py are R1.txt's.
+kept zerver/actions/reminders.py  # a reminder can wait for an agent run instead of a time
+kept zerver/actions/scheduled_messages.py  # a message can wait for an agent run; a time given later replaces the wait; delivery can be narrowed to the messages a run's end released

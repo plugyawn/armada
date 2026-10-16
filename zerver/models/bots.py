@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Final
 
 from django.db import models
@@ -203,6 +204,25 @@ class AgentRunEvent(models.Model):
                 name="zerver_agentrunevent_run_date",
             ),
         ]
+
+
+class AgentRunWait(models.Model):
+    """A scheduled message or a reminder that is sent when an agent run
+    ends, instead of at a time: Send when and Later
+    (zerver/lib/armada_later.py). It lives beside Zulip's ScheduledMessage
+    rather than in it. Deleting the message deletes its wait. When the run
+    first reaches done, failed or cancelled, one transaction makes the
+    message due and deletes this row, so it is sent once."""
+
+    # A waiting message's scheduled_timestamp: far enough away that
+    # Zulip's delivery worker, which sends what is due, leaves it alone
+    # until the run ends.
+    WAITING_TIMESTAMP: Final = datetime(9999, 12, 31, tzinfo=timezone.utc)
+
+    scheduled_message = models.OneToOneField(
+        "zerver.ScheduledMessage", on_delete=CASCADE, related_name="agent_run_wait"
+    )
+    run = models.ForeignKey(AgentRun, on_delete=CASCADE, related_name="waits")
 
 
 class AgentMonitor(models.Model):

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -29,6 +29,7 @@ from zerver.lib.scheduled_messages import access_scheduled_message
 from zerver.lib.string_validation import check_stream_topic
 from zerver.lib.timestamp import datetime_to_global_time
 from zerver.models import Client, Realm, ScheduledMessage, Subscription, UserProfile
+from zerver.models.bots import AgentRun, AgentRunWait
 from zerver.models.users import get_system_bot, is_cross_realm_bot_email
 from zerver.tornado.django_api import send_event_on_commit
 
@@ -42,12 +43,15 @@ def check_schedule_message(
     message_to: list[int],
     topic_name: str | None,
     message_content: str,
-    deliver_at: datetime,
+    deliver_at: datetime | None,
     realm: Realm | None = None,
     *,
     read_by_sender: bool | None = None,
     skip_events: bool = False,
+    agent_run: AgentRun | None = None,
 ) -> int:
+    """Schedule a message for deliver_at, or, with agent_run instead,
+    for when that run ends (zerver/lib/armada_later.py)."""
     addressee = Addressee.legacy_build(sender, recipient_type_name, message_to, topic_name, realm)
     send_request = check_message(
         sender,
@@ -72,6 +76,7 @@ def check_schedule_message(
         read_by_sender=read_by_sender,
         skip_events=skip_events,
         delivery_type=ScheduledMessage.SEND_LATER,
+        agent_run=agent_run,
     )[0]
 
 
@@ -104,6 +109,7 @@ def do_schedule_messages(
     read_by_sender: bool = False,
     skip_events: bool = False,
     delivery_type: int,
+    agent_run: AgentRun | None = None,
 ) -> list[int]:
     scheduled_messages: list[tuple[ScheduledMessage, SendMessageRequest]] = []
 
@@ -118,8 +124,12 @@ def do_schedule_messages(
         scheduled_message.sending_client = send_request.message.sending_client
         scheduled_message.stream = send_request.stream
         scheduled_message.realm = send_request.realm
-        assert send_request.deliver_at is not None
-        scheduled_message.scheduled_timestamp = send_request.deliver_at
+        if agent_run is None:
+            assert send_request.deliver_at is not None
+            scheduled_message.scheduled_timestamp = send_request.deliver_at
+        else:
+            assert send_request.deliver_at is None
+            scheduled_message.scheduled_timestamp = AgentRunWait.WAITING_TIMESTAMP
         scheduled_message.read_by_sender = read_by_sender
         scheduled_message.delivery_type = delivery_type
 
@@ -134,6 +144,11 @@ def do_schedule_messages(
             scheduled_message for scheduled_message, ignored in scheduled_messages
         ]
         ScheduledMessage.objects.bulk_create(scheduled_message_objects)
+        if agent_run is not None:
+            AgentRunWait.objects.bulk_create(
+                AgentRunWait(scheduled_message=scheduled_message, run=agent_run)
+                for scheduled_message in scheduled_message_objects
+            )
         for scheduled_message, send_request in scheduled_messages:
             if do_claim_attachments(
                 scheduled_message, send_request.rendering_result.potential_attachment_path_ids
@@ -261,8 +276,10 @@ def edit_scheduled_message(
         scheduled_message_object.has_attachment = attachment_reference_change.did_attachment_change
 
     if deliver_at is not None:
-        # User has updated the scheduled message's send timestamp.
+        # User has updated the scheduled message's send timestamp. A
+        # message that waited for an agent run now waits for the time.
         scheduled_message_object.scheduled_timestamp = deliver_at
+        AgentRunWait.objects.filter(scheduled_message=scheduled_message_object).delete()
 
     # Update for most recent Client information.
     scheduled_message_object.sending_client = client
@@ -427,18 +444,21 @@ def send_failed_scheduled_message_notification(
 
 
 @transaction.atomic(durable=True)
-def try_deliver_one_scheduled_message() -> bool:
+def try_deliver_one_scheduled_message(
+    scheduled_message_ids: Collection[int] | None = None,
+) -> bool:
     # Returns whether there was a scheduled message to attempt
-    # delivery on, regardless of whether delivery succeeded.
-    scheduled_message = (
-        ScheduledMessage.objects.filter(
-            scheduled_timestamp__lte=timezone_now(),
-            delivered=False,
-            failed=False,
-        )
-        .select_for_update(no_key=True)
-        .first()
+    # delivery on, regardless of whether delivery succeeded. With
+    # scheduled_message_ids, only those are considered: the messages
+    # an agent run's end has just made due (zerver/lib/armada_later.py).
+    due = ScheduledMessage.objects.filter(
+        scheduled_timestamp__lte=timezone_now(),
+        delivered=False,
+        failed=False,
     )
+    if scheduled_message_ids is not None:
+        due = due.filter(id__in=scheduled_message_ids)
+    scheduled_message = due.select_for_update(no_key=True).first()
 
     if scheduled_message is None:
         return False

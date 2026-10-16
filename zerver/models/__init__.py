@@ -7,6 +7,7 @@ from zerver.models.armada import Post as Post
 from zerver.models.bots import AgentMonitor as AgentMonitor
 from zerver.models.bots import AgentRun as AgentRun
 from zerver.models.bots import AgentRunEvent as AgentRunEvent
+from zerver.models.bots import AgentRunWait as AgentRunWait
 from zerver.models.bots import BotConfigData as BotConfigData
 from zerver.models.bots import BotStorageData as BotStorageData
 from zerver.models.bots import Repository as Repository

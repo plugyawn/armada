@@ -4100,6 +4100,12 @@ class ArmadaDatabaseWorkerRunStore:
                 "date_finished",
             ]
         )
+        if not same_status and status in (AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED):
+            # Imported here: Zulip's message actions, which Later and
+            # Send when deliver through, import this module.
+            from zerver.lib.armada_later import release_messages_waiting_for_run
+
+            release_messages_waiting_for_run(run)
         if (
             not same_status
             and status in (AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED)

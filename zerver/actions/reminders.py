@@ -8,15 +8,20 @@ from zerver.lib.addressee import Addressee
 from zerver.lib.message import access_message
 from zerver.lib.reminders import get_reminder_formatted_content, notify_remove_reminder
 from zerver.models import Client, ScheduledMessage, UserProfile
+from zerver.models.bots import AgentRun
 
 
 def schedule_reminder_for_message(
     current_user: UserProfile,
     client: Client,
     message_id: int,
-    deliver_at: datetime.datetime,
+    deliver_at: datetime.datetime | None,
     note: str,
+    *,
+    agent_run: AgentRun | None = None,
 ) -> int:
+    """Remind current_user of the message at deliver_at, or, with
+    agent_run instead, when that run ends (zerver/lib/armada_later.py)."""
     message = access_message(current_user, message_id, is_modifying_message=False)
     # Even though reminder will be sent from NOTIFICATION_BOT, we still
     # set current_user as the sender here to help us make the permission checks easier.
@@ -38,6 +43,7 @@ def schedule_reminder_for_message(
         current_user,
         read_by_sender=False,
         delivery_type=ScheduledMessage.REMIND,
+        agent_run=agent_run,
     )[0]
 
 

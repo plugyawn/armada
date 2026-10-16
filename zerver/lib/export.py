@@ -148,6 +148,7 @@ ALL_ZULIP_TABLES = {
     "zerver_agentmonitor",
     "zerver_agentrun",
     "zerver_agentrunevent",
+    "zerver_agentrunwait",
     "zerver_alertword",
     "zerver_archivedattachment",
     "zerver_archivedattachment_messages",
@@ -323,6 +324,9 @@ NON_EXPORTED_TABLES = {
     "zerver_agentmonitor",
     "zerver_agentrun",
     "zerver_agentrunevent",
+    # A scheduled message's wait for a run to end (Later and Send when)
+    # names a run, which is not exported either.
+    "zerver_agentrunwait",
     "zerver_repository",
     "zerver_workspace",
     "zerver_workspaceentrymutationreceipt",

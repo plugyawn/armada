@@ -563,11 +563,14 @@ def _check_update_message_rendering_only(
         content=content,
         message_sender=message.sender,
     )
+    # A rendering-only update queues no preview fetch (the agent streams
+    # its answer through it), so its rendering asks for none.
     rendering_result = render_incoming_message(
         message,
         content,
         user_profile.realm,
         mention_data=mention_data,
+        fetches_link_previews=False,
     )
 
     if message.is_channel_message and rendering_result.mentions_stream_wildcard:

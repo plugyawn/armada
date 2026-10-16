@@ -180,6 +180,7 @@ def render_incoming_message(
     email_gateway: bool = False,
     acting_user: UserProfile | None = None,
     no_previews: bool = False,
+    fetches_link_previews: bool = True,
 ) -> MessageRenderingResult:
     realm_alert_words_automaton = get_alert_word_automaton(realm)
     try:
@@ -193,6 +194,7 @@ def render_incoming_message(
             email_gateway=email_gateway,
             no_previews=no_previews,
             acting_user=acting_user,
+            fetches_link_previews=fetches_link_previews,
         )
     except MarkdownRenderingError:
         raise JsonableError(_("Unable to render message"))

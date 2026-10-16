@@ -1203,6 +1203,10 @@ class InlineInterestingLinkProcessor(markdown.treeprocessors.Treeprocessor):
 
             if self.zmd.url_embed_data is None or url not in self.zmd.url_embed_data:
                 self.zmd.zulip_rendering_result.links_for_preview.add(url)
+                # The link is marked while its preview is fetched, so that
+                # a client can keep the preview's place; the embed worker's
+                # rendering has no mark.
+                found_url.family.child.set("data-preview", "pending")
                 continue
 
             # Existing but being None means that we did process the
@@ -2611,6 +2615,7 @@ def do_convert(
     email_gateway: bool = False,
     no_previews: bool = False,
     acting_user: UserProfile | None = None,
+    fetches_link_previews: bool = True,
 ) -> MessageRenderingResult:
     """Convert Markdown to HTML, with Zulip-specific settings and hacks."""
     # This logic is a bit convoluted, but the overall goal is to support a range of use cases:
@@ -2652,7 +2657,9 @@ def do_convert(
     md_engine.zulip_realm = message_realm
     md_engine.zulip_db_data = None  # for now
     md_engine.image_preview_enabled = image_preview_enabled(message, message_realm, no_previews)
-    md_engine.url_embed_preview_enabled = url_embed_preview_enabled(
+    # A caller that does not fetch the previews a rendering asks for
+    # (links_for_preview) gets neither those requests nor their marks.
+    md_engine.url_embed_preview_enabled = fetches_link_previews and url_embed_preview_enabled(
         message, message_realm, no_previews
     )
     md_engine.url_embed_data = url_embed_data
@@ -2782,6 +2789,7 @@ def markdown_convert(
     email_gateway: bool = False,
     no_previews: bool = False,
     acting_user: UserProfile | None = None,
+    fetches_link_previews: bool = True,
 ) -> MessageRenderingResult:
     markdown_stats_start()
     ret = do_convert(
@@ -2796,6 +2804,7 @@ def markdown_convert(
         email_gateway,
         no_previews=no_previews,
         acting_user=acting_user,
+        fetches_link_previews=fetches_link_previews,
     )
     markdown_stats_finish()
     return ret
@@ -2811,6 +2820,7 @@ def render_message_markdown(
     email_gateway: bool = False,
     acting_user: UserProfile | None = None,
     no_previews: bool = False,
+    fetches_link_previews: bool = True,
 ) -> MessageRenderingResult:
     """
     This is basically just a wrapper for do_render_markdown.
@@ -2838,6 +2848,7 @@ def render_message_markdown(
         email_gateway=email_gateway,
         no_previews=no_previews,
         acting_user=acting_user,
+        fetches_link_previews=fetches_link_previews,
     )
 
     return rendering_result

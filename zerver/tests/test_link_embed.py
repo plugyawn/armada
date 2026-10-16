@@ -17,6 +17,8 @@ from urllib3.response import HTTPResponse
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.message_delete import do_delete_messages
+from zerver.actions.message_edit import check_update_message_rendering_only
+from zerver.actions.realm_settings import do_set_realm_property
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.cache import cache_delete, cache_get, preview_url_cache_key
 from zerver.lib.camo import get_camo_url
@@ -1259,7 +1261,8 @@ class PreviewTestCase(ZulipTestCase):
         msg = Message.objects.select_related("sender").get(id=msg_id)
         event = {
             "message_id": msg_id,
-            "urls": [url],
+            # What the server queues: the link's own URL.
+            "urls": ["https://www.youtube.com/watch?v=eSJTXC7Ixgg"],
             "message_realm_id": msg.sender.realm_id,
             "message_content": url,
         }
@@ -1278,7 +1281,7 @@ class PreviewTestCase(ZulipTestCase):
             ):
                 FetchLinksEmbedData().consume(event)
             self.assertTrue(
-                "INFO:root:Time spent on get_link_embed_data for [YouTube link](https://www.youtube.com/watch?v=eSJTXC7Ixgg):"
+                "INFO:root:Time spent on get_link_embed_data for https://www.youtube.com/watch?v=eSJTXC7Ixgg:"
                 in info_logs.output[0]
             )
 
@@ -1450,3 +1453,113 @@ class PreviewFetchTestCase(ZulipTestCase):
         self.assertEqual(
             session.proxies, {"http": "http://localhost:4750", "https": "http://localhost:4750"}
         )
+
+
+@override_settings(INLINE_URL_EMBED_PREVIEW=True)
+class PreviewMarkTestCase(ZulipTestCase):
+    """The links a rendering marks with data-preview are exactly the
+    links it queues for the embed worker, so that a client can keep
+    their previews' places without knowing the renderer's rules; the
+    worker's rendering has no mark."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        Realm.objects.all().update(inline_url_embed_preview=True)
+
+    def marked(self, message_id: int) -> set[str]:
+        from bs4 import BeautifulSoup
+
+        rendered = Message.objects.get(id=message_id).rendered_content
+        assert rendered is not None
+        soup = BeautifulSoup(rendered, "lxml")
+        return {str(a["href"]) for a in soup.select('a[data-preview="pending"]')}
+
+    def queued(self, patched: mock.Mock) -> set[str]:
+        return {
+            url
+            for call in patched.call_args_list
+            if call.args[0] == "embed_links"
+            for url in call.args[1]["urls"]
+        }
+
+    @responses.activate
+    def test_marks_are_the_queued_fetches(self) -> None:
+        hamlet = self.example_user("hamlet")
+        content = (
+            "a page https://example.org/a and a named [page](https://example.org/b)\n\n"
+            "the same page again https://example.org/a\n\n"
+            "a picture https://example.org/c.png\n\n"
+            "a video https://www.youtube.com/watch?v=eSJTXC7Ixgg\n\n"
+            "this server http://zulip.testserver/help/ and a relative [link](/help/)\n\n"
+            "> quoted https://example.org/quoted"
+        )
+        with mock_queue_publish("zerver.actions.message_send.queue_event_on_commit") as patched:
+            msg_id = self.send_stream_message(hamlet, "Denmark", content=content)
+        self.assertEqual(
+            self.queued(patched),
+            {
+                "https://example.org/a",
+                "https://example.org/b",
+                "https://www.youtube.com/watch?v=eSJTXC7Ixgg",
+            },
+        )
+        self.assertEqual(self.marked(msg_id), self.queued(patched))
+
+        # An edit fetches its links again, and marks them.
+        self.login_user(hamlet)
+        with mock_queue_publish("zerver.actions.message_edit.queue_event_on_commit") as patched:
+            self.assert_json_success(
+                self.client_patch(
+                    f"/json/messages/{msg_id}", {"content": "now https://example.org/d"}
+                )
+            )
+        self.assertEqual(self.queued(patched), {"https://example.org/d"})
+        self.assertEqual(self.marked(msg_id), {"https://example.org/d"})
+        event = next(
+            call.args[1] for call in patched.call_args_list if call.args[0] == "embed_links"
+        )
+
+        # The worker's rendering of it has no mark, preview or none.
+        responses.add(responses.GET, "https://example.org/d", status=404)
+        with self.settings(TEST_SUITE=False), self.assertLogs(level="INFO"):
+            FetchLinksEmbedData().consume(event)
+        self.assertEqual(self.marked(msg_id), set())
+
+        # With the realm's previews off, nothing is fetched or marked.
+        do_set_realm_property(hamlet.realm, "inline_url_embed_preview", False, acting_user=None)
+        with mock_queue_publish("zerver.actions.message_send.queue_event_on_commit") as patched:
+            msg_id = self.send_stream_message(hamlet, "Denmark", content="https://example.org/e")
+        self.assertEqual(self.queued(patched), set())
+        self.assertEqual(self.marked(msg_id), set())
+
+    def test_agent_marks_only_what_it_queues(self) -> None:
+        realm = get_realm("zulip")
+        agent = do_create_user(
+            "armada-agent-bot@zulip.testserver",
+            None,
+            realm,
+            "Agent",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            bot_owner=self.example_user("iago"),
+            acting_user=None,
+        )
+        Service.objects.create(name="armada", user_profile=agent, base_url="", token="")
+        invalidate_armada_selected_bot_cache(realm.id)
+        self.addCleanup(invalidate_armada_selected_bot_cache, realm.id)
+        self.subscribe(agent, "Denmark")
+
+        # A post of the agent's own is fetched and marked ...
+        with mock_queue_publish("zerver.actions.message_send.queue_event_on_commit") as patched:
+            msg_id = self.send_stream_message(agent, "Denmark", content="see https://example.org/f")
+        self.assertEqual(self.queued(patched), {"https://example.org/f"})
+        self.assertEqual(self.marked(msg_id), {"https://example.org/f"})
+
+        # ... and the rendering-only updates it streams an answer by
+        # fetch nothing, so mark nothing.
+        with mock_queue_publish("zerver.actions.message_edit.queue_event_on_commit") as patched:
+            check_update_message_rendering_only(
+                agent, msg_id, content="the answer cites https://example.org/g"
+            )
+        self.assertEqual(self.queued(patched), set())
+        self.assertEqual(self.marked(msg_id), set())

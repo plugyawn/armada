@@ -869,6 +869,12 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = False
 ARMADA_WORKER_TRUSTED_USER_IDS: list[int] = []
 ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC = 1
 ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM = 3
+# A run may start runs in other topics (the agent's armada_start_run
+# tool): at most this many, and a run started that way is one deeper
+# than the run that started it (a person's run is at depth 0); a run at
+# the maximum depth starts none.
+ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN = 5
+ARMADA_WORKER_MAX_RUN_DEPTH = 2
 # Each web process retains recent immutable Workspace indexes.  The path budget
 # prevents a handful of huge repositories from consuming unbounded memory.
 ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32

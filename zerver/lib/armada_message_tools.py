@@ -1,8 +1,8 @@
 """The agent's tools for talking in Armada (statement 38): post in a
-topic or a thread, with files such as screenshots, and read a topic or
-a thread. Each acts for the person whose message started the run, through
-Zulip's own checks: what that person could not send or read, the agent
-cannot send or read for them.
+topic or a thread, with files such as screenshots, read a topic or a
+thread, and start a run in another topic with a brief. Each acts for the
+person whose message started the run, through Zulip's own checks: what
+that person could not send, read or start, the agent cannot either.
 
 Codex calls them as dynamic tools, as it calls the page tools
 (zerver/lib/armada_page_tools.py): zerver/lib/armada_agent.py offers the
@@ -18,12 +18,18 @@ from pathlib import Path
 from typing import Any, Final
 
 from django.conf import settings
+from django.db import transaction
 from django.utils.html import escape
 from django.utils.translation import gettext as _
 
 from zerver.actions.message_send import check_message, do_send_messages
 from zerver.lib.addressee import Addressee
-from zerver.lib.armada import ARMADA_AGENT_NAME, trim_armada_text
+from zerver.lib.armada import (
+    ARMADA_AGENT_NAME,
+    ArmadaEmbeddedBotHandler,
+    build_armada_ack_message,
+    trim_armada_text,
+)
 from zerver.lib.armada_page_tools import (
     ArmadaToolAnswer,
     answer_tool_call,
@@ -32,6 +38,7 @@ from zerver.lib.armada_page_tools import (
     string_argument,
     tool_arguments,
 )
+from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.exceptions import JsonableError, StreamDoesNotExistError
 from zerver.lib.message import access_message, messages_for_ids
 from zerver.lib.message_cache import MessageDict
@@ -49,13 +56,19 @@ from zerver.lib.upload import (
     upload_message_attachment,
 )
 from zerver.models import Message, Stream, UserProfile
-from zerver.models.bots import AgentRun
+from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.models.clients import get_client
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
 from zerver.models.streams import get_stream
 
 ARMADA_POST_TOOL: Final = "armada_post"
 ARMADA_READ_TOOL: Final = "armada_read"
+ARMADA_START_RUN_TOOL: Final = "armada_start_run"
+
+# The run event log holds who started whom: the starting run records
+# run_started, the run it started records started_by, with its depth.
+ARMADA_RUN_STARTED_EVENT: Final = "run_started"
+ARMADA_STARTED_BY_EVENT: Final = "started_by"
 
 ARMADA_POST_FILE_LIMIT: Final = 10
 ARMADA_READ_DEFAULT_LIMIT: Final = 20
@@ -135,6 +148,40 @@ def armada_message_tool_specs() -> list[dict[str, Any]]:
                         "maximum": ARMADA_READ_MAX_LIMIT,
                     },
                 },
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": ARMADA_START_RUN_TOOL,
+            "description": (
+                f"Start a new {ARMADA_AGENT_NAME} run in a topic, for the person who asked "
+                "you: brief is posted there as the topic's request, and a run starts on it in "
+                "that topic's own worktree (a topic that does not exist yet gets a new "
+                "branch). The run sees that topic and the brief, not this conversation: put "
+                "everything it needs in the brief, including where to report (for example: "
+                "post progress with armada_post in thread 1234). It does not report back by "
+                "itself. Fails if the topic already has a live run. Limits: a run can start "
+                f"at most {settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN} runs, and runs "
+                "started this way nest at most "
+                f"{settings.ARMADA_WORKER_MAX_RUN_DEPTH} deep (a run that deep starts none). "
+                "Returns the brief's message id and a link (#**channel>topic@id**) to give "
+                "people; follow the run with armada_read."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "channel": WHERE_PROPERTIES["channel"],
+                    "topic": WHERE_PROPERTIES["topic"],
+                    "brief": {
+                        "type": "string",
+                        "description": (
+                            "The task and all the context the new run needs, in Markdown."
+                        ),
+                        "maxLength": settings.MAX_MESSAGE_LENGTH - 500,
+                    },
+                },
+                "required": ["channel", "topic", "brief"],
                 "additionalProperties": False,
             },
         },
@@ -474,11 +521,154 @@ def read_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaT
     return read_answer(answer, title)
 
 
+def run_depth(run: AgentRun) -> int:
+    """How deep a run is in a chain of runs starting runs: a person's run
+    is at 0."""
+    payload = (
+        AgentRunEvent.objects.filter(run=run, event_type=ARMADA_STARTED_BY_EVENT)
+        .values_list("payload", flat=True)
+        .first()
+    )
+    depth = payload.get("depth") if isinstance(payload, dict) else None
+    return depth if isinstance(depth, int) else 0
+
+
+def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaToolAnswer:
+    """Start a run as a person's request to the agent starts one: admitted
+    by the same rules (start_blocked_reason), its brief posted with the
+    asker's rights, and queued for the worker with its progress message."""
+    # Lazy import: armada_worker imports the agent runtime, which imports
+    # this module.
+    from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore, ArmadaQueueWorkerDispatcher
+
+    brief = string_argument(arguments, "brief").strip()
+    if not brief:
+        raise JsonableError(_("Give the run a brief."))
+    where = where_for(
+        caller,
+        {"channel": string_argument(arguments, "channel"), "topic": arguments.get("topic")},
+    )
+    # The topic as the message will carry it.
+    where = ArmadaWhere(
+        stream=where.stream,
+        topic=Addressee.for_stream(where.stream, where.topic).topic_name(),
+        root=None,
+    )
+    stream_name, topic_name = where.stream.name, where.topic
+    asker = caller.asker
+    bot_handler = EmbeddedBotHandler(caller.run.bot_profile)
+    store = ArmadaDatabaseWorkerRunStore()
+    reason = store.start_blocked_reason(
+        bot_handler, None, stream=stream_name, topic=topic_name, requesting_user_id=asker.id
+    )
+    if reason is not None:
+        raise JsonableError(reason)
+    # One transaction: a run that does not start leaves no brief behind.
+    with transaction.atomic(durable=True):
+        # Locked, so that parallel calls count each other's runs.
+        parent = AgentRun.objects.select_for_update(no_key=True).get(id=caller.run.id)
+        depth = run_depth(parent)
+        if depth >= settings.ARMADA_WORKER_MAX_RUN_DEPTH:
+            raise JsonableError(
+                _(
+                    "This run is at depth {depth}, where runs started by runs stop: do the "
+                    "work here, or ask the person to start a run."
+                ).format(depth=depth)
+            )
+        if (
+            AgentRunEvent.objects.filter(run=parent, event_type=ARMADA_RUN_STARTED_EVENT).count()
+            >= settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
+        ):
+            raise JsonableError(
+                _("This run has started {count} runs, the most one run may start.").format(
+                    count=settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
+                )
+            )
+        origin = _("Started for {person} from {link}.").format(
+            person=f"@_**{asker.full_name}|{asker.id}**",
+            link=f"#**{parent.stream_name}>{parent.topic_name}@{parent.trigger_message_id}**",
+        )
+        content = f"{brief}\n\n{origin}"
+        message_id = post_as_agent(caller, where, content, [])
+        # The topic's run limit and the realm's, again, against a race.
+        if not store.start(bot_handler, message_id, stream=stream_name, topic=topic_name):
+            raise JsonableError(_("The run could not start; try again."))
+        child = AgentRun.objects.get(
+            bot_profile=bot_handler.user_profile, trigger_message_id=message_id
+        )
+        child.requesting_user = asker
+        child.save(update_fields=["requesting_user"])
+        store.record_event(
+            bot_handler,
+            message_id,
+            ARMADA_STARTED_BY_EVENT,
+            summary=_("Started by a run in #{channel} > {topic}.").format(
+                channel=parent.stream_name, topic=parent.topic_name
+            ),
+            payload={
+                "run_id": parent.id,
+                "depth": depth + 1,
+                "stream": parent.stream_name,
+                "topic": parent.topic_name,
+                "message_id": parent.trigger_message_id,
+            },
+        )
+        store.record_event(
+            bot_handler,
+            parent.trigger_message_id,
+            ARMADA_RUN_STARTED_EVENT,
+            summary=_("Started a run in #{channel} > {topic}.").format(
+                channel=stream_name, topic=topic_name
+            ),
+            payload={
+                "run_id": child.id,
+                "stream": stream_name,
+                "topic": topic_name,
+                "message_id": message_id,
+            },
+        )
+    # After the commit, as for a person's request: the run's progress
+    # message, then the worker.
+    message = MessageDict.wide_dict(
+        access_message(caller.run.bot_profile, message_id, is_modifying_message=False)
+    )
+    progress_message_id = store.ensure_progress_message(
+        bot_handler,
+        message_id,
+        message=message,
+        stream=stream_name,
+        topic=topic_name,
+        content=build_armada_ack_message(content),
+    )
+    ArmadaQueueWorkerDispatcher().dispatch(
+        ArmadaEmbeddedBotHandler(worker_run_store=store),
+        bot_handler,
+        message,
+        content=content,
+        active_session=None,
+        message_id=message_id,
+        stream=stream_name,
+        topic=topic_name,
+        requesting_user_id=asker.id,
+        progress_message_id=progress_message_id,
+    )
+    return read_answer(
+        {
+            "message_id": message_id,
+            "channel": stream_name,
+            "topic": topic_name,
+            "link": f"#**{stream_name}>{topic_name}@{message_id}**",
+        },
+        _("Started a run in #{channel} > {topic}.").format(channel=stream_name, topic=topic_name),
+    )
+
+
 ARMADA_MESSAGE_TOOLS: Final[
     dict[str, Callable[[ArmadaToolCaller, dict[str, object]], ArmadaToolAnswer]]
 ] = {
     ARMADA_POST_TOOL: post_tool,
     ARMADA_READ_TOOL: read_tool,
+    ARMADA_START_RUN_TOOL: start_run_tool,
 }
 ARMADA_MESSAGE_TOOL_NAMES: Final = frozenset(ARMADA_MESSAGE_TOOLS)
 

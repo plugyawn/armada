@@ -180,6 +180,7 @@ class PageToolCallsTest(ZulipTestCase):
                 "armada_page_draft",
                 "armada_post",
                 "armada_read",
+                "armada_start_run",
             ],
         )
 

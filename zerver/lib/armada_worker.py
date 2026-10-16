@@ -2961,15 +2961,18 @@ class ArmadaDatabaseWorkerRunStore:
     def start_blocked_reason(
         self,
         bot_handler: Any,
-        message_id: int,
+        message_id: int | None,
         *,
         stream: str,
         topic: str,
         requesting_user_id: int | None,
     ) -> str | None:
+        """Why a request may not start a run, or None. message_id is None
+        for a request not posted yet (the agent's armada_start_run asks
+        before it posts its brief)."""
         if not stream:
             return "Codex runs currently require a channel topic."
-        if message_id <= 0 or requesting_user_id is None:
+        if (message_id is not None and message_id <= 0) or requesting_user_id is None:
             return None
         stream, topic = armada_topic_scope(stream, topic)
 
@@ -2990,15 +2993,18 @@ class ArmadaDatabaseWorkerRunStore:
         if armada_workspace_is_paused(user_profile, stream=stream, topic=topic):
             return "The session is paused until a resume control is posted."
 
-        queued_run = AgentRun.objects.filter(
-            bot_profile=user_profile,
-            trigger_message_id=message_id,
-            session_kind=AgentRun.SHARED,
-            stream_name__iexact=stream,
-            topic_name__iexact=topic,
-            status=AgentRun.QUEUED,
-        ).first()
-        if queued_run is not None:
+        if (
+            message_id is not None
+            and AgentRun.objects.filter(
+                bot_profile=user_profile,
+                trigger_message_id=message_id,
+                session_kind=AgentRun.SHARED,
+                stream_name__iexact=stream,
+                topic_name__iexact=topic,
+                status=AgentRun.QUEUED,
+            ).exists()
+        ):
+            # A redelivery of a request whose run is queued already.
             return None
 
         topic_limit = settings.ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_TOPIC
@@ -4379,6 +4385,14 @@ def load_armada_active_session_from_zulip(
         requesting_user_id = (
             Message.objects.filter(id=trigger_message_id, realm_id=user_profile.realm_id)
             .values_list("sender_id", flat=True)
+            .first()
+        )
+    if requesting_user_id == user_profile.id:
+        # A run that another run started (armada_start_run) answers the
+        # agent's own brief, for the person that run acted for.
+        requesting_user_id = (
+            AgentRun.objects.filter(bot_profile=user_profile, trigger_message_id=trigger_message_id)
+            .values_list("requesting_user_id", flat=True)
             .first()
         )
     requesting_user = (

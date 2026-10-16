@@ -1,11 +1,14 @@
 import json
 import shutil
 import tempfile
+from collections.abc import Mapping
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pyvips
+from typing_extensions import override
 
 from zerver.actions.streams import do_change_stream_group_based_setting
 from zerver.lib.armada import ARMADA_AGENT_NAME, ARMADA_EMBEDDED_BOT_SERVICE
@@ -14,9 +17,11 @@ from zerver.lib.armada_agent import (
     ArmadaAppServerTurnContext,
     ArmadaCodexAppServerToolRunner,
 )
+from zerver.lib.armada_worker import armada_worker_queue_name, load_armada_active_session_from_zulip
 from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.topic import messages_for_topic
 from zerver.models import Attachment, Message, NamedUserGroup, UserMessage, UserProfile
-from zerver.models.bots import AgentRun
+from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.models.groups import SystemGroups
 from zerver.models.streams import get_stream
 
@@ -26,6 +31,7 @@ class MessageToolsTest(ZulipTestCase):
     a JSON-RPC item/tool/call request into the runtime, answered with the
     reply Codex reads and an event the run shows."""
 
+    @override
     def setUp(self) -> None:
         super().setUp()
         self.hamlet = self.example_user("hamlet")
@@ -42,6 +48,12 @@ class MessageToolsTest(ZulipTestCase):
         for user in (self.hamlet, self.cordelia, self.agent):
             self.subscribe(user, "Denmark")
             self.subscribe(user, "Verona")
+        # A started run gets a worktree; keep them out of the checkout.
+        workdir_root = tempfile.mkdtemp(prefix="armada-message-tools-workspaces-")
+        self.addCleanup(shutil.rmtree, workdir_root, ignore_errors=True)
+        workdir_root_setting = self.settings(ARMADA_TOPIC_WORKDIR_ROOT=workdir_root)
+        workdir_root_setting.enable()
+        self.addCleanup(workdir_root_setting.disable)
 
     def ask(
         self, asker: UserProfile, content: str, *, topic: str = "parser", stream: str = "Denmark"
@@ -62,7 +74,7 @@ class MessageToolsTest(ZulipTestCase):
         self,
         run: AgentRun | None,
         tool: str,
-        arguments: dict[str, object],
+        arguments: object,
         *,
         requesting_user_id: int | None = None,
         workdir: str | None = None,
@@ -142,6 +154,15 @@ class MessageToolsTest(ZulipTestCase):
         self.assertEqual(
             set(tools["armada_read"]["inputSchema"]["properties"]),
             {"channel", "topic", "thread", "after", "limit"},
+        )
+        self.assertEqual(
+            tools["armada_start_run"]["inputSchema"]["required"], ["channel", "topic", "brief"]
+        )
+        # The caps are the realm's settings, and the model reads them.
+        self.assertIn(
+            "Limits: a run can start at most 5 runs, and runs started this way nest at most 2 "
+            "deep (a run that deep starts none).",
+            tools["armada_start_run"]["description"],
         )
 
     def test_a_post_in_another_topic_is_the_agents_message(self) -> None:
@@ -451,3 +472,192 @@ class MessageToolsTest(ZulipTestCase):
                 call_run, "armada_post", arguments, requesting_user_id=requesting_user_id
             )
             self.assertEqual(self.refusal(result), refusal)
+
+    def start(
+        self, run: AgentRun, arguments: Mapping[str, object]
+    ) -> tuple[dict[str, Any], dict[str, Any], MagicMock]:
+        """Start a run; the worker queue is captured, not consumed."""
+        with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
+            result, event = self.call(run, "armada_start_run", arguments)
+        return result, event, publish
+
+    def topic_messages(self, stream: str, topic: str) -> list[Message]:
+        recipient_id = get_stream(stream, self.hamlet.realm).recipient_id
+        assert recipient_id is not None
+        return list(messages_for_topic(self.hamlet.realm_id, recipient_id, topic).order_by("id"))
+
+    def test_a_started_run_works_from_its_brief_in_its_own_topic(self) -> None:
+        run = self.ask(self.hamlet, "have someone fix the lexer, and update me in a thread")
+        brief = (
+            "Fix the lexer's handling of non-ASCII identifiers.\n\n"
+            f"Post progress with armada_post in thread {run.trigger_message_id}."
+        )
+        result, event, publish = self.start(
+            run, {"channel": "Verona", "topic": "lexer fix", "brief": brief}
+        )
+        answer = self.answer(result)
+        [brief_message, progress_message] = self.topic_messages("Verona", "lexer fix")
+        self.assertEqual(
+            answer,
+            {
+                "message_id": brief_message.id,
+                "channel": "Verona",
+                "topic": "lexer fix",
+                "link": f"#**Verona>lexer fix@{brief_message.id}**",
+            },
+        )
+        self.assertEqual(event["title"], "Started a run in #Verona > lexer fix.")
+        # The brief is the agent's message and the new topic's request, and
+        # says where it came from.
+        self.assertEqual(brief_message.sender_id, self.agent.id)
+        self.assertEqual(
+            brief_message.content,
+            f"{brief}\n\nStarted for @_**{self.hamlet.full_name}|{self.hamlet.id}** from "
+            f"#**Denmark>parser@{run.trigger_message_id}**.",
+        )
+        # A run for the same person, in the new topic's own worktree, with
+        # its progress message, as a person's request gets.
+        child = AgentRun.objects.get(trigger_message_id=brief_message.id)
+        assert child.workspace_node is not None
+        self.assertEqual(
+            (
+                child.status,
+                child.session_kind,
+                child.requesting_user_id,
+                child.workspace_node.topic_name,
+                child.result_message_id,
+            ),
+            (AgentRun.QUEUED, AgentRun.SHARED, self.hamlet.id, "lexer fix", progress_message.id),
+        )
+        self.assertEqual(progress_message.sender_id, self.agent.id)
+        # Queued for the worker, with the brief as the request.
+        [(queue_name, worker_event)] = [call.args for call in publish.call_args_list]
+        self.assertEqual(
+            queue_name, armada_worker_queue_name(self.agent.id, stream="Verona", topic="lexer fix")
+        )
+        self.assertEqual(
+            {key: worker_event[key] for key in worker_event if key != "message"},
+            {
+                "user_profile_id": self.agent.id,
+                "message_id": brief_message.id,
+                "stream": "Verona",
+                "topic": "lexer fix",
+                "content": brief_message.content,
+                "requesting_user_id": self.hamlet.id,
+                "session_kind": AgentRun.SHARED,
+                "source_stream": "",
+                "source_topic": "",
+                "source_message_id": None,
+                "progress_message_id": progress_message.id,
+            },
+        )
+        # The run's tools act for the same person, though the agent sent
+        # the brief.
+        active_session = load_armada_active_session_from_zulip(
+            worker_event["message"], SimpleNamespace(user_profile=self.agent)
+        )
+        self.assertEqual(active_session.get("requesting_user_id"), self.hamlet.id)
+        # The event log says who started whom.
+        self.assertEqual(
+            AgentRunEvent.objects.get(run=run, event_type="run_started").payload,
+            {
+                "run_id": child.id,
+                "stream": "Verona",
+                "topic": "lexer fix",
+                "message_id": brief_message.id,
+            },
+        )
+        self.assertEqual(
+            AgentRunEvent.objects.get(run=child, event_type="started_by").payload,
+            {
+                "run_id": run.id,
+                "depth": 1,
+                "stream": "Denmark",
+                "topic": "parser",
+                "message_id": run.trigger_message_id,
+            },
+        )
+
+    def test_runs_started_by_runs_are_capped(self) -> None:
+        with self.settings(
+            ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN=2,
+            ARMADA_WORKER_MAX_RUN_DEPTH=2,
+            ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=10,
+        ):
+            run = self.ask(self.hamlet, "split the work")
+            for topic in ["one", "two"]:
+                result, _event, _publish = self.start(
+                    run, {"channel": "Verona", "topic": topic, "brief": f"Part {topic}."}
+                )
+                self.assertTrue(result["success"], result)
+            result, _event, publish = self.start(
+                run, {"channel": "Verona", "topic": "three", "brief": "Part three."}
+            )
+            self.assertEqual(
+                self.refusal(result), "This run has started 2 runs, the most one run may start."
+            )
+            self.assertEqual((self.topic_messages("Verona", "three"), publish.called), ([], False))
+
+            # A started run starts one more, which is at the maximum depth.
+            child = AgentRun.objects.get(
+                trigger_message_id=self.topic_messages("Verona", "one")[0].id
+            )
+            result, _event, _publish = self.start(
+                child, {"channel": "Verona", "topic": "deeper", "brief": "Part one, half."}
+            )
+            grandchild = AgentRun.objects.get(trigger_message_id=self.answer(result)["message_id"])
+            self.assertEqual(grandchild.requesting_user_id, self.hamlet.id)
+            result, _event, _publish = self.start(
+                grandchild, {"channel": "Verona", "topic": "deepest", "brief": "Quarter."}
+            )
+            self.assertEqual(
+                self.refusal(result),
+                "This run is at depth 2, where runs started by runs stop: do the work here, or "
+                "ask the person to start a run.",
+            )
+            self.assertEqual(self.topic_messages("Verona", "deepest"), [])
+
+    def test_a_start_has_the_askers_rights(self) -> None:
+        run = self.ask(self.hamlet, "start runs")
+        self.ask(self.cordelia, "keep going", stream="Verona", topic="busy")
+        self.make_stream("secret", invite_only=True)
+        self.subscribe(self.agent, "secret")
+        runs_before = AgentRun.objects.count()
+        for overrides, arguments, refusal in [
+            (
+                {},
+                {"channel": "Verona", "topic": "busy", "brief": "Do more."},
+                "This topic already has an active run.",
+            ),
+            (
+                {"ARMADA_WORKER_TRUSTED_USERS_ONLY": True},
+                {"channel": "Verona", "topic": "new", "brief": "Do it."},
+                f"This user is not allowed to start {ARMADA_AGENT_NAME}'s runs.",
+            ),
+            (
+                {},
+                {"channel": "secret", "topic": "new", "brief": "Do it."},
+                "Not authorized to send to channel 'secret'",
+            ),
+            ({}, {"channel": "Verona", "topic": "new", "brief": " "}, "Give the run a brief."),
+        ]:
+            with self.settings(**overrides):
+                result, _event, publish = self.start(run, arguments)
+            self.assertEqual(self.refusal(result), refusal)
+            self.assertFalse(publish.called)
+        # Admitted, then beaten to the last slot: the brief goes too.
+        with patch(
+            "zerver.lib.armada_worker.ArmadaDatabaseWorkerRunStore.start", return_value=False
+        ):
+            result, _event, publish = self.start(
+                run, {"channel": "Verona", "topic": "new", "brief": "Do it."}
+            )
+        self.assertEqual(self.refusal(result), "The run could not start; try again.")
+        self.assertFalse(publish.called)
+        # Nothing was started, and no brief was left behind.
+        self.assertEqual(AgentRun.objects.count(), runs_before)
+        self.assertEqual(
+            [message.sender_id for message in self.topic_messages("Verona", "busy")],
+            [self.cordelia.id],
+        )
+        self.assertEqual(self.topic_messages("Verona", "new"), [])

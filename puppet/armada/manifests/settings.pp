@@ -35,9 +35,11 @@ class armada::settings {
   # The check first asks whether the script is installed, so that a run where
   # it is not yet (the upgrade's --noop pre-check of a new server) reads the
   # block as a change to make rather than failing to find the command.
+  $apply = '/usr/local/sbin/armada-settings-apply'
+  $files = '/etc/zulip/armada-settings.block /etc/zulip/settings.py'
   exec { 'armada-settings-apply':
-    command  => '/usr/local/sbin/armada-settings-apply /etc/zulip/armada-settings.block /etc/zulip/settings.py',
-    unless   => 'test -x /usr/local/sbin/armada-settings-apply && /usr/local/sbin/armada-settings-apply --check /etc/zulip/armada-settings.block /etc/zulip/settings.py',
+    command  => "${apply} ${files}",
+    unless   => "test -x ${apply} && ${apply} --check ${files}",
     provider => shell,
     require  => [
       File['/usr/local/sbin/armada-settings-apply'],

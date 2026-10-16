@@ -930,7 +930,7 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = True
 ## idle timeout, not a cap on a run's length; RabbitMQ's consumer
 ## timeout for the armada_worker queues caps that (docs/armada/deploy.md).
 # ARMADA_WORKER_TIMEOUT_SECONDS = 19800
-## A topic's Codex app-server (about 230 MB) is closed once no turn has
+## A topic's Codex app-server (about 185 MB) is closed once no turn has
 ## used it for this long; the next turn starts it again.
 # ARMADA_WORKER_RUNTIME_IDLE_SECONDS = 300
 ## The longest reply or error text, in characters, the agent posts

@@ -1,6 +1,7 @@
-"""The agent runtime's processes: how an app-server is stopped."""
+"""The agent runtime's processes: which program an app-server runs, and how it stops."""
 
 import os
+import platform
 import stat
 import time
 from collections.abc import Callable
@@ -9,8 +10,15 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
+from typing_extensions import override
+
 from zerver.lib import armada_agent
-from zerver.lib.armada_agent import ArmadaCodexAppServerToolRunner, armada_process_group_exists
+from zerver.lib.armada_agent import (
+    ARMADA_CODEX_NPM_PLATFORM_PACKAGES,
+    ArmadaCodexAppServerToolRunner,
+    armada_codex_executable,
+    armada_process_group_exists,
+)
 
 # A Codex stand-in that answers every request. With "wedged" in its file
 # name it also ignores SIGTERM and stdin's end, and starts a child that
@@ -132,3 +140,87 @@ class ArmadaAppServerStopTest(TestCase):
             self.assertTrue(armada_eventually(lambda: process.returncode is not None))
             self.assertTrue(armada_eventually(lambda: not armada_process_group_exists(process.pid)))
             runner.close()
+
+
+class ArmadaCodexExecutableTest(TestCase):
+    @override
+    def setUp(self) -> None:
+        armada_codex_executable.cache_clear()
+        self.addCleanup(armada_codex_executable.cache_clear)
+
+    def make_npm_install(self, root: Path, *, with_native_binary: bool = True) -> Path:
+        """Codex as `npm install -g --prefix root @openai/codex` lays it out."""
+        package_root = root / "lib" / "node_modules" / "@openai" / "codex"
+        launcher = package_root / "bin" / "codex.js"
+        launcher.parent.mkdir(parents=True)
+        launcher.write_text("#!/usr/bin/env node\n")
+        launcher.chmod(0o755)
+        (root / "bin").mkdir()
+        (root / "bin" / "codex").symlink_to("../lib/node_modules/@openai/codex/bin/codex.js")
+        package_name, target_triple = ARMADA_CODEX_NPM_PLATFORM_PACKAGES[
+            (platform.system(), platform.machine())
+        ]
+        native_binary = (
+            package_root
+            / "node_modules"
+            / package_name
+            / "vendor"
+            / target_triple
+            / "bin"
+            / "codex"
+        )
+        if with_native_binary:
+            native_binary.parent.mkdir(parents=True)
+            native_binary.write_text("#!/bin/sh\n")
+            native_binary.chmod(0o755)
+        return native_binary
+
+    def test_npm_launcher_resolves_to_its_native_binary(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            native_binary = self.make_npm_install(root)
+            package_root = os.path.realpath(root / "lib" / "node_modules" / "@openai" / "codex")
+
+            executable, environment = armada_codex_executable(str(root / "bin" / "codex"))
+
+            self.assertEqual(os.path.realpath(executable), os.path.realpath(native_binary))
+            # The two variables the launcher sets for the binary.
+            self.assertEqual(
+                dict(environment),
+                {"CODEX_MANAGED_PACKAGE_ROOT": package_root, "CODEX_MANAGED_BY_NPM": "1"},
+            )
+            runner = ArmadaCodexAppServerToolRunner(
+                codex_bin=str(root / "bin" / "codex"),
+                workdir=directory,
+                model="gpt-6-astra",
+                sandbox="workspace-write",
+                approval_policy="never",
+                timeout_seconds=10,
+                output_limit=200,
+            )
+            self.assertEqual(
+                runner.build_command()[:6],
+                [
+                    "env",
+                    f"CODEX_MANAGED_PACKAGE_ROOT={package_root}",
+                    "CODEX_MANAGED_BY_NPM=1",
+                    executable,
+                    "app-server",
+                    "--stdio",
+                ],
+            )
+
+    def test_anything_else_runs_as_given(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.make_npm_install(root, with_native_binary=False)
+            launcher = str(root / "bin" / "codex")
+            # A launcher whose platform package is missing: it explains that
+            # itself when run.
+            self.assertEqual(armada_codex_executable(launcher), (launcher, ()))
+
+            native = root / "codex-native"
+            native.write_text("#!/bin/sh\n")
+            native.chmod(0o755)
+            self.assertEqual(armada_codex_executable(str(native)), (str(native), ()))
+            self.assertEqual(armada_codex_executable("no-such-codex"), ("no-such-codex", ()))

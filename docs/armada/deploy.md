@@ -704,7 +704,11 @@ npm install -g --prefix /opt/codex @openai/codex@0.157.1   # the version the dev
 ```
 
 `npm` and `node` are the ones Zulip installed (`/usr/local/bin`). The
-launcher runs `node` from `PATH`, which supervisor's environment has.
+launcher runs `node` from `PATH`, which supervisor's environment has. An
+agent's app-server does not go through the launcher: the worker finds the
+native binary the launcher would start (in the package's `node_modules`)
+and runs it with the launcher's two variables, which saves a resident node
+process of about 50 MB per warm topic.
 
 ### 6.3 Signing Codex in
 
@@ -1091,8 +1095,8 @@ estimates, not load tests; only the figures marked measured were measured.
   (tests, builds), which is where the load comes from.
 - **Memory: 6 to 8 GB, plus 2 to 4 GB swap.** Each agent slot keeps up to
   four Codex app-servers warm for 5 minutes after their topic's last turn
-  (`ARMADA_WORKER_RUNTIME_IDLE_SECONDS`; about 230 MB each, measured on the
-  hosted beta), two slots and the monitor worker can each hold four, a quiet
+  (`ARMADA_WORKER_RUNTIME_IDLE_SECONDS`; about 185 MB each, the native
+  binary measured on the hosted beta), two slots and the monitor worker can each hold four, a quiet
   server holds none, and a running agent's commands can need gigabytes. More than 3.8 GB is also what makes Zulip run each queue,
   and both agent slots, as a process of its own.
 - **Disk: 25 to 40 GB.** Zulip asks for 10 GB free beyond the system; each

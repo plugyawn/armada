@@ -2,7 +2,9 @@ import contextlib
 import json
 import logging
 import os
+import platform
 import queue
+import shutil
 import signal
 import subprocess
 import threading
@@ -11,6 +13,8 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from zerver.lib.armada import (
@@ -99,6 +103,62 @@ def armada_isolated_command(
     if process_isolation is None:
         return list(command)
     return [*process_isolation.command_prefix(), *command]
+
+
+# The platform packages of Codex's npm distribution, as its launcher
+# (bin/codex.js) names them.
+ARMADA_CODEX_NPM_PLATFORM_PACKAGES: Final = {
+    ("Linux", "x86_64"): ("@openai/codex-linux-x64", "x86_64-unknown-linux-musl"),
+    ("Linux", "aarch64"): ("@openai/codex-linux-arm64", "aarch64-unknown-linux-musl"),
+    ("Darwin", "x86_64"): ("@openai/codex-darwin-x64", "x86_64-apple-darwin"),
+    ("Darwin", "arm64"): ("@openai/codex-darwin-arm64", "aarch64-apple-darwin"),
+}
+
+
+@lru_cache(maxsize=8)
+def armada_codex_executable(codex_bin: str) -> tuple[str, tuple[tuple[str, str], ...]]:
+    """The program to start for codex_bin, and the environment it needs.
+
+    Codex's npm package installs a node launcher, bin/codex.js, which
+    finds the platform's native binary, sets two variables and spawns
+    it, then stays resident for the binary's whole life only to forward
+    signals: about 50 MB per app-server. Run the native binary directly,
+    with the same two variables; it finds its bundled bwrap and rg next
+    to itself, as under the launcher. Anything else (a native binary, a
+    Homebrew cask, a layout this does not know) runs as given. Resolved
+    once per process.
+    """
+    resolved = shutil.which(codex_bin)
+    if resolved is None:
+        return codex_bin, ()
+    launcher = Path(os.path.realpath(resolved))
+    if launcher.name != "codex.js" or launcher.parent.name != "bin":
+        return codex_bin, ()
+    package_root = launcher.parent.parent
+    platform_package = ARMADA_CODEX_NPM_PLATFORM_PACKAGES.get(
+        (platform.system(), platform.machine())
+    )
+    if platform_package is None:
+        return codex_bin, ()
+    package_name, target_triple = platform_package
+    # Where the launcher's require.resolve finds the platform package:
+    # the package's own node_modules, then each enclosing node_modules,
+    # then a vendor directory in the package itself.
+    vendor_roots = [package_root / "node_modules" / package_name / "vendor"]
+    vendor_roots.extend(
+        ancestor / package_name / "vendor"
+        for ancestor in package_root.parents
+        if ancestor.name == "node_modules"
+    )
+    vendor_roots.append(package_root / "vendor")
+    for vendor_root in vendor_roots:
+        native_binary = vendor_root / target_triple / "bin" / "codex"
+        if native_binary.is_file() and os.access(native_binary, os.X_OK):
+            return str(native_binary), (
+                ("CODEX_MANAGED_PACKAGE_ROOT", str(package_root)),
+                ("CODEX_MANAGED_BY_NPM", "1"),
+            )
+    return codex_bin, ()
 
 
 def armada_subprocess_cwd(
@@ -1588,12 +1648,16 @@ class ArmadaCodexAppServerToolRunner:
         return args
 
     def build_command(self) -> list[str]:
+        executable, environment = armada_codex_executable(self.codex_bin)
         command = [
-            self.codex_bin,
+            executable,
             "app-server",
             "--stdio",
             *self.config_args(),
         ]
+        if environment:
+            # env execs the binary in its place; no process stays resident.
+            command = ["env", *(f"{name}={value}" for name, value in environment), *command]
         return armada_isolated_command(command, self.process_isolation)
 
     def ensure_started(self) -> None:

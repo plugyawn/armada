@@ -27986,6 +27986,104 @@ paths:
                             "date_removed": null,
                           },
                       }
+  /armada/plugins/{install_id}/retry:
+    post:
+      operationId: retry-armada-plugin
+      tags: ["armada"]
+      summary: Retry a failed plugin
+      description: |
+        Start a plugin that failed five times in a row again at once. The
+        plugin host retries a failed plugin by itself, less and less often, up
+        to every five minutes; this tries now, with its count of failures
+        back at zero.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      plugin:
+                        $ref: "#/components/schemas/ArmadaPlugin"
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "plugin":
+                          {
+                            "id": 1,
+                            "plugin": "gpus",
+                            "name": "GPUs",
+                            "version": "0.1.0",
+                            "source_kind": "github",
+                            "source": "github.com/plugyawn/armada-gpus",
+                            "source_repository_id": null,
+                            "source_path": "",
+                            "sha": "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5",
+                            "manifest":
+                              {
+                                "id": "gpus",
+                                "name": "GPUs",
+                                "version": "0.1.0",
+                                "description": "Free GPUs, and the jobs on them.",
+                                "glyph": "gpu",
+                                "requires": {"armada": ">=1"},
+                                "run":
+                                  {"command": ["uv", "run", "armada-gpus"]},
+                                "provides": {},
+                              },
+                            "state": "starting",
+                            "detail": "",
+                            "bot_user_id": 31,
+                            "installed_by": 11,
+                            "made_by": null,
+                            "made_by_run_id": null,
+                            "made_in_stream_id": null,
+                            "made_in_topic": null,
+                            "made_in_message_id": null,
+                            "settings": {"manage_prefix": "nlscale-"},
+                            "secrets":
+                              [
+                                {
+                                  "name": "prime_api_key",
+                                  "title": "Prime Intellect API key",
+                                  "required": false,
+                                  "set": true,
+                                  "hint": "cdef",
+                                  "set_by": 11,
+                                  "date_set": 1760605200,
+                                },
+                              ],
+                            "links":
+                              [
+                                {
+                                  "id": 3,
+                                  "kind": "pool",
+                                  "value": "nlscale-a",
+                                  "stream_id": 7,
+                                  "topic": "lr-sweep",
+                                },
+                              ],
+                            "disabled": false,
+                            "widget_defaults":
+                              {"gpus": {"nav": "shown", "column": true}},
+                            "disabled_tools": [],
+                            "date_installed": 1760605200,
+                            "date_removed": null,
+                          },
+                      }
   /armada/plugins/{install_id}/links:
     post:
       operationId: add-armada-plugin-link

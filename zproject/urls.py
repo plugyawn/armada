@@ -66,6 +66,7 @@ from zerver.views.armada_plugins import (
     post_armada_plugin,
     post_armada_plugin_link,
     post_armada_plugin_restore,
+    post_armada_plugin_retry,
 )
 from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
 from zerver.views.armada_workspace import (
@@ -474,6 +475,7 @@ v1_api_and_json_patterns = [
         DELETE=delete_armada_plugin,
     ),
     rest_path("armada/plugins/<int:install_id>/restore", POST=post_armada_plugin_restore),
+    rest_path("armada/plugins/<int:install_id>/retry", POST=post_armada_plugin_retry),
     rest_path("armada/plugins/<int:install_id>/links", POST=post_armada_plugin_link),
     rest_path(
         "armada/plugins/<int:install_id>/links/<int:link_id>", DELETE=delete_armada_plugin_link

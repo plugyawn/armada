@@ -208,6 +208,7 @@ def server_processes() -> list[list[str]]:
             "--quiet",
         ],
         ["./manage.py", "deliver_scheduled_messages", "--automated"],
+        ["./manage.py", "armada_plugin_host"],
         [
             "./manage.py",
             "runtusd",

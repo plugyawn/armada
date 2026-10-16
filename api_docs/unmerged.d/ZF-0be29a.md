@@ -13,6 +13,10 @@
   it, or is a remote service; it may be a draft, seen only by the
   person the agent makes it for; and each of its widgets has the team's
   default, shown in the nav or offered in its "+" menu.
+* [`POST /armada/plugins/{install_id}/retry`](/api/retry-armada-plugin):
+  New endpoint to start a plugin that failed five times in a row again
+  at once. A plugin's state, in its `state` and `detail` fields, is now
+  reported by the plugin host, which runs it.
 * [`POST /armada/plugins/{install_id}/links`](/api/add-armada-plugin-link),
   [`DELETE /armada/plugins/{install_id}/links/{link_id}`](/api/remove-armada-plugin-link):
   New endpoints to link a plugin to a channel or to a topic, and to

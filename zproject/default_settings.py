@@ -801,6 +801,11 @@ ARMADA_NEW_INTERFACE_AT_ROOT = True
 # from github.com/<owner>/<repo>; with this, also from a git repository on
 # this machine's disk, for a development server and the tests.
 ARMADA_PLUGIN_LOCAL_SOURCES = False
+# Where the plugin host (zerver/lib/armada_plugin_host.py) keeps each install's
+# checkout, home and log; and the uv a Python plugin's setup and command run
+# with, which is Zulip's own (scripts/lib/install-uv).
+ARMADA_PLUGIN_DIR = "/srv/armada/plugins"
+ARMADA_PLUGIN_UV = "/usr/local/bin/uv"
 
 # Partners (zerver/lib/partner.py): how use becomes experience, and the
 # levels at which a partner changes. Levels are computed from experience

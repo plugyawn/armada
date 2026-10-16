@@ -181,6 +181,7 @@
 * [Update a plugin](/api/update-armada-plugin)
 * [Remove a plugin](/api/remove-armada-plugin)
 * [Undo a plugin's removal](/api/restore-armada-plugin)
+* [Retry a failed plugin](/api/retry-armada-plugin)
 * [Link a plugin to a channel or a topic](/api/add-armada-plugin-link)
 * [Unlink a plugin](/api/remove-armada-plugin-link)
 

@@ -663,6 +663,7 @@ class PluginInstallTest(ZulipTestCase):
             self.patch(hamlet, lear, disabled=True),
             self.client_delete(f"/json/armada/plugins/{lear.id}"),
             self.client_post(f"/json/armada/plugins/{lear.id}/restore"),
+            self.client_post(f"/json/armada/plugins/{lear.id}/retry"),
             self.client_post(
                 f"/json/armada/plugins/{lear.id}/links",
                 {"kind": "project", "value": "a/b", "stream_id": self.get_stream_id("Verona")},
@@ -696,6 +697,9 @@ class PluginInstallTest(ZulipTestCase):
         self.assert_json_error(self.client_get("/json/armada/plugins"), guest_error)
         self.assert_json_error(self.post_install(polonius), guest_error)
         self.assert_json_error(self.patch(polonius, install, disabled=True), guest_error)
+        self.assert_json_error(
+            self.client_post(f"/json/armada/plugins/{install.id}/retry"), guest_error
+        )
 
         bot_error = "Plugins are installed, linked and removed by people, not bots."
         # Neither a bot of a person's nor the plugin's own bot may.

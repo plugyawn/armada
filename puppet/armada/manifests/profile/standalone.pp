@@ -8,6 +8,7 @@ class armada::profile::standalone {
   include zulip::profile::standalone
   include armada::settings
   include armada::agent_runtime
+  include armada::plugin_host
   include armada::hooks
   include armada::nginx_brotli
   include armada::patching

@@ -1,0 +1,23 @@
+{
+    "id": "fake",
+    "name": "Fake",
+    "version": "1.0.0",
+    "description": "A plugin for the plugin host's tests.",
+    "glyph": "plugin",
+    "requires": {"armada": ">=1"},
+    "run": {
+        "setup": ["python3", "-c", "open('setup-ran', 'a').write('1')"],
+        "command": ["python3", "armada_fake_plugin.py"]
+    },
+    "settings": {
+        "type": "object",
+        "properties": {
+            "exit_at_start": {"type": "boolean", "title": "Exit at start"},
+            "crash_after": {"type": "number", "title": "Crash after"},
+            "unhealthy": {"type": "boolean", "title": "Unhealthy"},
+            "say_secrets": {"type": "boolean", "title": "Say its secrets"}
+        }
+    },
+    "secrets": {"key": {"title": "Key", "env": "FAKE_KEY"}},
+    "provides": {"tools": {"path": "/mcp"}}
+}

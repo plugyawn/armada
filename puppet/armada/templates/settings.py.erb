@@ -20,3 +20,5 @@ ARMADA_WORKER_MODEL_CHOICES = [<%= @settings['worker_model_choices'].split(',').
 ARMADA_WORKER_SERVICE_TIER = "<%= @settings['worker_service_tier'] %>"
 ARMADA_WORKER_REASONING_EFFORT = "<%= @settings['worker_reasoning_effort'] %>"
 ARMADA_WORKER_BROWSER_DIR = "<%= @settings['browser_dir'] %>"
+## Where the plugin host keeps each plugin's checkout (armada::plugin_host).
+ARMADA_PLUGIN_DIR = "<%= @settings['plugin_dir'] %>"

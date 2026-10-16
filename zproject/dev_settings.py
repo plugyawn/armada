@@ -118,6 +118,7 @@ ARMADA_WORKER_TRUSTED_USERS_ONLY = False
 ARMADA_WORKER_CODEX_MEMORIES = True
 # A plugin can be installed from a git repository on this machine.
 ARMADA_PLUGIN_LOCAL_SOURCES = True
+ARMADA_PLUGIN_DIR = os.path.join(DEPLOY_ROOT, "var", "armada-plugins")
 
 SYSTEM_ONLY_REALMS: set[str] = set()
 USING_PGROONGA = True

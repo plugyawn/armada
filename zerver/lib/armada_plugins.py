@@ -39,6 +39,7 @@ from email.headerregistry import Address
 from secrets import token_hex
 from typing import Any
 
+import requests
 from cryptography.fernet import Fernet, MultiFernet
 from django.conf import settings
 from django.db import transaction
@@ -56,6 +57,7 @@ from zerver.lib.armada_plugin_validation import (
     canonicalize_plugin_settings,
 )
 from zerver.lib.exceptions import JsonableError, ResourceNotFoundError
+from zerver.lib.outgoing_http import OutgoingSession
 from zerver.lib.streams import access_stream_by_id
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.models import (
@@ -755,6 +757,54 @@ def restore_plugin(user: UserProfile, install: PluginInstall) -> None:
         _settle_state(install, _check_settings(install.manifest, install.settings)[1])
         install.save()
         _audit(install, user, AuditLogEventType.PLUGIN_RESTORED, {"version": install.version})
+
+
+def retry_plugin(user: UserProfile, install: PluginInstall) -> None:
+    """Retry a plugin that failed five times in a row: the host starts it
+    again, with five more tries."""
+    if install.state != PluginInstall.FAILED:
+        raise JsonableError(_("{name} has not failed.").format(name=install.name))
+    install.state = PluginInstall.STARTING
+    install.state_detail = ""
+    install.failures = 0
+    install.generation += 1
+    install.date_updated = timezone_now()
+    install.save(update_fields=["state", "state_detail", "failures", "generation", "date_updated"])
+
+
+def set_plugin_state(
+    install: PluginInstall, state: int, *, detail: str, failures: int | None = None
+) -> None:
+    """The plugin host reports what an install's process is doing. It
+    acts on what it read at the start of its pass, so the report is
+    dropped if the install changed since (a change raises generation)."""
+    fields: dict[str, object] = {"state": state, "state_detail": detail[-4000:]}
+    if failures is not None:
+        fields["failures"] = failures
+    if all(getattr(install, name) == value for name, value in fields.items()):
+        return
+    if PluginInstall.objects.filter(id=install.id, generation=install.generation).update(**fields):
+        for name, value in fields.items():
+            setattr(install, name, value)
+
+
+def armada_plugin_url(install: PluginInstall) -> str:
+    """Where the plugin answers: its port on this server, or its service."""
+    if "remote" in install.manifest:
+        return install.manifest["remote"]["url"].rstrip("/")
+    return f"http://127.0.0.1:{install.port}"
+
+
+def armada_plugin_session(install: PluginInstall, *, timeout: float) -> requests.Session:
+    """A session that reaches the plugin. A process on this server is
+    reached directly: Zulip's outgoing proxy, which a production server's
+    environment names, refuses 127.0.0.1. A remote plugin is reached
+    through the proxy, like any other service."""
+    if "remote" in install.manifest:
+        return OutgoingSession(role="armada_plugin", timeout=timeout)
+    session = OutgoingSession(role="armada_plugin", timeout=timeout, proxies={})
+    session.trust_env = False
+    return session
 
 
 def _manifest_diff(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:

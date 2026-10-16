@@ -17,6 +17,7 @@ class armada::settings {
     'worker_service_tier'       => zulipconf('armada', 'worker_service_tier', 'ultrafast'),
     'worker_reasoning_effort'   => zulipconf('armada', 'worker_reasoning_effort', 'medium'),
     'browser_dir'               => zulipconf('armada', 'browser_dir', '/opt/armada-browser'),
+    'plugin_dir'                => zulipconf('armada', 'plugin_dir', '/srv/armada/plugins'),
   }
 
   file { '/usr/local/sbin/armada-settings-apply':

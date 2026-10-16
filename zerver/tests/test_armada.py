@@ -113,6 +113,7 @@ from zerver.lib.armada_agent import (
     ARMADA_CODEX_SIDE_BOUNDARY_PROMPT,
     ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS,
     ARMADA_CODEX_WARM_SIDE_CONVERSATION_LIMIT,
+    ARMADA_OPS_RUNBOOK_URL,
     ArmadaAgentRuntimeError,
     ArmadaAppServerTurnContext,
     ArmadaCodexAppServerToolRunner,
@@ -2699,6 +2700,18 @@ class ArmadaSessionDefaultsTest(TestCase):
             "If two people's instructions conflict, say so in one line, mention both",
             instructions,
         )
+
+    def test_codex_developer_instructions_send_ops_alerts_to_the_runbook(self) -> None:
+        # The agent asked about an alert in #ops works in that channel's
+        # own repository, so it reads the runbook where the alert links it.
+        self.assertIn(
+            "An alert the Ops bot posts in #ops names its section of Armada's operations "
+            "runbook, which is not in the channel's repository: read it at "
+            f"{ARMADA_OPS_RUNBOOK_URL}.",
+            build_armada_codex_developer_instructions(),
+        )
+        ops_check = Path(settings.DEPLOY_ROOT, "puppet/armada/files/armada-ops-check")
+        self.assertIn(f'RUNBOOK_URL = "{ARMADA_OPS_RUNBOOK_URL}"', ops_check.read_text())
 
     def test_what_the_agent_reads_calls_the_product_armada(self) -> None:
         # The agent names the product as these words do: told it worked

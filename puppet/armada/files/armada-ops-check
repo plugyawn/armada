@@ -19,8 +19,9 @@ Settings, in /etc/zulip/zulip.conf:
     ops_host = chat.example.com            # optional; EXTERNAL_HOST otherwise
 
 and the bot's API key in /etc/zulip/zulip-secrets.conf as
-armada_ops_bot_api_key. Each message names its runbook section in
-docs/armada/operations.md.
+armada_ops_bot_api_key. Each message links its runbook section in
+docs/armada/operations.md on GitHub: the agent answering in #ops works in
+that channel's own repository, where the runbook is not.
 """
 
 import argparse
@@ -45,7 +46,7 @@ STATE_FILE = "/var/lib/armada-ops/state.json"
 BACKUP_STAMPS = "/var/lib/armada-backup"
 CERTIFICATE = "/etc/ssl/certs/zulip.combined-chain.crt"
 CODEX = "/opt/codex/bin/codex"
-RUNBOOK = "docs/armada/operations.md"
+RUNBOOK_URL = "https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md"
 
 OK, WARN, CRITICAL = "ok", "warn", "critical"
 ORDER = {OK: 0, WARN: 1, CRITICAL: 2}
@@ -327,7 +328,8 @@ def post(check: str, result: Result, previous: str) -> None:
     else:
         content = (
             f"**{result.status.capitalize()}**: {result.detail}.\n"
-            f'Runbook: `{RUNBOOK}`, section "{result.runbook}".'
+            # A section is a "### <name>" heading, so GitHub's anchor is its name.
+            f"Runbook: [{result.runbook}]({RUNBOOK_URL}#{result.runbook})"
         )
     body = urllib.parse.urlencode(
         {"type": "stream", "to": stream, "topic": check, "content": content}

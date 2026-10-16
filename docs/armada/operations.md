@@ -160,6 +160,18 @@ Three layers, each reaching a person a different way:
   `#ops` channel when a check changes, and again when it recovers. A
   post that fails is tried again the next minute.
 
+An alert says what is wrong and links its section below, on GitHub
+(`ui-overhaul`):
+
+```text
+**Critical**: no file snapshot in 2 hours; no nightly backup in 26 hours.
+Runbook: [file-backup](https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md#file-backup)
+```
+
+A link rather than a path because the agent asked about an alert in
+`#ops` works in that channel's own repository, where this file is not;
+its instructions tell it to read the runbook at that address.
+
 `armada-ops-check --print` prints every check now and posts nothing. Make
 the bot and the channel once, after the organization exists:
 `armada-ops-bot-setup OWNER_EMAIL`.

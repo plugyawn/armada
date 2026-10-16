@@ -2,6 +2,7 @@ import io
 import os
 import sys
 import tempfile
+import urllib.parse
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from types import ModuleType
@@ -154,7 +155,12 @@ class OpsCheckTests(TestCase):
         self.assertEqual(self.codex_runs, 1)
 
     def test_every_check_names_a_runbook_section(self) -> None:
-        with open(os.path.join(ROOT_DIR, "docs/armada/operations.md")) as f:
+        # The file the alerts link, on the branch they link it on.
+        runbook = ops_check.RUNBOOK_URL.removeprefix(
+            "https://github.com/plugyawn/armada/blob/ui-overhaul/"
+        )
+        self.assertEqual(runbook, "docs/armada/operations.md")
+        with open(os.path.join(ROOT_DIR, runbook)) as f:
             sections = {line.removeprefix("### ").strip() for line in f if line.startswith("### ")}
 
         def broken() -> object:
@@ -173,3 +179,53 @@ class OpsCheckTests(TestCase):
             self.assertEqual(ops_check.check_disk().status, ops_check.CRITICAL)
             usage.used = 40
             self.assertEqual(ops_check.check_disk().status, ops_check.OK)
+
+
+class OpsPostTests(TestCase):
+    """What the ops bot posts in #ops."""
+
+    def posted(self, result: object, previous: str) -> dict[str, list[str]]:
+        conf = {
+            ("armada", "ops_bot_email"): "ops-bot@example.com",
+            ("armada", "ops_host"): "chat.example.com",
+        }
+        secrets = mock.Mock()
+        secrets.get.return_value = "api-key"
+        urlopen = mock.MagicMock()
+        ops_check.external_host.cache_clear()
+        self.addCleanup(ops_check.external_host.cache_clear)
+        with (
+            mock.patch.object(ops_check, "zulip_conf_get", lambda *key: conf.get(key, "")),
+            mock.patch.object(ops_check, "secrets_conf", secrets),
+            mock.patch.object(ops_check.urllib.request, "urlopen", urlopen),
+        ):
+            ops_check.post("file-backup", result, previous)
+        [request] = [call.args[0] for call in urlopen.call_args_list]
+        self.assertEqual(request.full_url, "https://chat.example.com/api/v1/messages")
+        return urllib.parse.parse_qs(request.data.decode())
+
+    def test_an_alert_links_its_runbook_section(self) -> None:
+        # The agent asked about it in #ops works in that channel's own
+        # repository, so the alert links the runbook rather than name a path.
+        result = ops_check.Result(
+            ops_check.CRITICAL,
+            "no file snapshot in 2 hours; no nightly backup in 26 hours",
+            "file-backup",
+        )
+        posted = self.posted(result, ops_check.OK)
+        self.assertEqual((posted["to"], posted["topic"]), (["ops"], ["file-backup"]))
+        self.assertEqual(
+            posted["content"],
+            [
+                "**Critical**: no file snapshot in 2 hours; no nightly backup in 26 hours.\n"
+                "Runbook: [file-backup](https://github.com/plugyawn/armada/blob/ui-overhaul/"
+                "docs/armada/operations.md#file-backup)"
+            ],
+        )
+
+    def test_a_recovery_says_what_it_was(self) -> None:
+        result = ops_check.Result(ops_check.OK, "last snapshot 5 minutes ago", "file-backup")
+        self.assertEqual(
+            self.posted(result, ops_check.CRITICAL)["content"],
+            ["**Recovered** (critical before): last snapshot 5 minutes ago."],
+        )

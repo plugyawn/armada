@@ -2530,7 +2530,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_a, "fix"))
         self.assertNotIn(instructions, build_armada_codex_turn_prompt(active_session_b, "fix"))
 
-    def test_codex_developer_instructions_ask_for_a_checklist_and_real_mentions(self) -> None:
+    def test_codex_developer_instructions_ask_for_a_checklist_questions_and_mentions(
+        self,
+    ) -> None:
         instructions = build_armada_codex_developer_instructions()
 
         self.assertIn(
@@ -2538,7 +2540,12 @@ class ArmadaSessionDefaultsTest(TestCase):
             "make a checklist with your plan tool, and keep it current",
             instructions,
         )
-        self.assertIn("mention them as @**Full Name**", instructions)
+        self.assertIn(
+            "When a question blocks the work (a decision, or a choice between options), "
+            "ask it with your request_user_input tool, not in text",
+            instructions,
+        )
+        self.assertIn("To tell a person something, mention them as @**Full Name**", instructions)
         self.assertIn(
             "If two people's instructions conflict, say so in one line, mention both",
             instructions,
@@ -7998,6 +8005,16 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         self.assertIn(
             ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS,
             str(fork_params["developerInstructions"]),
+        )
+        # A side conversation declines a question at once (it has no
+        # user-input provider), so it is told to ask in text instead,
+        # after the instruction it inherits to use the question tool.
+        side_instructions = str(fork_params["developerInstructions"])
+        self.assertLess(
+            side_instructions.index("ask it with your request_user_input tool"),
+            side_instructions.index(
+                "The request_user_input tool gets no answer in this side conversation."
+            ),
         )
         inject_params = requests[1][1]
         self.assertEqual(inject_params["threadId"], "side-1")

@@ -980,7 +980,7 @@ def do_send_messages(
         locked_thread_roots = {
             root.id: root
             for root in (
-                Message.objects.select_for_update(of=("self",)).filter(
+                Message.objects.select_for_update(no_key=False, of=("self",)).filter(
                     id__in=thread_root_ids,
                     thread_root__isnull=True,
                 )

@@ -656,7 +656,7 @@ def check_update_message_rendering_only_in_transaction(
     # Keep this operation isolated behind a savepoint. Callers such as the agent may
     # recover by posting a new message if this edit fails; they must not commit
     # a partial edit and its fallback together.
-    with transaction.atomic():
+    with transaction.atomic(savepoint=True):
         _check_update_message_rendering_only(user_profile, message_id, content=content)
 
 

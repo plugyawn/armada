@@ -615,6 +615,10 @@ python_rules = RuleList(
                     "with suppress(IntegrityError), transaction.atomic(savepoint=True):",
                 ),
                 (
+                    "zerver/actions/message_edit.py",
+                    "with transaction.atomic(savepoint=True):",
+                ),
+                (
                     "zerver/lib/test_classes.py",
                     "with transaction.atomic(savepoint=True):",
                 ),

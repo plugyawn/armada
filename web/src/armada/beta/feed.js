@@ -4,7 +4,7 @@ import {$, $$, clamp, el, esc} from "./util.js";
 import {msgIndex, state, unread} from "./state.js";
 import {dayKey, dayLabel, hhmm, now} from "./time.js";
 import {band, feed, lane} from "./frame.js";
-import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
+import {faceOf, isBot, isOnix, nameOf, stoneOf} from "./faces.js";
 import {partEl, partsOf} from "./parts.js";
 import {drawReactions} from "./reactions.js";
 import {receiptButton, RECEIPTS, untick} from "./receipts.js";
@@ -52,11 +52,14 @@ function grown(write, token = "move", o = {}) {
 }
 
 /* ---------- the conversation ---------- */
-const kindOf = (m) => (isOnix(m.sender_id) ? "onix" : m.sender_id === state.ME ? "me" : "them");
+const kindOf = (m) => (isOnix(m.sender_id) ? "onix" : m.sender_id === state.ME ? "me" : isBot(m.sender_id) ? "bot" : "them");
 function named(cl) { for (let x = cl.previousElementSibling; x; x = x.previousElementSibling) { if (!x.classList.contains("cl") || x.classList.contains("me")) continue; return x.dataset.sid !== cl.dataset.sid; } return true; }
 function newSection(c, m, kind, o) {
   const cl = el("section", "cl " + kind); cl.dataset.sid = m.sender_id; cl.dataset.day = dayKey(m.timestamp); c.append(cl);
   if (kind === "onix") { const lab = named(cl); cl.classList.toggle("lab", lab); cl.innerHTML = faceOf(m.sender_id) + (lab ? '<div class="who">Onix</div>' : ""); }
+  /* a bot's post (an alert, a plugin's line): on the plane like Onix's words, one message a turn, always under its face, its
+     name and its time, as the plugin design draws a machine's post */
+  else if (kind === "bot") { cl.classList.add("lab"); cl.dataset.mid = m.id; cl.innerHTML = `<div class="who">${faceOf(m.sender_id, "s18")}<span>${esc(nameOf(m.sender_id))}</span><time></time></div>`; }
   else if (kind === "them") { const solo = state.place.kind === "dm" && state.place.ids.length === 1, lab = !solo && named(cl); cl.classList.add("s-" + stoneOf(m.sender_id)); cl.classList.toggle("lab", lab);
     cl.innerHTML = o.thread ? `<div class="who">${faceOf(m.sender_id, "s20")}${esc(nameOf(m.sender_id))}</div>` : faceOf(m.sender_id) + (lab ? `<div class="who">${esc(nameOf(m.sender_id))}</div>` : ""); if (o.thread) cl.classList.add("lab"); }
   return cl;
@@ -64,7 +67,8 @@ function newSection(c, m, kind, o) {
 /* a turn's bubbles: the first keeps its lower inner corner square, the last its upper one; the turn's time stands on its last bubble.
    A link's card belongs to the words above it, so the time stays with them: a preview that arrives, or a reserved card
    that closes, never moves the time (previews.js) */
-function finish(cl) { if (cl.classList.contains("onix")) return; const bs = $$(":scope > .bl > .b", cl); bs.forEach((b, i) => { b.classList.toggle("u", i < bs.length - 1); b.classList.toggle("t", i > 0); });
+function finish(cl) { if (cl.classList.contains("onix")) return;
+  if (cl.classList.contains("bot")) { const t = $(":scope > .who > time", cl), ts = +cl.dataset.ts; t.textContent = hhmm(ts); t.title = new Date(ts * 1000).toLocaleString(); return; } const bs = $$(":scope > .bl > .b", cl); bs.forEach((b, i) => { b.classList.toggle("u", i < bs.length - 1); b.classList.toggle("t", i > 0); });
   $$(":scope > .bl > time, :scope > .bl > .rt, :scope > .rcpt.at", cl).forEach((t) => { for (const b of t.matches(".rt") ? [t] : $$(".rt", t)) untick(b); t.remove(); }); const all = $$(":scope > [data-part]", cl); let lastPart = all.pop(); while (lastPart && /^pv/.test(lastPart.dataset.part) && all.length) lastPart = all.pop(); if (!lastPart || cl.dataset.pending) return;
   const edited = (mid) => { const c = msgIndex.get(+mid), x = c && c.byId.get(+mid); return !!(x && (x.edited || x.last_edit_timestamp)); };
   /* an edited message that is not the turn's last says so on its own last bubble; the last one says it with the time */
@@ -78,7 +82,7 @@ function appendMessage(c, m, o = {}) {
   if (!o.thread && c._day !== d) { const line = el("div", "day", dayLabel(m.timestamp)); line.dataset.day = d; c.append(line); c._day = d; }
   if (o.unreadAt === m.id) c.append(el("div", "unread", "New"));
   let cl = c.lastElementChild;
-  const join = kind !== "onix" && cl && cl.classList.contains("cl") && +cl.dataset.sid === m.sender_id && !cl.dataset.closed && m.timestamp - +cl.dataset.ts < 600 && !cl.classList.contains("onix");
+  const join = kind !== "onix" && kind !== "bot" && cl && cl.classList.contains("cl") && +cl.dataset.sid === m.sender_id && !cl.dataset.closed && m.timestamp - +cl.dataset.ts < 600 && !cl.classList.contains("onix");
   if (!join) cl = newSection(c, m, kind, o);
   cl.dataset.ts = m.timestamp; (msgIndex.get(m.id) || state.P).rows.set(m.id, cl);
   const parts = partsOf(m).map((p) => partEl(p, m)); cl.append(...parts); const evo = evoCaption(m); if (evo) cl.append(evo);
@@ -122,7 +126,7 @@ const idOf = (mid) => (/^\d+$/.test(mid) ? +mid : mid);
 const isHead = (x) => x.matches(".av, .pk, .who");                 /* what a turn begins with: the face and the name */
 const firstMsgOf = (c, cl) => { const p = $(":scope > [data-mid]", cl); return p ? c.byId.get(idOf(p.dataset.mid)) : null; };
 /* whether drawLane would have written turn b's messages into turn a, the turn above it */
-function joinable(c, a, b) { if (!a || !b || !a.matches(".cl:not(.onix)") || !b.matches(".cl:not(.onix)") || a.dataset.sid !== b.dataset.sid || a.dataset.closed) return false;
+function joinable(c, a, b) { if (!a || !b || !a.matches(".cl:not(.onix):not(.bot)") || !b.matches(".cl:not(.onix):not(.bot)") || a.dataset.sid !== b.dataset.sid || a.dataset.closed) return false;
   const m = firstMsgOf(c, b); return !!m && m.timestamp - +a.dataset.ts < 600; }
 /* turn `from` joins turn `into` ("before": its words go first, the earlier turn; "after": last); `into` stays */
 function merge(c, into, from, where) { const moved = [...from.children].filter((x) => !isHead(x));
@@ -131,11 +135,11 @@ function merge(c, into, from, where) { const moved = [...from.children].filter((
   for (const x of moved) if (x.dataset.mid && c.rows.get(idOf(x.dataset.mid)) === from) c.rows.set(idOf(x.dataset.mid), into);
   from.remove(); finish(into); hush(into); toHug.add(into); }
 /* whether a turn names its speaker, set in place */
-function label(cl, lab) { if (cl.classList.contains("me") || cl.classList.contains("lab") === lab) return; cl.classList.toggle("lab", lab); const who = $(":scope > .who", cl);
+function label(cl, lab) { if (cl.classList.contains("me") || cl.classList.contains("bot") || cl.classList.contains("lab") === lab) return; cl.classList.toggle("lab", lab); const who = $(":scope > .who", cl);
   if (!lab) { if (who) who.remove(); return; }
   const w = el("div", "who", cl.classList.contains("onix") ? "Onix" : esc(nameOf(+cl.dataset.sid))), face = $(":scope > .av, :scope > .pk", cl); if (face) face.after(w); else cl.prepend(w); }
 /* the first turn from x on that names its speaker by the turn before it (mine never do) is named as drawLane would name it */
-function relabelFrom(x) { for (; x; x = x.nextElementSibling) if (x.matches(".cl:not(.me)")) { const solo = x.classList.contains("them") && state.place.kind === "dm" && state.place.ids.length === 1; label(x, !solo && named(x)); return; } }
+function relabelFrom(x) { for (; x; x = x.nextElementSibling) if (x.matches(".cl:not(.me):not(.bot)")) { const solo = x.classList.contains("them") && state.place.kind === "dm" && state.place.ids.length === 1; label(x, !solo && named(x)); return; } }
 /* the turns written inside x forget their messages' rows and ticks */
 function forgetRows(c, x) { for (const b of $$(".rt[data-info]", x)) untick(b); for (const s of [x, ...$$(".cl", x)]) if (s.matches(".cl")) for (const p of $$(":scope > [data-mid]", s)) { const i = idOf(p.dataset.mid); if (c.rows.get(i) === s) c.rows.delete(i); } }
 /* a message taken out of its place's rows (deleted, dropped, let go): its parts leave its turn; a turn left with nothing

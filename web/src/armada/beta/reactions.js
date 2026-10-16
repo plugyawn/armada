@@ -12,7 +12,7 @@ const emojiChar = (r) => { if (r.reaction_type !== "unicode_emoji") return ":" +
 function drawReactions(cl, m) {
   $$(`.rcs[data-mid="${m.id}"]`, cl).forEach((x) => (x.closest(".rca") || x).remove());
   const groups = chipsOf(m), own = $$(`:scope > [data-mid="${m.id}"]`, cl); if (!own.length) return null;
-  const onix = cl.classList.contains("onix"), bubbles = own.filter((e) => e.classList.contains("bl")), b = bubbles.length ? $(".b", bubbles[bubbles.length - 1]) : null;
+  const onix = cl.classList.contains("onix") || cl.classList.contains("bot"), bubbles = own.filter((e) => e.classList.contains("bl")), b = bubbles.length ? $(".b", bubbles[bubbles.length - 1]) : null;
   if (b) b.classList.toggle("liked", groups.some((g) => g.mine) && !cl.classList.contains("me"));
   if (!groups.length) return null;
   const rcs = el("span", "rcs", groups.map((g) => `<button class="rc${g.mine ? " mine" : ""}" data-name="${esc(g.r.emoji_name)}" data-code="${esc(g.r.emoji_code)}" data-type="${esc(g.r.reaction_type)}" title="${esc(":" + g.r.emoji_name + ":")}"><span class="e">${esc(emojiChar(g.r))}</span>${g.n > 1 ? `<span class="n fig">${fig(g.n)}</span>` : ""}</button>`).join("")); rcs.dataset.mid = m.id;

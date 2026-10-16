@@ -9,6 +9,8 @@ const STONES = ["lapis", "larimar", "rose", "amethyst", "moss", "flint"];
 const stoneOf = (id) => { if (id === state.ME) return "me"; const p = partnerOf(id); return p && p.stone ? p.stone : STONES[id % STONES.length]; };
 const person = (id) => people.get(id) || {id, name: "Someone", email: ""};
 const isOnix = (id) => armadaBots.has(id);
+/* a machine that is not Onix: the Ops bot, a plugin's bot, the notification bot. Its words stand on the plane, as Onix's do */
+const isBot = (id) => !isOnix(id) && !!(people.get(id) || {}).bot;
 const nameOf = (id) => (isOnix(id) ? "Onix" : person(id).name);
 /* a face's initials: letters and figures of any script (a name in Devanagari keeps its first letter with its vowel sign),
    cut by grapheme, so no name is drawn as "?" while it has a letter */
@@ -36,4 +38,4 @@ const bigFaceOf = (id, size) => { const p = partnerOf(id);
   if (p && !brokenSprites.has(svSrc(p.species))) { const h = svFace(p.species, size, "", "", 0); if (h) return h; }
   return `<i class="av p-${stoneOf(id)} big" style="width:${size}px;height:${size}px" aria-hidden="true">${initials(person(id).name)}</i>`; };
 
-export {bigFaceOf, faceOf, faceSize, initials, isOnix, nameOf, person, presOf, stoneOf};
+export {bigFaceOf, faceOf, faceSize, initials, isBot, isOnix, nameOf, person, presOf, stoneOf};

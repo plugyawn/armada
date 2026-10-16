@@ -10,6 +10,15 @@
 .plan > .chk { font: var(--t-text); }
 .chk > li.failed > .mk.sm { color: var(--failure); }
 
+/* a bot's post (feed.js, "bot"): on the plane, as Onix's words are (statement 42; plugin decision 9), from the gutter's edge
+   where Onix's words start. Its label is its face, its name and its time, on the label's line (the plugin design's
+   machine post), and its words have no bubble. */
+.cl.bot { align-items: stretch; }
+.feed .lane > .cl.bot { margin-left: calc(-1 * var(--gutter)); }
+.cl.bot > .who { display: flex; align-items: center; gap: var(--s-2); }
+.cl.bot > .who > time { font: var(--t-caption); font-variant-numeric: tabular-nums; }
+.cl.bot > .over { left: auto; right: 0; top: -6px; }
+
 /* a code block (code_blocks.js): the code scrolls sideways in its own span, so the copy button stays in the block's top
    right corner, on the block's fill, over the end of the first line. It is shown while the pointer is on the block, or
    when it has the keyboard's focus. */

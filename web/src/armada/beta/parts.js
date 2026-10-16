@@ -3,7 +3,7 @@
 import {$$, el, esc} from "./util.js";
 import {marks, people, repoStreams, state, streams} from "./state.js";
 import {dayLabel, hhmm} from "./time.js";
-import {isOnix, nameOf} from "./faces.js";
+import {isBot, isOnix, nameOf} from "./faces.js";
 import {codeBlock} from "./code_blocks.js";
 import {echoRefs, quoteOf} from "./mention_text.js";
 import {quoteHTML, refLook} from "./mentions.js";
@@ -22,7 +22,8 @@ import {cardEl, messageLinks, moreEl, takeCards} from "./previews.js";
    whose preview the server is still fetching are cards, each under the run of prose that holds its link (previews.js).
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
-   - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
+   - Onix's message, and any bot's (statement 42; plugin decision 9: one rule for every machine voice): each run of prose is
+     ambient text on the page (no bubble); blocks are the same blocks.
    A bubble takes its direction from its first strong letter (dir=auto), so words written right to left read right to
    left; which side the bubble stands on is the turn's (mine right, everyone else's left), not the words'. A mention and
    inline code are tokens set left to right in any bubble (dir=ltr), and an element with its own dir is no part of the
@@ -64,14 +65,14 @@ function askPart(ul) { const opts = $$(":scope > li", ul).map((li) => { const c 
   return {t: "ask", html: opts.map((o, i) => `<button class="opt" data-answer="${esc(o.label)}"${o.desc ? ` data-tip="${esc(o.desc)}"` : ""}><span class="k">${i + 1}</span><span class="t">${esc(o.label)}</span>${o.desc ? `<span class="d">${esc(o.desc)}</span>` : ""}</button>`).join("")}; }
 const JUMBO = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|‍|️|[\u{1f1e6}-\u{1f1ff}]){1,12}$/u;
 function partsOf(m) {
-  const onix = isOnix(m.sender_id), out = []; let run = [];
+  const onix = isOnix(m.sender_id), plane = onix || isBot(m.sender_id), out = []; let run = [];
   if (onix && /^·\s*Working\s*$/.test((m.content || "").replace(/<[^>]+>/g, "").trim())) return out;   /* the server's placeholder: Onix has no words yet */
   const wdg = widgetPart(m); if (wdg) return [wdg];   /* a poll or a to-do list stands in place of the words that made it (widgets.js) */
   tpl.innerHTML = m.content || ""; const root = clean(tpl.content); const cards = takeCards(root, m); liftInline(root); dropNames(root);
   $$("code", root).forEach((x) => { if (x.closest("pre")) return; x.dir = "ltr"; if (x.textContent.length <= 32) x.classList.add("nw"); });   /* a short flag or path does not break at its own hyphen */
-  if (onix) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
+  if (plane) [...root.children].filter((x) => x.tagName === "P").forEach((x) => { if (x.childNodes.length === 1 && x.firstChild.tagName === "STRONG") { const h = el("h4"); h.append(...x.firstChild.childNodes); x.replaceWith(h); } });   /* "**What changed**" alone on its line is a heading. The fragment's own children: ":scope" matches nothing in a DocumentFragment */
   const flush = () => { if (!run.length) return; const under = cards.under(run);
-    if (onix) { run.forEach((n) => { if (/^H[12]$/.test(n.tagName)) { const h = el("h3"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } else if (/^H[3-6]$/.test(n.tagName)) { const h = el("h4"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } });
+    if (plane) { run.forEach((n) => { if (/^H[12]$/.test(n.tagName)) { const h = el("h3"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } else if (/^H[3-6]$/.test(n.tagName)) { const h = el("h4"); h.append(...n.childNodes); n.replaceWith(h); run[run.indexOf(n)] = h; } });
       const box = el("div"); box.append(...run); $$("li", box).forEach((li) => { const s = el("span"); s.append(...li.childNodes); li.append(s); }); out.push({t: "ans", html: box.innerHTML}); }
     else if (run.length === 1 && run[0].tagName === "P") { const p = run[0], txt = p.textContent.trim(), ems = $$(".em, img.emoji", p).length; out.push({t: "b", tag: "p", html: p.innerHTML, jumbo: ems >= 1 && ems <= 3 && JUMBO.test(txt.replace(/\s/g, ""))}); }
     else { const box = el("div"); box.append(...run); out.push({t: "b", tag: "div", html: box.innerHTML}); }
@@ -88,7 +89,7 @@ function partsOf(m) {
     else run.push(n); }
   flush(); out.push(...cards.rest());
   const art = artifactPart(m); if (art) out.push(art);   /* the artifact a run attached: a block after its words (artifacts.js) */
-  if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
+  if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push(plane ? {t: "ans", html: `<p>${esc(t || " ")}</p>`} : {t: "b", tag: "p", html: esc(t || " ")}); }
   return out;
 }
 const plainOf = (html) => { tpl.innerHTML = html || ""; return tpl.content.textContent; };

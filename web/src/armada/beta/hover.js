@@ -20,7 +20,7 @@ import {openLater, savePending} from "./later.js";
 
 /* ---------- the message's controls: the hover overlay, its menu, edit and delete ----------
    One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or at the
-   top right of Onix's words. It waits for the pointer to rest, travels between messages while it is up, never sits in
+   top right of words on the plane (Onix's, a bot's). It waits for the pointer to rest, travels between messages while it is up, never sits in
    flow. Onix's row is as wide as the lane but its words are not: only its words and blocks bring the overlay up, never
    the empty width beside them (statement 27). */
 let dialogOpen = false, menu = null, editing = null;
@@ -30,7 +30,7 @@ const msgOf = (t) => { const n = t && t.closest("[data-mid]"); if (!n) return nu
 function buildOver() {
   over = el("span", "over", Object.keys(OVER).map((n) => `<button class="c" aria-label="${OVER[n]}" data-act="${n}" data-tip="${OVER[n]}">${ic(n)}</button>`).join("")); host(over); over.inert = true;
   feed.addEventListener("pointermove", (e) => { if (menu) return; if (e.target.closest && e.target.closest(".rcs, .cz, .blk.ask")) return;
-    let t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl:not(.onix) > :is(.blk.pic, .blk.wdg), .cl.onix")); if (t && t !== overAt && t.matches(".cl.onix") && !onWords(t, e.clientX, e.clientY)) t = null;
+    let t = e.target.closest && (e.target.closest(".over") ? overAt : e.target.closest(".b, .cl:not(.onix):not(.bot) > :is(.blk.pic, .blk.wdg), .cl:is(.onix, .bot)")); if (t && t !== overAt && t.matches(".cl:is(.onix, .bot)") && !onWords(t, e.clientX, e.clientY)) t = null;
     if (!t || !msgOf(t)) { if (!e.target.closest(".over")) { clearTimeout(overTimer); overWant = null; } return; }
     if (t === overAt && !over.inert) return; if (!over.inert) { overShow(t); return; }
     if (t === overWant && Math.hypot(e.clientX - px_, e.clientY - py_) < 40) return; overWant = t; px_ = e.clientX; py_ = e.clientY; clearTimeout(overTimer); overTimer = setTimeout(() => { if (overWant === t) overShow(t); }, 120); }, {passive: true});
@@ -67,7 +67,7 @@ function onWords(cl, x, y) { const base = cl.getBoundingClientRect(), px = x - b
   return wordsOf(cl).rects.some((r) => px >= r.l - 8 && px <= r.r + 8 && py >= r.t - 4 && py <= r.b + 4); }
 let door = null;
 /* a person's pictures, poll or to-do list are a stop of their own: such a message has no bubble */
-const doors = () => $$(".bl > .b, .cl:not(.onix) > :is(.blk.pic, .blk.wdg), .cl.onix[data-mid]", lane).filter((t) => !t.closest(".cz"));
+const doors = () => $$(".bl > .b, .cl:not(.onix):not(.bot) > :is(.blk.pic, .blk.wdg), .cl:is(.onix, .bot)[data-mid]", lane).filter((t) => !t.closest(".cz"));
 function syncDoor() { const all = doors(); if (!door || !door.isConnected || !all.includes(door)) door = all[all.length - 1] || null;
   for (const x of $$("[data-door]", lane)) if (x !== door) { x.removeAttribute("tabindex"); delete x.dataset.door; }
   if (door && !door.dataset.door) { door.tabIndex = 0; door.dataset.door = "1"; } }
@@ -77,7 +77,7 @@ function overShow(t) { if (!t || !t.isConnected) return; if (overAt === t && !ov
   if (up) { M.fade(over, 1); M.flip(over, before, "touch"); } else { M.fade(over, 1); M.release(over, {y: T["pane-rise"] || 4}, "touch"); } }
 /* on Onix's words: beside the top right of the words, or at the row's end when the words reach it (a block does); on a
    bubble, where the stylesheet puts it */
-function placeOver() { placeOver.due = false; const t = overAt; if (!t || !over.isConnected) return; const box = t.matches(".cl.onix") && wordsOf(t).box;
+function placeOver() { placeOver.due = false; const t = overAt; if (!t || !over.isConnected) return; const box = t.matches(".cl:is(.onix, .bot)") && wordsOf(t).box;
   if (box) { over.style.left = Math.round(Math.max(0, Math.min(box.r + 6, t.getBoundingClientRect().width - over.offsetWidth))) + "px"; over.style.top = Math.round(box.t - 6) + "px"; over.style.right = "auto"; }
   else over.style.left = over.style.top = over.style.right = ""; }
 function overHide() { clearTimeout(overTimer); overWant = null; if (!over || over.inert) return; over.inert = true; overAt = null; M.fade(over, 0); }

@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): a link's card under the words that hold it (previews.js). Tokens only, as beta.css.
    The kit draws the card (.pv in kit/mock.css: 368 wide, 56 high, the block's fill, the 40 px cell at its end); what is
    here is what real data needs: a height that never depends on what arrives, a picture that fades in inside its cell,
-   a reserved card's quiet first state, a video's still, and the card as a link. */
+   a reserved card's quiet first state, a video's still, a quote's line, and the card as a link. */
 @layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
 
 a.pv { height: 56px; flex: none; color: var(--ink-1); text-decoration: none; overflow: hidden; transition: background-color var(--fade-out) linear; }
@@ -14,11 +14,12 @@ a.pv:hover { background-color: color-mix(in srgb, var(--block) 94%, var(--ink-1)
 .cl > button.pvm:hover { background-color: var(--fill-1); transition-duration: var(--fade-in); }
 .cl.me > .pvm { align-self: flex-end; }
 
-/* two lines of one height each, whatever they hold: the title, then the site and what the page says of itself. A
-   reserved card holds the site's name in the second ink until the preview fills it. */
+/* two lines of one height each, whatever they hold: the title (or who said it), then the site and what the page says of
+   itself (or the quoted line). A reserved card holds the site's name in the second ink until the preview fills it. */
 .pv > .pvt { display: block; min-width: 0; }
 .pv .pvh { display: flex; align-items: baseline; gap: var(--s-2); height: 20px; font: var(--t-strong); color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pv .pvh > b { font: inherit; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pv .pvh > time { flex: none; font: var(--t-caption); color: var(--ink-2); }
 .pv .pvc { display: block; height: 16px; font: var(--t-caption); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pv[data-wait] .pvh { font: var(--t-text); color: var(--ink-2); }
 .pv[data-wait] .pvc { display: none; }   /* the site alone, at the card's middle */

@@ -145,5 +145,5 @@ function wireMentions() {
   press(lane, ".rq[data-quote]", (b) => jumpTo(+b.dataset.quote));
 }
 
-export {fillFromWire, holdReply, quoteHTML, refLook, reseed, restoreReply, seedField, startReply, syncReply, takeReply,
+export {fillFromWire, holdReply, jumpTo, quoteHTML, refLook, reseed, restoreReply, seedField, startReply, syncReply, takeReply,
   wireMentions};

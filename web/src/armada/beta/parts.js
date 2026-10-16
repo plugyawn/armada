@@ -11,15 +11,15 @@ import {tkey} from "./routing.js";
 import {dropNames, liftInline, loadPics, localSize, picHTML, picsOf} from "./media.js";
 import {widgetPart} from "./widgets.js";
 import {artifactPart} from "./artifacts.js";
-import {cardEl, moreEl, takeCards} from "./previews.js";
+import {cardEl, messageLinks, moreEl, takeCards} from "./previews.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
    A block is: a code block (div.codehilite or pre), a table, pictures (div.message_inline_image; consecutive previews are
    one block, and a Markdown image is lifted out of its words first: media.js), a spoiler, display maths. Everything else is
    prose: paragraphs, lists, quotes, headings. A link that only names a picture shown below it is that picture's label, not
-   words (media.js, dropNames). A link's preview (a page's, div.message_embed; a video's), and a link whose preview the server
-   is still fetching, are cards under the run of prose that holds the link (previews.js).
+   words (media.js, dropNames). A link's preview (a page's, div.message_embed; a video's), a link to a message, and a link
+   whose preview the server is still fetching are cards, each under the run of prose that holds its link (previews.js).
    - A person's message: each run of consecutive prose elements is one bubble; each block stands as a block in the
      turn, between the bubbles, at the lane's width. A message that is one to three emoji and nothing else is jumbo.
    - Onix's message: each run of prose is ambient text on the page (no bubble); blocks are the same blocks.
@@ -42,7 +42,8 @@ function clean(root) {
   $$("a.stream, a.stream-topic", root).forEach((a) => { const sid = +a.dataset.streamId, st = streams.get(sid); if (!st) return; const pre = `#${st.name} > `, topic = a.classList.contains("stream-topic") && a.textContent.startsWith(pre) ? a.textContent.slice(pre.length) : null;
     const e = el(topic != null ? "a" : "span", "placelink"), live = topic != null && marks.get(tkey(sid, topic)) === "live"; if (topic != null) e.href = `#c/${sid}/${encodeURIComponent(topic)}`; if (live) e.dataset.state = "live";
     e.innerHTML = `${ic(topic != null ? "branch" : repoStreams.has(sid) ? "repo" : "hash")}<span>${esc(st.name)}</span>${topic != null ? `<span class="sep">\u203a</span><span>${esc(topic)}</span>` : ""}`; a.replaceWith(e); });
-  $$("a[href]:not(.placelink)", root).forEach((a) => { const h = a.getAttribute("href"); if (h[0] === "#") a.href = "/" + h; a.target = "_blank"; a.rel = "noopener noreferrer"; });   /* a link to a narrow opens the place it names in a new tab (routing.js reads the old interface's narrows) */
+  messageLinks(root);   /* a link to a message: a chip of its place, which opens the message here (previews.js) */
+  $$("a[href]:not(.placelink):not([data-msg])", root).forEach((a) => { const h = a.getAttribute("href"); if (h[0] === "#") a.href = "/" + h; a.target = "_blank"; a.rel = "noopener noreferrer"; });   /* a link to a narrow opens the place it names in a new tab (routing.js reads the old interface's narrows) */
   $$("time[datetime]", root).forEach((t) => { const d = new Date(t.getAttribute("datetime")); if (!isNaN(d)) t.textContent = `${dayLabel(d / 1000)} ${hhmm(d / 1000)}`; });
   $$("img:not(.emoji)", root).forEach((i) => { if (!i.closest("div.message_inline_image") && !i.classList.contains("inline-image")) i.loading = "lazy"; });   /* pictures are media.js's; a link preview's image loads when near */
   return root;

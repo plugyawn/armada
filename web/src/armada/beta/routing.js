@@ -124,5 +124,5 @@ addEventListener("pagehide", flushSeen); document.addEventListener("visibilitych
 let ctxTimer = 0;
 function refreshCtx(c, ms = 1000) { clearTimeout(ctxTimer); ctxTimer = setTimeout(async () => { await fetchCtx(c); if (c === state.P) { drawHeader(); drawSide(); if (state.tab === "Changes") drawChanges(); } }, ms); }
 
-export {addMsg, cacheOf, dkey, fetchMsgs, keepEnd, markRead, markSeen, openPlace, placeFromHash, placeFromKey, placeOfMsg, refreshCtx,
+export {addMsg, cacheOf, dkey, fetchMsgs, keepEnd, markRead, markSeen, openPlace, placeFromHash, placeFromKey, placeFromNarrow, placeOfMsg, refreshCtx,
   tkey, topicLabel};

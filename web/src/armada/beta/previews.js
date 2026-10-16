@@ -7,21 +7,28 @@
    - a video (YouTube's, Vimeo's and any oEmbed video preview): its still at 16:9 with a play mark, then the title and
      the site; it opens the video. No player in the lane. The bubble keeps the link as it was typed: the server rewrites a
      bare video link's words to "YouTube - <title>" when its title arrives, and that title is the card's.
+   - a link to a message (pasted, #**channel>topic@id**, Onix's citations): a chip of its place in the words, and under
+     them a card of 56 quoting it: who, its first line, when. The message comes from this page's cache, or from one
+     request for every message the page is missing at once. Pressing either opens the message here.
    - a link the server is fetching a preview of: the card's place, kept from the moment the message is drawn, with the
      site's name, so that the preview fills it and nothing moves. The server says which links: its renderer marks each one
      it asks the embed worker to fetch (a data-preview), and the worker's rendering has no mark, preview or none. Only my
      echo, drawn before the server's copy exists, mirrors the renderer's rule (fetchedLinks). A mark is honoured for
      WAIT_LIMIT after the message was sent or edited: a worker that never answers, or a rendering that never asked it,
      leaves a mark behind.
-   A bubble shows at most three cards; past that, a quiet "+N more" line under them opens the rest in place, below it, so
+   A bubble shows at most three cards (quotes count); past that, a quiet "+N more" line under them opens the rest in place, below it, so
    nothing above it moves. */
 
 import {$$, el, esc, press} from "./util.js";
-import {msgIndex, people, state} from "./state.js";
-import {now} from "./time.js";
-import {isOnix} from "./faces.js";
+import {msgIndex, people, state, streams} from "./state.js";
+import {dayLabel, hhmm, now} from "./time.js";
+import {faceOf, isOnix, nameOf} from "./faces.js";
+import {api} from "./connection.js";
 import {lane} from "./frame.js";
 import {dist} from "./feed.js";
+import {openPlace, placeFromKey, placeFromNarrow, placeOfMsg} from "./routing.js";
+import {quoteLine, quoteOf} from "./mention_text.js";
+import {jumpTo} from "./mentions.js";
 import {updateMessage} from "./agent_turn.js";
 
 const MAX_UNDER = 3;                           /* the cards a bubble shows before "+N more" */
@@ -61,12 +68,36 @@ function waitingLinks(root, m) {
   return new Set(hrefs);
 }
 
+/* ---------- a message's links, read out of its rendered words ---------- */
+/* a link to a message of this server: #narrow/…/near/<id> or …/with/<id>, relative or whole */
+function msgTarget(href) {
+  const u = href && urlOf(href); if (!u || u.origin !== location.origin || !u.hash.startsWith("#narrow/")) return null;
+  const id = /\/(?:near|with)\/(\d+)(?:\/|$)/.exec(u.hash); return id ? {id: +id[1], hash: u.hash} : null;
+}
+/* a chip's words for a message's place: the channel and the topic, or the people of a direct message, read from the link
+   itself (a channel I am not in keeps the name its link carries) */
+function placeWords(hash) {
+  const parts = hash.slice(1).split("/"), dec = (s) => { try { return decodeURIComponent(s.replaceAll(".", "%")); } catch (e) { return s; } };
+  const term = (...ops) => { for (let i = 1; i + 1 < parts.length; i += 2) if (ops.includes(parts[i])) return dec(parts[i + 1]); return null; };
+  const ch = term("channel", "stream"), topic = term("topic", "subject"), dm = term("dm", "pm-with");
+  if (ch !== null) { const sid = parseInt(ch, 10), st = streams.get(sid), name = st ? st.name : ch.replace(/^\d+-/, ""); return `${ic(topic != null ? "branch" : "hash")}<span>${esc(name)}</span>${topic != null ? `<span class="sep">›</span><span>${esc(topic)}</span>` : ""}`; }
+  if (dm !== null) { const ids = (/^([\d,]+)/.exec(dm) || ["", ""])[1].split(",").map(Number).filter((i) => i && i !== state.ME); return `${ic("person")}<span>${esc(ids.map(nameOf).join(", ") || "Direct message")}</span>`; }
+  return `${ic("thread")}<span>A message</span>`;
+}
+/* clean(): a link to a message opens it here. Its own URL (or the server's "#channel > topic @ 💬") becomes a chip of its
+   place; words someone gave the link stay theirs. */
+function messageLinks(root) {
+  for (const a of $$("a[href]", root)) { const t = msgTarget(a.getAttribute("href")); if (!t) continue;
+    const said = /^https?:\/\//i.test(a.textContent.trim()) && urlOf(a.textContent.trim()), bare = a.classList.contains("message-link") || (!!said && said.hash === t.hash);
+    a.className = bare ? "placelink" : "msglink"; a.href = t.hash; a.dataset.msg = t.id; a.removeAttribute("target"); if (bare) a.innerHTML = placeWords(t.hash); }
+}
+
 /* ---------- the cards of one message ---------- */
 const embedImage = (a) => { const m = a && /url\("((?:[^"\\]|\\.)*)"\)/.exec(a.getAttribute("style") || ""); return m ? m[1].replace(/\\a /g, "\n").replace(/\\(.)/g, "$1") : null; };
 /* the messages whose cards past the first three are open (their "+N more" was pressed) */
 const opened = new Set();
 /* partsOf(): the server's previews leave the words; each comes back under the run of words that holds its link, with the
-   places kept for those still coming; what no run holds comes last */
+   places kept for those still coming, and the quotes of the messages linked; what no run holds comes last */
 function takeCards(root, m) {
   const found = new Map();
   for (const d of $$("div.message_embed", root)) { const a = d.querySelector(".message_embed_title a[href]") || d.querySelector("a[href]"), href = a && a.getAttribute("href"); if (href && !found.has(href)) {
@@ -81,37 +112,82 @@ function takeCards(root, m) {
   const capped = (cards) => (cards.length <= MAX_UNDER || opened.has(m.id) ? cards : [...cards.slice(0, MAX_UNDER), {t: "pvm", n: cards.length - MAX_UNDER, html: String(cards.length - MAX_UNDER)}]);
   return {
     under(run) { const out = [];
-      for (const n of run) for (const a of n.matches("a[href]") ? [n] : $$("a[href]", n)) { if (a.closest("blockquote")) continue; const h = a.getAttribute("href");
+      for (const n of run) for (const a of n.matches("a[href]") ? [n] : $$("a[href]", n)) { if (a.closest("blockquote")) continue; const h = a.getAttribute("href"), id = +a.dataset.msg;
+        if (id) { if (!used.has("m" + id)) { used.add("m" + id); out.push(card(quoteCard(id, h))); } continue; }
         if (used.has(h)) continue; if (found.has(h)) { used.add(h); out.push(card(found.get(h))); } else if (waiting.has(h)) { used.add(h); out.push(card({kind: isVideoSite(h) ? "video" : "wait", href: h, wait: true})); } }
       return capped(out); },
     rest() { return capped([...found.values()].filter((p) => !used.has(p.href)).map(card)); },
   };
 }
 
+/* ---------- a quoted message ---------- */
+const quoted = new Map();                      /* message id -> the server's copy, or null for one I cannot read */
+const asked = new Map(); let batch = null;     /* message id -> the answer it waits on; the ids asked for before the next frame */
+function quoteCard(id, href) {
+  const c = msgIndex.get(id), m = (c && c.byId.get(id)) || quoted.get(id);
+  if (m) return {kind: "msg", id, href, uid: m.sender_id, line: firstLine(m), at: m.timestamp};
+  if (quoted.has(id)) return {kind: "msg", id, href, gone: true};
+  ask(id); return {kind: "msg", id, href, wait: true};
+}
+const tplQ = document.createElement("template");
+function firstLine(m) { tplQ.innerHTML = m.content || ""; const kids = [...tplQ.content.children]; if (quoteOf(kids)) { kids[0].remove(); kids[1].remove(); }
+  $$(".user-mention, .user-group-mention, .topic-mention", tplQ.content).forEach((s) => s.replaceWith(s.textContent.replace(/^@/, "")));
+  $$("div.message_embed, div.message_inline_image, div.message_inline_video", tplQ.content).forEach((d) => d.remove());
+  return quoteLine([...tplQ.content.children].map((x) => x.textContent).join("\n") || tplQ.content.textContent, 140) || (/<img/.test(m.content || "") ? "Image" : ""); }
+/* every message the page is missing, asked for in one request once the draw that wanted them has been painted (a send's
+   row is on screen before any request) */
+function ask(id) {
+  if (asked.has(id)) return asked.get(id);
+  if (!batch) { const b = (batch = {ids: new Set()}); b.done = new Promise((resolve) => requestAnimationFrame(() => setTimeout(() => { batch = null; resolve(answer([...b.ids])); }, 0))); }
+  batch.ids.add(id); asked.set(id, batch.done); return batch.done;
+}
+async function answer(ids) {
+  let got = [];
+  try { got = (await api("GET", "messages", {message_ids: ids, apply_markdown: true, client_gravatar: false})).messages || []; }
+  catch (e) { if (e.net) { ids.forEach((i) => asked.delete(i)); return; } }   /* unreachable: asked again at the next draw; refused: none of them can be read */
+  ids.forEach((i) => asked.delete(i)); const byId = new Map(got.map((x) => [x.id, x])); for (const i of ids) quoted.set(i, byId.get(i) || null);
+  for (const e of $$('.pv[data-kind="msg"][data-wait]', lane)) { const id = +e.dataset.id; if (quoted.has(id)) fillCard(e, quoteCard(id, e.getAttribute("href"))); }
+}
+
 /* ---------- a card ---------- */
 function cardHTML(p) {
+  if (p.kind === "msg") {
+    const head = p.wait ? "" : p.gone ? "<b>Not available</b>" : `<b>${esc(nameOf(p.uid))}</b><time>${esc(dayLabel(p.at))} ${esc(hhmm(p.at))}</time>`;
+    const line = p.wait ? "" : p.gone ? "Deleted, or where you cannot read it" : esc(p.line);
+    return `<span class="pvt"><span class="pvh">${head}</span><span class="pvc">${line}</span></span><span class="tn">${p.uid != null ? faceOf(p.uid) || ic("answer") : ic("answer")}</span>`; }
   const site = esc(siteOf(p.href));
   const text = p.wait ? `<span class="pvh"><b>${site}</b></span><span class="pvc"></span>` : `<span class="pvh"><b>${esc(p.title || site)}</b></span><span class="pvc">${p.title ? site : ""}${p.title && p.desc ? " · " : ""}${esc(p.desc)}</span>`;
   const pic = p.img ? `<img alt="" loading="lazy" decoding="async" src="${esc(p.img)}">` : "";
   if (p.kind === "video") return `<span class="still">${pic}${PLAY}</span><span class="pvt">${text}</span>`;
   return `<span class="pvt">${text}</span><span class="tn">${ic("link")}${pic}</span>`;
 }
-const labelOf = (p) => `${p.kind === "video" ? "Video" : "Link"}: ${p.title || siteOf(p.href)}${p.title ? ", " + siteOf(p.href) : ""}`;
+const labelOf = (p) => (p.kind === "msg" ? (p.wait ? "A linked message" : p.gone ? "A linked message, not available" : `Message from ${nameOf(p.uid)}, ${dayLabel(p.at)} ${hhmm(p.at)}: ${p.line}`)
+  : `${p.kind === "video" ? "Video" : "Link"}: ${p.title || siteOf(p.href)}${p.title ? ", " + siteOf(p.href) : ""}`);
 function cardEl(p) { const e = el("a", "pv"); setCard(e, p); return e; }
 function setCard(e, p) {
-  e.dataset.kind = p.kind === "wait" ? "link" : p.kind; e.toggleAttribute("data-wait", !!p.wait); e.href = p.href; e.setAttribute("aria-label", labelOf(p)); e.target = "_blank"; e.rel = "noopener noreferrer";
+  e.dataset.kind = p.kind === "wait" ? "link" : p.kind; e.toggleAttribute("data-wait", !!p.wait); e.href = p.href; e.setAttribute("aria-label", labelOf(p));
+  if (p.kind === "msg") { e.dataset.msg = p.id; e.dataset.id = p.id; e.removeAttribute("target"); e.removeAttribute("rel"); } else { delete e.dataset.msg; delete e.dataset.id; e.target = "_blank"; e.rel = "noopener noreferrer"; }
   e.innerHTML = cardHTML(p);
 }
 /* the line that opens a bubble's cards past the first three */
 function moreEl(p) { const e = el("button", "pvm", `+${p.n} more`); e.setAttribute("aria-label", `Show ${p.n} more ${p.n === 1 ? "link" : "links"}`); return e; }
-/* a card already on screen takes what arrived (the preview of a kept place): its box stays, its words fade in */
+/* a card already on screen takes what arrived (the preview of a kept place, the quoted message): its box stays, its
+   words fade in */
 function fillCard(e, p) { const was = e.hasAttribute("data-wait"); setCard(e, p); e._src = p.html ?? JSON.stringify(p);
-  if (was && !p.wait && !M.reduced()) for (const x of e.querySelectorAll(".pvt")) M.appear(x, 0.3); }
+  if (was && !p.wait && !M.reduced()) for (const x of e.querySelectorAll(".pvt, .tn > .av")) M.appear(x, 0.3); }
 
 /* ---------- once, at boot (host.js) ---------- */
-/* a card's picture fades in when it has loaded; one that fails leaves the glyph. "+N more" opens the rest of a bubble's
-   cards where it stood. */
+/* a link to a message, in words or as a card: pressed, the message opens here, in its place (a press with a modifier, or
+   the middle button, is the browser's: a new tab). A card's picture fades in when it has loaded; one that fails leaves
+   the glyph. "+N more" opens the rest of a bubble's cards where it stood. */
+async function openMessage(id, hash) {
+  const known = () => { const c = msgIndex.get(id); return (c && c.byId.get(id)) || quoted.get(id); };
+  let p = placeFromNarrow(hash); if (!p && !known() && !quoted.has(id)) await ask(id);   /* a link that names no place (#narrow/near/<id>) */
+  if (!p && known()) p = placeFromKey(placeOfMsg(known())); if (!p) return;
+  if (!state.place || state.place.key !== p.key) await openPlace(p); if (state.place && state.place.key === p.key) jumpTo(id);
+}
 function wirePreviews() {
+  document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("a[data-msg]"); if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); openMessage(+a.dataset.msg, a.getAttribute("href")); });
   /* the rest opens under the cards that stay: the view keeps its place even at the conversation's end, where the feed
      would follow the growth and lift everything above the line. By the keyboard (a click with no pointer), focus goes on
      to the first card that opened. */
@@ -123,4 +199,4 @@ function wirePreviews() {
   lane.addEventListener("error", (e) => { if (e.target.matches && e.target.matches(".pv img")) e.target.remove(); }, true);
 }
 
-export {cardEl, fetchedLinks, fillCard, moreEl, takeCards, wirePreviews, WAIT_LIMIT};
+export {cardEl, fetchedLinks, fillCard, messageLinks, moreEl, openMessage, takeCards, wirePreviews, WAIT_LIMIT};

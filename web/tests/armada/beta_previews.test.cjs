@@ -6,12 +6,13 @@
 // link the server marks as being fetched keeps the card's place from the
 // first draw (my echo guesses which), and the preview fills that place
 // without replacing anything around it; the worker's rendering without a
-// preview closes it; a video is a still that opens the video. jsdom lays
-// nothing out, so "moves nothing" is read as the conversation's elements:
-// the same ones, in the same order, before and after the preview arrives.
-// The measured layout is in
-// var/armada-overhaul/build/dogfood/link-previews.md. Deleted with
-// web/src/armada/beta/.
+// preview closes it; a video is a still that opens the video; a link to a
+// message is a chip and a quote of the message, read from the page's cache
+// or from one request, which opens the message here. jsdom lays nothing
+// out, so "moves nothing" is read as the conversation's elements: the same
+// ones, in the same order, before and after the preview arrives. The
+// measured layout is in var/armada-overhaul/build/dogfood/link-previews.md.
+// Deleted with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -31,7 +32,7 @@ const dom = real_dom.make_real_dom(`
     <div id="run" class="off"><span id="run-st"></span><span id="clock"></span><span id="act"></span><button id="stop">Stop</button></div>
     <div id="ty" class="off"></div><button id="jump" class="off">Jump to latest</button>
   </div></div>
-  <div id="pane"><div id="col"></div></div>
+  <div id="pane"><div class="clip"><div id="col"></div></div></div>
   <div class="dock"><div class="cz"><div class="sh">
     <span class="txw"><div class="tx" contenteditable="true"></div><span class="ph"></span></span>
     <button class="k to"></button><button class="k mode"></button>
@@ -80,7 +81,7 @@ set_global("M", {
     land: noop,
     figure: noop,
     reduced: () => false,
-    current: () => [{}],
+    current: () => [{}, {}],
     rest: () => ({top: 0, left: 0}),
     say: noop,
     refuse: noop,
@@ -164,6 +165,10 @@ mock_esm("../../src/armada/beta/frame.js", {
     ph: find(".ph"),
 });
 
+// The header says where I am; opening a place draws it, which is not what
+// these tests read.
+mock_esm("../../src/armada/beta/header.js", {drawHeader: noop});
+
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const feed = zrequire("armada/beta/feed.js");
@@ -220,8 +225,9 @@ const GITHUB_EMBED = embed(
 const YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 const youtube = (text) =>
     `<p>YouTube <a href="${YOUTUBE}">${text}</a></p>\n<div class="youtube-video message_inline_image"><a data-id="dQw4w9WgXcQ" href="${YOUTUBE}"><img src="https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg"></a></div>`;
+const narrow = (topic, id) => `#narrow/channel/10-devel/topic/${topic}/near/${id}`;
 
-// #devel > links, with an old message of Iago's.
+// #devel > links: an old message of Iago's that others link to.
 const place = {
     key: routing.tkey(10, "links"),
     kind: "topic",
@@ -534,8 +540,116 @@ run_test("a video is a still that opens the video, under the link as it was type
     assert.equal(card.querySelector(".pvh").textContent, "Never Gonna Give You Up");
 });
 
+run_test("a link to a message is a chip and a quote, from the cache or one request", async () => {
+    serve([
+        [
+            "GET",
+            /^\/json\/messages$/,
+            ({query}) =>
+                query.message_ids
+                    ? success({
+                          messages: [
+                              message(77, IAGO, 86400, "<p>@Iago said it first</p>", "older"),
+                          ],
+                      })
+                    : success({messages: []}),
+        ],
+    ]);
+    const origin = dom.window.location.origin;
+    deliver(
+        message(
+            2040,
+            IAGO,
+            5,
+            `<p>as <a href="${narrow("links", 1002)}">${origin}/${narrow("links", 1002)}</a> says, and ` +
+                `<a class="message-link" href="/${narrow("older", 77)}">#devel &gt; older @ 💬</a> and ` +
+                `<a href="${narrow("older", 78)}">this one</a></p>`,
+        ),
+    );
+    // In the words: the place, which opens the message here.
+    const chips = [...bubble(2040).querySelectorAll("a[data-msg]")];
+    assert.deepEqual(
+        chips.map((a) => [a.className, a.textContent, a.dataset.msg, a.target]),
+        [
+            ["placelink", "devel›links", "1002", ""],
+            ["placelink", "devel›older", "77", ""],
+            ["msglink", "this one", "78", ""],
+        ],
+    );
+    // Under them, a quote of each: the one in the cache at once ...
+    const [cached, asked, unseen] = cards(2040);
+    assert.equal(cached.querySelector(".pvh b").textContent, "Iago");
+    assert.equal(cached.querySelector(".pvc").textContent, "the old decision: cards are 368 wide");
+    assert.ok(cached.querySelector(".pvh time"));
+    assert.ok(asked.hasAttribute("data-wait") && unseen.hasAttribute("data-wait"));
+    // ... the others from one request for both.
+    await settle();
+    assert.deepEqual(
+        requests.map((r) => [r.method, r.path, r.query.message_ids]),
+        [["GET", "/json/messages", "[77,78]"]],
+    );
+    assert.equal(asked.querySelector(".pvc").textContent, "Iago said it first");
+    assert.ok(!asked.hasAttribute("data-wait"));
+    assert.equal(unseen.querySelector(".pvh").textContent, "Not available");
+    // Drawn again, nothing is asked again.
+    feed.drawLane();
+    await settle();
+    assert.equal(requests.length, 1);
+});
+
+run_test("quotes count among a bubble's three cards", async () => {
+    serve();
+    const ids = [1002, 77, 78, 2001];
+    deliver(
+        message(
+            2045,
+            IAGO,
+            5,
+            `<p>${ids.map((id) => `<a href="${narrow("links", id)}">this ${id}</a>`).join(" ")}</p>`,
+        ),
+    );
+    assert.equal(cards(2045).length, 3);
+    assert.equal(lane.querySelector('.pvm[data-mid="2045"]').textContent, "+1 more");
+});
+
+run_test("pressing a quote opens the message in its place, not a new tab", async () => {
+    serve([
+        [
+            "GET",
+            /^\/json\/messages$/,
+            ({query}) =>
+                success({
+                    messages: query.narrow
+                        ? [message(77, IAGO, 86400, "<p>@Iago said it first</p>", "older")]
+                        : [],
+                    found_oldest: true,
+                    found_newest: true,
+                }),
+        ],
+        ["GET", /^\/json\/users\/me\/\d+\/topics$/, () => success({topics: []})],
+    ]);
+    const quote = cards(2040)[1];
+    // A press with a modifier is the browser's (a new tab): the page stays.
+    assert.equal(dom.click(quote, {metaKey: true}), true);
+    await settle();
+    assert.equal(beta_state.state.place.key, place.key);
+    // A press opens the message here, in its own place.
+    assert.equal(dom.click(quote), false, "the browser does not follow the link");
+    await settle();
+    assert.equal(beta_state.state.place.key, routing.tkey(10, "older"));
+    assert.ok(lane.querySelector('[data-part][data-mid="77"]'));
+    // A link that names no place (#narrow/near/<id>) opens where the message is.
+    await routing.openPlace(place);
+    deliver(message(2041, IAGO, 5, `<p>here: <a href="#narrow/near/77">that</a></p>`));
+    assert.equal(dom.click(bubble(2041).querySelector("a[data-msg]")), false);
+    await settle();
+    assert.equal(beta_state.state.place.key, routing.tkey(10, "older"));
+});
+
 run_test("a place the server does not answer in time closes", async () => {
     serve();
+    // Back to #devel > links, where a message waits on its preview.
+    await routing.openPlace(place);
     deliver(message(2050, IAGO, 1, pending("slow page:", "https://slow.example.org/")));
     assert.equal(cards(2050).length, 1);
     clock.tick(previews.WAIT_LIMIT + 1);

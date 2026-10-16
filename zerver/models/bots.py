@@ -144,6 +144,10 @@ class AgentRun(models.Model):
         related_name="worker_runs",
     )
     codex_thread_id = models.TextField(blank=True)
+    # What codex_thread_id was given when it started, its tools and its
+    # instructions' version (armada_codex_thread_version): a thread keeps
+    # them for good, so a topic resumes it only while they are current.
+    codex_thread_version = models.CharField(max_length=16, blank=True, default="")
     ambient_triggered = models.BooleanField(default=False)
     result_message_id = models.IntegerField(null=True)
     error = models.TextField(null=True)

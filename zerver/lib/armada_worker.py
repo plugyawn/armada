@@ -54,6 +54,7 @@ from zerver.lib.armada_agent import (
     ArmadaDisabledAgentRunner,
     ArmadaGeminiInteractionsAddressingIntentClassifier,
     ArmadaProcessIsolation,
+    armada_codex_thread_version,
 )
 from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_skills import reconcile_armada_codex_skills
@@ -599,18 +600,19 @@ def latest_armada_codex_run_for_topic(
         # discoverable by their labels during the scratch-pad cutover.
         runs = runs.filter(stream_name__iexact=stream, topic_name__iexact=topic)
     if source_message_id is not None and source_message_id > 0:
-        return (
-            runs.filter(
-                Q(trigger_message_id=source_message_id)
-                | Q(result_message_id=source_message_id)
-                | Q(source_message_id=source_message_id)
-            )
-            .order_by("-trigger_message_id", "-id")
-            .first()
+        runs = runs.filter(
+            Q(trigger_message_id=source_message_id)
+            | Q(result_message_id=source_message_id)
+            | Q(source_message_id=source_message_id)
         )
-    if before_message_id > 0:
+    elif before_message_id > 0:
         runs = runs.filter(trigger_message_id__lt=before_message_id)
-    return runs.order_by("-trigger_message_id", "-id").first()
+    run = runs.order_by("-trigger_message_id", "-id").first()
+    if run is None or run.codex_thread_version != armada_codex_thread_version():
+        # A thread given other tools or instructions would keep them:
+        # start a fresh one.
+        return None
+    return run
 
 
 def armada_default_worker_model() -> str:
@@ -3766,6 +3768,12 @@ class ArmadaDatabaseWorkerRunStore:
                 if isinstance(value, str):
                     setattr(run, field, value)
                     update_fields.append(field)
+            if isinstance(metadata.get("codex_thread_id"), str):
+                # The thread is one this code started or resumed, and it
+                # resumes only threads given the current tools and
+                # instructions.
+                run.codex_thread_version = armada_codex_thread_version()
+                update_fields.append("codex_thread_version")
             ambient_triggered = metadata.get("ambient_triggered")
             if isinstance(ambient_triggered, bool):
                 run.ambient_triggered = ambient_triggered
@@ -4354,11 +4362,12 @@ def load_armada_active_session_from_zulip(
         # not a second context cache.
         prompt_message_query = prompt_message_query.filter(
             id__gt=latest_codex_run.trigger_message_id
-        )
+        ).exclude(sender=user_profile)
+    # With no thread to resume (a new topic, or one whose thread was given
+    # other tools or instructions), the agent's own earlier replies are
+    # context it has lost.
     prompt_message_rows = list(
-        prompt_message_query.exclude(sender=user_profile)
-        .order_by("-id")
-        .values_list(
+        prompt_message_query.order_by("-id").values_list(
             "id",
             "content",
             "sender__is_bot",

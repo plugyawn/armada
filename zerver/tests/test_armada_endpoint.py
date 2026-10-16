@@ -49,7 +49,11 @@ from zerver.lib.armada import (
     get_armada_session_payload,
     write_armada_live_run_state,
 )
-from zerver.lib.armada_agent import ArmadaCodexAppServerToolRunner, ArmadaProcessIsolation
+from zerver.lib.armada_agent import (
+    ArmadaCodexAppServerToolRunner,
+    ArmadaProcessIsolation,
+    armada_codex_thread_version,
+)
 from zerver.lib.armada_agent_threads import serialize_armada_agent_threads
 from zerver.lib.armada_background_read import ArmadaBackgroundRead
 from zerver.lib.armada_gate import (
@@ -2283,6 +2287,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             workspace_node=workspace_node,
             status=AgentRun.DONE,
             codex_thread_id="thread-parent",
+            codex_thread_version=armada_codex_thread_version(),
             source_stream_name=ARMADA_DEFAULT_STREAM,
             source_topic_name="exact-side-parent",
             source_message_id=9198,
@@ -5600,6 +5605,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
             codex_thread_id="thread-first",
+            codex_thread_version=armada_codex_thread_version(),
         )
         self.send_stream_message(
             armada_bot,
@@ -5656,6 +5662,118 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             ],
         )
 
+    def test_worker_loader_starts_a_fresh_thread_when_the_tools_changed(self) -> None:
+        owner = self.example_user("hamlet")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(owner, ARMADA_DEFAULT_STREAM)
+        self.subscribe(armada_bot, ARMADA_DEFAULT_STREAM)
+        first_message_id = self.send_stream_message(
+            owner,
+            ARMADA_DEFAULT_STREAM,
+            "agent, Choose a random 15 digit number.",
+            topic_name=ARMADA_DEFAULT_TOPIC,
+        )
+        # A thread recorded before versions were, then one offered other tools.
+        run = AgentRun.objects.create(
+            realm=owner.realm,
+            bot_profile=armada_bot,
+            requesting_user=owner,
+            trigger_message_id=first_message_id,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
+            workspace_node=ensure_armada_workspace_node(
+                armada_bot, stream=ARMADA_DEFAULT_STREAM, topic=ARMADA_DEFAULT_TOPIC
+            ),
+            status=AgentRun.DONE,
+            codex_thread_id="thread-first",
+        )
+        self.send_stream_message(
+            armada_bot,
+            ARMADA_DEFAULT_STREAM,
+            "I picked 123456789012345.",
+            topic_name=ARMADA_DEFAULT_TOPIC,
+        )
+        second_message_id = self.send_stream_message(
+            owner,
+            ARMADA_DEFAULT_STREAM,
+            "agent, what was the number you picked?",
+            topic_name=ARMADA_DEFAULT_TOPIC,
+        )
+        message = {
+            "id": second_message_id,
+            "type": "stream",
+            "display_recipient": ARMADA_DEFAULT_STREAM,
+            "topic": ARMADA_DEFAULT_TOPIC,
+            "content": "agent, what was the number you picked?",
+        }
+
+        for stale_version in ["", "0123456789abcdef"]:
+            AgentRun.objects.filter(id=run.id).update(codex_thread_version=stale_version)
+            active_session = load_armada_active_session_from_zulip(
+                message, SimpleNamespace(user_profile=armada_bot)
+            )
+            self.assertIsNone(active_session["latest_codex_thread_id"])
+            # The fresh thread sees the agent's own earlier reply, which only
+            # the old thread remembered.
+            self.assertEqual(
+                [message["content"] for message in active_session["recent_messages"]],
+                ["agent, Choose a random 15 digit number.", "I picked 123456789012345."],
+            )
+
+        AgentRun.objects.filter(id=run.id).update(codex_thread_version=armada_codex_thread_version())
+        active_session = load_armada_active_session_from_zulip(
+            message, SimpleNamespace(user_profile=armada_bot)
+        )
+        self.assertEqual(active_session["latest_codex_thread_id"], "thread-first")
+        self.assertEqual(active_session["recent_messages"], [])
+
+    def test_a_run_records_the_tools_its_codex_thread_was_offered(self) -> None:
+        owner = self.example_user("hamlet")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        run = AgentRun.objects.create(
+            realm=owner.realm,
+            bot_profile=armada_bot,
+            requesting_user=owner,
+            trigger_message_id=9401,
+            stream_name=ARMADA_DEFAULT_STREAM,
+            topic_name=ARMADA_DEFAULT_TOPIC,
+            status=AgentRun.RUNNING,
+        )
+        store = ArmadaDatabaseWorkerRunStore()
+        bot_handler = SimpleNamespace(user_profile=armada_bot)
+
+        store.update_metadata(bot_handler, 9401, summary="Working.")
+        run.refresh_from_db()
+        self.assertEqual(run.codex_thread_version, "")
+
+        store.update_metadata(bot_handler, 9401, codex_thread_id="thread-new")
+        run.refresh_from_db()
+        self.assertEqual(
+            (run.codex_thread_id, run.codex_thread_version),
+            ("thread-new", armada_codex_thread_version()),
+        )
+
+    def test_the_thread_version_follows_the_tools_and_instructions_version(self) -> None:
+        version = armada_codex_thread_version()
+        self.assertRegex(version, r"^[0-9a-f]{16}$")
+        with patch("zerver.lib.armada_agent.ARMADA_PAGE_TOOL_SPECS", []):
+            self.assertNotEqual(armada_codex_thread_version(), version)
+        with patch("zerver.lib.armada_agent.ARMADA_CODEX_INSTRUCTIONS_VERSION", 2):
+            self.assertNotEqual(armada_codex_thread_version(), version)
+        self.assertEqual(armada_codex_thread_version(), version)
+
     def test_worker_loader_keeps_child_replies_out_of_parent_prompt_delta(self) -> None:
         owner = self.example_user("hamlet")
         berry = self.example_user("othello")
@@ -5683,6 +5801,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             topic_name=ARMADA_DEFAULT_TOPIC,
             status=AgentRun.DONE,
             codex_thread_id="thread-first",
+            codex_thread_version=armada_codex_thread_version(),
         )
         parent_message_id = self.send_stream_message(
             berry,
@@ -5759,6 +5878,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             session_kind=AgentRun.SHARED,
             status=AgentRun.DONE,
             codex_thread_id="thread-old",
+            codex_thread_version=armada_codex_thread_version(),
         )
         new_trigger_message_id = self.send_stream_message(
             owner,
@@ -5783,6 +5903,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             session_kind=AgentRun.SHARED,
             status=AgentRun.DONE,
             codex_thread_id="thread-new",
+            codex_thread_version=armada_codex_thread_version(),
         )
         side_trigger_message_id = self.send_stream_message(
             owner,

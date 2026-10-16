@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -450,6 +451,35 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
             thinking_level=self.thinking_level,
         )
         return parse_armada_addressing_json_output(output)
+
+
+def armada_codex_dynamic_tools() -> list[dict[str, Any]]:
+    """The tools Armada offers a new Codex thread (answered in
+    answer_for_server_request)."""
+    return [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS]
+
+
+def armada_codex_thread_version() -> str:
+    """A fingerprint of what a new Codex thread is given and a resume
+    cannot change: the tools it is offered (thread/resume takes none, and
+    a resumed thread keeps its old ones) and the instructions' version. A
+    topic resumes its thread only while this is the version recorded on
+    it, and otherwise starts a fresh one."""
+    encoded = json.dumps(
+        {
+            "tools": armada_codex_dynamic_tools(),
+            "instructions": ARMADA_CODEX_INSTRUCTIONS_VERSION,
+        },
+        sort_keys=True,
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()[:16]
+
+
+# Bump when the developer instructions change in a way existing topics
+# need: each topic's next run then starts a fresh Codex thread, which
+# gets them (and loses the old thread's memory). Small rewordings that
+# can wait for a topic's next fresh thread need no bump.
+ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 1
 
 
 def build_armada_codex_developer_instructions() -> str:
@@ -2432,7 +2462,7 @@ class ArmadaCodexAppServerToolRunner:
             "model": self.model,
             "sandbox": self.sandbox,
             "personality": "pragmatic",
-            "dynamicTools": [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS],
+            "dynamicTools": armada_codex_dynamic_tools(),
         }
         if existing_thread_id is not None:
             params["threadId"] = existing_thread_id

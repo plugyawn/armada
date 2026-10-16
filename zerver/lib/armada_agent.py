@@ -41,6 +41,11 @@ from zerver.lib.armada_artifact import (
     canonicalize_armada_artifact,
 )
 from zerver.lib.armada_artifact_contract import ARMADA_ARTIFACT_TOOL_SPEC
+from zerver.lib.armada_later_tools import (
+    ARMADA_LATER_TOOL_NAMES,
+    ARMADA_LATER_TOOL_SPECS,
+    answer_armada_later_tool,
+)
 from zerver.lib.armada_message_tools import (
     ARMADA_MESSAGE_TOOL_NAMES,
     ArmadaToolTurn,
@@ -477,7 +482,12 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
 def armada_codex_dynamic_tools() -> list[dict[str, Any]]:
     """The tools Armada offers a new Codex thread (answered in
     answer_for_server_request)."""
-    return [ARMADA_ARTIFACT_TOOL_SPEC, *ARMADA_PAGE_TOOL_SPECS, *armada_message_tool_specs()]
+    return [
+        ARMADA_ARTIFACT_TOOL_SPEC,
+        *ARMADA_PAGE_TOOL_SPECS,
+        *armada_message_tool_specs(),
+        *ARMADA_LATER_TOOL_SPECS,
+    ]
 
 
 def armada_codex_thread_version() -> str:
@@ -1700,8 +1710,8 @@ class ArmadaAppServerTurnContext:
     user_input_provider: ArmadaUserInputProvider | None
     is_main: bool
     turn_id: str | None = None
-    # The person whose message started the turn: the page and message
-    # tools act as them.
+    # The person whose message started the turn: the page, message and
+    # Later tools act as them.
     requesting_user_id: int | None = None
     # The message the turn's run answers, which names the run.
     trigger_message_id: int | None = None
@@ -2444,6 +2454,13 @@ class ArmadaCodexAppServerToolRunner:
         requesting_user_id = turn_context.requesting_user_id if turn_context is not None else None
         if tool_name in ARMADA_PAGE_TOOL_NAMES:
             answer = answer_armada_page_tool(requesting_user_id, tool_name, params.get("arguments"))
+        elif tool_name in ARMADA_LATER_TOOL_NAMES:
+            answer = answer_armada_later_tool(
+                requesting_user_id,
+                turn_context.trigger_message_id if turn_context is not None else None,
+                tool_name,
+                params.get("arguments"),
+            )
         else:
             answer = answer_armada_message_tool(
                 ArmadaToolTurn(
@@ -2554,7 +2571,8 @@ class ArmadaCodexAppServerToolRunner:
             )
         if (
             method == "item/tool/call"
-            and params.get("tool") in ARMADA_PAGE_TOOL_NAMES | ARMADA_MESSAGE_TOOL_NAMES
+            and params.get("tool")
+            in ARMADA_PAGE_TOOL_NAMES | ARMADA_MESSAGE_TOOL_NAMES | ARMADA_LATER_TOOL_NAMES
             and params.get("namespace") in {None, ""}
         ):
             return self.answer_armada_tool_call(params, turn_context=turn_context)

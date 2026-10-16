@@ -1464,6 +1464,9 @@ You may perform non-mutating inspection, including reading or searching files an
 Do not modify files, source, git state, permissions, configuration, or any other workspace state unless the user explicitly requests that mutation in this side conversation. Do not request escalated permissions or broader sandbox access unless the user explicitly requests a mutation that requires it. If the user explicitly requests a mutation, keep it minimal, local to the request, and avoid disrupting the main thread."""
 
 ARMADA_CODEX_WARM_SIDE_CONVERSATION_LIMIT: Final = 8
+# The native agents a warm app-server remembers between turns; an active one
+# is kept beyond it, with its ancestors.
+ARMADA_CODEX_RETAINED_THREAD_LIMIT: Final = 256
 
 
 @dataclass(frozen=True)
@@ -2840,6 +2843,75 @@ class ArmadaCodexAppServerToolRunner:
             lineage.reverse()
             return lineage
 
+    def prune_thread_maps_locked(self) -> None:
+        """Forget, after a turn, the threads no later turn of this app-server
+        can use: those outside the lineage of the loaded thread, the retained
+        side conversations and any live turn, and beyond
+        ARMADA_CODEX_RETAINED_THREAD_LIMIT the oldest idle ones. A busy
+        topic's runtime otherwise kept every sub-agent it ever saw, with its
+        last reply and its notifications nobody claimed."""
+        descriptors = self.translator.thread_descriptors
+        roots = {
+            thread_id
+            for thread_id in (
+                self.loaded_thread_id,
+                *self.side_thread_ids_by_conversation_key.values(),
+                *self.turn_contexts_by_thread_id,
+            )
+            if thread_id
+        }
+
+        def ancestry(thread_id: str) -> list[str] | None:
+            # The thread and its ancestors up to a root, or None when the
+            # chain ends elsewhere.
+            chain: list[str] = []
+            current: str | None = thread_id
+            while current is not None and current not in chain:
+                chain.append(current)
+                if current in roots:
+                    return chain
+                parent = descriptors.get(current, {}).get("parent_thread_id")
+                current = parent if isinstance(parent, str) else None
+            return None
+
+        lineages = {
+            thread_id: chain
+            for thread_id in descriptors
+            if (chain := ancestry(thread_id)) is not None
+        }
+        kept = list(lineages)
+        if len(kept) > ARMADA_CODEX_RETAINED_THREAD_LIMIT:
+            needed = set(roots)
+            for thread_id, chain in lineages.items():
+                status = descriptors[thread_id].get("status")
+                if isinstance(status, dict) and status.get("type") == "active":
+                    needed.update(chain)
+            idle = [thread_id for thread_id in kept if thread_id not in needed]
+            dropped = set(idle[: len(kept) - ARMADA_CODEX_RETAINED_THREAD_LIMIT])
+            # A dropped thread takes its descendants with it, so no kept
+            # thread loses the ancestry that routes its events.
+            kept = [
+                thread_id
+                for thread_id in kept
+                if not any(ancestor in dropped for ancestor in lineages[thread_id])
+            ]
+        kept_ids = set(kept)
+        self.translator.thread_descriptors = {
+            thread_id: descriptors[thread_id] for thread_id in kept
+        }
+        self.translator.latest_direct_assistant_body = {
+            thread_id: body
+            for thread_id, body in self.translator.latest_direct_assistant_body.items()
+            if thread_id in kept_ids
+        }
+        # Notifications wait here for a thread no turn has claimed yet; those
+        # of a forgotten thread never will be, and the rest are bounded.
+        for thread_id in set(descriptors) - kept_ids:
+            self.unrouted_notifications.pop(thread_id, None)
+        waiting = list(self.unrouted_notifications)
+        for thread_id in waiting[: max(len(waiting) - ARMADA_CODEX_RETAINED_THREAD_LIMIT, 0)]:
+            del self.unrouted_notifications[thread_id]
+
     def active_descendant_thread_ids(self, root_thread_id: str) -> set[str]:
         with self.state_lock:
             active: set[str] = set()
@@ -3069,6 +3141,8 @@ class ArmadaCodexAppServerToolRunner:
                     )
             finally:
                 self.unregister_turn_context(turn_context)
+                with self.state_lock:
+                    self.prune_thread_maps_locked()
             results = armada_worker_results_from_final_text(
                 final_text, output_limit=self.output_limit
             )

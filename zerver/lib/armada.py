@@ -2565,6 +2565,11 @@ class ArmadaEmbeddedBotHandler:
                 failure_topic,
             )
             current_time = time.monotonic()
+            # Notices past their cooldown suppress nothing; forgetting them
+            # keeps this long-lived handler's map to the recent failures.
+            for noticed_key, noticed_at in list(self.addressing_failure_notices.items()):
+                if current_time - noticed_at >= ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS:
+                    del self.addressing_failure_notices[noticed_key]
             previous_notice = self.addressing_failure_notices.get(failure_key)
             if (
                 previous_notice is None

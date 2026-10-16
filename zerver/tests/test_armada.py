@@ -21,6 +21,7 @@ from typing_extensions import NotRequired, Self, Unpack, override
 
 from zerver.lib.armada import (
     ARMADA_ACTIVE_SESSION_ENDPOINT,
+    ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS,
     ARMADA_AGENT_MENTION,
     ARMADA_AGENT_NAME,
     ARMADA_AGENT_RUNTIME_PACKAGES,
@@ -4609,6 +4610,54 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(len(sent_replies), 1)
         self.assertIn("@Onix", sent_replies[0])
+
+    def test_router_failure_notices_forget_topics_past_their_cooldown(self) -> None:
+        # The addressing worker's handler lives as long as its process; a
+        # notice per topic that ever failed routing must not.
+        loaded_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix fix the checkout test", False)],
+            response_policy="ambient",
+        )
+
+        def addressing_intent_classifier(**kwargs: object) -> ArmadaAmbientDecision:
+            raise RuntimeError("Gemini unavailable")
+
+        class FakeBotHandler:
+            user_profile = SimpleNamespace(id=99)
+
+            def send_reply(self, message: dict[str, object], response: str) -> None:
+                pass
+
+        handler = make_test_armada_handler(
+            active_session_loader=lambda message, bot_handler: loaded_session,
+            addressing_intent_classifier=addressing_intent_classifier,
+        )
+        clock = Mock()
+        with (
+            patch("zerver.lib.armada.time", clock),
+            self.assertLogs("zerver.lib.armada", level="WARNING"),
+        ):
+            for index, seconds in enumerate(
+                (0, 1, ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS + 1)
+            ):
+                clock.monotonic.return_value = seconds
+                handler.handle_message(
+                    {
+                        "id": 300 + index,
+                        "type": "stream",
+                        "display_recipient": ARMADA_DEFAULT_STREAM,
+                        "topic": f"topic {index}",
+                        "content": "Can you check the build?",
+                    },
+                    FakeBotHandler(),
+                )
+
+        self.assertEqual(
+            list(handler.addressing_failure_notices), [(99, ARMADA_DEFAULT_STREAM, "topic 2")]
+        )
 
     def test_embedded_bot_worker_dispatches_armada_to_dedicated_queue(self) -> None:
         user_profile = SimpleNamespace(id=99)

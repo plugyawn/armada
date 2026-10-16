@@ -2,16 +2,20 @@
 runs, how it stops, and how the monitor tick thread survives a dropped
 database connection."""
 
+import json
 import os
 import platform
+import queue
 import stat
 import subprocess
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from subprocess import Popen
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from typing import cast
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
@@ -20,9 +24,15 @@ from django.db.utils import InterfaceError
 from typing_extensions import override
 
 from zerver.lib import armada_agent
-from zerver.lib.armada import ARMADA_DEFAULT_STREAM, ARMADA_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada import (
+    ARMADA_DEFAULT_STREAM,
+    ARMADA_EMBEDDED_BOT_SERVICE,
+    build_armada_active_session_summary_from_messages,
+    get_armada_session_payload,
+)
 from zerver.lib.armada_agent import (
     ARMADA_CODEX_NPM_PLATFORM_PACKAGES,
+    ARMADA_CODEX_RETAINED_THREAD_LIMIT,
     ArmadaCodexAppServerToolRunner,
     armada_codex_executable,
     armada_process_group_exists,
@@ -426,3 +436,115 @@ class ArmadaTurnProvisioningTest(ZulipTestCase):
                     workdir,
                 )
             self.assertEqual(self.git_spawns(spawn), 0)
+
+
+class ArmadaThreadMapTest(ZulipTestCase):
+    def make_runner(self) -> ArmadaCodexAppServerToolRunner:
+        return ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-6-astra",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=10,
+            output_limit=200,
+        )
+
+    def test_a_turn_leaves_only_the_threads_later_turns_can_use(self) -> None:
+        runner = self.make_runner()
+        translator = runner.translator
+
+        def remember(thread_id: str, parent: str | None, status: str = "idle") -> None:
+            translator.thread_descriptors[thread_id] = {
+                "id": thread_id,
+                "parent_thread_id": parent,
+                "thread_source": "subagent" if parent else None,
+                "status": {"type": status},
+            }
+            translator.latest_direct_assistant_body[thread_id] = f"{thread_id} is done."
+
+        remember("root", None)
+        for index in range(300):
+            remember(f"agent-{index}", "root")
+        # Still working, under an idle parent: both stay.
+        remember("grandchild", "agent-0", status="active")
+        # A /btw conversation retained for its next reply, and its agent.
+        remember("side", None)
+        remember("side-agent", "side")
+        runner.side_thread_ids_by_conversation_key["root-message-7"] = "side"
+        # A thread this app-server resumed before the topic's current one.
+        remember("old-root", None)
+        remember("old-agent", "old-root")
+        for thread_id in ("old-agent", "agent-299", "unknown"):
+            runner.unrouted_notifications[thread_id] = []
+        runner.loaded_thread_id = "root"
+
+        with runner.state_lock:
+            runner.prune_thread_maps_locked()
+
+        kept = set(translator.thread_descriptors)
+        self.assert_length(kept, ARMADA_CODEX_RETAINED_THREAD_LIMIT)
+        self.assertTrue({"root", "agent-0", "grandchild", "side", "side-agent"} <= kept)
+        self.assertFalse({"old-root", "old-agent"} & kept)
+        # The oldest idle agents went first.
+        self.assertNotIn("agent-1", kept)
+        self.assertIn("agent-299", kept)
+        self.assertEqual(set(translator.latest_direct_assistant_body), kept)
+        # A thread no turn has claimed yet keeps its notifications.
+        self.assertEqual(set(runner.unrouted_notifications), {"agent-299", "unknown"})
+
+    def test_every_turn_prunes_when_it_ends(self) -> None:
+        class ScriptedProcess:
+            def __init__(self) -> None:
+                self.output: queue.Queue[str | None] = queue.Queue()
+                self.stdin = self
+                self.stdout = iter(self.output.get, None)
+
+            def write(self, line: str) -> int:
+                message = json.loads(line)
+                if "id" not in message:
+                    return len(line)
+                result: dict[str, object] = {}
+                if message["method"] == "thread/start":
+                    result = {"thread": {"id": "thread-1"}}
+                elif message["method"] == "turn/start":
+                    result = {"turn": {"id": "turn-1"}}
+                self.output.put(json.dumps({"id": message["id"], "result": result}) + "\n")
+                if message["method"] == "turn/start":
+                    completed = {"threadId": "thread-1", "turn": {"id": "turn-1"}}
+                    self.output.put(
+                        json.dumps({"method": "turn/completed", "params": completed}) + "\n"
+                    )
+                return len(line)
+
+            def flush(self) -> None:
+                pass
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                self.output.put(None)
+
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-6-astra",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=10,
+            output_limit=200,
+            popen_command=lambda command, **kwargs: cast(Popen[str], ScriptedProcess()),
+        )
+        runner.translator.thread_descriptors["stale-root"] = {"id": "stale-root"}
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@**Onix** check the build", False)],
+        )
+
+        runner(active_session, "Check the build.")
+
+        self.assertNotIn("stale-root", runner.translator.thread_descriptors)
+        runner.close()

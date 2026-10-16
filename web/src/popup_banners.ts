@@ -23,12 +23,12 @@ const get_connection_error_label = (retry_delay_secs: number): string => {
         // When the retry delay is less than 5 seconds, we don't show the retry
         // delay time in the banner, and instead just show "Trying to reconnect soon…"
         // to avoid constant flickering of the banner label for very short times.
-        return $t({defaultMessage: "Unable to connect to Zulip. Trying to reconnect soon…"});
+        return $t({defaultMessage: "Unable to connect to Armada. Trying to reconnect soon…"});
     }
     return $t(
         {
             defaultMessage:
-                "Unable to connect to Zulip. {retry_delay_secs, plural, one {Trying to reconnect in {retry_delay_secs} second…} other {Trying to reconnect in {retry_delay_secs} seconds…}}",
+                "Unable to connect to Armada. {retry_delay_secs, plural, one {Trying to reconnect in {retry_delay_secs} second…} other {Trying to reconnect in {retry_delay_secs} seconds…}}",
         },
         {retry_delay_secs},
     );
@@ -241,7 +241,7 @@ function retry_connection_click_handler(e: JQuery.ClickEvent, on_retry_callback:
     const $banner = $(e.currentTarget).closest(".banner");
     $banner
         .find(".banner-label")
-        .text($t({defaultMessage: "Unable to connect to Zulip. Trying to reconnect soon…"}));
+        .text($t({defaultMessage: "Unable to connect to Armada. Trying to reconnect soon…"}));
 
     const $button = $(e.currentTarget).closest(".retry-connection");
 

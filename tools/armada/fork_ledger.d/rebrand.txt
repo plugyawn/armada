@@ -3,3 +3,32 @@
 # server-sent message and document people see. zerver/openapi/zulip.yaml's
 # line is R1.txt's.
 kept zerver/tests/test_openapi.py  # every documented response's return values render, as /api/ draws them
+kept web/src/admin.ts  # the old interface: Zulip's name leaves the organization settings' labels
+kept web/src/gear_menu_util.ts  # the old interface: the gear menu's version line names Armada's server
+kept web/src/integration_url_modal.ts  # the old interface: Zulip's name leaves the integration URL's channel option
+kept web/src/narrow_banner.ts  # the old interface: Zulip's name leaves the empty notes-to-self banner
+kept web/src/navbar_alerts.ts  # the old interface: Zulip's name leaves the banners above the view
+kept web/src/onboarding_steps.ts  # the old interface: Zulip's name leaves the welcome video's dialog
+kept web/src/popup_banners.ts  # the old interface: Zulip's name leaves the connection-error banner
+kept web/src/settings_config.ts  # the old interface: Zulip's name leaves a bot permission's label
+kept web/src/settings_notifications.ts  # the old interface: Zulip's name leaves the notification banner and test notification
+kept web/templates/compose_banner/unknown_zoom_user_error.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/confirm_dialog/confirm_deactivate_realm.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/confirm_dialog/confirm_deactivate_stream.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/confirm_dialog/confirm_deactivate_user.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/default_language_modal.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/account_settings.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/add_new_bot_form.hbs  # the old interface: the native webhook format is Armada's
+kept web/templates/settings/admin_linkifier_add_form.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/alert_word_settings.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/data_exports_admin.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/edit_outgoing_webhook_service.hbs  # the old interface: the native webhook format is Armada's
+kept web/templates/settings/linkifier_settings_admin.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/notification_settings.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/playground_settings_admin.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/profile_settings.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/settings/user_topics_settings.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/stream_settings/copy_email_address_modal.hbs  # the old interface: Zulip's name leaves the text
+kept web/templates/stream_settings/first_stream_created_modal.hbs  # the old interface: Zulip's name leaves the text
+kept web/tests/gear_menu_util.test.cjs  # the version line's new wording
+kept web/tests/message_view.test.cjs  # the notes-to-self banner's new wording

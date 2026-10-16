@@ -32,12 +32,12 @@ import * as util from "./util.ts";
 const admin_settings_label = {
     // Organization profile
     realm_want_advertise_in_communities_directory: $t({
-        defaultMessage: "Advertise organization in the Zulip communities directory",
+        defaultMessage: "Advertise organization in the communities directory",
     }),
     // Organization settings
     realm_new_stream_announcements_stream: $t({defaultMessage: "New channel announcements"}),
     realm_signup_announcements_stream: $t({defaultMessage: "New user announcements"}),
-    realm_zulip_update_announcements_stream: $t({defaultMessage: "Zulip update announcements"}),
+    realm_zulip_update_announcements_stream: $t({defaultMessage: "Armada update announcements"}),
     realm_moderation_request_channel: $t({defaultMessage: "Moderation requests"}),
     realm_media_preview_size: $t({
         defaultMessage: "Size of images and videos in messages",
@@ -46,7 +46,7 @@ const admin_settings_label = {
         defaultMessage: "Show previews of linked images and videos",
     }),
     realm_inline_url_embed_preview: $t({defaultMessage: "Show previews of linked websites"}),
-    realm_send_welcome_emails: $t({defaultMessage: "Send emails introducing Zulip to new users"}),
+    realm_send_welcome_emails: $t({defaultMessage: "Send emails introducing Armada to new users"}),
     realm_require_e2ee_push_notifications: $t({
         defaultMessage: "Require end-to-end encryption for push notifications",
     }),

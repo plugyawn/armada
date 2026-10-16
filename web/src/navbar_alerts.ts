@@ -187,7 +187,7 @@ const DESKTOP_NOTIFICATIONS_BANNER: AlertBanner = {
     intent: "brand",
     label: $t({
         defaultMessage:
-            "Zulip needs your permission to enable desktop notifications for important messages.",
+            "Armada needs your permission to enable desktop notifications for important messages.",
     }),
     buttons: [
         {
@@ -215,7 +215,7 @@ const CONFIGURE_OUTGOING_MAIL_BANNER: AlertBanner = {
     intent: "warning",
     label: $t({
         defaultMessage:
-            "Zulip needs to send email to confirm users' addresses and send notifications.",
+            "Armada needs to send email to confirm users' addresses and send notifications.",
     }),
     buttons: [
         {
@@ -233,7 +233,7 @@ const INSECURE_DESKTOP_APP_BANNER: AlertBanner = {
     intent: "warning",
     label: $t({
         defaultMessage:
-            "Zulip Desktop is not updating automatically. Please upgrade for security updates and other improvements.",
+            "The desktop app is not updating automatically. Please upgrade for security updates and other improvements.",
     }),
     buttons: [
         {
@@ -251,7 +251,7 @@ const UNSUPPORTED_BROWSER_BANNER: AlertBanner = {
     intent: "warning",
     label: $t({
         defaultMessage:
-            "Because you're using an unsupported or very old browser, Zulip may not work as expected.",
+            "Because you're using an unsupported or very old browser, Armada may not work as expected.",
     }),
     buttons: [
         {
@@ -303,7 +303,7 @@ const SERVER_NEEDS_UPGRADE_BANNER: AlertBanner = {
     process: "server-needs-upgrade",
     intent: "danger",
     label: $t({
-        defaultMessage: "This Zulip server is running an old version and should be upgraded.",
+        defaultMessage: "This server is running an old version and should be upgraded.",
     }),
     buttons: [
         {
@@ -412,7 +412,7 @@ const time_zone_update_offer_banner = (): AlertBanner => {
         label: $t(
             {
                 defaultMessage:
-                    "Your computer's time zone differs from your Zulip profile. Update your time zone to {browser_time_zone}?",
+                    "Your computer's time zone differs from your profile. Update your time zone to {browser_time_zone}?",
             },
             {
                 browser_time_zone,

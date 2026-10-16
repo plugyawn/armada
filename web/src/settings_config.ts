@@ -801,7 +801,7 @@ export const all_group_setting_labels = {
         }),
         can_summarize_topics_group: $t({defaultMessage: "Who can use AI summaries"}),
         can_create_write_only_bots_group: $t({
-            defaultMessage: "Who can create bots that send messages into Zulip",
+            defaultMessage: "Who can create bots that send messages into Armada",
         }),
         can_create_bots_group: $t({defaultMessage: "Who can create any bot"}),
         can_add_custom_emoji_group: $t({defaultMessage: "Who can add custom emoji"}),

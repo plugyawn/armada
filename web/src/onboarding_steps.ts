@@ -116,12 +116,12 @@ function show_navigation_tour_video(
         });
         let watch_later_clicked = false;
         dialog_widget.launch({
-            modal_title_html: $t_html({defaultMessage: "Welcome to Zulip!"}),
+            modal_title_html: $t_html({defaultMessage: "Welcome to Armada!"}),
             modal_content_html,
             on_click() {
                 // Do nothing
             },
-            modal_submit_button_text: $t({defaultMessage: "Skip video — I'm familiar with Zulip"}),
+            modal_submit_button_text: $t({defaultMessage: "Skip video — I'm familiar with Armada"}),
             modal_exit_button_text: $t({defaultMessage: "Watch later"}),
             close_on_submit: true,
             id: "navigation-tour-video-modal",

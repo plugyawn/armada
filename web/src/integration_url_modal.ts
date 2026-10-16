@@ -54,7 +54,7 @@ export function show_generate_integration_url_modal(api_key: string): void {
         is_direct_message: true,
     };
     const map_channels_option: Option = {
-        name: $t_html({defaultMessage: "Matching Zulip channel"}),
+        name: $t_html({defaultMessage: "Matching Armada channel"}),
         unique_id: -2,
     };
     const modal_content_html = render_generate_integration_url_modal({

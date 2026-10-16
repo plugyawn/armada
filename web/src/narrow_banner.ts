@@ -474,7 +474,7 @@ export function pick_empty_narrow_banner(
                         }),
                         html: $t_html({
                             defaultMessage:
-                                "Use this space for personal notes, or to test out Zulip features.",
+                                "Use this space for personal notes, or to test out Armada features.",
                         }),
                     };
                 }

@@ -45,7 +45,7 @@ const stream_ids_with_custom_notifications = new Set<number>();
 const DESKTOP_NOTIFICATIONS_BANNER: banners.Banner = {
     intent: "warning",
     label: $t({
-        defaultMessage: "Zulip needs your permission to enable desktop notifications.",
+        defaultMessage: "Armada needs your permission to enable desktop notifications.",
     }),
     buttons: [
         {
@@ -535,7 +535,7 @@ export function set_up(settings_panel: SettingsPanel): void {
     // organization-level defaults.
     $container.find(".send_test_notification").on("click", () => {
         message_notifications.send_test_notification(
-            $t({defaultMessage: "This is a test notification from Zulip."}),
+            $t({defaultMessage: "This is a test notification from Armada."}),
         );
     });
 

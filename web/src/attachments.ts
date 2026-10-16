@@ -7,6 +7,7 @@ export const attachment_schema = z.object({
     size: z.number(),
     create_time: z.number(),
     message_ids: z.array(z.number()),
+    post_ids: z.array(z.number()),
 });
 
 const attachments_schema = z.array(attachment_schema);

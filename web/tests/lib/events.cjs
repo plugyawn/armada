@@ -144,6 +144,7 @@ exports.fixtures = {
             path_id: "path_id",
             create_time: fake_now,
             message_ids: [1000],
+            post_ids: [],
         },
         upload_space_used: 90000,
     },

@@ -8,11 +8,16 @@
     </td>
     <td>{{ create_time_str }}</td>
     <td>
-        {{#unless (eq message_ids.length 0)}}
+        {{#unless (and (eq message_ids.length 0) (eq posts.length 0))}}
         <div class="attachment-messages">
             {{#each message_ids}}
                 <a class="ind-message" href="/#narrow/id/{{ this }}">
                     #{{ this }}
+                </a>
+            {{/each}}
+            {{#each posts}}
+                <a class="ind-message" href="/#post/{{ post_id }}">
+                    {{t "Post #{post_id}" }}
                 </a>
             {{/each}}
         </div>

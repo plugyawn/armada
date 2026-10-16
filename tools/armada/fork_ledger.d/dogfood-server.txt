@@ -1,5 +1,5 @@
-# Dogfood fixes to the server. Every Zulip file they change already has
-# its line in another package's file, which keeps it:
+# Dogfood fixes to the server. The Zulip server files they change
+# already have their lines in other packages' files, which keep them:
 # - A message's agent flag costs a query only when an embedded bot sent
 #   it: zerver/lib/message_cache.py, zerver/tests/test_message_dict.py
 #   (R1.txt).
@@ -8,3 +8,9 @@
 #   zerver/models/messages.py, zerver/lib/event_types.py,
 #   zerver/openapi/zulip.yaml (R1.txt); zerver/lib/attachments.py
 #   (dogfood-pages.txt).
+# The old Uploaded files page lists the posts under "Mentioned in"; it
+# goes with K-58 (C5).
+kept web/src/attachments.ts  # an upload's post_ids
+kept web/src/attachments_ui.ts  # posts labelled for the row; uploads only posts use sort among used ones
+kept web/templates/settings/uploaded_files_list.hbs  # "Mentioned in" lists an upload's posts after its messages
+kept web/tests/lib/events.cjs  # the attachment event carries post_ids, as the server's does

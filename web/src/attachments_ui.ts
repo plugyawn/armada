@@ -25,6 +25,9 @@ type ServerAttachment = z.infer<typeof attachment_api_response_schema>["attachme
 type Attachment = ServerAttachment & {
     create_time_str: string;
     size_str: string;
+    // The pages posts that use it, each id as text, so that its label
+    // shows the id as it is rather than as a formatted number.
+    posts: {post_id: string}[];
 };
 
 type AttachmentEvent =
@@ -131,15 +134,24 @@ function delete_attachments(attachment: string, file_name: string): void {
     });
 }
 
-function sort_mentioned_in(a: Attachment, b: Attachment): number {
+// Uploads that messages use come first, then those that only pages
+// posts use, then unused ones.
+function mentioned_in_rank(attachment: Attachment): number {
+    if (attachment.message_ids.length > 0) {
+        return 0;
+    }
+    if (attachment.post_ids.length > 0) {
+        return 1;
+    }
+    return 2;
+}
+
+export function sort_mentioned_in(a: Attachment, b: Attachment): number {
     const a_id = a.message_ids[0];
     const b_id = b.message_ids[0];
 
-    if (a_id === undefined) {
-        return 1;
-    }
-    if (b_id === undefined) {
-        return -1;
+    if (a_id === undefined || b_id === undefined) {
+        return mentioned_in_rank(a) - mentioned_in_rank(b);
     }
 
     if (a_id > b_id) {
@@ -188,11 +200,12 @@ function render_attachments_ui(): void {
     scroll_util.reset_scrollbar($uploaded_files_table.closest(".progressive-table-wrapper"));
 }
 
-function format_attachment_data(attachment: ServerAttachment): Attachment {
+export function format_attachment_data(attachment: ServerAttachment): Attachment {
     return {
         ...attachment,
         create_time_str: timerender.render_now(new Date(attachment.create_time * 1000)).time_str,
         size_str: bytes_to_size(attachment.size),
+        posts: attachment.post_ids.map((post_id) => ({post_id: post_id.toString()})),
     };
 }
 

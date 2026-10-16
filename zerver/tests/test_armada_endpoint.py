@@ -71,6 +71,7 @@ from zerver.lib.armada_worker import (
     ArmadaQueueWorkerDispatcher,
     armada_expected_project_cache_path,
     armada_expected_topic_workdir,
+    armada_git_branch_name_is_valid,
     armada_git_current_branch_name,
     armada_git_output,
     armada_git_status_delta,
@@ -1730,6 +1731,63 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         )
         self.assertEqual(armada_topic_branch_name("Feature/Some Work!"), "Feature-Some-Work")
         self.assertEqual(armada_topic_branch_name(""), "topic")
+
+    def test_branch_name_check_agrees_with_git(self) -> None:
+        names = [
+            "main",
+            "feature/some-work",
+            "Feature/Some Work!",
+            "armada-efficient-smoke",
+            "café/naïve-ünïcode",
+            "@",
+            "@{-1}",
+            "a@{b",
+            "HEAD",
+            "head",
+            "-leading-dash",
+            "trailing.",
+            "trailing.lock",
+            "dir.lock/name",
+            "name.locked",
+            ".hidden",
+            "dir/.hidden",
+            "a..b",
+            "a.b",
+            "a//b",
+            "/leading",
+            "trailing/",
+            "tab\there",
+            "bell\x07",
+            "del\x7f",
+            "colon:name",
+            "question?",
+            "star*",
+            "bracket[",
+            "back\\slash",
+            "caret^",
+            "tilde~",
+            "brace{}",
+            "plus+comma,semicolon;",
+            "quote'\"",
+            "x" * 300,
+        ]
+        with (
+            tempfile.TemporaryDirectory() as not_a_repository,
+            patch("zerver.lib.armada_worker.subprocess.run") as subprocess_run,
+        ):
+            answers = {name: armada_git_branch_name_is_valid(name) for name in names}
+            subprocess_run.assert_not_called()
+            for name in names:
+                completed = subprocess.Popen(
+                    ["git", "check-ref-format", "--branch", name],
+                    cwd=not_a_repository,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self.assertEqual(answers[name], completed.wait(timeout=10) == 0, name)
+        self.assertFalse(armada_git_branch_name_is_valid(""))
+        self.assertFalse(armada_git_branch_name_is_valid("lone\ud800surrogate"))
+        self.assertEqual(armada_topic_branch_name("lone\ud800surrogate"), "lone-surrogate")
 
     def test_workspace_default_branch_skips_blank_candidates(self) -> None:
         # An unset project base ref must not surface armada_topic_branch_name's

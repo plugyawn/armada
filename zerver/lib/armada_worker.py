@@ -702,20 +702,29 @@ def armada_topic_workdir_slug(
     return f"{human_slug[:48]}-{digest}"
 
 
+# Bytes git refuses anywhere in a ref name: ASCII control characters,
+# space, DEL, and ~ ^ : ? * [ \ (refs.c, refname_disposition).
+ARMADA_GIT_REF_FORBIDDEN_BYTES = frozenset([*range(0x20), 0x7F, *b" ~^:?*[\\"])
+
+
 def armada_git_branch_name_is_valid(branch_name: str) -> bool:
-    if not branch_name or branch_name.startswith("-"):
+    """What `git check-ref-format --branch` answers outside a repository,
+    without running git: every topic header asks, and a subprocess per
+    question cost a request two process starts."""
+    if not branch_name or branch_name.startswith("-") or branch_name == "HEAD":
         return False
     try:
-        completed = subprocess.run(
-            ["git", "check-ref-format", "--branch", branch_name],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=10,
-        )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
-        return re.fullmatch(r"[A-Za-z0-9._/-]+", branch_name) is not None
-    return completed.returncode == 0
+        name = branch_name.encode()
+    except UnicodeEncodeError:
+        return False
+    if name.endswith(b".") or b".." in name or b"@{" in name:
+        return False
+    if any(byte in ARMADA_GIT_REF_FORBIDDEN_BYTES for byte in name):
+        return False
+    return all(
+        component and not component.startswith(b".") and not component.endswith(b".lock")
+        for component in name.split(b"/")
+    )
 
 
 def armada_topic_branch_name(topic: str) -> str:

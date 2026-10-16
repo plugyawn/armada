@@ -29,6 +29,7 @@ from zerver.lib.armada import (
     ArmadaWorkerTranscriptCallback,
     ArmadaWorkerTranscriptEvent,
     armada_normalize_token_usage,
+    armada_turn_idle_hook,
     format_armada_referenced_threads,
 )
 from zerver.lib.armada_artifact import (
@@ -2933,6 +2934,27 @@ class ArmadaCodexAppServerToolRunner:
                     active.add(thread_id)
             return active
 
+    def next_turn_message(self, turn_context: ArmadaAppServerTurnContext) -> object:
+        """The turn's next queued message. While it waits, the turn's own work
+        falls due on time (armada_turn_idle_hook: Onix's words held back to
+        pace the stream); Codex's silence still counts from the start."""
+        idle_hook = armada_turn_idle_hook.get()
+        silent_until = time.monotonic() + self.timeout_seconds
+        while True:
+            wait = silent_until - time.monotonic()
+            due = idle_hook.idle_due_in() if idle_hook is not None else None
+            try:
+                return turn_context.messages.get(
+                    timeout=max(0.0, wait if due is None else min(wait, due))
+                )
+            except queue.Empty as error:
+                if idle_hook is None or time.monotonic() >= silent_until:
+                    raise ArmadaAgentRuntimeError(
+                        "Codex app-server produced no activity for "
+                        f"{self.timeout_seconds:g} seconds."
+                    ) from error
+                idle_hook.on_idle()
+
     def wait_for_turn(
         self,
         *,
@@ -2948,13 +2970,7 @@ class ArmadaCodexAppServerToolRunner:
         root_turn_completed = False
         while True:
             if turn_context is not None:
-                try:
-                    queued = turn_context.messages.get(timeout=self.timeout_seconds)
-                except queue.Empty as error:
-                    raise ArmadaAgentRuntimeError(
-                        "Codex app-server produced no activity for "
-                        f"{self.timeout_seconds:g} seconds."
-                    ) from error
+                queued = self.next_turn_message(turn_context)
                 abort_error = self.transport_abort_error
                 if abort_error is not None:
                     raise abort_error

@@ -243,6 +243,11 @@ class ClientDescriptor:
         return True
 
     def accepts_event(self, event: Mapping[str, Any]) -> bool:
+        if event["type"] == "agent_stream" and self.event_types is None:
+            # The agent's streamed words come many times a second while it
+            # writes; only a client that names the type wants each long poll
+            # woken for them. Others read the saved message.
+            return False
         if self.event_types is not None:
             if event["type"] not in self.event_types:
                 return False

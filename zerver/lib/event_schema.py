@@ -20,6 +20,7 @@ from zerver.lib.event_types import (
     ArmadaPostEvent,
     ArmadaReadReceiptsEvent,
     ArmadaRunEvent,
+    ArmadaStreamEvent,
     ArmadaWorkspaceChangedEvent,
     AttachmentAddEvent,
     AttachmentRemoveEvent,
@@ -254,6 +255,7 @@ check_armada_read_receipts_event = make_checker(ArmadaReadReceiptsEvent)
 check_armada_partner_event = make_checker(ArmadaPartnerEvent)
 check_armada_post_event = make_checker(ArmadaPostEvent)
 check_armada_run_event = make_checker(ArmadaRunEvent)
+check_armada_stream_event = make_checker(ArmadaStreamEvent)
 check_armada_workspace_changed_event = make_checker(ArmadaWorkspaceChangedEvent)
 
 

@@ -30,6 +30,7 @@ from zerver.lib.armada import (
     ARMADA_REASONING_EFFORTS,
     ArmadaActiveSessionSummary,
     ArmadaAddressingIntentClassifier,
+    ArmadaAnswerStreamSender,
     ArmadaEmbeddedBotHandler,
     ArmadaPendingSteeringEvent,
     ArmadaReferencedMessage,
@@ -1935,22 +1936,24 @@ def ensure_armada_project_origin(
                 ).stdout.strip()
                 if is_bare != "true":
                     raise JsonableError(_("The channel repository cache is invalid."))
-                configured_url = armada_run_git_checked(
-                    [
-                        "git",
-                        "--git-dir",
-                        str(origin),
-                        "config",
-                        "--get",
-                        "remote.upstream.url",
-                    ],
-                    error_message="Could not inspect the channel repository.",
-                    timeout=10,
-                ).stdout.strip() if project.repository_url else ""
+                configured_url = (
+                    armada_run_git_checked(
+                        [
+                            "git",
+                            "--git-dir",
+                            str(origin),
+                            "config",
+                            "--get",
+                            "remote.upstream.url",
+                        ],
+                        error_message="Could not inspect the channel repository.",
+                        timeout=10,
+                    ).stdout.strip()
+                    if project.repository_url
+                    else ""
+                )
                 if project.repository_url and configured_url != project.repository_url:
-                    raise JsonableError(
-                        _("This channel already has a different Git repository.")
-                    )
+                    raise JsonableError(_("This channel already has a different Git repository."))
                 if project.repository_url and refresh_upstream:
                     armada_run_git_checked(
                         [
@@ -1967,14 +1970,11 @@ def ensure_armada_project_origin(
                         error_message="Could not refresh the Git repository.",
                         timeout=fetch_timeout_seconds,
                     )
-                base_ref = (
-                    project.default_base_ref.strip()
-                    or armada_run_git_checked(
-                        ["git", "--git-dir", str(origin), "symbolic-ref", "--short", "HEAD"],
-                        error_message="Could not inspect the channel repository.",
-                        timeout=10,
-                    ).stdout.strip().removeprefix("refs/heads/")
-                )
+                base_ref = project.default_base_ref.strip() or armada_run_git_checked(
+                    ["git", "--git-dir", str(origin), "symbolic-ref", "--short", "HEAD"],
+                    error_message="Could not inspect the channel repository.",
+                    timeout=10,
+                ).stdout.strip().removeprefix("refs/heads/")
                 base_commit = armada_run_git_checked(
                     [
                         "git",
@@ -2051,9 +2051,7 @@ def configure_armada_channel_repository_workspace(
     if project is None:
         raise JsonableError(_("Could not configure this channel workspace."))
     if project.repository_url and project.repository_url != clean_url:
-        raise JsonableError(
-            _("This channel already has a different Git repository.")
-        )
+        raise JsonableError(_("This channel already has a different Git repository."))
     origin = armada_expected_project_cache_path(user_profile, stream=stream)
     if not project.repository_url and origin.exists():
         raise JsonableError(
@@ -2466,8 +2464,7 @@ def build_armada_workspace_context(
     )
     return {
         "repository": repository,
-        "remote_url": armada_pinned_repository_value(workspace_repo)
-        or "",
+        "remote_url": armada_pinned_repository_value(workspace_repo) or "",
         "worktree": worktree,
         "workdir": workdir,
         "branch": workspace_node.branch_name.strip() or armada_workspace_node_default_branch(),
@@ -3885,6 +3882,29 @@ class ArmadaDatabaseWorkerRunStore:
             topic=topic,
             response_policy=response_policy,
         )
+
+    def answer_stream_sender(
+        self, bot_handler: Any, message_id: int
+    ) -> ArmadaAnswerStreamSender | None:
+        """What sends this run's streamed words to the people who see the
+        run; None for a run with no row. One query, once per run."""
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        run = (
+            AgentRun.objects.select_related("realm")
+            .filter(bot_profile=user_profile, trigger_message_id=message_id)
+            .first()
+        )
+        if run is None:
+            return None
+        from zerver.actions.armada import send_armada_stream_event
+
+        def send(*, message_id: int, item: int, offset: int, text: str) -> None:
+            send_armada_stream_event(
+                run, message_id=message_id, item=item, offset=offset, text=text
+            )
+
+        return send
 
     def steering_events_after(
         self,

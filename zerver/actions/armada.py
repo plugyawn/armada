@@ -9,7 +9,7 @@ from zerver.lib.message import event_recipient_ids_for_action_on_messages
 from zerver.lib.stream_subscription import get_user_ids_for_streams
 from zerver.models import Message, Stream
 from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
-from zerver.tornado.django_api import send_event_on_commit
+from zerver.tornado.django_api import send_event_on_commit, send_event_rollback_unsafe
 
 
 def _armada_run_usage(payload: dict[str, Any]) -> dict[str, int | float | None] | None:
@@ -159,6 +159,29 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
     if agents is not None:
         event["agents"] = agents
     send_event_on_commit(run.realm, event, recipient_ids)
+
+
+def send_armada_stream_event(
+    run: AgentRun, *, message_id: int, item: int, offset: int, text: str
+) -> None:
+    """Push new words of the run's answer to the people who see the run.
+
+    Volatile: nothing is stored and nothing waits for a transaction. The
+    answer's message is saved now and then, and whole at the end; a client
+    that misses words waits for that. Only event queues that ask for
+    agent_stream by name receive it (zerver/tornado/event_queue.py)."""
+    recipient_ids = armada_run_recipient_ids(run)
+    if not recipient_ids:
+        return
+    event = {
+        "type": "agent_stream",
+        "run_id": run.id,
+        "message_id": message_id,
+        "item": item,
+        "offset": offset,
+        "text": text,
+    }
+    send_event_rollback_unsafe(run.realm, event, recipient_ids)
 
 
 def send_armada_workspace_changed_event(node: Workspace, revision: int) -> None:

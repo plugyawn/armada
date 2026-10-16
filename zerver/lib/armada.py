@@ -5,6 +5,7 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
+from contextvars import ContextVar
 from dataclasses import dataclass
 from re import IGNORECASE, compile, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict, cast
@@ -90,6 +91,9 @@ ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
 # While Onix's words stream, cancel and steering are read at most this
 # often; every other event of a run still reads them at once.
 ARMADA_STREAM_CONTROL_POLL_SECONDS: Final = 0.5
+# Onix's words go to people as agent_stream events at most this often
+# (30 a second); the first words of an item go at once.
+ARMADA_STREAM_DELTA_INTERVAL_SECONDS: Final = 0.033
 ARMADA_TYPING_REFRESH_INTERVAL_SECONDS: Final = 10.0
 ARMADA_LIVE_RUN_CACHE_KEY_PREFIX: Final = "armada:live-run:"
 ARMADA_LIVE_RUN_CACHE_TTL_SECONDS: Final = 3600
@@ -322,6 +326,28 @@ ArmadaWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], ArmadaActiveSe
 # The engine's request_user_input questions, normalized: the provider
 # returns per-question answer lists, or None to decline/timeout.
 ArmadaUserInputProvider = Callable[[list[dict[str, Any]]], dict[str, list[str]] | None]
+
+
+class ArmadaTurnIdleHook(Protocol):
+    """Work a turn has due while Codex is quiet."""
+
+    def idle_due_in(self) -> float | None:
+        """Seconds until the turn has work due, or None when it has none."""
+
+    def on_idle(self) -> None:
+        """Do the work that is due."""
+
+
+# The turn running on this thread. The runtime's loop that waits for Codex
+# wakes for it when it has work due, such as streamed words held back to
+# pace the stream, without knowing what that work is.
+armada_turn_idle_hook: ContextVar[ArmadaTurnIdleHook | None] = ContextVar(
+    "armada_turn_idle_hook", default=None
+)
+
+
+class ArmadaAnswerStreamSender(Protocol):
+    def __call__(self, *, message_id: int, item: int, offset: int, text: str) -> None: ...
 
 
 class ArmadaWorkerToolRunner(Protocol):
@@ -3108,6 +3134,73 @@ class ArmadaAssistantText:
         return self.chunks[0] if self.chunks else ""
 
 
+def armada_utf16_length(text: str) -> int:
+    """The length of text as a browser counts it: in UTF-16 code units."""
+    return len(text.encode("utf-16-le")) // 2
+
+
+class ArmadaAnswerStream:
+    """Onix's words on their way to the people watching, as agent_stream
+    events that carry only the characters that are new.
+
+    The first words of an item leave at once. Later ones leave when
+    ARMADA_STREAM_DELTA_INTERVAL_SECONDS have passed since the last send,
+    so a run sends at most 30 events a second however fast Codex writes;
+    words held back leave when their time comes (the turn's idle hook) or
+    before the run's next other event. `item` counts the run's assistant
+    items from 0, and `offset` is where the text goes in its item, in
+    UTF-16 code units, as the browser's strings count; an offset of 0
+    starts the item's text again."""
+
+    def __init__(self, send: ArmadaAnswerStreamSender, *, message_id: int) -> None:
+        self.send = send
+        self.message_id = message_id
+        self.item = -1
+        self.offset = 0
+        self.held: list[str] = []
+        self.last_sent_at: float | None = None
+
+    def start_item(self, text: str, *, now: float) -> None:
+        self.flush(now=now)
+        self.item += 1
+        self.offset = 0
+        self.held = [text]
+        self.flush(now=now)
+
+    def append(self, text: str, *, now: float) -> None:
+        self.held.append(text)
+        if self.due_in(now=now) == 0:
+            self.flush(now=now)
+
+    def replace(self, text: str, *, now: float) -> None:
+        """The item's whole text, when it is not what was streamed."""
+        self.offset = 0
+        self.held = [text]
+        self.flush(now=now)
+
+    def due_in(self, *, now: float) -> float | None:
+        if not self.held:
+            return None
+        if self.last_sent_at is None:
+            return 0
+        return max(0, self.last_sent_at + ARMADA_STREAM_DELTA_INTERVAL_SECONDS - now)
+
+    def flush(self, *, now: float) -> None:
+        text = "".join(self.held)
+        self.held = []
+        if not text:
+            return
+        offset = self.offset
+        self.offset += armada_utf16_length(text)
+        self.last_sent_at = now
+        try:
+            self.send(message_id=self.message_id, item=self.item, offset=offset, text=text)
+        except Exception:
+            # The words are decoration until the message is saved: a client
+            # that misses some sees the gap and waits for the saved text.
+            logger.exception("Streaming the answer in message %s failed.", self.message_id)
+
+
 class ArmadaWorkerTurn:
     """A single agent run: transcript streaming, same-turn steering
     segments, and settlement for one request.
@@ -3157,6 +3250,8 @@ class ArmadaWorkerTurn:
         self.result_message_id = progress_message_id
         self.transcript_events: list[ArmadaWorkerTranscriptEvent] = []
         self.assistant_text = ArmadaAssistantText()
+        self.answer_stream: ArmadaAnswerStream | None = None
+        self.answer_stream_opened = False
         self.live_operation: ArmadaLiveRunOperation | None = None
         self.task = armada_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
@@ -3201,6 +3296,54 @@ class ArmadaWorkerTurn:
             self.last_typing_signal_at = time.monotonic()
         if operator == "stop":
             self.typing_started = False
+
+    def open_answer_stream(self) -> ArmadaAnswerStream | None:
+        """The stream of this run's words, from the run store, opened at
+        the first words. None when there is no message to stream into or
+        the store does not stream."""
+        if not self.answer_stream_opened:
+            self.answer_stream_opened = True
+            target_message_id = self.result_message_id or self.progress_message_id
+            open_sender = getattr(self.handler.worker_run_store, "answer_stream_sender", None)
+            send = (
+                open_sender(self.bot_handler, self.message_id)
+                if target_message_id is not None and callable(open_sender)
+                else None
+            )
+            if send is not None:
+                assert target_message_id is not None
+                self.answer_stream = ArmadaAnswerStream(send, message_id=target_message_id)
+        return self.answer_stream
+
+    def stream_assistant_event(
+        self, event: ArmadaWorkerTranscriptEvent, *, new_item: bool, streamed_text: str = ""
+    ) -> None:
+        """Send what is new of the answer: a delta's characters, or an item's
+        text when it arrives whole and is not what was streamed of it
+        (`streamed_text`)."""
+        stream = self.open_answer_stream()
+        if stream is None:
+            return
+        now = time.monotonic()
+        body = event.get("body", "")
+        if new_item:
+            stream.start_item(body, now=now)
+        elif armada_is_streamed_delta(event):
+            stream.append(body, now=now)
+        elif streamed_text.strip() != body.strip():
+            stream.replace(body, now=now)
+
+    def flush_answer_stream(self) -> None:
+        if self.answer_stream is not None:
+            self.answer_stream.flush(now=time.monotonic())
+
+    def idle_due_in(self) -> float | None:
+        if self.answer_stream is None:
+            return None
+        return self.answer_stream.due_in(now=time.monotonic())
+
+    def on_idle(self) -> None:
+        self.flush_answer_stream()
 
     def control_poll_due(self, event: ArmadaWorkerTranscriptEvent) -> bool:
         """Whether this event reads cancel and steering. A streamed delta
@@ -3428,6 +3571,9 @@ class ArmadaWorkerTurn:
         self.update_live_transcript("running", force=True)
 
     def handle_transcript_event(self, event: ArmadaWorkerTranscriptEvent) -> None:
+        if not armada_is_streamed_delta(event):
+            # Words held back to pace the stream go before anything after them.
+            self.flush_answer_stream()
         poll_controls = self.control_poll_due(event)
         if poll_controls:
             self.raise_if_cancel_requested()
@@ -3502,14 +3648,19 @@ class ArmadaWorkerTurn:
             item_id = event.get("item_id")
             if not isinstance(item_id, str):
                 item_id = ""
-            if item_id != self.assistant_text.item_id:
+            new_item = item_id != self.assistant_text.item_id
+            if new_item:
                 self.assistant_text.reset(item_id)
             self.assistant_text.append(body)
+            self.stream_assistant_event(event, new_item=new_item)
         else:
             self.transcript_events.append(event)
             if event_kind == "assistant":
                 item_id = event.get("item_id")
+                new_item = item_id is None or item_id != self.assistant_text.item_id
+                streamed_text = "" if new_item else self.assistant_text.text
                 self.assistant_text.reset(item_id if isinstance(item_id, str) else None, body)
+                self.stream_assistant_event(event, new_item=new_item, streamed_text=streamed_text)
         if not streaming_assistant:
             self.handler.record_worker_event(
                 self.bot_handler,
@@ -3601,7 +3752,12 @@ class ArmadaWorkerTurn:
             # thread starts another side turn, so no answer could reach this
             # one. Codex goes on without an answer when a question is declined.
             runtime_kwargs["user_input_provider"] = self.request_user_answers
-        segment_result = run_runtime(**runtime_kwargs)
+        idle_hook = armada_turn_idle_hook.set(self)
+        try:
+            segment_result = run_runtime(**runtime_kwargs)
+        finally:
+            armada_turn_idle_hook.reset(idle_hook)
+        self.flush_answer_stream()
         self.raise_if_cancel_requested()
         self.artifact_tool_results.extend(
             result for result in segment_result["tool_results"] if result["label"] == "Artifact"

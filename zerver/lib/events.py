@@ -2108,10 +2108,16 @@ def apply_event(
     elif event["type"] == "restart":
         # The Tornado process restarted.  This has no effect; we ignore it.
         pass
-    elif event["type"] in {"agent_run", "workspace_changed", "armada_partner", "armada_post"}:
-        # Agent run deltas, partner changes and page posts update dedicated
-        # client-side reducers; they do not mutate the initial-state payload
-        # assembled by this module.
+    elif event["type"] in {
+        "agent_run",
+        "agent_stream",
+        "workspace_changed",
+        "armada_partner",
+        "armada_post",
+    }:
+        # Agent run deltas, the agent's streamed words, partner changes and
+        # page posts update dedicated client-side reducers; they do not
+        # mutate the initial-state payload assembled by this module.
         pass
     elif event["type"] == "read_receipts":
         # Read receipts are fetched per message, not held in the register

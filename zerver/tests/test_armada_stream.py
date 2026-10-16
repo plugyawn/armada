@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from typing import Any
 from unittest.mock import patch
 
 from typing_extensions import override
@@ -9,14 +10,21 @@ from zerver.lib.armada import (
     ARMADA_DEFAULT_STREAM,
     ARMADA_DEFAULT_TOPIC,
     ArmadaActiveSessionSummary,
+    ArmadaAnswerStreamSender,
     ArmadaEmbeddedBotHandler,
     ArmadaUserInputProvider,
     ArmadaWorkerRuntime,
     ArmadaWorkerToolResult,
     ArmadaWorkerTranscriptCallback,
     ArmadaWorkerTranscriptEvent,
+    armada_turn_idle_hook,
     build_armada_active_session_summary_from_messages,
     get_armada_session_payload,
+)
+from zerver.lib.armada_agent import (
+    ArmadaAgentRuntimeError,
+    ArmadaAppServerTurnContext,
+    ArmadaCodexAppServerToolRunner,
 )
 from zerver.lib.test_classes import ZulipTestCase
 
@@ -25,9 +33,13 @@ PROGRESS_MESSAGE_ID = 9302
 
 
 class StreamRunStore:
-    """The run store a turn talks to, keeping what the turn asked of it."""
+    """The run store a turn talks to, keeping what the turn asked of it, and
+    the words it streamed, in order with the run's events in `log`."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = lambda: 0.0) -> None:
+        self.clock = clock
+        self.log: list[str] = []
+        self.streamed: list[dict[str, Any]] = []
         self.recorded_events: list[str] = []
         self.cancel = False
         self.cancel_reads = 0
@@ -51,6 +63,24 @@ class StreamRunStore:
         self, bot_handler: object, message_id: int, event_type: str, **kwargs: object
     ) -> None:
         self.recorded_events.append(event_type)
+        self.log.append(event_type)
+
+    def answer_stream_sender(
+        self, bot_handler: object, message_id: int
+    ) -> ArmadaAnswerStreamSender:
+        def send(*, message_id: int, item: int, offset: int, text: str) -> None:
+            self.streamed.append(
+                {
+                    "at": self.clock(),
+                    "message_id": message_id,
+                    "item": item,
+                    "offset": offset,
+                    "text": text,
+                }
+            )
+            self.log.append("agent_stream")
+
+        return send
 
     def update_metadata(self, bot_handler: object, message_id: int, **metadata: object) -> None:
         pass
@@ -125,7 +155,7 @@ class ArmadaStreamTest(ZulipTestCase):
     ) -> tuple[StreamRunStore, StreamBotHandler]:
         """Run one turn whose runtime plays `script`, which sends the turn's
         events and returns the answer."""
-        store = store or StreamRunStore()
+        store = store or StreamRunStore(lambda: self.clock)
         bot_handler = bot_handler or StreamBotHandler()
 
         def tool_runner(
@@ -245,3 +275,151 @@ class ArmadaStreamTest(ZulipTestCase):
         self.assertGreaterEqual(sent, 100)
         self.assertLessEqual(sent - 100, 100)
         self.assertEqual(bot_handler.edits[-1], "Stopped.")
+
+    def test_words_stream_as_new_characters_thirty_times_a_second(self) -> None:
+        # 400 tokens a second for 3 seconds.
+        words = [f"x{i % 10} " for i in range(1200)]
+        store, bot_handler = self.run_turn(self.stream_words(words, every=0.0025))
+
+        answer = "".join(words)
+        self.assertEqual("".join(event["text"] for event in store.streamed), answer)
+        self.assertEqual({event["message_id"] for event in store.streamed}, {PROGRESS_MESSAGE_ID})
+        self.assertEqual({event["item"] for event in store.streamed}, {0})
+        # Each event says where its characters go, and none is lost or doubled.
+        offset = 0
+        for event in store.streamed:
+            self.assertEqual(event["offset"], offset)
+            offset += len(event["text"])
+        # The first words leave with the first delta; then at most one event
+        # every 33 ms.
+        self.assertEqual(store.streamed[0]["text"], words[0])
+        self.assertAlmostEqual(store.streamed[0]["at"], 1000.0025)
+        # The last goes with the item's end, whenever that comes.
+        gaps = [
+            b["at"] - a["at"] for a, b in zip(store.streamed, store.streamed[1:-1], strict=False)
+        ]
+        self.assertGreaterEqual(min(gaps), 0.033 - 1e-9)
+        self.assertLessEqual(len(store.streamed), 3 * 30 + 2)
+        self.assertEqual(bot_handler.edits[-1].strip(), answer.strip())
+
+    def test_held_words_go_before_the_runs_next_event(self) -> None:
+        store = StreamRunStore(lambda: self.clock)
+
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("Running "))
+            self.tick(0.001)
+            event_callback(streamed("the tests"))
+            event_callback({"kind": "command", "status": "running", "title": "pytest", "body": ""})
+            return "Running the tests"
+
+        store, _bot_handler = self.run_turn(script, store=store)
+
+        self.assertEqual([event["text"] for event in store.streamed], ["Running ", "the tests"])
+        self.assertLess(
+            store.log.index("agent_stream", store.log.index("agent_stream") + 1),
+            store.log.index("transcript"),
+        )
+
+    def test_a_new_item_starts_its_text_again(self) -> None:
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("Checking ", item_id="a"))
+            self.tick(0.1)
+            event_callback(streamed("the parser.", item_id="a"))
+            event_callback(completed("Checking the parser.", item_id="a"))
+            self.tick(0.1)
+            event_callback(streamed("Fixed", item_id="b"))
+            self.tick(0.1)
+            event_callback(completed("Fixed it.", item_id="b"))
+            return "Fixed it."
+
+        store, _bot_handler = self.run_turn(script)
+
+        self.assertEqual(
+            [(event["item"], event["offset"], event["text"]) for event in store.streamed],
+            [
+                (0, 0, "Checking "),
+                (0, 9, "the parser."),
+                (1, 0, "Fixed"),
+                # Codex's whole text of the item is not what streamed: it
+                # replaces the item's text.
+                (1, 0, "Fixed it."),
+            ],
+        )
+
+    def test_offsets_count_what_a_browser_counts(self) -> None:
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("Done \U0001f389"))
+            self.tick(0.1)
+            event_callback(streamed(" and pushed."))
+            return "Done \U0001f389 and pushed."
+
+        store, _bot_handler = self.run_turn(script)
+
+        # The party popper is one character in Python and two in JavaScript.
+        self.assertEqual([event["offset"] for event in store.streamed], [0, 7])
+
+    def test_the_wait_for_codex_wakes_for_held_words(self) -> None:
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=5,
+            output_limit=200,
+        )
+        context = ArmadaAppServerTurnContext(
+            thread_id="thread-1", event_callback=None, user_input_provider=None, is_main=True
+        )
+
+        class Turn:
+            def __init__(self) -> None:
+                self.due: float | None = 0.01
+                self.woken = 0
+
+            def idle_due_in(self) -> float | None:
+                return self.due
+
+            def on_idle(self) -> None:
+                self.woken += 1
+                self.due = None
+                context.messages.put("next")
+
+        turn = Turn()
+        token = armada_turn_idle_hook.set(turn)
+        try:
+            self.assertEqual(runner.next_turn_message(context), "next")
+        finally:
+            armada_turn_idle_hook.reset(token)
+        self.assertEqual(turn.woken, 1)
+
+    def test_the_wait_for_codex_still_ends_when_codex_is_silent(self) -> None:
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=0,
+            output_limit=200,
+        )
+        context = ArmadaAppServerTurnContext(
+            thread_id="thread-1", event_callback=None, user_input_provider=None, is_main=True
+        )
+
+        class Turn:
+            woken = 0
+
+            def idle_due_in(self) -> float | None:
+                return 0.0
+
+            def on_idle(self) -> None:
+                self.woken += 1
+
+        turn = Turn()
+        token = armada_turn_idle_hook.set(turn)
+        try:
+            with self.assertRaises(ArmadaAgentRuntimeError):
+                runner.next_turn_message(context)
+        finally:
+            armada_turn_idle_hook.reset(token)

@@ -5083,6 +5083,69 @@ paths:
                                   "immediate": true,
                                 }
                             - type: object
+                              description: |
+                                Event sent while the agent writes an answer: the characters
+                                that are new since the last such event, to be appended to
+                                the answer's text.
+
+                                Sent only to event queues that list `agent_stream` in
+                                their `event_types`, to the users who receive the
+                                agent's run events. It is not stored: the answer's
+                                message is edited with the whole text now and then while
+                                the agent writes, and once at the end, so a client that
+                                misses an event, or registers while an answer is being
+                                written, ends with the same text. The final message
+                                edit's `rendered_content` replaces whatever was shown.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-d3416d).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - agent_stream
+                                run_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the agent's run that is writing.
+                                message_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the message that holds the answer.
+                                item:
+                                  type: integer
+                                  description: |
+                                    Which of the run's answer texts these characters
+                                    belong to, counting from 0. While a run works, the
+                                    message shows its latest text; a new `item` starts
+                                    a new text.
+                                offset:
+                                  type: integer
+                                  description: |
+                                    Where `text` goes in the item's text, in UTF-16 code
+                                    units. An `offset` of 0 starts the item's text again.
+                                    An `offset` beyond the text a client holds means it
+                                    missed an event; it should show the saved message
+                                    until the next item or the end of the run.
+                                text:
+                                  type: string
+                                  description: |
+                                    The new characters, as the agent wrote them (Markdown,
+                                    not rendered).
+                              additionalProperties: false
+                              example:
+                                {
+                                  "id": 0,
+                                  "type": "agent_stream",
+                                  "run_id": 12,
+                                  "message_id": 4561,
+                                  "item": 0,
+                                  "offset": 42,
+                                  "text": " the parser keeps the first",
+                                }
+                            - type: object
                               additionalProperties: false
                               description: |
                                 The more general of two event types that may be used when

@@ -86,7 +86,7 @@ kept zerver/tests/test_message_dict.py  # follows the renamed modules: their pat
 kept zerver/tests/test_queue.py  # the agent's queues are armada_*
 kept zerver/tests/test_service_bot_system.py  # follows the renamed modules: their paths, armada_* names and wire names, and the agent's models by their plain nouns
 kept zerver/tests/test_submessage.py  # follows the renamed modules: their paths, armada_* names and wire names
-kept zerver/tornado/event_queue.py  # the agent's events are agent_run and workspace_changed
+kept zerver/tornado/event_queue.py  # the agent's events are agent_run and workspace_changed; agent_stream reaches only queues that name it
 kept zerver/views/message_send.py  # the send parameter is agent_followup
 kept zerver/views/submessage.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/views/users.py  # follows the renamed modules: their paths, armada_* names and wire names

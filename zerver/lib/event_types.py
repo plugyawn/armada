@@ -1366,6 +1366,15 @@ class ArmadaRunEvent(BaseEvent):
     agents: list[ArmadaRunAgent] | None = None
 
 
+class ArmadaStreamEvent(BaseEvent):
+    type: Literal["agent_stream"]
+    run_id: int
+    message_id: int
+    item: int
+    offset: int
+    text: str
+
+
 class ArmadaWorkspaceChangedEvent(BaseEvent):
     type: Literal["workspace_changed"]
     workspace_id: str

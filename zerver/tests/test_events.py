@@ -20,6 +20,7 @@ from django.utils.timezone import now as timezone_now
 from typing_extensions import override
 
 from zerver.actions.alert_words import do_add_alert_words, do_remove_alert_words
+from zerver.actions.armada import send_armada_stream_event
 from zerver.actions.bots import (
     do_change_bot_owner,
     do_change_default_all_public_streams,
@@ -170,6 +171,7 @@ from zerver.lib.drafts import DraftData, do_create_drafts, do_delete_draft, do_e
 from zerver.lib.event_schema import (
     check_alert_words,
     check_armada_post_event,
+    check_armada_stream_event,
     check_attachment_add,
     check_attachment_remove,
     check_attachment_update,
@@ -311,7 +313,7 @@ from zerver.models import (
     UserStatus,
     UserTopic,
 )
-from zerver.models.bots import get_bot_services
+from zerver.models.bots import AgentRun, get_bot_services
 from zerver.models.clients import get_client
 from zerver.models.groups import SystemGroups
 from zerver.models.realm_audit_logs import AuditLogEventType
@@ -3632,6 +3634,47 @@ class NormalActionsTest(BaseAction):
         )
 
         self.assertEqual(state, {})
+
+    def agent_run_for_stream(self) -> AgentRun:
+        bot = self.create_test_bot(
+            "onix",
+            self.user_profile,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        trigger_message_id = self.send_stream_message(
+            self.user_profile, "Verona", "@Onix explain", topic_name="streaming"
+        )
+        return AgentRun.objects.create(
+            realm=self.user_profile.realm,
+            bot_profile=bot,
+            requesting_user=self.user_profile,
+            trigger_message_id=trigger_message_id,
+            stream_name="Verona",
+            topic_name="streaming",
+            status=AgentRun.RUNNING,
+        )
+
+    def test_agent_stream_events(self) -> None:
+        run = self.agent_run_for_stream()
+        with self.verify_action(
+            event_types=["agent_stream"], state_change_expected=False
+        ) as events:
+            send_armada_stream_event(
+                run, message_id=run.trigger_message_id + 1, item=0, offset=8, text=" option"
+            )
+        check_armada_stream_event("events[0]", events[0])
+        self.assertEqual(
+            {key: events[0][key] for key in ("run_id", "item", "offset", "text")},
+            {"run_id": run.id, "item": 0, "offset": 8, "text": " option"},
+        )
+
+        # Only a queue that asks for the streamed words by name gets them.
+        with self.verify_action(num_events=0, state_change_expected=False):
+            send_armada_stream_event(
+                run, message_id=run.trigger_message_id + 1, item=0, offset=15, text=" groups"
+            )
 
     def test_change_bot_full_name(self) -> None:
         bot = self.create_bot("test")

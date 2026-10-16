@@ -48,6 +48,27 @@ class RealmUploadQuotaError(JsonableError):
     code = ErrorCode.REALM_UPLOAD_QUOTA
 
 
+def check_upload_within_size_limit(realm: Realm, uploaded_file_size: int) -> None:
+    max_file_upload_size_mebibytes = realm.get_max_file_upload_size_mebibytes()
+    if uploaded_file_size <= max_file_upload_size_mebibytes * 1024 * 1024:
+        return
+    if realm.plan_type != Realm.PLAN_TYPE_SELF_HOSTED:
+        raise JsonableError(
+            _(
+                "File is larger than the maximum upload size ({max_size} MiB) allowed by your organization's plan."
+            ).format(
+                max_size=max_file_upload_size_mebibytes,
+            )
+        )
+    raise JsonableError(
+        _(
+            "File is larger than this server's configured maximum upload size ({max_size} MiB)."
+        ).format(
+            max_size=max_file_upload_size_mebibytes,
+        )
+    )
+
+
 def check_upload_within_quota(realm: Realm, uploaded_file_size: int) -> None:
     upload_quota = realm.upload_quota_bytes()
     if upload_quota is None:

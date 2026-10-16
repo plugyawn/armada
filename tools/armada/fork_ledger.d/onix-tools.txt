@@ -1,0 +1,1 @@
+kept zerver/views/upload.py  # the upload size check moved to zerver/lib/upload, shared with the agent's file posts

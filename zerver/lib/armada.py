@@ -10,6 +10,7 @@ from re import IGNORECASE, compile, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict, cast
 
 from django.core.cache import cache
+from django.db import connection
 from django.utils.translation import gettext as _
 
 from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
@@ -3108,6 +3109,9 @@ class ArmadaWorkerTurn:
         # Set when Codex refuses a steer: the live turn has ended or cannot
         # be steered, so pending steers wait for the next turn instead.
         self.steering_refused_this_turn = False
+        # Set while Codex waits on a question: a message addressed to the
+        # run is then its answer, so same-turn steering leaves it alone.
+        self.question_open = False
         self.worker_result: dict[str, Any] = {}
         self.artifact_tool_results: list[ArmadaWorkerToolResult] = []
         self.codex_thread_id: str | None = None
@@ -3197,10 +3201,34 @@ class ArmadaWorkerTurn:
         )
 
     def request_user_answers(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:
-        """The engine asked the humans something (request_user_input,
-        plan-mode). Post the question into the conversation, then wait on
-        the steering store — a reply addressed to the run IS the answer.
-        Returns per-question answers, or None on timeout/cancel."""
+        """The run's user-input provider: Codex asked the people something
+        with its question tool. Returns per-question answers, or None when
+        no answer arrived in time or the run was stopped; Codex is told
+        the question was declined either way.
+
+        It runs on the thread that answers Codex's request, beside the
+        turn's own thread, which keeps reading the run's events."""
+        self.question_open = True
+        try:
+            return self.ask_and_wait_for_answers(questions)
+        except ArmadaRunCancelledError:
+            # Stop interrupted the turn; the turn's own thread settles the
+            # run as cancelled when it next reads an event.
+            return None
+        finally:
+            self.question_open = False
+            # Like the page tools: each thread that answers Codex opens its
+            # own database connection, so close it rather than leave it to
+            # the thread's end. Inside a transaction (a test's), the
+            # connection is its owner's.
+            if not connection.in_atomic_block:
+                connection.close()
+
+    def ask_and_wait_for_answers(
+        self, questions: list[dict[str, Any]]
+    ) -> dict[str, list[str]] | None:
+        """Post the question into the conversation, then wait on the
+        steering store: a reply addressed to the run IS the answer."""
         if not questions or not callable(self.steering_events_after):
             return None
         question_lines = [f"{ARMADA_AGENT_NAME} needs your input to continue:", ""]
@@ -3295,6 +3323,7 @@ class ArmadaWorkerTurn:
             self.active_session is None
             or not callable(self.steering_events_after)
             or self.steering_refused_this_turn
+            or self.question_open
         ):
             return
         pending_steering_events: list[ArmadaPendingSteeringEvent] = self.steering_events_after(
@@ -3522,6 +3551,11 @@ class ArmadaWorkerTurn:
             if self.source_message_id is None:
                 raise RuntimeError("Side conversation has no durable message root.")
             runtime_kwargs["conversation_key"] = str(self.source_message_id)
+        else:
+            # A side conversation asks nobody: a reply naming the agent in its
+            # thread starts another side turn, so no answer could reach this
+            # one. Codex goes on without an answer when a question is declined.
+            runtime_kwargs["user_input_provider"] = self.request_user_answers
         segment_result = run_runtime(**runtime_kwargs)
         self.raise_if_cancel_requested()
         self.artifact_tool_results.extend(

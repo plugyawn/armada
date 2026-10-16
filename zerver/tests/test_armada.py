@@ -63,6 +63,7 @@ from zerver.lib.armada import (
     ArmadaWorkerToolResult,
     ArmadaWorkerTranscriptCallback,
     ArmadaWorkerTranscriptEvent,
+    ArmadaWorkerTurn,
     armada_distinct_transcript_tool_events,
     armada_normalize_token_usage,
     armada_sanitized_child_agent_event,
@@ -6837,16 +6838,24 @@ class ArmadaScriptedAppServer:
     steer sent at a turn's end runs).
 
     A turn ends once every steer the test has made visible is delivered,
-    so the worker's own loop has to carry anything left over."""
+    so the worker's own loop has to carry anything left over. Given a
+    question, the first turn also asks it with request_user_input, as
+    Codex does, and ends only once the client has replied to it."""
+
+    QUESTION_REQUEST_ID = "question-1"
 
     def __init__(
         self,
         *,
         accept_steer: Callable[[], bool],
         visible_steer_ids: Callable[[], list[str]],
+        question: dict[str, object] | None = None,
     ) -> None:
         self.accept_steer = accept_steer
         self.visible_steer_ids = visible_steer_ids
+        self.question = question
+        # The client's replies to the question: a result or an error.
+        self.question_replies: list[dict[str, Any]] = []
         self.output: queue.Queue[str | None] = queue.Queue()
         self.stdin = self
         self.stdout = iter(self.output.get, None)
@@ -6869,6 +6878,8 @@ class ArmadaScriptedAppServer:
         delivered = set(self.delivered_ids())
         if any(steer_id not in delivered for steer_id in self.visible_steer_ids()):
             return
+        if self.question is not None and not self.question_replies:
+            return
         assert self.turn_id is not None
         self.emit(
             {
@@ -6881,7 +6892,12 @@ class ArmadaScriptedAppServer:
 
     def write(self, value: str) -> int:
         message = json.loads(value)
-        if "id" not in message or "method" not in message:
+        if "method" not in message:
+            if message.get("id") == self.QUESTION_REQUEST_ID:
+                self.question_replies.append(message)
+                self.end_turn_if_nothing_is_left()
+            return len(value)
+        if "id" not in message:
             return len(value)
         request_id = message["id"]
         method = message["method"]
@@ -6908,6 +6924,19 @@ class ArmadaScriptedAppServer:
                     },
                 }
             )
+            if self.question is not None and len(self.turn_starts) == 1:
+                self.emit(
+                    {
+                        "id": self.QUESTION_REQUEST_ID,
+                        "method": "item/tool/requestUserInput",
+                        "params": {
+                            "threadId": "thread-app",
+                            "turnId": self.turn_id,
+                            "itemId": "call-question",
+                            "questions": [self.question],
+                        },
+                    }
+                )
             self.end_turn_if_nothing_is_left()
         elif method == "turn/steer":
             if self.turn_id == params["expectedTurnId"] and self.accept_steer():
@@ -7165,6 +7194,233 @@ class ArmadaSteerDeliveryTest(TestCase):
         )
 
         self.assert_each_steer_delivered_once(server, steering_events)
+
+
+class ArmadaQuestionRunStore(FakeArmadaWorkerRunStore):
+    """A run store whose messages addressed to the run, and whose Stop,
+    the test sets."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.steering_events: list[ArmadaPendingSteeringEvent] = []
+        self.stop_requested = False
+
+    def steering_events_after(
+        self,
+        bot_handler: object,
+        message_id: int,
+        *,
+        after_event_id: int,
+    ) -> list[ArmadaPendingSteeringEvent]:
+        return [event for event in self.steering_events if event["event_id"] > after_event_id]
+
+    def cancel_requested(self, bot_handler: object, message_id: int) -> bool:
+        return self.stop_requested
+
+
+class ArmadaQuestionTest(TestCase):
+    """Codex asks the people something with its question tool: the
+    question is posted in the topic, and a reply addressed to the run is
+    the request's result, through the real app-server runner and the
+    worker's turn loop."""
+
+    QUESTION: dict[str, object] = {
+        "id": "color",
+        "header": "Color",
+        "question": "Which color?",
+        "isOther": True,
+        "isSecret": False,
+        "options": [
+            {"label": "Red", "description": "Choose red."},
+            {"label": "Blue", "description": "Choose blue."},
+        ],
+    }
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        self.store = ArmadaQuestionRunStore()
+        self.servers: list[ArmadaScriptedAppServer] = []
+        self.posts: list[str] = []
+        self.steering_passes = 0
+        self.steering_pass_made = threading.Condition()
+
+    def wait_for_steering_passes(self, count: int) -> None:
+        """Wait until the turn's own thread has handled `count` events
+        that steer the run, each with its pass over the steering store."""
+        with self.steering_pass_made:
+            self.assertTrue(
+                self.steering_pass_made.wait_for(lambda: self.steering_passes >= count, timeout=5)
+            )
+
+    def run_asking_turn(
+        self,
+        on_question: Callable[[], None],
+        *,
+        question_timeout_seconds: float = 2,
+    ) -> ArmadaScriptedAppServer:
+        """Run one turn whose Codex asks QUESTION; `on_question` runs
+        once the question is posted, on the thread that waits for its
+        answer."""
+
+        def fake_popen(command: list[str], **kwargs: object) -> Popen[str]:
+            server = ArmadaScriptedAppServer(
+                accept_steer=lambda: True,
+                visible_steer_ids=list,
+                question=self.QUESTION,
+            )
+            self.servers.append(server)
+            return cast(Popen[str], server)
+
+        test = self
+
+        class QuestionBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                # The run edits its progress message in place, so the
+                # only message it sends is the question.
+                test.posts.append(response)
+                on_question()
+                return {"id": 600 + len(test.posts)}
+
+            def update_message(self, message: dict[str, object]) -> None:
+                pass
+
+        apply_same_turn_steering = ArmadaWorkerTurn.maybe_apply_same_turn_steering
+
+        def counted_steering_pass(turn: ArmadaWorkerTurn) -> None:
+            apply_same_turn_steering(turn)
+            with self.steering_pass_made:
+                self.steering_passes += 1
+                self.steering_pass_made.notify_all()
+
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="danger-full-access",
+            approval_policy="never",
+            timeout_seconds=5,
+            output_limit=200,
+            popen_command=fake_popen,
+        )
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix pick a color for the badge", False)],
+        )
+        try:
+            with (
+                patch.object(
+                    ArmadaWorkerTurn, "maybe_apply_same_turn_steering", counted_steering_pass
+                ),
+                patch(
+                    "zerver.lib.armada.ARMADA_QUESTION_TIMEOUT_SECONDS", question_timeout_seconds
+                ),
+                patch("zerver.lib.armada.ARMADA_QUESTION_POLL_SECONDS", 0.01),
+            ):
+                make_test_armada_handler(
+                    worker_runtime=ArmadaWorkerRuntime(runner),
+                    worker_run_store=self.store,
+                ).run_worker_turn(
+                    {
+                        "id": 205,
+                        "type": "stream",
+                        "display_recipient": ARMADA_DEFAULT_STREAM,
+                        "topic": ARMADA_DEFAULT_TOPIC,
+                        "content": "@Onix pick a color for the badge",
+                    },
+                    QuestionBotHandler(),
+                    content="@Onix pick a color for the badge",
+                    active_session=active_session,
+                    message_id=205,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic=ARMADA_DEFAULT_TOPIC,
+                    post_started_progress=True,
+                    progress_message_id=501,
+                )
+        finally:
+            runner.close()
+        [server] = self.servers
+        return server
+
+    def test_a_reply_to_the_run_is_the_answer_codex_receives(self) -> None:
+        def on_question() -> None:
+            self.wait_for_steering_passes(1)
+            self.store.steering_events.append(
+                {
+                    "event_id": 1,
+                    "message_id": 301,
+                    "instruction": "Blue",
+                    "sender_full_name": "Iago",
+                }
+            )
+            # Another event reaches the run while the question is open (a
+            # subagent's, say). The reply waiting is the answer, not a steer.
+            self.servers[0].emit(
+                {
+                    "method": "item/started",
+                    "params": {
+                        "threadId": "thread-app",
+                        "turnId": "turn-1",
+                        "item": {
+                            "id": "cmd-while-asking",
+                            "type": "commandExecution",
+                            "command": "ls",
+                            "status": "inProgress",
+                        },
+                    },
+                }
+            )
+            self.wait_for_steering_passes(2)
+
+        server = self.run_asking_turn(on_question)
+
+        [question] = self.posts
+        self.assertIn("**Color** — Which color?", question)
+        self.assertIn("- `Blue` — Choose blue.", question)
+        self.assertEqual(
+            server.question_replies,
+            [{"id": "question-1", "result": {"answers": {"color": {"answers": ["Blue"]}}}}],
+        )
+        self.assertEqual(server.accepted_steers, [])
+        self.assertEqual([turn[0] for turn in server.turn_starts], ["205"])
+        self.assertEqual(self.store.runs[205]["status"], "done")
+
+    def test_a_question_nobody_answers_is_declined_and_the_run_goes_on(self) -> None:
+        server = self.run_asking_turn(lambda: None, question_timeout_seconds=0.2)
+
+        [question] = self.posts
+        self.assertIn("Which color?", question)
+        self.assertEqual(
+            server.question_replies,
+            [
+                {
+                    "id": "question-1",
+                    "error": {"code": -32601, "message": "No user answer was available."},
+                }
+            ],
+        )
+        self.assertEqual(self.store.runs[205]["status"], "done")
+
+    def test_stop_ends_the_wait_for_an_answer(self) -> None:
+        def on_question() -> None:
+            self.wait_for_steering_passes(1)
+            self.store.stop_requested = True
+
+        with self.assertNoLogs("zerver.lib.armada_agent", level="ERROR"):
+            server = self.run_asking_turn(on_question)
+
+        self.assertEqual(
+            server.question_replies,
+            [
+                {
+                    "id": "question-1",
+                    "error": {"code": -32601, "message": "No user answer was available."},
+                }
+            ],
+        )
+        self.assertEqual(self.store.runs[205]["status"], "cancelled")
 
 
 class ArmadaAppServerProtocolCitizenTest(TestCase):
@@ -8482,7 +8738,7 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         assert event is not None
         self.assertEqual(event["title"], "Declined an escalation request.")
 
-    def test_request_user_input_declines_visibly_for_now(self) -> None:
+    def test_request_user_input_declines_visibly_without_a_provider(self) -> None:
         runner = self.make_runner(isolated=True)
         result, error, event = runner.answer_for_server_request(
             "item/tool/requestUserInput",

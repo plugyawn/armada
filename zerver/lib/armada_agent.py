@@ -251,7 +251,7 @@ def build_armada_addressing_router_prompt(
 
     return "\n".join(
         [
-            f"You are {ARMADA_AGENT_NAME}'s low-latency routing layer for a Zulip coding agent.",
+            f"You are {ARMADA_AGENT_NAME}'s low-latency routing layer for a coding agent in Armada, a team chat.",
             "Classify one new untagged message. Do not answer it.",
             "Do not answer the user. Do not run commands or use tools.",
             "Return only the JSON object required by the response schema.",
@@ -262,7 +262,7 @@ def build_armada_addressing_router_prompt(
             "Treat a repeated concrete request as intentional. Exact transport duplicates are handled outside this model.",
             "When uncertain, use addressee=uncertain and action=ignore.",
             "",
-            f"Stream: {stream or 'unknown'}",
+            f"Channel: {stream or 'unknown'}",
             f"Topic: {topic or 'unknown'}",
             "Session:",
             *session_lines,
@@ -510,7 +510,7 @@ def armada_codex_thread_version() -> str:
 # need: each topic's next run then starts a fresh Codex thread, which
 # gets them (and loses the old thread's memory). Small rewordings that
 # can wait for a topic's next fresh thread need no bump.
-ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 2
+ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 3
 
 
 # What the agent is told about its browser (browser_config_args), when it
@@ -537,9 +537,9 @@ ARMADA_CODEX_BROWSER_INSTRUCTIONS: Final = (
 def build_armada_codex_developer_instructions(*, browser: bool = False) -> str:
     """The instructions a new Codex thread starts with; browser says
     whether the agent has its browser (ARMADA_WORKER_BROWSER_DIR)."""
-    agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\n"
+    agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a topic in Armada, the team chat you work in.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\n"
     browser_lines = ARMADA_CODEX_BROWSER_INSTRUCTIONS if browser else ""
-    answer = "Keep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
+    answer = "Keep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent topic transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
     return agent + browser_lines + answer
 
 
@@ -571,7 +571,7 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
             return "\n".join([*request_lines, *referenced_context_lines])
         return "\n".join(
             [
-                "New Zulip messages since your previous turn:",
+                "New messages since your previous turn:",
                 *recent_transcript_lines,
                 *referenced_context_lines,
                 "",
@@ -587,10 +587,10 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
         f"- workdir: {workspace_context.get('workdir') or 'unknown'}",
         f"- branch: {workspace_context.get('branch') or 'unknown'}",
         f"- head: {workspace_context.get('head') or 'unknown'}",
-        "- contract: the Zulip stream maps to the repository, and the Zulip topic/subthread maps to the Git branch.",
+        "- contract: the channel maps to the repository, and the topic/subthread maps to the Git branch.",
         "- privacy: refer to the workspace by branch or worktree name in replies; never print the absolute workdir path in the topic.",
         "- servers and watchers: never start a long-lived process (http.server, watch loops, dev servers) in the foreground — it blocks your turn from ever finishing. Run it detached (nohup ... >/dev/null 2>&1 &) and verify with a follow-up probe.",
-        "- math: write math in Zulip's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
+        "- math: write math in Armada's dialect — $$...$$ for inline math and ```math fenced blocks for display equations; \\[ \\] and \\( \\) do not render here.",
         "- checklists: your plan tool is the working checklist — its steps render live in the topic rail, so keep it current instead of duplicating it in chat or a workspace document.",
     ]
     recent_human_participants = list(
@@ -607,8 +607,8 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
     return "\n".join(
         [
             f"Task: {task_text}",
-            f"Zulip stream: {active_session['stream']}",
-            f"Zulip topic: {active_session['topic']}",
+            f"Channel: {active_session['stream']}",
+            f"Topic: {active_session['topic']}",
             *(
                 [f"Request message: #{request_message_id}"]
                 if request_message_id is not None
@@ -622,7 +622,7 @@ def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, t
             "Visible recent human participants:",
             *recent_participant_lines,
             "",
-            "Recent Zulip topic transcript, oldest to newest:",
+            "Recent topic transcript, oldest to newest:",
             *initial_transcript_lines,
             *referenced_context_lines,
         ]

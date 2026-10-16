@@ -42,7 +42,7 @@ ARMADA_MONITOR_PARSE_MODES: Final = frozenset({"text", "regex", "json", "static"
 
 ARMADA_MONITOR_CONTRACT_PREFIX: Final = """\
 You are setting up an Armada wall monitor: a small standing display block \
-that keeps one thing visible next to a Zulip topic. You run once, now, \
+that keeps one thing visible next to an Armada topic. You run once, now, \
 to write its spec; after that a dumb scheduler re-runs your recipe on a \
 cadence with no AI involved. The artifact is the same native, theme-owned \
 document used in chat. Never emit SVG, HTML, CSS, colors, fonts, URLs, or scripts.

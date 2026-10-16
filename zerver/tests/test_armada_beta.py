@@ -3,12 +3,14 @@
 import importlib
 import json
 import os
+import re
 import struct
 import tempfile
 import zlib
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from html import unescape
 from typing import Any
 from unittest import mock
 
@@ -24,11 +26,16 @@ from django.utils.timezone import now as timezone_now
 from typing_extensions import override
 
 from zerver.actions.create_user import do_create_user
+from zerver.actions.realm_settings import (
+    do_change_realm_permission_group_setting,
+    do_set_realm_property,
+)
 from zerver.actions.users import do_deactivate_user
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
 from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
 from zerver.lib.event_schema import check_armada_partner_event
+from zerver.lib.events import fetch_initial_state_data
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
@@ -51,8 +58,17 @@ from zerver.lib.templates import font_preloads
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import ratelimit_rule
 from zerver.lib.users import get_user_ids_who_can_access_user
-from zerver.models import AgentRun, BotStorageData, Message, Partner, Reaction, UserProfile
+from zerver.models import (
+    AgentRun,
+    BotStorageData,
+    Message,
+    NamedUserGroup,
+    Partner,
+    Reaction,
+    UserProfile,
+)
 from zerver.models.bots import Service
+from zerver.models.groups import SystemGroups
 from zerver.tornado.django_api import EventQueueData
 from zerver.views.armada_beta import live_run_ids_for_user
 
@@ -282,6 +298,62 @@ class ArmadaBetaTest(ZulipTestCase):
         self.assertEqual(
             [url.rsplit("/", 1)[-1] for url in beta], ["soehne-buch.woff2", "GeistMonoVF.woff2"]
         )
+
+    def beta_data(self, html: str) -> dict[str, str]:
+        tag = re.search(r'<div id="beta-data"[^>]*>', html)
+        assert tag is not None
+        return {
+            name: unescape(value) for name, value in re.findall(r'data-([a-z-]+)="([^"]*)"', tag[0])
+        }
+
+    def test_the_page_brings_what_the_page_does_not_register_for(self) -> None:
+        # The page registers without the realm bundle and the realm's bots
+        # (web/src/armada/beta/connection.js): the agent's user ids and the
+        # rules for editing and deleting come with it, written as register
+        # writes them, a named group by its id and an anonymous one by its
+        # members and subgroups.
+        hamlet = self.example_user("hamlet")
+        realm = hamlet.realm
+        do_set_realm_property(realm, "message_content_delete_limit_seconds", 600, acting_user=None)
+        moderators = NamedUserGroup.objects.get(
+            name=SystemGroups.MODERATORS, realm_for_sharding=realm, is_system_group=True
+        )
+        do_change_realm_permission_group_setting(
+            realm,
+            "can_delete_own_message_group",
+            self.create_or_update_anonymous_group_for_setting(
+                [self.example_user("cordelia"), hamlet], [moderators]
+            ),
+            acting_user=None,
+        )
+        state = fetch_initial_state_data(hamlet, realm=realm, event_types=["realm", "realm_bot"])
+
+        self.login_user(hamlet)
+        data = self.beta_data(self.client_get("/beta/").content.decode())
+        self.assertEqual(orjson.loads(data["agent-user-ids"]), state["agent_user_ids"])
+        rules = orjson.loads(data["edit-and-delete"])
+        self.assertEqual(
+            rules,
+            {
+                name: state["realm_" + name]
+                for name in [
+                    "allow_message_editing",
+                    "message_content_edit_limit_seconds",
+                    "message_content_delete_limit_seconds",
+                    "can_delete_any_message_group",
+                    "can_delete_own_message_group",
+                ]
+            },
+        )
+        self.assertEqual(rules["message_content_delete_limit_seconds"], 600)
+        self.assertEqual(
+            rules["can_delete_own_message_group"],
+            {
+                "direct_members": sorted([self.example_user("cordelia").id, hamlet.id]),
+                "direct_subgroups": [moderators.id],
+            },
+        )
+        self.assertIsInstance(rules["can_delete_any_message_group"], int)
 
     def test_read_receipts_off_is_written_into_the_page(self) -> None:
         hamlet = self.example_user("hamlet")

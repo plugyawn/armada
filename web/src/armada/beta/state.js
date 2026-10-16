@@ -4,7 +4,9 @@ import {$, store} from "./util.js";
 
 const DATA = ($("#beta-data") || {dataset: {}}).dataset;   /* what the page cannot ask for (zerver/views/armada_beta.py) */
 const QUESTION_TIMEOUT = +DATA.questionTimeout || 600;    /* how long a run waits for an answer, then goes on with defaults (ARMADA_QUESTION_TIMEOUT_SECONDS) */
-const LIVE_RUN_IDS = (() => { try { return JSON.parse(DATA.liveRunIds || "[]"); } catch (e) { return []; } })();   /* the live runs in my channels at load: where Home starts */
+const fromData = (json, none) => { try { return json ? JSON.parse(json) : none; } catch (e) { return none; } };
+const LIVE_RUN_IDS = fromData(DATA.liveRunIds, []);       /* the live runs in my channels at load: where Home starts */
+const RULES = fromData(DATA.editAndDelete, {});            /* the realm's rules for editing and deleting, as register's realm bundle writes them */
 /* the page's own measurements, which the Lab and the checks read: each list keeps its newest 600 entries, as the event log does */
 class Recent extends Array { static get [Symbol.species]() { return Array; } push(...x) { super.push(...x); if (this.length > 600) this.splice(0, this.length - 600); return this.length; } }
 const stats = {sends: new Recent(), firstWords: new Recent(), runs: new Recent(), events: 0, api: 0, log: []};
@@ -16,10 +18,11 @@ const state = {
   ME: 0, meName: "", queue: null, lastEvent: -1, skew: 0,
   dms: [], presences: {}, place: null, P: null, tab: "Chat", localSeq: 0, agentMention: "@**Onix**",
   runtimeCfg: null,                                        /* the server's runtime settings, from armada/runs: the service tier is server-wide */
-  /* the realm's rules for changing and deleting a message (register, then the realm event): a limit of null is none; a
-     group setting is as the server writes it, a group's id or {direct_members, direct_subgroups}, read against `groups`.
-     `guest`: I am a guest, whom the realm's can_delete_any_message_group never holds. */
-  realm: {allowEdit: true, editLimit: null, deleteLimit: null, deleteAny: null, deleteOwn: null, guest: false},
+  /* the realm's rules for changing and deleting a message (the page's data, then the realm event): a limit of null is
+     none; a group setting is as the server writes it, a group's id or {direct_members, direct_subgroups}, read against
+     `groups`. `guest`: I am a guest (register), whom the realm's can_delete_any_message_group never holds. */
+  realm: {allowEdit: RULES.allow_message_editing !== false, editLimit: RULES.message_content_edit_limit_seconds ?? null, deleteLimit: RULES.message_content_delete_limit_seconds ?? null,
+    deleteAny: RULES.can_delete_any_message_group ?? null, deleteOwn: RULES.can_delete_own_message_group ?? null, guest: false},
   muted: new Set(),                                        /* the people I muted: receipts do not count them */
   hd: null,                                                /* the header, drawn again whole when what it says changes */
   pinned: true, lastSet: 0,                                /* the feed: whether it keeps to its end, and where it was last scrolled to */
@@ -27,7 +30,7 @@ const state = {
   atts: [],                                                /* the field's attachments, until the message is sent */
   lastKey: -1e9, pressing: false,                          /* the last key and a press held: an evolution waits for the page to be idle */
 };
-const people = new Map(), streams = new Map(), repoStreams = new Set(), armadaBots = new Set();
+const people = new Map(), streams = new Map(), repoStreams = new Set(), armadaBots = new Set(fromData(DATA.agentUserIds, []));   /* the agent's user ids (realm_bot) */
 const topicsOf = new Map();                                /* stream id -> [{name, max_id}] in the order first shown; null while loading */
 const worktrees = new Map();                               /* stream id -> Set of lower-cased topic names that have a worktree */
 const unread = new Map();                                  /* place key -> Set of message ids */

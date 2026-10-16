@@ -20,6 +20,7 @@ from zerver.decorator import (
     zulip_otp_required_if_logged_in,
 )
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
+from zerver.lib.armada_identity import armada_bot_user_ids_for_realm
 from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
@@ -36,7 +37,11 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint,
     typed_endpoint_without_parameters,
 )
-from zerver.models import AgentRun, Stream, UserProfile
+from zerver.lib.user_groups import (
+    get_group_setting_value_for_register_api,
+    get_members_and_subgroups_of_groups,
+)
+from zerver.models import AgentRun, NamedUserGroup, Realm, Stream, UserProfile
 
 # The live runs the page is told about. armada/runs takes 20 ids a
 # request, so this is a handful of requests at most; a realm with more
@@ -84,6 +89,28 @@ def live_run_ids_for_user(user_profile: UserProfile) -> list[int]:
     return ids
 
 
+def edit_and_delete_rules(realm: Realm) -> dict[str, object]:
+    """The realm's rules for editing and deleting a message, written as
+    register's realm bundle writes them: a group setting is a named
+    group's id, or an anonymous group's members and subgroups. The page
+    reads these five of the bundle's hundred keys, so it does not
+    register for the bundle; the realm event keeps them current."""
+    group_ids = [realm.can_delete_any_message_group_id, realm.can_delete_own_message_group_id]
+    named = set(NamedUserGroup.objects.filter(id__in=group_ids).values_list("id", flat=True))
+    anonymous = get_members_and_subgroups_of_groups([i for i in group_ids if i not in named])
+    return {
+        "allow_message_editing": realm.allow_message_editing,
+        "message_content_edit_limit_seconds": realm.message_content_edit_limit_seconds,
+        "message_content_delete_limit_seconds": realm.message_content_delete_limit_seconds,
+        "can_delete_any_message_group": get_group_setting_value_for_register_api(
+            realm.can_delete_any_message_group_id, anonymous
+        ),
+        "can_delete_own_message_group": get_group_setting_value_for_register_api(
+            realm.can_delete_own_message_group_id, anonymous
+        ),
+    }
+
+
 def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     """The new design on this server's real data, for the signed-in
     person: what / serves them (zerver/views/home.py) and /beta/ too. It
@@ -91,8 +118,10 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
     old interface, and every write goes through /json/ with the session's
     CSRF token. The page is given two facts it cannot ask for: how long a
     run waits for an answer to its question, and which runs are live now;
-    and the version of the partner pack, so that its species.json can be
-    kept for good under each version."""
+    the version of the partner pack, so that its species.json can be
+    kept for good under each version; and the little it would otherwise
+    register for whole bundles to learn: the agent's user ids (from
+    realm_bot) and the rules for editing and deleting (from realm)."""
     pack = load_pack()
     return render(
         request,
@@ -103,6 +132,10 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
             "live_run_ids": orjson.dumps(live_run_ids_for_user(user_profile)).decode(),
             "read_receipts": user_profile.realm.enable_read_receipts,
             "sprite_version": pack.version if pack is not None else "",
+            "agent_user_ids": orjson.dumps(
+                armada_bot_user_ids_for_realm(user_profile.realm)
+            ).decode(),
+            "edit_and_delete": orjson.dumps(edit_and_delete_rules(user_profile.realm)).decode(),
         },
     )
 

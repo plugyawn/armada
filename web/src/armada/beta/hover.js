@@ -16,7 +16,7 @@ import {fillFromWire, holdReply, restoreReply, startReply, takeReply} from "./me
 import {fieldEmpty, splitQuoteWire} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 import {openCard} from "./partner_card.js";
-import {openLater} from "./later.js";
+import {openLater, savePending} from "./later.js";
 
 /* ---------- the message's controls: the hover overlay, its menu, edit and delete ----------
    One raised object with four controls (React, Reply in thread, Copy text, More) on the bubble's open side, or at the
@@ -151,7 +151,8 @@ function endEdit() { if (!editing) return; const {m, was, reply} = editing; edit
    Edited mark), says why, and gives my words back to the field as the same edit, to save again or to copy; whatever the
    field held by then is kept as an edit's draft is. With another edit in the field by then, my words join that edit's
    draft and come back when it ends. */
-async function saveEdit(text, at) { const {m} = editing; if (!text) { const why = whyNoDelete(m); if (!why) { endEdit(); confirmDelete(m); } else refuse("Not deleted: " + why); return; }   /* no words: delete it, when I may; else the edit stays open */
+async function saveEdit(text, at) { const {m} = editing; if (m.scheduled) { savePending(text, at); return; }   /* a held message of mine (Send when) */
+  if (!text) { const why = whyNoDelete(m); if (!why) { endEdit(); confirmDelete(m); } else refuse("Not deleted: " + why); return; }   /* no words: delete it, when I may; else the edit stays open */
   const raw = takeReply() + text, c = msgIndex.get(m.id) || state.P, saved = {content: m.content, edited: m.edited}, shown = echoHTML(raw);
   endEdit(); m.content = shown; m.edited = true; updateMessage(c, m); S.play("send", 0, at); ready();
   try { await api("PATCH", `messages/${m.id}`, {content: raw}); }
@@ -170,5 +171,5 @@ function confirmDelete(m) { if (dialogOpen || !canDelete(m)) return; dialogOpen 
   const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); (document.activeElement === $("[data-no]", d) ? close : yes)(); } else if (e.key === "Tab") { e.preventDefault(); const b = $$("button", d), i = b.indexOf(document.activeElement); b[(i + 1) % b.length].focus(); } };
   addEventListener("keydown", key, true); press(d, "[data-no]", close); press(d, "[data-yes]", yes); $("[data-no]", d).focus(); }   /* it stands on Cancel: Return alone never deletes */
 
-export {wordsChanged, buildOver, canDelete, canEdit, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf, over, overAt,
-  overHide, saveEdit, startEdit};
+export {wordsChanged, buildOver, canDelete, canEdit, caretAtEnd, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf,
+  openEdit, over, overAt, overHide, saveEdit, startEdit};

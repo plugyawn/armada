@@ -368,5 +368,12 @@ a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent
 .later-menu .mi .k { font: var(--t-caption); font-variant-numeric: tabular-nums; }
 /* Home: what came back first, the Later list last; when it comes back, then Done */
 #home .later-row .v { align-items: center; gap: var(--s-1); }
+/* Send when (later.js): my held messages stand at the conversation's foot, above the band, on the plane's own
+   ground, which reaches over the gutter (where faces stand) and down to the band, and fades in over the gap above the first:
+   what scrolls passes behind them, as it passes behind the band. Each says what it waits for, under its bubble. */
+.feed > .clip > .pend { position: sticky; bottom: calc(var(--h-band) + var(--s-3)); margin-left: calc(var(--lx) - var(--gutter)); padding-left: var(--gutter); width: calc(var(--col) + var(--gutter)); display: flex; flex-direction: column; background: linear-gradient(transparent, var(--content) var(--gap-turn)); z-index: 1; }
+.feed > .clip > .pend::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: var(--s-3); background: var(--content); }   /* the ground reaches down to the band */
+.pend:empty { display: none; }
+.pend .tl.pc .sn.bad { color: var(--failure); }
 
 }   /* @layer zulip.armada-beta */

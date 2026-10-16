@@ -1,13 +1,16 @@
 "use strict";
 
-// The interim beta's Later (web/src/armada/beta/later.js), with a real DOM
-// and a stand-in server. Later is an item of a message's More menu, with
-// its times as a small menu, and the overlay keeps its four controls;
-// what is put off is listed last on Home, and a reminder that came back
-// stands at the top of Home until it is read. The conversation is drawn
-// by the beta's own feed; the frame around it is a few bare elements, and
-// the kit's window globals are stand-ins that draw nothing of their own.
-// Deleted with web/src/armada/beta/.
+// The interim beta's Later and Send when (web/src/armada/beta/later.js),
+// with a real DOM and a stand-in server. Later is an item of a message's
+// More menu, with its times as a small menu, and the overlay keeps its
+// four controls; what is put off is listed last on Home, and a reminder
+// that came back stands at the top of Home until it is read. Send when
+// is a menu on Send: what the field holds is held until a time or until
+// the run here ends, as a quiet pending row of mine, which can be edited
+// and cancelled. The conversation is drawn by the beta's own feed; the
+// frame around it is a few bare elements, and the kit's window globals
+// are stand-ins that draw nothing of their own. Deleted with
+// web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -39,6 +42,7 @@ set_global("removeEventListener", (...args) => dom.window.removeEventListener(..
 set_global("getSelection", () => dom.window.getSelection());
 set_global("innerWidth", 1440);
 set_global("innerHeight", 900);
+set_global("requestAnimationFrame", (f) => setTimeout(f, 16));
 set_global(
     "ResizeObserver",
     class {
@@ -54,8 +58,8 @@ set_global(
         postMessage() {}
     },
 );
-// What the page tells the person (M.say beside Send), kept for the tests
-// to read.
+// What the page tells the person (M.say beside Send) and the sounds it
+// plays, kept for the tests to read.
 const said = [];
 const noop = () => {};
 set_global("M", {
@@ -69,6 +73,10 @@ set_global("M", {
     land: noop,
     refuse: noop,
     figure: noop,
+    rest: () => ({top: 0, left: 0}),
+    swap(cell, html) {
+        cell.innerHTML = html;
+    },
     say(_target, text) {
         said.push(text);
     },
@@ -124,6 +132,10 @@ function serve(extra = []) {
         ["POST", /^\/json\/reminders$/, () => success({reminder_id: 501})],
         ["DELETE", /^\/json\/reminders\/\d+$/, () => success()],
         ["POST", /^\/json\/messages\/flags$/, () => success()],
+        ["POST", /^\/json\/scheduled_messages$/, () => success({scheduled_message_id: 601})],
+        ["PATCH", /^\/json\/scheduled_messages\/\d+$/, () => success()],
+        ["DELETE", /^\/json\/scheduled_messages\/\d+$/, () => success()],
+        ["POST", /^\/json\/messages$/, () => success({id: 140})],
         [
             "GET",
             /^\/json\/messages$/,
@@ -140,6 +152,8 @@ const asked = (method, url) => requests.filter((r) => r.method === method && r.u
 
 const find = (selector) => document.querySelector(selector);
 const lane = find("#col");
+const field = find(".tx");
+const go = find(".disc");
 mock_esm("../../src/armada/beta/frame.js", {
     main: find("main"),
     feed: find("#pane"),
@@ -158,8 +172,8 @@ mock_esm("../../src/armada/beta/frame.js", {
     },
     cz: find(".cz"),
     sh: find(".sh"),
-    tx: find(".tx"),
-    go: find(".disc"),
+    tx: field,
+    go,
     goc: find(".disc .cell"),
     ph: find(".ph"),
     panes: {Chat: find("#pane"), Home: find('[data-pane="Home"]')},
@@ -170,6 +184,7 @@ mock_esm("../../src/armada/beta/column.js", {drawSide: noop});
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const feed = zrequire("armada/beta/feed.js");
+const send = zrequire("armada/beta/send.js");
 const hover = zrequire("armada/beta/hover.js");
 const home = zrequire("armada/beta/home.js");
 const later = zrequire("armada/beta/later.js");
@@ -253,6 +268,11 @@ async function settle() {
         clock.tick(60);
     }
 }
+const write = (text) => {
+    field.textContent = text;
+    field.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+};
+const verb = () => go.getAttribute("aria-label");
 const labels = (menu) => [...menu.querySelectorAll("button")].map((b) => b.firstChild.textContent);
 const choose = (menu, label) =>
     dom.click([...menu.querySelectorAll("button")].find((b) => b.textContent.startsWith(label)));
@@ -296,14 +316,23 @@ const homeRows = () =>
         where: row.querySelector(".wh").textContent,
         when: row.querySelector("time").textContent,
     }));
+// A place opened as routing.js opens it: the pending rows are drawn for it.
 function showHome() {
     beta_state.state.place = home.HOME;
+    later.drawPending();
     home.drawHome();
 }
 function showTopic() {
     beta_state.state.place = place;
     beta_state.state.P = cache;
+    later.drawPending();
 }
+const pendingRows = () =>
+    [...find("#pane").querySelectorAll(".pend > .cl")].map((row) => ({
+        words: row.querySelector(".b").textContent,
+        waits: row.querySelector(".tl .sn").textContent,
+        controls: [...row.querySelectorAll(".tl button")].map((b) => b.textContent),
+    }));
 
 run_test("Later is an item of More; the overlay keeps its four controls", async () => {
     serve();
@@ -493,3 +522,167 @@ run_test("a reminder that came back stands at the top of Home until it is read",
     assert.equal(find("#home [data-back]"), null);
     assert.equal(beta_state.unread.has(key), false);
 });
+
+run_test("Send when holds what the field holds until the run here ends", async () => {
+    serve();
+    showTopic();
+    write("after this lands, open the PR");
+    // A right press on Send opens the menu; the run here is offered.
+    go.dispatchEvent(new dom.window.MouseEvent("contextmenu", {bubbles: true, cancelable: true}));
+    const menu = choices("Send when");
+    assert.deepEqual(labels(menu), ["In 1 hour", "Tomorrow 9:00", "When this run ends"]);
+    choose(menu, "When this run ends");
+
+    // At once: the field is empty and my words stand as a pending row
+    // that says what they wait for.
+    assert.equal(field.textContent, "");
+    assert.deepEqual(pendingRows(), [
+        {words: "after this lands, open the PR", waits: "When the run ends", controls: []},
+    ]);
+    await settle();
+    assert.deepEqual(asked("POST", "/json/scheduled_messages"), [
+        {
+            method: "POST",
+            url: "/json/scheduled_messages",
+            body: {
+                type: "stream",
+                to: "10",
+                topic: "later",
+                content: "after this lands, open the PR",
+                read_by_sender: "true",
+                agent_run_id: "77",
+            },
+        },
+    ]);
+    // Nothing was sent now.
+    assert.deepEqual(asked("POST", "/json/messages"), []);
+    // The server's copy: the row can be edited and cancelled.
+    later.onScheduled({
+        type: "scheduled_messages",
+        op: "add",
+        scheduled_messages: [
+            {
+                scheduled_message_id: 601,
+                type: "stream",
+                to: 10,
+                topic: "later",
+                content: "after this lands, open the PR",
+                rendered_content: "<p>after this lands, open the PR</p>",
+                scheduled_delivery_timestamp: 253402214400,
+                agent_run_id: RUN,
+                failed: false,
+            },
+        ],
+    });
+    assert.deepEqual(pendingRows(), [
+        {
+            words: "after this lands, open the PR",
+            waits: "When the run ends",
+            controls: ["Edit", "Cancel"],
+        },
+    ]);
+
+    // Return alone still sends at once.
+    serve();
+    write("and a word now");
+    send.send({at: 0});
+    await settle();
+    assert.equal(asked("POST", "/json/messages").length, 1);
+    assert.deepEqual(asked("POST", "/json/scheduled_messages"), []);
+});
+
+run_test("Edit puts a held message's words in the field; Return saves them into it", async () => {
+    serve();
+    showTopic();
+    dom.click(find("#pane [data-pend-edit]"));
+    assert.equal(field.textContent, "after this lands, open the PR");
+    assert.equal(verb(), "Save");
+    write("after this lands, open the PR and ping Iago");
+    send.send({at: 0});
+    assert.equal(field.textContent, "");
+    assert.equal(pendingRows()[0].words, "after this lands, open the PR and ping Iago");
+    await settle();
+    assert.deepEqual(asked("PATCH", "/json/scheduled_messages/601"), [
+        {
+            method: "PATCH",
+            url: "/json/scheduled_messages/601",
+            body: {content: "after this lands, open the PR and ping Iago"},
+        },
+    ]);
+    assert.equal(verb(), "Send");
+});
+
+run_test("Cancel gives the words back to the field, and the message is not sent", async () => {
+    serve();
+    showTopic();
+    dom.click(find("#pane [data-pend-cancel]"));
+    assert.deepEqual(pendingRows(), []);
+    assert.equal(field.textContent, "after this lands, open the PR and ping Iago");
+    await settle();
+    assert.deepEqual(asked("DELETE", "/json/scheduled_messages/601"), [
+        {method: "DELETE", url: "/json/scheduled_messages/601", body: null},
+    ]);
+    write("");
+});
+
+run_test("a held message that is sent leaves its row; a time is said as a time", async () => {
+    serve();
+    showTopic();
+    const in_an_hour = Math.floor(Date.now() / 1000) + 3600;
+    later.onScheduled({
+        type: "scheduled_messages",
+        op: "add",
+        scheduled_messages: [
+            {
+                scheduled_message_id: 602,
+                type: "stream",
+                to: 10,
+                topic: "later",
+                content: "standup notes",
+                rendered_content: "<p>standup notes</p>",
+                scheduled_delivery_timestamp: in_an_hour,
+                failed: false,
+            },
+        ],
+    });
+    const d = new Date(in_an_hour * 1000);
+    const hhmm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+    assert.equal(
+        pendingRows()[0].waits,
+        d.getDate() === new Date().getDate() ? hhmm : `Tomorrow ${hhmm}`,
+    );
+    // A held message is mine and of this place only: Home has none.
+    showHome();
+    assert.equal(find("#pane .pend").children.length, 0);
+    showTopic();
+    later.onScheduled({type: "scheduled_messages", op: "remove", scheduled_message_id: 602});
+    assert.deepEqual(pendingRows(), []);
+});
+
+run_test(
+    "Send when offers no run where none is live, and holds nothing from an empty field",
+    async () => {
+        serve();
+        showTopic();
+        cache.runs = [];
+        write("tomorrow's plan");
+        assert.equal(later.openSendWhen(), true);
+        assert.deepEqual(labels(choices("Send when")), ["In 1 hour", "Tomorrow 9:00"]);
+        choose(choices("Send when"), "Tomorrow 9:00");
+        await settle();
+        assert.equal(
+            asked("POST", "/json/scheduled_messages")[0].body.scheduled_delivery_timestamp,
+            String(tomorrowAt9()),
+        );
+        later.onScheduled({type: "scheduled_messages", op: "remove", scheduled_message_id: 601});
+
+        // An empty field holds nothing.
+        serve();
+        write("");
+        later.openSendWhen();
+        choose(choices("Send when"), "In 1 hour");
+        await settle();
+        assert.deepEqual(requests, []);
+        cache.runs = [live_run];
+    },
+);

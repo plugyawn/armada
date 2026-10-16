@@ -40,14 +40,14 @@ import {wireMentions} from "./mentions.js";
 import {wireCaret} from "./caret.js";
 import {onPresence, startPresence} from "./presence.js";
 import {onPost, wirePages} from "./pages.js";
-import {loadLater, onReminders, wireLater} from "./later.js";
+import {loadLater, onReminders, onScheduled, openSendWhen, wireLater} from "./later.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 on("armada_post", onPost); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
-on("reminders", onReminders);
+on("scheduled_messages", onScheduled); on("reminders", onReminders);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
 const tabStops = () => $$("a[href], button, input, [tabindex], [contenteditable]").filter((x) => x.tabIndex >= 0 && !x.disabled && !x.hidden && !x.closest("[inert], [hidden]") && x.getClientRects().length > 0 && getComputedStyle(x).visibility !== "hidden");
@@ -85,6 +85,7 @@ async function boot() {
   tx.addEventListener("keydown", (e) => { if (state.place && state.place.kind === "partner" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {   /* the picker: arrows move through the grid, Return chooses, Esc clears the search */
       if (/^Arrow(Up|Down|Left|Right)$/.test(e.key)) { e.preventDefault(); movePick(e.key); drawPickerBand(); return; }
       if (e.key === "Escape" && tx.textContent) { e.preventDefault(); e.stopPropagation(); tx.textContent = ""; tx.dispatchEvent(new Event("input")); return; } }
+    if (e.key === "Enter" && e.altKey && !e.shiftKey && !e.isComposing && openSendWhen()) { e.preventDefault(); return; }   /* Option-Return: Send when (later.js); Return alone sends at once */
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send({at: e.timeStamp}); if (!(state.place && state.place.kind === "partner")) go.classList.remove("armed"); return; }
     if (e.key === "Escape" && editing) { e.preventDefault(); e.stopPropagation(); endEdit(); return; }
     if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop && editLast()) e.preventDefault(); });   /* Up in an empty field (the switch's pill alone is empty) edits my last message, while the realm lets me */

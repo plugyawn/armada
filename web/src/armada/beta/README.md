@@ -68,7 +68,7 @@ into the engineered client deletes the module it replaces.
 | `band.js` | the band: what the run is doing, its clock, Stop | none this sprint |
 | `views.js` | the views: README, Files, Changes | none this sprint |
 | `home.js` | Home: what needs me | none this sprint |
-| `later.js` | Later: a message put off (More › Later, the Later list on Home, what came back at Home's top); on the server's reminders and stars, with `agent_run_id` for a run's end (`zerver/lib/armada_later.py`) | later |
+| `later.js` | Later and Send when: a message put off (More › Later, the Later list on Home, what came back at Home's top), and a message of mine held until a time or a run's end (the menu on Send, its pending row at the conversation's foot); on the server's reminders, stars and scheduled messages, with `agent_run_id` for a run's end (`zerver/lib/armada_later.py`) | later |
 | `palette.js` | Jump to (⌘K) | none this sprint |
 | `lab.js` | the Lab: what is real, what is not, and its controls | none this sprint |
 | `pages.js` | personal pages (contract C5): a person's page, a post, my editor; their places (`page:`, `post:`, `edit:`), the column's list of pages, their rows in Jump to, the `armada_post` event | pages |

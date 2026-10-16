@@ -22,7 +22,7 @@ import {pack} from "./partners.js";
 import {drawPicker, drawPickerBand, PARTNER} from "./partner_picker.js";
 import {closeCard} from "./partner_card.js";
 import {openPage, pageFromHash, pageFromKey, pageHash} from "./pages.js";
-import {closeChoices} from "./later.js";
+import {closeChoices, drawPending} from "./later.js";
 
 const tkey = (sid, topic) => `s:${sid}:${topic.toLowerCase()}`, dkey = (ids) => "d:" + [...ids].sort((a, b) => a - b).join(",");
 const topicLabel = (t) => t || "general chat";
@@ -87,7 +87,7 @@ async function openPlace(p, o = {}) {
   store.set("place", p.key);
   if (p.kind === "topic" && !expanded.has(p.stream_id)) { expanded.add(p.stream_id); loadTopics(p.stream_id); store.set("open", JSON.stringify([...expanded])); }
   if (state.tab !== "Chat") setTab("Chat", true);
-  if (state.threadTx && !lane.contains(state.threadTx)) state.threadTx = null; if (editing) endEdit(); closePicker(); closeMenu(); closeChoices(); closeInfo(true); overHide();
+  if (state.threadTx && !lane.contains(state.threadTx)) state.threadTx = null; if (editing) endEdit(); closePicker(); closeMenu(); closeChoices(); closeInfo(true); overHide(); drawPending();
   showHome(p.kind === "home", p.kind === "partner", p.kind === "page"); $$(".row", navFixed).forEach((r) => r.classList.toggle("sel", r.dataset.k === "home" && p.kind === "home")); closeCard(); drawPickerBand();
   if (p.kind === "partner") { drawNav(); drawHeader(); drawRunState(true); drawPicker(); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#picker"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); ready(); return; }
   if (p.kind === "page") { drawNav(); drawHeader(); drawRunState(true); drawSide(); drawComposer(); if (prev && prev.key !== p.key) M.release($("#page"), {y: T["pane-rise"] || 4}, "touch", {id: "pane"}); openPage(p); return; }

@@ -190,6 +190,12 @@ class zulip::app_frontend_base {
     [regsubst($key, '_workers$', ''), Integer(zulipconf('application_server', $key, 1))]
   })
   $mobile_notification_shards = Integer(zulipconf('application_server', 'mobile_notification_shards', 1))
+  # Armada's agent runs: one armada_worker process per slot, numbered from
+  # 0.  Django reads the same key (scripts/lib/armada_worker_slots.py).
+  $armada_worker_slots = Integer(zulipconf('armada', 'worker_slots', 2))
+  if $armada_worker_slots < 1 {
+    fail("[armada] worker_slots in zulip.conf must be at least 1, not ${armada_worker_slots}")
+  }
   $user_activity_shards = Integer(zulipconf('application_server', 'user_activity_shards', 1))
   $tornado_ports = $zulip::tornado_sharding::tornado_ports
 

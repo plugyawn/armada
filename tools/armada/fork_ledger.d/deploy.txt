@@ -1,8 +1,8 @@
 # Deploy, the production build and docs/armada/deploy.md. package.json and
 # pnpm-lock.yaml are F1's lines; this package moved the JSX transform from
 # devDependencies to dependencies, because the production build needs it.
-kept puppet/zulip/manifests/app_frontend_base.pp  # armada_* queues, armada_monitor_worker among them
-kept puppet/zulip/templates/supervisor/zulip.conf.template.erb  # armada_worker runs as slots 0 and 1
+kept puppet/zulip/manifests/app_frontend_base.pp  # armada_* queues, armada_monitor_worker among them; [armada] worker_slots
+kept puppet/zulip/templates/supervisor/zulip.conf.template.erb  # armada_worker runs as one process per slot, numbered from 0 ([armada] worker_slots)
 kept zproject/prod_settings_template.py  # the Armada section: EMBEDDED_BOTS_ENABLED and every ARMADA_* setting
 kept zerver/views/streams.py  # a channel's repository URL only from a trusted user (ARMADA_WORKER_TRUSTED_USERS_ONLY)
 kept zproject/computed_settings.py  # ARMADA_WORKER_MODEL_CHOICES honoured from settings.py; ARMADA_WORKER_TRUSTED_USERS_ONLY; ARMADA_WORKER_CODEX_MEMORIES; ARMADA_WORKER_SLOTS from zulip.conf

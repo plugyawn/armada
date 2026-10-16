@@ -1923,6 +1923,7 @@ paths:
                                       "size": 6,
                                       "create_time": 1594825414,
                                       "message_ids": [],
+                                      "post_ids": [],
                                     },
                                   "upload_space_used": 6,
                                   "id": 0,
@@ -1964,6 +1965,7 @@ paths:
                                       "size": 6,
                                       "create_time": 1594825414,
                                       "message_ids": [],
+                                      "post_ids": [],
                                     },
                                   "upload_space_used": 6,
                                   "id": 0,
@@ -7055,6 +7057,7 @@ paths:
                               "size": 571946,
                               "create_time": 1588145417,
                               "message_ids": [102, 103],
+                              "post_ids": [],
                             },
                           ],
                         "upload_space_used": 571946,
@@ -7073,7 +7076,11 @@ paths:
         a [message retention policy](/help/message-retention-policy)).
 
         Uploaded files that are never used in a message are
-        automatically deleted a few weeks after being uploaded.
+        automatically deleted a few weeks after being uploaded. A pages
+        post that links to a file keeps it, as a message does.
+
+        Deleting a file that messages or pages posts link to removes it
+        for their readers as well.
 
         Attachment IDs can be contained from [GET /attachments](/api/get-attachments).
       parameters:
@@ -10713,6 +10720,7 @@ paths:
                           were removed when editing this message. Clients should ask the acting user
                           if they wish to delete the uploaded files returned in this response,
                           which might otherwise remain visible only in message edit history.
+                          A file that a pages post links to is still in use, and is not listed.
 
                           Note that [access to message edit history][edit-history-access]
                           is configurable; this detail may be important in presenting the
@@ -27434,6 +27442,18 @@ components:
             **Changes**: In Zulip 12.0 (feature level 472), this
             replaced the previous `messages` field, which was an array
             of objects containing both `id` and `date_sent` properties.
+          items:
+            type: integer
+        post_ids:
+          type: array
+          description: |
+            Array containing the IDs of the pages posts that link to
+            this [uploaded file](/api/upload-file), among those its
+            owner may see: every published post, and the owner's own
+            drafts. A post's link keeps the file in use, as a message's
+            does.
+
+            **Changes**: New in Zulip 13.0 (feature level ZF-2acc5b).
           items:
             type: integer
     BasicChannel:

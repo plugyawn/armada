@@ -3,7 +3,7 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Exists, OuterRef, QuerySet
+from django.db.models import Exists, OuterRef, Prefetch, QuerySet
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
@@ -17,6 +17,7 @@ from zerver.models import (
     Attachment,
     ImageAttachment,
     Message,
+    Post,
     Realm,
     Recipient,
     Stream,
@@ -27,7 +28,10 @@ from zerver.models import (
 
 
 def user_attachments(user_profile: UserProfile) -> list[dict[str, Any]]:
-    attachments = Attachment.objects.filter(owner=user_profile).prefetch_related("messages")
+    attachments = Attachment.objects.filter(owner=user_profile).prefetch_related(
+        "messages",
+        Prefetch("armada_posts", queryset=Post.objects.defer("content", "rendered_content")),
+    )
     return [a.to_dict() for a in attachments]
 
 

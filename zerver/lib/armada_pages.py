@@ -75,7 +75,8 @@ def post_in_full(post: Post) -> dict[str, Any]:
 
 def visible_posts(viewer: UserProfile) -> Q:
     """The posts a viewer may see, among those of people they can see:
-    every published post, and their own drafts."""
+    every published post, and their own drafts. Post.is_visible_to
+    asks the same of one post."""
     return Q(draft=False) | Q(author_id=viewer.id)
 
 

@@ -1,3 +1,10 @@
-# Dogfood fixes to the server: a message's agent flag costs a query only
-# when an embedded bot sent it. zerver/lib/message_cache.py and
-# zerver/tests/test_message_dict.py change too; their lines are R1's.
+# Dogfood fixes to the server. Every Zulip file they change already has
+# its line in another package's file, which keeps it:
+# - A message's agent flag costs a query only when an embedded bot sent
+#   it: zerver/lib/message_cache.py, zerver/tests/test_message_dict.py
+#   (R1.txt).
+# - A pages post's upload is in use wherever a message's is, and the
+#   attachments API reports the posts as post_ids:
+#   zerver/models/messages.py, zerver/lib/event_types.py,
+#   zerver/openapi/zulip.yaml (R1.txt); zerver/lib/attachments.py
+#   (dogfood-pages.txt).

@@ -858,7 +858,12 @@ class Attachment(AbstractAttachment):
         ]
 
     def is_claimed(self) -> bool:
-        return self.messages.exists() or self.scheduled_messages.exists()
+        return (
+            self.messages.exists()
+            or self.scheduled_messages.exists()
+            # armada: a pages post claims an upload as a message does.
+            or self.armada_posts.exists()
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -868,6 +873,10 @@ class Attachment(AbstractAttachment):
             "size": self.size,
             "create_time": int(time.mktime(self.create_time.timetuple())),
             "message_ids": [m.id for m in self.messages.all()],
+            # armada: the pages posts that use it, as its owner sees them.
+            "post_ids": [
+                post.id for post in self.armada_posts.all() if post.is_visible_to(self.owner_id)
+            ],
         }
 
 

@@ -35,6 +35,7 @@ class Attachment(BaseModel):
     path_id: str
     create_time: int
     message_ids: list[int]
+    post_ids: list[int]
 
 
 class AttachmentAddEvent(BaseEvent):

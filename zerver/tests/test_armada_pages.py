@@ -495,6 +495,50 @@ class PagesTest(UploadSerializeMixin, ZulipTestCase):
         result = self.client_patch(f"/json/messages/{message_id}", {"content": "Gone."})
         self.assertEqual(self.assert_json_success(result)["detached_uploads"], [])
 
+    def test_a_posts_uploads_are_in_use_for_their_owner(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        shown = self.upload(hamlet)
+        drafted = self.upload(hamlet)
+        unused = self.upload(hamlet)
+        shown_post = self.write(hamlet, "Shown", self.link(shown))
+        draft_id = self.write(hamlet, "Draft", self.link(drafted), draft="true")
+        # Cordelia may read Hamlet's shown upload, so her posts claim
+        # it; Hamlet sees her published post, never her draft.
+        her_post = self.write(cordelia, "Hers", self.link(shown))
+        self.write(cordelia, "Her draft", self.link(shown), draft="true")
+
+        self.assertTrue(Attachment.objects.get(id=shown.id).is_claimed())
+        self.assertTrue(Attachment.objects.get(id=drafted.id).is_claimed())
+        self.assertFalse(Attachment.objects.get(id=unused.id).is_claimed())
+
+        def in_use() -> dict[str, tuple[list[int], list[int]]]:
+            self.login_user(hamlet)
+            result = self.assert_json_success(self.client_get("/json/attachments"))
+            return {
+                attachment["path_id"]: (attachment["message_ids"], sorted(attachment["post_ids"]))
+                for attachment in result["attachments"]
+            }
+
+        self.assertEqual(
+            in_use(),
+            {
+                shown.path_id: ([], sorted([shown_post, her_post])),
+                drafted.path_id: ([], [draft_id]),
+                unused.path_id: ([], []),
+            },
+        )
+
+        # Its owner may still delete an upload a post uses, as one
+        # messages use: the post's claim goes with it, and its readers
+        # find the file gone.
+        self.login_user(hamlet)
+        self.assert_json_success(self.client_delete(f"/json/attachments/{shown.id}"))
+        self.assertEqual(self.claims(shown_post), set())
+        self.login_user(cordelia)
+        self.assertEqual(self.client_get(f"/user_uploads/{shown.path_id}").status_code, 404)
+        self.assertEqual(in_use(), {drafted.path_id: ([], [draft_id]), unused.path_id: ([], [])})
+
     def test_posts_from_before_claims_claim_their_authors_uploads(self) -> None:
         # Migrations are not in the coverage report; the backfill is
         # tested here on the shapes a post's links take.

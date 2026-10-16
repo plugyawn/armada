@@ -105,3 +105,8 @@ class Post(models.Model):
                 name="zerver_post_author_created",
             ),
         ]
+
+    def is_visible_to(self, user_id: int) -> bool:
+        """visible_posts (zerver/lib/armada_pages.py) for one post: a
+        published post, or a draft of the person's own."""
+        return not self.draft or self.author_id == user_id

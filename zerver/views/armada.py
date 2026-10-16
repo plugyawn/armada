@@ -56,6 +56,10 @@ from zerver.lib.armada_monitor import (
     build_armada_monitor_contract,
     serialize_armada_monitor,
 )
+from zerver.lib.armada_run_access import (
+    check_can_access_armada_worker_run,
+    get_visible_armada_worker_run,
+)
 from zerver.lib.armada_run_card import record_agent_run_event, serialize_armada_run_card
 from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
@@ -713,49 +717,6 @@ def serialize_armada_worker_run(
             for event in run.events.order_by("-date_created", "-id")[:ARMADA_RUN_EVENT_LIMIT]
         ]
     return payload
-
-
-def check_can_access_armada_worker_run(
-    user_profile: UserProfile,
-    run: AgentRun,
-    *,
-    accessible_streams: set[str] | None = None,
-) -> None:
-    """Raises unless this person may see the run. accessible_streams holds
-    the channels already checked for this person, by upper-cased name, so
-    that runs of one channel cost one check."""
-    if run.realm_id != user_profile.realm_id:
-        raise JsonableError(_("Run not found."))
-    if run.session_kind == AgentRun.SIDE:
-        if run.requesting_user_id != user_profile.id:
-            raise JsonableError(_("Run not found."))
-        return
-    stream_name = (
-        run.workspace_node.stream_name
-        if run.workspace_node is not None and run.workspace_node.stream_name
-        else run.stream_name
-    )
-    if accessible_streams is not None and stream_name.upper() in accessible_streams:
-        return
-    access_stream_by_name(user_profile, stream_name)
-    if accessible_streams is not None:
-        accessible_streams.add(stream_name.upper())
-
-
-def get_visible_armada_worker_run(
-    user_profile: UserProfile,
-    run_id: int,
-) -> AgentRun:
-    try:
-        run = AgentRun.objects.select_related(
-            "bot_profile",
-            "requesting_user",
-            "workspace_node",
-        ).get(id=run_id, realm=user_profile.realm)
-    except AgentRun.DoesNotExist as error:
-        raise JsonableError(_("Run not found.")) from error
-    check_can_access_armada_worker_run(user_profile, run)
-    return run
 
 
 def get_visible_armada_worker_runs_by_id(

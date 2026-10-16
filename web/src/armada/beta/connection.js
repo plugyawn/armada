@@ -17,6 +17,7 @@ import {createLink} from "./link.js";
 import {forgetReceipts} from "./receipts.js";
 import {applyLater} from "./later.js";
 import {applyChannels} from "./channels.js";
+import {applyPlugins} from "./plugins.js";
 
 /* the tabs of this browser tell each other whose session they hold, and when it ends (resilience.md 2.5) */
 const tabs = typeof BroadcastChannel === "function" ? new BroadcastChannel("armada") : null;
@@ -40,8 +41,8 @@ const link = createLink({
   /* only what the page reads: the realm bundle (a hundred keys for five), every stream and the realm's bots are not
      fetched; their few facts come with the page (#beta-data) and their events keep them current. The page draws no
      avatars, so none are sent. */
-  registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_user_groups", "scheduled_messages", "reminders", "starred_messages"],
-    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "submessage", "realm", "user_group", "stream", "realm_user", "presence", "scheduled_messages", "reminders", "subscription"], apply_markdown: true, client_gravatar: true,
+  registerParams: () => ({fetch_event_types: ["muted_users", "subscription", "realm_user", "presence", "update_message_flags", "message", "recent_private_conversations", "realm_user_groups", "scheduled_messages", "reminders", "starred_messages", "armada_plugin", "armada_widget"],
+    event_types: ["message", "update_message", "reaction", "agent_run", "agent_stream", "workspace_changed", "typing", "delete_message", "update_message_flags", "armada_partner", "read_receipts", "restart", "armada_post", "submessage", "realm", "user_group", "stream", "realm_user", "presence", "scheduled_messages", "reminders", "subscription", "armada_plugin", "armada_widget"], apply_markdown: true, client_gravatar: true,
     client_capabilities: {notification_settings_null: true, bulk_message_deletion: true, user_avatar_url_field_optional: true, stream_typing_notifications: true, user_settings_object: true, linkifier_url_template: true, user_list_incomplete: false, include_deactivated_groups: false, archived_channels: false, empty_topic_name: true, simplified_presence_events: true}}),
   onRegister: applyRegister,
   onEvent: handle,
@@ -76,6 +77,7 @@ function applyRegister(r) {
   state.dms = (r.recent_private_conversations || []).slice(0, 12);
   applyLater(r);   /* Later and Send when: my reminders, stars and held messages (later.js) */
   applyChannels(r);   /* the channels bound to a repository, for those I join later (channels.js) */
+  applyPlugins(r);   /* the team's plugins and their widgets' documents (plugins.js) */
   unread.clear(); const u = r.unread_msgs || {}; state.unreadMentions = u.mentions || []; for (const s of u.streams || []) unread.set(tkey(s.stream_id, s.topic), new Set(s.unread_message_ids)); for (const d of u.pms || []) unread.set(dkey([d.other_user_id]), new Set(d.unread_message_ids)); for (const d of u.huddles || []) unread.set(dkey(d.user_ids_string.split(",").map(Number).filter((i) => i !== state.ME)), new Set(d.unread_message_ids));
 }
 /* the queue was lost and registered again: what the page holds may have missed events, so every place is asked again

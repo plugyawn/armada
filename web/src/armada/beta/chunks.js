@@ -1,5 +1,5 @@
-/* INTERIM BETA (README.md): what the page loads on first use. The lightbox, an artifact's document and a scene are not
-   part of the first load: each is a chunk (webpack splits an import() into one), asked for once and kept. Once the page
+/* INTERIM BETA (README.md): what the page loads on first use. The lightbox, an artifact's document, a scene and what a
+   plugin's widget opens (plugin_view.js) are not part of the first load: each is a chunk (webpack splits an import() into one), asked for once and kept. Once the page
    has drawn its first place and goes idle they are fetched and run, so a press never waits on the network; a press
    that comes before (prefetchChunks() not yet run, or a slow network) shows nothing new and does its work when its
    chunk is in.
@@ -20,6 +20,7 @@ const LOAD = {
   lightbox: () => import(/* webpackChunkName: "beta-lightbox" */ "./lightbox.js"),
   artifact: () => import(/* webpackChunkName: "beta-artifact" */ "./artifact_view.js"),
   scene: () => import(/* webpackChunkName: "beta-scene" */ "./scene.js"),
+  plugins: () => import(/* webpackChunkName: "beta-plugins" */ "./plugin_view.js"),
 };
 /* read when a chunk arrives, never while the modules load (they import each other in cycles) */
 const page = () => ({$, $$, clamp, el, esc, T, state, dayLabel, hhmm, nameOf, ready, katexSheet, loadPics, picHTML, bound, dataAt, isObj, text, words});

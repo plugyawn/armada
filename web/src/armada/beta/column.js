@@ -1,4 +1,4 @@
-/* INTERIM BETA (README.md): the column: the checklist's standing home, Changes, Runs, People. */
+/* INTERIM BETA (README.md): the column: the checklist's standing home, Changes, a linked plugin's list, Runs, People. */
 
 import {esc, inlineMd, mid} from "./util.js";
 import {armadaBots, people, state} from "./state.js";
@@ -12,6 +12,7 @@ import {homeScanned} from "./home.js";
 import {pack} from "./partners.js";
 import {pickerSideHTML} from "./partner_picker.js";
 import {pagesSideHTML} from "./pages.js";
+import {pluginSectionsHTML} from "./plugins.js";
 
 /* ---------- the column: the checklist's standing home, Changes, Runs, People ---------- */
 function drawSide() {
@@ -36,9 +37,11 @@ function drawSide() {
     if (p.repo) { const g = c.ctx && c.ctx.git && c.ctx.git.available ? c.ctx.git : null, files = g ? g.changed_files || [] : [];
     c.changeRows = Math.min(4, Math.max(1, files.length, c.changeRows || 0));   /* the rows Changes has held while the place is open, up to four */
     h += `<section class="sec slots" id="sec-changes" style="--slots:${c.changeRows}"><div class="sh"><span>Changes</span><span class="e"><button class="lk" data-goto="Changes">Review</button></span></div><ul class="ls">` + (files.length ? files.map((f) => `<li>${ic("file")}<span class="t"><code>${esc(mid(f.path, 26))}</code></span><span class="e"><span class="kd">${esc(f.kind)}</span></span></li>`).join("") : `<li>${ic(g ? "check" : "file")}<span class="t">${g ? "No uncommitted changes" : c.ctx ? "No worktree yet" : "Loading"}</span><span class="e"></span></li>`) + "</ul></section>"; }
+    h += pluginSectionsHTML(p);   /* a plugin linked here: its list, in slots of its own (plugins.js) */
     h += '<section class="sec grow" id="sec-runs"><div class="sh"><span>Runs</span></div><ul class="ls">' + c.runs.slice(0, 30).map((r) => { const live = r.status === "queued" || r.status === "running", m = live ? "live" : r.status === "done" ? "done" : r.status === "failed" ? "failed" : r.status === "cancelled" ? "cancelled" : "left", title = runTitle(c, r);
       return `<li class="${live ? "on" : ""}">${mk(live ? runMark(r) : m)}<span class="t">${esc(title.slice(0, 80))}</span><span class="e"><span class="d">${live ? esc(age(r.date_created)) : esc(dayKey(r.date_created) === dayKey(now() / 1000) ? hhmm(r.date_created) : shortDay(r.date_created))}</span></span></li>`; }).join("") + (c.runs.length ? "" : `<li>${ic("trace")}<span class="t">${c.runsLoaded ? "No runs yet" : "Loading"}</span><span class="e"></span></li>`)
       + "</ul></section>"; }
+  if (!agent) h += pluginSectionsHTML(p);   /* where Onix has no sections, a linked plugin's list stands above People */
   const ids = p.kind === "dm" ? [state.ME, ...p.ids] : [...new Set(c.msgs.filter((m) => !isOnix(m.sender_id)).map((m) => m.sender_id))].slice(-8);
   /* in a topic Onix has no part in, the column's heading already says People (headCfg) */
   h += `<section class="sec ${agent ? "foot" : "grow"}" id="sec-people">${p.kind === "topic" && !agent ? "" : '<div class="sh"><span>People</span></div>'}<ul class="ls">` + (agent ? `<li>${faceOf([...armadaBots][0], "s20")}<span class="t">Onix</span><span class="e"></span></li>` : "") + ids.map((i) => `<li>${faceOf(i, "s20", presOf(i))}<span class="t">${esc(nameOf(i))}</span><span class="e"></span></li>`).join("") + "</ul></section>";

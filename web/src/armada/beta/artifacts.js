@@ -14,6 +14,7 @@ import {ready} from "./composer.js";
 import {send} from "./send.js";
 import {updateMessage} from "./agent_turn.js";
 import {chunk, loadedChunk} from "./chunks.js";
+import {closeWidgetViews} from "./plugins.js";
 
 /* ---------- the document ---------- */
 const BLOCKS = new Set(["copy", "metric", "meter", "series", "log", "key_value", "media", "scene"]);
@@ -74,7 +75,7 @@ function openArtifact(m, back, kbd) {
   Promise.all([chunk("artifact"), scene ? chunk("scene") : null]).then(([V2, S2]) => { if (wanted !== ask) return; wanted = null; const d = artifactOf(m); if (d) show(m, d, V2, S2, back, kbd); }, () => { if (wanted === ask) wanted = null; });
 }
 function show(m, doc, V, S, back, kbd) {
-  if (opened) closeArtifact(true);
+  if (opened) closeArtifact(true); closeWidgetViews();   /* a plugin's item gives the column back first */
   const inColumn = !!side && getComputedStyle(side).display !== "none", e = V.panel(doc, titleOf(doc), inColumn, S); e.dataset.mid = m.id;
   if (inColumn) { side.append(e); side.dataset.borrowed = "artifact"; } else $("main").append(e);
   V.mount(e, doc, S);

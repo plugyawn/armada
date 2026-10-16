@@ -59,5 +59,5 @@ export default function artifactViewChunk({$, $$, el, esc, katexSheet, loadPics,
   /* a later artifact on the same message, drawn in the open panel in place */
   function replace(e, doc, title, S) { const body = $(".abody", e); body.innerHTML = documentHTML(doc, S); $(".aph b", e).textContent = title; e.setAttribute("aria-label", title); host(body); loadPics(body); if (S) S.wireScene(e, doc); typeset(e); }
 
-  return {documentHTML, mount, panel, replace};
+  return {blockHTML, documentHTML, mount, panel, replace};
 }

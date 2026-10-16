@@ -112,8 +112,15 @@ function syncPaused(c) { const k = c.place.key, paused = !!(c.ctx && c.ctx.is_pa
 /* a person's page, a post and the editor are one pane (pages.js), with no band and no field, as Home */
 function showHome(on, picker = false, page = false) { if (!feed) return; feed.hidden = on || picker || page; panes.Home.hidden = !on; if (panes.Partner) panes.Partner.hidden = !picker; if (panes.Page) panes.Page.hidden = !page; $("main > .dock").hidden = on || page; band.el.hidden = on || page; main.classList.toggle("bare", on || page); R.classList.toggle("picking", picker); }
 function markRead(c) { const set = unread.get(c.place.key); if (!set || !set.size || document.hidden) return; const ids = [...set].filter((i) => typeof i === "number"); unread.delete(c.place.key); drawTrail(c.place.key); ids.forEach((i) => mentions.delete(i)); if (ids.length) api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}).catch(() => {}); }
+/* messages read as they arrive in the open place: marked in one request a second after the first of them, and at once when
+   the page is hidden or goes away (keepalive, so the request outlives the page) */
+const READ_AFTER_MS = 1000, seen = new Set();
+let seenTimer = 0;
+function markSeen(id) { seen.add(id); if (!seenTimer) seenTimer = setTimeout(flushSeen, READ_AFTER_MS); }
+function flushSeen() { clearTimeout(seenTimer); seenTimer = 0; if (!seen.size) return; const ids = [...seen]; seen.clear(); api("POST", "messages/flags", {messages: ids, op: "add", flag: "read"}, {keepalive: true}).catch(() => {}); }
+addEventListener("pagehide", flushSeen); document.addEventListener("visibilitychange", () => { if (document.hidden) flushSeen(); });
 let ctxTimer = 0;
 function refreshCtx(c, ms = 1000) { clearTimeout(ctxTimer); ctxTimer = setTimeout(async () => { await fetchCtx(c); if (c === state.P) { drawHeader(); drawSide(); if (state.tab === "Changes") drawChanges(); } }, ms); }
 
-export {addMsg, cacheOf, dkey, fetchMsgs, keepEnd, markRead, openPlace, placeFromHash, placeFromKey, placeOfMsg, refreshCtx,
+export {addMsg, cacheOf, dkey, fetchMsgs, keepEnd, markRead, markSeen, openPlace, placeFromHash, placeFromKey, placeOfMsg, refreshCtx,
   tkey, topicLabel};

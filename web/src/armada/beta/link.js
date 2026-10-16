@@ -47,7 +47,7 @@ function createLink(env) {
     let url = "/json/" + path, body = o.body; if (method === "GET" || method === "DELETE") { const s = sp.toString(); if (s) url += "?" + s; } else if (!body) body = sp;
     stats.requests++;
     const headers = method === "GET" ? {} : {"X-CSRFToken": link.csrf};
-    let r; try { r = await env.fetch(url, {method, body, headers, credentials: "same-origin", signal: o.signal}); }
+    let r; try { r = await env.fetch(url, {method, body, headers, credentials: "same-origin", signal: o.signal, keepalive: o.keepalive}); }
     catch (e) { throw Object.assign(new Error("The server cannot be reached"), {net: true, aborted: !!(o.signal && o.signal.aborted)}); }
     if (r.status === 401) { signedOut(); throw stoppedError(); }
     let j = null; try { j = await r.json(); } catch (e) { /* a proxy's page, or nothing: below */ }

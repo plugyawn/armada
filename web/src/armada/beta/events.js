@@ -3,8 +3,7 @@
 import {$, $$, esc, T} from "./util.js";
 import {groups, marks, msgIndex, people, places, state, stats, streams, topicsOf, unread} from "./state.js";
 import {now} from "./time.js";
-import {api} from "./connection.js";
-import {addMsg, dkey, keepEnd, placeOfMsg, refreshCtx, tkey} from "./routing.js";
+import {addMsg, dkey, keepEnd, markSeen, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
@@ -30,7 +29,7 @@ function onMessage(ev) {
   if (m.type === "stream") { const list = topicsOf.get(m.stream_id), name = m.subject ?? ""; if (list && !list.some((t) => t.name.toLowerCase() === name.toLowerCase())) { list.unshift({name, max_id: m.id}); drawNav(); } }
   else if (!state.dms.some((d) => dkey(d.user_ids) === key)) { state.dms.unshift({user_ids: key.slice(2).split(",").filter(Boolean).map(Number), max_message_id: m.id}); drawNav(); }
   const seenNow = state.place && state.place.key === key && !document.hidden && state.tab === "Chat";
-  if (!mine && !flags.includes("read")) { if (seenNow) api("POST", "messages/flags", {messages: [m.id], op: "add", flag: "read"}).catch(() => {}); else { let s = unread.get(key); if (!s) unread.set(key, (s = new Set())); s.add(m.id); drawTrail(key); if (flags.includes("mentioned") || flags.includes("stream_wildcard_mentioned") || flags.includes("topic_wildcard_mentioned")) mentions.set(m.id, m); drawHomeRow(key); } }
+  if (!mine && !flags.includes("read")) { if (seenNow) markSeen(m.id); else { let s = unread.get(key); if (!s) unread.set(key, (s = new Set())); s.add(m.id); drawTrail(key); if (flags.includes("mentioned") || flags.includes("stream_wildcard_mentioned") || flags.includes("topic_wildcard_mentioned")) mentions.set(m.id, m); drawHomeRow(key); } }
   { const runs = (c && c.runsLoaded ? c.runs : runsSeen.get(key)) || [], r = runs.find((x) => x.status === "queued" || x.status === "running");   /* a question asked, or answered by someone */
     if (r && isOnix(m.sender_id) && QUESTION.test(m.content || "")) { r.waiting = true; r.answeredAt = 0; r.askedAt = m.timestamp; r.question = questionOf(m); marks.set(key, "needs"); drawTrail(key); drawHomeRow(key); if (c === state.P) drawRunState(); }
     else if (r && r.waiting && !isOnix(m.sender_id) && namesOnix(m)) { answered(r); marks.set(key, runMark(r)); drawTrail(key); drawHomeRow(key); if (c === state.P) drawRunState(); } }

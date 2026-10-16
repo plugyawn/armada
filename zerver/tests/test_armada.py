@@ -121,6 +121,7 @@ from zerver.lib.armada_agent import (
     ArmadaDisabledAgentRunner,
     ArmadaGeminiInteractionsAddressingIntentClassifier,
     ArmadaProcessIsolation,
+    armada_addressing_context_messages,
     armada_codex_dynamic_tools,
     armada_worker_results_from_final_text,
     build_armada_addressing_router_prompt,
@@ -3204,6 +3205,30 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertIn("Recent topic messages", prompt)
         self.assertIn(f"Channel: {ARMADA_DEFAULT_STREAM}", prompt)
         self.assertIn("New message:\nhey agent, can you check?", prompt)
+
+    def test_addressing_routers_see_the_newest_six_messages_before_the_new_one(self) -> None:
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[
+                (
+                    message_id,
+                    f"message {message_id}" + ("!" * 300 if message_id == 5 else ""),
+                    message_id % 2 == 0,
+                    f"Person {message_id}",
+                )
+                for message_id in range(1, 10)
+            ],
+        )
+
+        context = armada_addressing_context_messages(active_session, message_id=9)
+
+        self.assertEqual([message["message_id"] for message in context], [3, 4, 5, 6, 7, 8])
+        self.assertEqual(context[0]["sender"], "Person 3")
+        self.assertIs(context[1]["sender_is_bot"], True)
+        self.assertEqual(context[2]["content"], "message 5" + "!" * 216 + "... [truncated]")
+        self.assertEqual(armada_addressing_context_messages(None, message_id=9), [])
 
     def test_normalize_token_usage_handles_app_server_payload(self) -> None:
         usage = armada_normalize_token_usage(

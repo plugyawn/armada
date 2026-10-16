@@ -25,6 +25,7 @@ from zerver.lib.armada import (
     ArmadaAmbientAction,
     ArmadaAmbientAddressee,
     ArmadaAmbientDecision,
+    ArmadaRecentMessage,
     ArmadaResponsePresentation,
     ArmadaUserInputProvider,
     ArmadaWorkerToolResult,
@@ -205,6 +206,38 @@ def trim_armada_agent_text(value: str, *, limit: int) -> str:
     return f"{value[: max(limit - 15, 0)].rstrip()}... [truncated]"
 
 
+# What an addressing router is shown: the topic's newest messages before
+# the one it classifies, each cut short, and that message, cut longer.
+ARMADA_ADDRESSING_CONTEXT_MESSAGES: Final = 6
+ARMADA_ADDRESSING_CONTEXT_MESSAGE_CHARACTERS: Final = 240
+ARMADA_ADDRESSING_NEW_MESSAGE_CHARACTERS: Final = 1000
+
+
+def armada_addressing_context_messages(
+    active_session: ArmadaActiveSessionSummary | None,
+    *,
+    message_id: int | None,
+) -> list[ArmadaRecentMessage]:
+    if active_session is None:
+        return []
+    messages = [
+        message
+        for message in active_session.get("routing_messages", active_session["recent_messages"])
+        if message_id is None or message["message_id"] != message_id
+    ][-ARMADA_ADDRESSING_CONTEXT_MESSAGES:]
+    return [
+        {
+            "message_id": message["message_id"],
+            "sender": message["sender"],
+            "sender_is_bot": message["sender_is_bot"],
+            "content": trim_armada_agent_text(
+                message["content"], limit=ARMADA_ADDRESSING_CONTEXT_MESSAGE_CHARACTERS
+            ),
+        }
+        for message in messages
+    ]
+
+
 def build_armada_addressing_router_prompt(
     *,
     content: str,
@@ -232,19 +265,9 @@ def build_armada_addressing_router_prompt(
             f"- latest_request_message_id: {active_session['latest_request_message_id'] or 'None'}",
         ]
 
-    recent_messages = (
-        [
-            message
-            for message in active_session.get("routing_messages", active_session["recent_messages"])
-            if message_id is None or message["message_id"] != message_id
-        ][-6:]
-        if active_session is not None
-        else []
-    )
     recent_lines = [
-        f"- {message['sender']}{' [bot]' if message['sender_is_bot'] else ''}: "
-        f"{trim_armada_agent_text(message['content'], limit=240)}"
-        for message in recent_messages
+        f"- {message['sender']}{' [bot]' if message['sender_is_bot'] else ''}: {message['content']}"
+        for message in armada_addressing_context_messages(active_session, message_id=message_id)
     ]
     if not recent_lines:
         recent_lines = ["- none"]
@@ -271,7 +294,7 @@ def build_armada_addressing_router_prompt(
             *recent_lines,
             "",
             "New message:",
-            trim_armada_agent_text(content, limit=1000),
+            trim_armada_agent_text(content, limit=ARMADA_ADDRESSING_NEW_MESSAGE_CHARACTERS),
         ]
     )
 

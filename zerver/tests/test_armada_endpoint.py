@@ -50,6 +50,7 @@ from zerver.lib.armada import (
     write_armada_live_run_state,
 )
 from zerver.lib.armada_agent import (
+    ARMADA_CODEX_INSTRUCTIONS_VERSION,
     ArmadaCodexAppServerToolRunner,
     ArmadaProcessIsolation,
     armada_codex_thread_version,
@@ -5803,7 +5804,10 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertRegex(version, r"^[0-9a-f]{16}$")
         with patch("zerver.lib.armada_agent.ARMADA_PAGE_TOOL_SPECS", []):
             self.assertNotEqual(armada_codex_thread_version(), version)
-        with patch("zerver.lib.armada_agent.ARMADA_CODEX_INSTRUCTIONS_VERSION", 2):
+        with patch(
+            "zerver.lib.armada_agent.ARMADA_CODEX_INSTRUCTIONS_VERSION",
+            ARMADA_CODEX_INSTRUCTIONS_VERSION + 1,
+        ):
             self.assertNotEqual(armada_codex_thread_version(), version)
         self.assertEqual(armada_codex_thread_version(), version)
 

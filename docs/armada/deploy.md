@@ -952,6 +952,13 @@ sudo -u zulip -H env PLAYWRIGHT_BROWSERS_PATH=/opt/armada-browser/browsers \
     https://example.com /tmp/example.png
 ```
 
+Then, after a restart, in a topic: `@**Onix** open https://example.com and
+send a screenshot of it here`. The run's trace reads "Opened example.com",
+"Took a screenshot", and Onix posts the picture in the topic. Its
+instructions say when it may hand browsing to a Mac-mini agent instead:
+only when the headless browser fails (a site that blocks it, or a task that
+needs a real desktop or a login in a real browser), saying why.
+
 ## Fonts
 
 Söhne is licensed, so it is never in git. Put the four `.woff2` files named

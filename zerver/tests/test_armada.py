@@ -2667,6 +2667,52 @@ class ArmadaSessionDefaultsTest(TestCase):
             instructions,
         )
 
+    def test_codex_developer_instructions_tell_the_agent_about_its_browser(self) -> None:
+        instructions = build_armada_codex_developer_instructions(browser=True)
+
+        self.assertIn("You have a browser: a headless Chromium on the server", instructions)
+        # The user's rule (16 October): headless first, a Mac mini only where it fails.
+        self.assertIn(
+            "Your headless browser is the default for every browsing task. Only when it fails "
+            "(a site that blocks headless browsers, or a task that needs a real desktop or a "
+            "login in a real browser) do you hand the task to a Mac-mini agent: mention it with "
+            "the task, and say why the headless browser could not do it.",
+            instructions,
+        )
+        self.assertIn("browser_take_screenshot and no filename", instructions)
+        self.assertIn("fullPage: true", instructions)
+        self.assertIn("armada_post with files", instructions)
+        # The browser lines come before the final-response requirements.
+        self.assertLess(
+            instructions.index("You have a browser"),
+            instructions.index("Final response requirements"),
+        )
+        self.assertNotIn("browser", build_armada_codex_developer_instructions())
+
+        def thread_start_instructions(browser_dir: str | None) -> str:
+            runner = ArmadaCodexAppServerToolRunner(
+                codex_bin="codex",
+                workdir="/srv/armada/worktrees/devel-browser-0123456789ab",
+                model="gpt-6-astra",
+                sandbox="workspace-write",
+                approval_policy="on-request",
+                timeout_seconds=900,
+                output_limit=200,
+                browser_dir=browser_dir,
+            )
+            # A side conversation (/btw) starts from the same instructions.
+            self.assertTrue(
+                runner.side_fork_params("thread-parent")["developerInstructions"].startswith(
+                    runner.thread_params()["developerInstructions"]
+                )
+            )
+            return runner.thread_params()["developerInstructions"]
+
+        self.assertEqual(thread_start_instructions("/opt/armada-browser"), instructions)
+        self.assertEqual(
+            thread_start_instructions(None), build_armada_codex_developer_instructions()
+        )
+
     def test_resumed_codex_prompt_contains_only_unseen_messages_and_current_request(self) -> None:
         active_session = build_armada_active_session_summary_from_messages(
             armada_session=get_armada_session_payload(),

@@ -500,11 +500,37 @@ def armada_codex_thread_version() -> str:
 # need: each topic's next run then starts a fresh Codex thread, which
 # gets them (and loses the old thread's memory). Small rewordings that
 # can wait for a topic's next fresh thread need no bump.
-ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 1
+ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 2
 
 
-def build_armada_codex_developer_instructions() -> str:
-    return f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\nKeep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
+# What the agent is told about its browser (browser_config_args), when it
+# has one.  The rule on Mac-mini agents is the user's (16 October): the
+# headless browser is the default, and a mini only where it fails.
+ARMADA_CODEX_BROWSER_INSTRUCTIONS: Final = (
+    "You have a browser: a headless Chromium on the server, which you drive with your "
+    "playwright tools (browser_navigate, browser_snapshot, browser_click, browser_type, "
+    "browser_take_screenshot and the rest). Use it to open pages, to check web apps, "
+    "a server you start in your worktree included, and to show people what you see.\n"
+    "Your headless browser is the default for every browsing task. Only when it fails "
+    "(a site that blocks headless browsers, or a task that needs a real desktop or a login "
+    "in a real browser) do you hand the task to a Mac-mini agent: mention it with the task, "
+    "and say why the headless browser could not do it.\n"
+    "Before a screenshot of a page that is still loading, wait for what you expect to see "
+    "(browser_wait_for). Take a screenshot with browser_take_screenshot and no filename: you "
+    "see it, and its file is kept outside the worktree at the path the tool reports. Pass "
+    "fullPage: true when asked for the whole page.\n"
+    "When you show people what you see, send them the screenshot: armada_post with files "
+    "set to the path the tool reported, and words saying what it shows.\n"
+)
+
+
+def build_armada_codex_developer_instructions(*, browser: bool = False) -> str:
+    """The instructions a new Codex thread starts with; browser says
+    whether the agent has its browser (ARMADA_WORKER_BROWSER_DIR)."""
+    agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a Zulip topic.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\n"
+    browser_lines = ARMADA_CODEX_BROWSER_INSTRUCTIONS if browser else ""
+    answer = "Keep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent Zulip transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the Zulip topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
+    return agent + browser_lines + answer
 
 
 def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, task: str) -> str:
@@ -2710,7 +2736,9 @@ class ArmadaCodexAppServerToolRunner:
             params.pop("ephemeral", None)
             params.pop("dynamicTools", None)
         else:
-            params["developerInstructions"] = build_armada_codex_developer_instructions()
+            params["developerInstructions"] = build_armada_codex_developer_instructions(
+                browser=bool(self.browser_dir)
+            )
         return {key: value for key, value in params.items() if value is not None}
 
     def turn_params(
@@ -2731,7 +2759,7 @@ class ArmadaCodexAppServerToolRunner:
 
     def side_fork_params(self, parent_thread_id: str) -> dict[str, Any]:
         developer_instructions = (
-            f"{build_armada_codex_developer_instructions()}\n\n"
+            f"{build_armada_codex_developer_instructions(browser=bool(self.browser_dir))}\n\n"
             f"{ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS}"
         )
         params: dict[str, Any] = {

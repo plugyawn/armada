@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): what each live event does to the page. */
 
 import {$, $$, esc, T} from "./util.js";
-import {groups, marks, msgIndex, people, places, state, stats, streams, topicsOf, unread} from "./state.js";
+import {groups, marks, msgIndex, people, places, repoStreams, state, stats, streams, topicsOf, unread, worktrees} from "./state.js";
 import {now} from "./time.js";
 import {addMsg, dkey, keepEnd, markSeen, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
@@ -17,6 +17,8 @@ import {endRun, syncOnix, updateMessage, WORKING} from "./agent_turn.js";
 import {adopt} from "./outbox.js";
 import {drawRunState} from "./band.js";
 import {drawSide} from "./column.js";
+import {drawHeader} from "./header.js";
+import {drawComposer} from "./composer.js";
 import {drawHomeRow, mentions, questionOf} from "./home.js";
 import {hopOnce} from "./partners.js";
 import {onStarred} from "./later.js";
@@ -59,6 +61,7 @@ function onUpdate(ev, at) {
 function onRun(ev) {
   if (ev.status !== "queued" && ev.status !== "running") endRun(ev.run_id);   /* its streamed words: the saved message has them all */
   if (!ev.stream) return; const s = [...streams.values()].find((x) => x.name.toLowerCase() === ev.stream.toLowerCase()); if (!s) return; const key = tkey(s.stream_id, ev.topic || ""), c = places.get(key), live = ev.status === "queued" || ev.status === "running";
+  learnRepository(s.stream_id, ev.topic || "");
   const list = c ? c.runs : runsSeen.get(key) || []; if (!runsSeen.has(key)) runsSeen.set(key, list);
   let r = list.find((x) => x.id === ev.run_id); const fresh = !r; if (!r) { r = {id: ev.run_id, session_kind: "shared", date_created: ev.run_date_created, plan: null, overview: null, tool_count: 0, waiting: false}; seeRun(list, r); }
   if (!live) r.waiting = false; else if (ev.event_type === "question_waiting" && !(r.answeredAt && now() / 1000 - r.answeredAt < 20)) { if (!r.waiting) r.askedAt = r.askedAt || ev.date_created; r.waiting = true; settleAsk(r); }   /* the server's heartbeat while it waits */
@@ -76,6 +79,14 @@ function onRun(ev) {
   if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
+/* a run in a channel's topic means the channel has its repository and the topic its worktree: the server makes both in the
+   transaction that queues the run (armada_worker.py, start, by armada_workspace_node_record), before any of the run's events
+   is sent. A page loaded before a channel's first run learns it here: the nav, the header, the field and the column of a
+   place in that channel are drawn as a repository's, and the topic's context (its git facts) is read. */
+function learnRepository(sid, topic) { if (!worktrees.has(sid)) worktrees.set(sid, new Set()); worktrees.get(sid).add(topic.toLowerCase());
+  if (repoStreams.has(sid)) return; repoStreams.add(sid);
+  for (const c of places.values()) if (c.place.kind === "topic" && c.place.stream_id === sid) c.place.repo = true;
+  drawNav(); if (state.place && state.place.kind === "topic" && state.place.stream_id === sid) { drawHeader(); drawComposer(); drawSide(); refreshCtx(state.P); } }
 function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); }
 function onFlags(ev) { if (ev.flag === "starred") { onStarred(ev); return; }   /* Later's "Just keep it" (later.js) */
   if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); mentions.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const i of ids) mentions.delete(i);   /* a mention read is not Home's any more */ for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }

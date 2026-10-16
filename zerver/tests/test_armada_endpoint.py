@@ -117,6 +117,10 @@ from zerver.lib.armada_worker import (
     wait_for_redelivered_armada_worker_run,
 )
 from zerver.lib.armada_workspace_git import workspace_git_isolation_username
+from zerver.lib.armada_workspace_map import (
+    armada_project_stream_ids_for_realm,
+    armada_workspace_topics_for_stream,
+)
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_armada_run_event, check_armada_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
@@ -6692,6 +6696,41 @@ class ArmadaWorkspaceMapTest(ZulipTestCase):
         self.assertIn(stream.id, state["repository_stream_ids"])
         # Bindings on channels the user cannot see stay invisible.
         self.assertNotIn(private_stream.id, state["repository_stream_ids"])
+
+    def test_a_channels_first_run_event_comes_after_its_repository(self) -> None:
+        # The new interface learns that a channel has gained its
+        # repository from the first agent_run event of the channel's first
+        # run (web/src/armada/beta/events.js, learnRepository): the run is
+        # queued in the transaction that makes the channel's Repository and
+        # the topic's Workspace, and its event is sent when that commits.
+        owner = self.example_user("hamlet")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        stream = self.subscribe(owner, "fresh")
+        message_id = self.send_stream_message(owner, "fresh", "back it up", topic_name="First")
+        self.assertNotIn(stream.id, armada_project_stream_ids_for_realm(owner.realm))
+
+        with self.capture_send_event_calls(expected_num_events=1) as events:
+            started = ArmadaDatabaseWorkerRunStore().start(
+                SimpleNamespace(user_profile=armada_bot), message_id, stream="fresh", topic="First"
+            )
+
+        self.assertTrue(started)
+        self.assertEqual(
+            {key: events[0]["event"][key] for key in ["type", "status", "stream", "topic"]},
+            {"type": "agent_run", "status": "queued", "stream": "fresh", "topic": "first"},
+        )
+        self.assertIn(owner.id, events[0]["users"])
+        self.assertIn(stream.id, armada_project_stream_ids_for_realm(owner.realm))
+        self.assertEqual(
+            [topic["topic"] for topic in armada_workspace_topics_for_stream(owner.realm, "fresh")],
+            ["first"],
+        )
 
 
 class ArmadaMonitorTest(ZulipTestCase):

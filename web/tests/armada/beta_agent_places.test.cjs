@@ -135,6 +135,7 @@ const routing = zrequire("armada/beta/routing.js");
 const mentions = zrequire("armada/beta/mentions.js");
 const send = zrequire("armada/beta/send.js");
 const column = zrequire("armada/beta/column.js");
+const events = zrequire("armada/beta/events.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -143,6 +144,7 @@ const OPS = 4;
 const CLICK = 22;
 beta_state.state.ME = ME;
 beta_state.state.meName = "King Hamlet";
+beta_state.state.hd = document.createElement("header");
 beta_state.armadaBots.add(AGENT);
 for (const [id, name, bot] of [
     [ME, "King Hamlet", false],
@@ -292,4 +294,44 @@ run_test("opening any channel's topic reads its runs", async () => {
     routing.openPlace(routing.placeFromKey(routing.tkey(OPS, "disk")));
     await settle();
     assert.ok(requests.some((r) => r.url === "/json/armada/runs"));
+});
+
+run_test("a channel's first run makes it a repository in the open page", async () => {
+    // #ops has no repository: its column has no Changes.
+    const c = topic("database-backup");
+    c.runsLoaded = true;
+    assert.deepEqual(
+        column_lists().map((list) => list[0]),
+        ["No run here yet.", "Runs", "People"],
+    );
+    requests.length = 0;
+    // The run's first event, queued: the server made the repository with it.
+    events.onRun({
+        type: "agent_run",
+        run_id: 7,
+        event_type: "queued",
+        status: "queued",
+        stream: "ops",
+        topic: "database-backup",
+        trigger_message_id: 950,
+        result_message_id: null,
+        run_date_created: 0,
+        date_created: 0,
+        plan: null,
+    });
+    assert.deepEqual(
+        column_lists().map((list) => list[0]),
+        [
+            "The runs here had no plan. A run that plans its work shows its steps here.",
+            "Changes",
+            "Runs",
+            "People",
+        ],
+    );
+    // The topic's git facts are read, and any place in #ops opened from
+    // now on is a repository's.
+    await settle();
+    clock.tick(1000);
+    assert.ok(requests.some((r) => r.url === "/json/armada/topic-context"));
+    assert.ok(routing.placeFromKey(routing.tkey(OPS, "disk")).repo);
 });

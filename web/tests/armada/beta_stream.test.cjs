@@ -179,13 +179,15 @@ for (const [id, name] of [
         active: true,
     });
 }
+// #click has its repository, as any channel with runs does.
 beta_state.streams.set(10, {stream_id: 10, name: "click"});
+beta_state.repoStreams.add(10);
 const place = {
     key: routing.tkey(10, "option groups"),
     kind: "topic",
     stream_id: 10,
     topic: "option groups",
-    repo: false,
+    repo: true,
 };
 const message = (id, sender_id, html) => ({
     id,

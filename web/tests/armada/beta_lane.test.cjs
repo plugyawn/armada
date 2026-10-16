@@ -260,7 +260,9 @@ for (const [id, name] of [
         active: true,
     });
 }
+// #devel has its repository, as any channel with runs does.
 beta_state.streams.set(10, {stream_id: 10, name: "devel"});
+beta_state.repoStreams.add(10);
 beta_state.streams.set(20, {stream_id: 20, name: "Denmark"});
 
 // Messages are a minute apart from 8:00 on one day (local time), so that

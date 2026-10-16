@@ -2441,6 +2441,39 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     self.assertIn(f"features.memories={expected}", command)
                     self.assertNotIn(f"features.memories={'false' if enabled else 'true'}", command)
 
+    def test_browser_follows_the_setting(self) -> None:
+        owner = self.example_user("hamlet")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_workdir = Path(temp_dir) / "base"
+            self.create_git_repository(base_workdir)
+            with self.settings(
+                ARMADA_WORKER_AGENT_RUNTIME="codex-app-server",
+                ARMADA_WORKER_WORKDIR=str(base_workdir),
+                ARMADA_TOPIC_WORKDIR_ROOT=str(Path(temp_dir) / "topics"),
+            ):
+                context = ensure_armada_workspace_node(
+                    owner,
+                    stream=ARMADA_DEFAULT_STREAM,
+                    topic="browser",
+                )
+                for browser_dir in ("/opt/armada-browser", "", None):
+                    with self.settings(ARMADA_WORKER_BROWSER_DIR=browser_dir):
+                        runtime = build_armada_worker_runtime_from_settings(
+                            workdir_override=context.workdir,
+                        )
+                    assert isinstance(runtime.tool_runner, ArmadaCodexAppServerToolRunner)
+                    command = runtime.tool_runner.build_command()
+                    self.assertEqual(
+                        'mcp_servers.playwright.command="/opt/armada-browser/bin/playwright"'
+                        in command,
+                        bool(browser_dir),
+                    )
+                    self.assertEqual(
+                        any(arg.startswith("mcp_servers.") for arg in command),
+                        bool(browser_dir),
+                    )
+
     def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
         owner = self.example_user("hamlet")
 

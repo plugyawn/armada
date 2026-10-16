@@ -2663,6 +2663,7 @@ def build_armada_worker_runtime_from_settings(
                 reasoning_effort=reasoning_effort,
                 ephemeral=settings.ARMADA_WORKER_CODEX_EPHEMERAL,
                 process_isolation=process_isolation_override,
+                browser_dir=settings.ARMADA_WORKER_BROWSER_DIR,
             )
         )
     if runtime != "disabled":

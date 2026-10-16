@@ -858,6 +858,11 @@ ARMADA_WORKER_CODEX_EPHEMERAL = False
 # sessions into every new session, so what one channel's run saw can
 # reach another channel's run.  dev_settings.py turns it on.
 ARMADA_WORKER_CODEX_MEMORIES = False
+# The agent's browser: the directory holding Playwright (bin/playwright) and
+# its headless Chromium (browsers/), which puppet installs
+# (puppet/armada/manifests/agent_runtime.pp).  None leaves the agent
+# without a browser.
+ARMADA_WORKER_BROWSER_DIR: str | None = None
 ARMADA_CODEX_SKILLS_DIR: str | None = None
 # Who may drive the agent (start, steer and answer runs; set up monitors)
 # and give a new channel a repository URL.  Organization administrators

@@ -59,6 +59,20 @@ ArmadaSubprocessPopen = Callable[..., subprocess.Popen[str]]
 ArmadaUrlOpen = Callable[..., Any]
 ARMADA_GEMINI_INTERACTIONS_API_REVISION = "2026-05-20"
 
+# The agent's browser.  Codex's own browser comes with the ChatGPT desktop
+# app and does not exist on a headless server; for the CLI, Codex's manual
+# names an MCP server, and Playwright's ships in the `playwright` package
+# (`playwright mcp`).  The server keeps Playwright's name, so its tools reach
+# the model as the names it knows (playwright__browser_navigate, ...).
+ARMADA_BROWSER_MCP_SERVER: Final = "playwright"
+# A desktop Chrome's user agent, of the version of the Chromium that
+# puppet's pinned Playwright installs (agent_runtime.pp): the default one
+# says HeadlessChrome, which sites block.
+ARMADA_BROWSER_USER_AGENT: Final = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/151.0.0.0 Safari/537.36"
+)
+
 
 @dataclass(frozen=True)
 class ArmadaProcessIsolation:
@@ -1625,6 +1639,7 @@ class ArmadaCodexAppServerToolRunner:
         reasoning_effort: str | None = None,
         ephemeral: bool = False,
         process_isolation: ArmadaProcessIsolation | None = None,
+        browser_dir: str | None = None,
         popen_command: ArmadaSubprocessPopen = subprocess.Popen,
     ) -> None:
         self.codex_bin = codex_bin
@@ -1641,6 +1656,7 @@ class ArmadaCodexAppServerToolRunner:
         self.reasoning_effort = reasoning_effort
         self.ephemeral = ephemeral
         self.process_isolation = process_isolation
+        self.browser_dir = browser_dir
         self.popen_command = popen_command
         self.process: subprocess.Popen[str] | None = None
         self.messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
@@ -1700,9 +1716,69 @@ class ArmadaCodexAppServerToolRunner:
         # warns about it on every thread, which would reach the transcript.
         args.extend(["--config", "features.default_mode_request_user_input=true"])
         args.extend(["--config", "suppress_unstable_features_warning=true"])
+        if self.browser_dir:
+            args.extend(self.browser_config_args(self.browser_dir))
         if self.reasoning_effort:
             args.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         return args
+
+    def browser_config_args(self, browser_dir: str) -> list[str]:
+        """The browser, an MCP server Codex starts beside each thread: a
+        headless Chromium from the install in browser_dir.  Its tools are
+        approved here, since Armada answers no approval request for them;
+        MCP servers run outside Codex's sandbox, so it reaches the network.
+        Values are TOML, which JSON's strings and arrays of strings are."""
+        server = f"mcp_servers.{ARMADA_BROWSER_MCP_SERVER}"
+        playwright_args = [
+            "mcp",
+            "--headless",
+            # Playwright's own Chromium (Chrome for Testing), in new
+            # headless mode, which renders as desktop Chrome does.
+            "--browser",
+            "chromium",
+            "--isolated",
+            # Clicks by coordinates too, for what a page snapshot cannot
+            # name (canvas, maps).
+            "--caps",
+            "vision",
+            "--viewport-size",
+            "1440x900",
+            "--user-agent",
+            ARMADA_BROWSER_USER_AGENT,
+            # How long to wait after each action for the work it set off,
+            # so that a screenshot shows the page settled.
+            "--timeout-settle",
+            "1000",
+            "--output-dir",
+            self.browser_output_dir(),
+            "--output-max-size",
+            str(100 * 1024 * 1024),
+        ]
+        browsers_path = json.dumps(f"{browser_dir}/browsers")
+        return [
+            "--config",
+            f"{server}.command={json.dumps(f'{browser_dir}/bin/playwright')}",
+            "--config",
+            f"{server}.args={json.dumps(playwright_args)}",
+            "--config",
+            f"{server}.env={{PLAYWRIGHT_BROWSERS_PATH={browsers_path}}}",
+            "--config",
+            f'{server}.default_tools_approval_mode="approve"',
+            # Above the browser's own 60-second navigation timeout, so a
+            # slow page reports its own error.
+            "--config",
+            f"{server}.tool_timeout_sec=120",
+        ]
+
+    def browser_output_dir(self) -> str:
+        """Where the browser keeps screenshots and page snapshots: the
+        agent's cache, a directory per worktree, outside the repository so
+        that they never show among the topic's changes."""
+        home = (
+            self.process_isolation.home if self.process_isolation is not None else str(Path.home())
+        )
+        worktree = Path(self.workdir).name if self.workdir else "default"
+        return f"{home}/.cache/armada-browser/{worktree}"
 
     def build_command(self) -> list[str]:
         executable, environment = armada_codex_executable(self.codex_bin)

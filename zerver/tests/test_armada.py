@@ -2859,6 +2859,68 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertIn("/srv/zulip-node/bin/codex", runner.build_command())
 
+    def test_codex_app_server_starts_the_browser_when_one_is_installed(self) -> None:
+        def browser_runner(
+            process_isolation: ArmadaProcessIsolation | None = None,
+        ) -> ArmadaCodexAppServerToolRunner:
+            return ArmadaCodexAppServerToolRunner(
+                codex_bin="codex",
+                workdir="/srv/armada/worktrees/devel-browser-0123456789ab",
+                model="gpt-6-astra",
+                sandbox="workspace-write",
+                approval_policy="on-request",
+                timeout_seconds=900,
+                output_limit=200,
+                process_isolation=process_isolation,
+                browser_dir="/opt/armada-browser",
+            )
+
+        output_dir = f"{Path.home()}/.cache/armada-browser/devel-browser-0123456789ab"
+        self.assertEqual(
+            browser_runner().build_command(),
+            [
+                "codex",
+                "app-server",
+                "--stdio",
+                "--config",
+                "features.memories=false",
+                "--config",
+                "tools.update_plan={enabled=true}",
+                "--config",
+                "features.default_mode_request_user_input=true",
+                "--config",
+                "suppress_unstable_features_warning=true",
+                "--config",
+                'mcp_servers.playwright.command="/opt/armada-browser/bin/playwright"',
+                "--config",
+                "mcp_servers.playwright.args="
+                '["mcp", "--headless", "--browser", "chromium", "--isolated",'
+                ' "--caps", "vision", "--viewport-size", "1440x900", "--user-agent",'
+                ' "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)'
+                ' Chrome/151.0.0.0 Safari/537.36", "--timeout-settle", "1000",'
+                f' "--output-dir", "{output_dir}", "--output-max-size", "104857600"]',
+                "--config",
+                'mcp_servers.playwright.env={PLAYWRIGHT_BROWSERS_PATH="/opt/armada-browser/browsers"}',
+                "--config",
+                'mcp_servers.playwright.default_tools_approval_mode="approve"',
+                "--config",
+                "mcp_servers.playwright.tool_timeout_sec=120",
+            ],
+        )
+
+        # A topic's own Unix user keeps the browser's files in its own home.
+        isolated = browser_runner(
+            ArmadaProcessIsolation(
+                username="armada-0123456789abcdef01234567",
+                home="/home/armada-0123456789abcdef01234567",
+                codex_home="/home/armada-0123456789abcdef01234567/.codex",
+            )
+        )
+        self.assertEqual(
+            isolated.browser_output_dir(),
+            "/home/armada-0123456789abcdef01234567/.cache/armada-browser/devel-browser-0123456789ab",
+        )
+
     def test_codex_app_server_resume_does_not_resend_developer_instructions(self) -> None:
         runner = ArmadaCodexAppServerToolRunner(
             codex_bin="codex",

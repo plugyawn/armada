@@ -8,7 +8,9 @@
 // and gives back (Close, Esc, or Open again), with focus back on Open; a
 // later artifact replaces it in place; an action asks Onix in this place;
 // only the message's own sender's artifact, of kinds this page knows, is
-// drawn. Deleted with web/src/armada/beta/.
+// drawn; a scene is laid out in ranks, bound to its data, and its steps
+// change its nodes one after another from the controls and the keys.
+// Deleted with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -86,6 +88,8 @@ set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
 // A face is drawn with no words of its own, as a picture is.
 set_global("face", (_spec, cls) => `<i class="av ${cls || ""}"></i>`);
 set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
+// The column fits its lists to its height; here it has none.
+set_global("fitLists", noop);
 // The working mark Onix's new turn stands with while its run starts.
 set_global("wk", () => `<span class="mk wk"></span>`);
 
@@ -149,6 +153,7 @@ const routing = zrequire("armada/beta/routing.js");
 const feed = zrequire("armada/beta/feed.js");
 const hover = zrequire("armada/beta/hover.js");
 const artifacts = zrequire("armada/beta/artifacts.js");
+const scene = zrequire("armada/beta/scene.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
@@ -364,3 +369,147 @@ run_test("only the sender's own artifact, of kinds this page knows, is drawn", (
     assert.match(rowOf(two).textContent, /Newer/);
     assert.equal(artifacts.artifactOf({sender_id: AGENT, submessages: []}), null);
 });
+
+const PATH = {
+    version: 1,
+    title: "A screenshot's path",
+    data: {stages: ["Upload", "Thumbnail"], width: 840, height: 560},
+    blocks: [
+        {
+            type: "scene",
+            label: "From upload to the screen",
+            root: {
+                type: "group",
+                layout: "graph",
+                children: [
+                    {type: "shape", id: "up", shape: "pill", label: "Upload"},
+                    {type: "shape", id: "thumb", label: "Thumbnail"},
+                    {type: "shape", id: "msg", label: "Message"},
+                    {
+                        type: "shape",
+                        id: "seen",
+                        shape: "circle",
+                        label: "Seen",
+                        interaction: "select",
+                    },
+                    {type: "connector", id: "c1", from: "up", to: "thumb", label: "worker"},
+                    {type: "connector", from: "up", to: "msg"},
+                    {type: "connector", from: "thumb", to: "seen"},
+                    {type: "connector", from: "msg", to: "seen"},
+                    {
+                        type: "text",
+                        text: "",
+                        bind: "data.item",
+                        textRole: "label",
+                        repeat: {source: "data.stages"},
+                    },
+                    {
+                        type: "text",
+                        textRole: "value",
+                        derive: {op: "divide", args: ["data.width", "data.height"]},
+                    },
+                ],
+            },
+            steps: [
+                {label: "Uploaded", changes: [{target: "up", state: "success"}]},
+                {
+                    label: "Thumbnail made",
+                    changes: [
+                        {target: "thumb", state: "running"},
+                        {target: "c1", state: "running"},
+                    ],
+                },
+                {
+                    label: "On screen",
+                    changes: [{target: "seen", state: "success", label: "Seen, no shift"}],
+                },
+            ],
+        },
+    ],
+};
+const nodeIn = (id) =>
+    [...panel().querySelectorAll("[data-node]")].find((n) => n.dataset.node === id);
+const stepAt = () =>
+    [...panel().querySelectorAll("span")].find((x) => / of \d+ · /.test(x.textContent)).textContent;
+
+run_test(
+    "a scene: a graph in ranks, bound to its data, its steps from the controls and the keys",
+    () => {
+        const m = answer("Here is the path.", [PATH]);
+        assert.match(rowOf(m).textContent, /A screenshot's path\s*Diagram, 3 steps/);
+        pressOn(rowOf(m).querySelector("button"));
+        // Ranks: what leads to a node stands above it.
+        const ranks = scene.ranksOf(
+            ["up", "thumb", "msg", "seen"],
+            [
+                {from: "up", to: "thumb", directed: true},
+                {from: "up", to: "msg", directed: true},
+                {from: "thumb", to: "seen", directed: true},
+                {from: "msg", to: "seen", directed: true},
+            ],
+        );
+        assert.deepEqual(Object.fromEntries(ranks), {up: 0, thumb: 1, msg: 1, seen: 2});
+        // A cycle, or no direction: by distance from the first node.
+        assert.deepEqual(
+            Object.fromEntries(
+                scene.ranksOf(
+                    ["a", "b", "c"],
+                    [
+                        {from: "a", to: "b", directed: false},
+                        {from: "b", to: "c", directed: true},
+                    ],
+                ),
+            ),
+            {a: 0, b: 1, c: 2},
+        );
+        // Its words: each stage of the data, and a value computed from it.
+        const words = panel().querySelector('[role="group"]').textContent;
+        assert.match(words, /Upload\s*Thumbnail\s*Message\s*Seen/);
+        assert.match(words, /UploadThumbnail/);
+        assert.match(words, /1\.5/);
+        // Its connectors, drawn once the nodes are laid out.
+        clock.tick(20);
+        assert.equal(panel().querySelectorAll("line").length, 4);
+        assert.equal(panel().querySelector("svg text").textContent, "worker");
+
+        // Opened, it plays; a press on its controls takes over.
+        assert.match(stepAt(), /^1 of 3 · Uploaded/);
+        assert.equal(nodeIn("up").dataset.state, "success");
+        const next = panel().querySelector('[aria-label="Next step"]');
+        next.click();
+        assert.match(stepAt(), /^2 of 3 · Thumbnail made/);
+        assert.equal(nodeIn("thumb").dataset.state, "running");
+        assert.match(panel().textContent, /Step 2 of 3: Thumbnail made\./);
+        next.click();
+        assert.equal(nodeIn("seen").textContent, "Seen, no shift");
+        assert.equal(next.disabled, true);
+        // The track, from the keyboard: Home is the first step, and what the
+        // later steps changed is undone.
+        const track = panel().querySelector('[role="slider"]');
+        dom.press("Home", {target: track});
+        assert.match(stepAt(), /^1 of 3/);
+        assert.equal(nodeIn("thumb").dataset.state, undefined);
+        assert.equal(nodeIn("seen").textContent, "Seen");
+        dom.press("End", {target: track});
+        assert.equal(track.getAttribute("aria-valuenow"), "3");
+        // Play from the end starts again from the first step, a step at a time.
+        const play = [...panel().querySelectorAll("button")].find((b) =>
+            /Play|Pause/.test(b.textContent),
+        );
+        play.click();
+        assert.match(stepAt(), /^1 of 3/);
+        clock.tick(1300);
+        assert.match(stepAt(), /^2 of 3/);
+        play.click();
+        clock.tick(5000);
+        assert.match(stepAt(), /^2 of 3/);
+        // A node people can choose is a button that keeps whether it is chosen.
+        const seen = nodeIn("seen");
+        assert.equal(seen.getAttribute("role"), "button");
+        seen.click();
+        assert.equal(seen.getAttribute("aria-pressed"), "true");
+        dom.press("Enter", {target: seen});
+        assert.equal(seen.getAttribute("aria-pressed"), "false");
+        artifacts.closeArtifact(true);
+    },
+);

@@ -13,6 +13,7 @@ import {picHTML, loadPics} from "./media.js";
 import {ready} from "./composer.js";
 import {send} from "./send.js";
 import {updateMessage} from "./agent_turn.js";
+import {sceneHTML, wireScene} from "./scene.js";
 
 /* ---------- the document ---------- */
 const BLOCKS = new Set(["copy", "metric", "meter", "series", "log", "key_value", "media", "scene"]);
@@ -82,7 +83,7 @@ function blockHTML(doc, b, i) {
     if (b.kind === "video") { const poster = themed(b, "poster"), auto = b.motion !== "manual" && !(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
       return `<video class="avd" src="${esc(src)}"${poster ? ` poster="${esc(poster)}"` : ""} controls muted playsinline preload="metadata"${auto ? " autoplay" : ""}${b.motion === "loop" ? " loop" : ""} aria-label="${esc(text(b.alt))}"${aw ? ` style="aspect-ratio:${aw}/${ah}"` : ""}></video>${cap}`; }
     return `<div class="blk pic">${picHTML([{href: src, src, w: aw * 100, h: ah * 100, name: text(b.alt), full: src}])}</div>${cap}`; }
-  if (b.type === "scene") return `<div class="ad">${esc(text(b.label))}</div>`;
+  if (b.type === "scene") return sceneHTML(doc, b, i);
   return "";
 }
 /* the whole document: its blocks, then its actions, each a request to Onix in this place */
@@ -104,7 +105,7 @@ function openArtifact(m, back, kbd) {
   e.setAttribute("role", "region"); e.setAttribute("aria-label", titleOf(doc)); e.dataset.mid = m.id;
   e.innerHTML = `<div class="aph"><b>${esc(titleOf(doc))}</b><button class="c sq" data-art-close aria-label="Close" data-tip="Close" data-key="Esc">${ic("x")}</button></div><div class="abody">${documentHTML(doc)}</div>`;
   if (inColumn) { side.append(e); side.dataset.borrowed = "artifact"; } else $("main").append(e);
-  host(e); loadPics(e); typeset(e);
+  host(e); loadPics(e); wireScene(e, doc); typeset(e);
   opened = {mid: m.id, el: e, back: back || null, doc};
   redrawRow(m); M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6);
   if (kbd) $("[data-art-close]", e).focus();   /* from the keyboard, the next key is the panel's */
@@ -125,7 +126,7 @@ function onArtifactEvent(ev) {
   m.submessages = m.submessages || []; if (m.submessages.some((s) => s.id === ev.submessage_id)) return;
   m.submessages.push({id: ev.submessage_id, sender_id: ev.sender_id, msg_type: ev.msg_type, content: ev.content});
   if (c === state.P) updateMessage(c, m);
-  if (opened && opened.mid === m.id) { const doc = artifactOf(m); if (doc && doc.id !== opened.doc.id) { const body = $(".abody", opened.el); body.innerHTML = documentHTML(doc); $(".aph b", opened.el).textContent = titleOf(doc); opened.doc = doc; host(body); loadPics(body); typeset(opened.el); } }
+  if (opened && opened.mid === m.id) { const doc = artifactOf(m); if (doc && doc.id !== opened.doc.id) { const body = $(".abody", opened.el); body.innerHTML = documentHTML(doc); $(".aph b", opened.el).textContent = titleOf(doc); opened.doc = doc; host(body); loadPics(body); wireScene(opened.el, doc); typeset(opened.el); } }
 }
 /* display maths: KaTeX is fetched the first time an artifact needs it; until then (or if it cannot be had) the formula
    stands in the code face, as written */
@@ -143,4 +144,4 @@ function wireArtifacts(root, msgOf) {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && opened && opened.el.contains(document.activeElement)) { e.preventDefault(); e.stopPropagation(); closeArtifact(); } }, true);
 }
 
-export {artifactOf, artifactOpen, artifactPart, captionOf, closeArtifact, onArtifactEvent, openArtifact, titleOf, wireArtifacts};
+export {artifactOf, artifactOpen, artifactPart, captionOf, closeArtifact, dataAt, isObj, onArtifactEvent, openArtifact, text, titleOf, wireArtifacts, words};

@@ -7715,6 +7715,188 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         for method in ("thread/status/changed", "mcpServer/startupStatus/updated"):
             self.assertEqual(translator.events_from_message({"method": method, "params": {}}), [])
 
+    def test_browser_web_and_image_actions_read_as_what_the_agent_did(self) -> None:
+        # Item shapes as Codex 0.157.1's app-server sent them, driven with
+        # Playwright's MCP server (playwright 1.62.1).
+        def mcp_call(
+            tool: str, arguments: dict[str, object], server: str = "playwright"
+        ) -> dict[str, object]:
+            return {
+                "type": "mcpToolCall",
+                "id": f"exec-{tool}",
+                "server": server,
+                "tool": tool,
+                "status": "completed",
+                "arguments": arguments,
+                "readOnlyHint": False,
+                "result": {"content": [{"type": "text", "text": "### Ran Playwright code"}]},
+                "error": None,
+            }
+
+        cases: list[tuple[dict[str, object], str]] = [
+            (mcp_call("browser_navigate", {"url": "https://example.com/"}), "Opened example.com"),
+            (
+                mcp_call(
+                    "browser_navigate",
+                    {"url": "https://github.com/plugyawn/armada/pull/12?tab=files#top"},
+                ),
+                "Opened github.com/plugyawn/armada/pull/12",
+            ),
+            (mcp_call("browser_navigate", {"url": "about:blank"}), "Opened about:blank"),
+            (mcp_call("browser_take_screenshot", {"scale": "css"}), "Took a screenshot"),
+            (
+                mcp_call("browser_take_screenshot", {"fullPage": True, "type": "png"}),
+                "Took a full-page screenshot",
+            ),
+            (
+                mcp_call("browser_take_screenshot", {"element": "Pricing table", "target": "e12"}),
+                "Took a screenshot of Pricing table",
+            ),
+            (
+                mcp_call("browser_click", {"element": "Sign in button", "target": "e7"}),
+                "Clicked Sign in button",
+            ),
+            (
+                mcp_call("browser_click", {"element": "Row 3", "doubleClick": True}),
+                "Double-clicked Row 3",
+            ),
+            (
+                mcp_call("browser_type", {"element": "Password field", "text": "hunter2"}),
+                "Typed into Password field",
+            ),
+            (mcp_call("browser_press_key", {"key": "Enter"}), "Pressed Enter"),
+            (
+                mcp_call("browser_wait_for", {"text": "Settled heading"}),
+                "Waited for “Settled heading”",
+            ),
+            (mcp_call("browser_wait_for", {"time": 2}), "Waited for the page"),
+            (mcp_call("browser_snapshot", {}), "Read the page"),
+            (mcp_call("browser_mouse_click_xy", {"x": 100, "y": 200}), "Clicked at 100, 200"),
+            (mcp_call("browser_tabs", {"action": "new"}), "Opened a tab"),
+            (mcp_call("browser_pdf_save", {}), "Browser: pdf save"),
+            (mcp_call("browser_navigate", {}), "Opened a page"),
+            (mcp_call("browser_navigate_back", {}), "Went back"),
+            (mcp_call("browser_hover", {"element": "Help menu"}), "Pointed at Help menu"),
+            (
+                mcp_call("browser_select_option", {"element": "Country", "values": ["IN"]}),
+                "Chose an option in Country",
+            ),
+            (
+                mcp_call("browser_drag", {"startElement": "Card 1", "endElement": "Done column"}),
+                "Dragged Card 1 to Done column",
+            ),
+            (mcp_call("browser_find", {"text": "Pricing"}), "Searched the page for “Pricing”"),
+            (mcp_call("browser_wait_for", {"textGone": "Loading…"}), "Waited for “Loading…” to go"),
+            (mcp_call("browser_tabs", {"action": "close", "index": 1}), "Closed a tab"),
+            (mcp_call("browser_tabs", {"action": "select", "index": 0}), "Switched tabs"),
+            (mcp_call("browser_tabs", {"action": "list"}), "Listed the tabs"),
+            (mcp_call("browser_handle_dialog", {"accept": True}), "Accepted a dialog"),
+            (mcp_call("browser_handle_dialog", {"accept": False}), "Dismissed a dialog"),
+            (mcp_call("browser_click", {"element": "x" * 100}), f"Clicked {'x' * 59}…"),
+            ({**mcp_call("browser_click", {}), "arguments": "not an object"}, "Clicked an element"),
+            (mcp_call("query", {"q": "x"}, server="docs"), "query"),
+            (
+                {
+                    "type": "imageView",
+                    "id": "exec-view",
+                    "path": "/home/zulip/.cache/armada-browser/devel-x/page-2026.png",
+                },
+                "Looked at page-2026.png",
+            ),
+            (
+                {
+                    "type": "webSearch",
+                    "id": "exec-web",
+                    "query": "",
+                    "action": None,
+                    "results": None,
+                },
+                "Searched the web",
+            ),
+            (
+                {
+                    "type": "webSearch",
+                    "id": "exec-web",
+                    "query": "playwright latest version",
+                    "action": {
+                        "type": "search",
+                        "query": "playwright latest version",
+                        "queries": None,
+                    },
+                    "results": [],
+                },
+                "Searched the web for “playwright latest version”",
+            ),
+            (
+                {
+                    "type": "webSearch",
+                    "id": "exec-web",
+                    "query": "https://www.npmjs.com/package/playwright",
+                    "action": {
+                        "type": "openPage",
+                        "url": "https://www.npmjs.com/package/playwright",
+                    },
+                    "results": [],
+                },
+                "Read www.npmjs.com/package/playwright",
+            ),
+            (
+                {
+                    "type": "webSearch",
+                    "id": "exec-web",
+                    "query": "",
+                    "action": {
+                        "type": "findInPage",
+                        "url": "https://www.npmjs.com/package/playwright",
+                        "pattern": "1.62",
+                    },
+                    "results": [],
+                },
+                "Searched www.npmjs.com/package/playwright for “1.62”",
+            ),
+            (
+                {"type": "webSearch", "id": "exec-web", "query": "", "action": {"type": "search"}},
+                "Searched the web",
+            ),
+            (
+                {"type": "webSearch", "id": "exec-web", "query": "", "action": {"type": "other"}},
+                "Searched the web",
+            ),
+            ({"type": "imageView", "id": "exec-view", "path": ""}, "Looked at an image"),
+        ]
+        translator = self.make_translator()
+        for item, title in cases:
+            [event] = translator.events_from_message(
+                {
+                    "method": "item/completed",
+                    "params": {"threadId": "t", "turnId": "u", "item": item},
+                }
+            )
+            self.assertEqual(
+                (event["kind"], event["title"], event["status"]), ("tool", title, "done")
+            )
+            # Neither what was typed nor an absolute path reaches the trace's line.
+            self.assertNotIn("hunter2", event["title"] + event.get("body", ""))
+            self.assertNotIn("/home/zulip", event["title"])
+
+        [opening] = translator.events_from_message(
+            {
+                "method": "item/started",
+                "params": {
+                    "threadId": "t",
+                    "item": {
+                        **mcp_call("browser_navigate", {"url": "https://example.com/a?b=1"}),
+                        "status": "inProgress",
+                        "result": None,
+                    },
+                },
+            }
+        )
+        self.assertEqual(
+            (opening["title"], opening["status"], opening["body"]),
+            ("Opened example.com/a", "running", "https://example.com/a?b=1"),
+        )
+
     def test_native_child_thread_identity_and_status_are_preserved(self) -> None:
         translator = self.make_translator()
         [started] = translator.events_from_message(

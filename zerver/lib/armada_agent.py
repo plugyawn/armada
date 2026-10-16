@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Literal, cast
+from urllib.parse import urlsplit
 
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
@@ -760,6 +761,111 @@ def armada_codex_event_item_id(event: dict[str, Any]) -> str:
     return "assistant"
 
 
+def armada_trace_text(value: object, *, limit: int = 60) -> str:
+    """A value quoted in a line of a run's trace, on one line and clipped."""
+    text = " ".join(str(value).split()) if value is not None else ""
+    return text if len(text) <= limit else f"{text[: limit - 1].rstrip()}…"
+
+
+def armada_trace_url(url: object) -> str:
+    """A URL as a line of a run's trace names it: host and path, without
+    the scheme, query or fragment."""
+    if not isinstance(url, str) or not url.strip():
+        return "a page"
+    parts = urlsplit(url.strip())
+    if parts.scheme in {"http", "https"} and parts.netloc:
+        return armada_trace_text(parts.netloc + parts.path.rstrip("/"), limit=80)
+    return armada_trace_text(url, limit=80)
+
+
+# The browser's tools whose line in the trace needs nothing from their
+# arguments (Playwright 1.62.1's MCP server, with the vision tools).
+ARMADA_BROWSER_ACTION_TITLES: Final = {
+    "browser_navigate_back": "Went back",
+    "browser_snapshot": "Read the page",
+    "browser_fill_form": "Filled in a form",
+    "browser_file_upload": "Uploaded files",
+    "browser_drop": "Dropped files on the page",
+    "browser_evaluate": "Ran code in the page",
+    "browser_run_code_unsafe": "Ran code in the browser",
+    "browser_console_messages": "Read the console",
+    "browser_network_requests": "Read the network requests",
+    "browser_network_request": "Read a network request",
+    "browser_resize": "Resized the window",
+    "browser_close": "Closed the browser",
+    "browser_mouse_move_xy": "Moved the pointer",
+    "browser_mouse_drag_xy": "Dragged the pointer",
+    "browser_mouse_down": "Pressed the mouse button",
+    "browser_mouse_up": "Released the mouse button",
+    "browser_mouse_wheel": "Scrolled",
+}
+
+
+def armada_browser_action_title(tool: str, arguments: dict[str, Any]) -> str:
+    """A browser action as people read it in a run's trace ("Opened
+    example.com", "Took a screenshot") rather than the tool's name.  What
+    the agent typed or filled in is not repeated."""
+    element = armada_trace_text(arguments.get("element") or "an element")
+    if tool == "browser_navigate":
+        return f"Opened {armada_trace_url(arguments.get('url'))}"
+    if tool == "browser_take_screenshot":
+        if arguments.get("element"):
+            return f"Took a screenshot of {element}"
+        return "Took a full-page screenshot" if arguments.get("fullPage") else "Took a screenshot"
+    if tool == "browser_click":
+        return f"{'Double-clicked' if arguments.get('doubleClick') else 'Clicked'} {element}"
+    if tool == "browser_mouse_click_xy":
+        return f"Clicked at {arguments.get('x')}, {arguments.get('y')}"
+    if tool == "browser_hover":
+        return f"Pointed at {element}"
+    if tool == "browser_type":
+        return f"Typed into {element}"
+    if tool == "browser_select_option":
+        return f"Chose an option in {element}"
+    if tool == "browser_press_key":
+        return f"Pressed {armada_trace_text(arguments.get('key'))}"
+    if tool == "browser_drag":
+        start = armada_trace_text(arguments.get("startElement") or "an element")
+        end = armada_trace_text(arguments.get("endElement") or "another")
+        return f"Dragged {start} to {end}"
+    if tool == "browser_find":
+        return f"Searched the page for “{armada_trace_text(arguments.get('text') or arguments.get('regex'))}”"
+    if tool == "browser_wait_for":
+        if arguments.get("text"):
+            return f"Waited for “{armada_trace_text(arguments['text'])}”"
+        if arguments.get("textGone"):
+            return f"Waited for “{armada_trace_text(arguments['textGone'])}” to go"
+        return "Waited for the page"
+    if tool == "browser_tabs":
+        return {
+            "new": "Opened a tab",
+            "close": "Closed a tab",
+            "select": "Switched tabs",
+        }.get(str(arguments.get("action")), "Listed the tabs")
+    if tool == "browser_handle_dialog":
+        return "Accepted a dialog" if arguments.get("accept") else "Dismissed a dialog"
+    return ARMADA_BROWSER_ACTION_TITLES.get(
+        tool, f"Browser: {tool.removeprefix('browser_').replace('_', ' ')}"
+    )
+
+
+def armada_web_search_title(item: dict[str, Any]) -> str:
+    """Codex's own web tool (web.run), which searches and reads pages as
+    text: its action is known only once the item completes."""
+    action = item.get("action")
+    if not isinstance(action, dict):
+        return "Searched the web"
+    if action.get("type") == "search":
+        query = action.get("query") or item.get("query")
+        return f"Searched the web for “{armada_trace_text(query)}”" if query else "Searched the web"
+    if action.get("type") == "openPage":
+        return f"Read {armada_trace_url(action.get('url'))}"
+    if action.get("type") == "findInPage":
+        pattern = armada_trace_text(action.get("pattern"))
+        return f"Searched {armada_trace_url(action.get('url'))} for “{pattern}”"
+    return "Searched the web"
+
+
 def armada_transcript_events_from_codex_json_event(
     event: dict[str, Any],
 ) -> list[ArmadaWorkerTranscriptEvent]:
@@ -908,7 +1014,27 @@ def armada_transcript_events_from_codex_json_event(
                 "title": f"Agent {activity_kind}",
             }
         ]
-    if isinstance(item_type, str) and ("tool" in item_type or item_type == "web_search"):
+    if item_type == "mcp_tool_call" and item.get("server") == ARMADA_BROWSER_MCP_SERVER:
+        raw_arguments = item.get("arguments")
+        arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
+        tool = str(item.get("tool") or "")
+        browser_event: ArmadaWorkerTranscriptEvent = {
+            **base_event,
+            "kind": "tool",
+            "title": armada_browser_action_title(tool, arguments),
+        }
+        if tool == "browser_navigate" and isinstance(arguments.get("url"), str):
+            browser_event["body"] = trim_armada_agent_text(arguments["url"], limit=1000)
+        return [browser_event]
+    if item_type == "web_search":
+        return [{**base_event, "kind": "tool", "title": armada_web_search_title(item)}]
+    if item_type == "image_view":
+        # The model looking at an image file with Codex's view_image: named
+        # by the file alone, never the absolute path.
+        path = item.get("path")
+        name = Path(path).name if isinstance(path, str) and path.strip() else "an image"
+        return [{**base_event, "kind": "tool", "title": f"Looked at {name}"}]
+    if isinstance(item_type, str) and "tool" in item_type:
         return [{**base_event, "kind": "tool", "title": title or item_type}]
     if isinstance(item_type, str):
         return [{**base_event, "kind": "status", "title": title or item_type}]
@@ -945,6 +1071,7 @@ ARMADA_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
     "dynamicToolCall": "dynamic_tool_call",
     "plan": "plan_update",
     "webSearch": "web_search",
+    "imageView": "image_view",
     "contextCompaction": "context_compaction",
     "userMessage": "user_message",
     "collabAgentToolCall": "collab_agent_tool_call",

@@ -4501,7 +4501,6 @@ class ArmadaSessionDefaultsTest(TestCase):
             response_policy="ambient",
         )
         sent_replies: list[str] = []
-        warm_calls: list[tuple[int, str, str]] = []
 
         def active_session_loader(
             message: dict[str, Any], bot_handler: object
@@ -4550,22 +4549,14 @@ class ArmadaSessionDefaultsTest(TestCase):
             def send_reply(self, message: dict[str, object], response: str) -> None:
                 sent_replies.append(response)
 
-        class FakeDispatcher:
-            def warm(
-                self,
-                bot_handler: object,
-                message: dict[str, object],
-                *,
-                stream: str,
-                topic: str,
-            ) -> None:
-                assert isinstance(message["id"], int)
-                warm_calls.append((int(message["id"]), stream, topic))
+        # People talking to each other in an agent topic queue nothing for
+        # the worker: no run, and no speculative warm of a Codex process.
+        dispatcher = Mock()
 
         make_test_armada_handler(
             active_session_loader=active_session_loader,
             worker_run_store=FakeRunStore(),
-            worker_dispatcher=FakeDispatcher(),
+            worker_dispatcher=dispatcher,
             addressing_intent_classifier=addressing_intent_classifier,
         ).handle_message(
             {
@@ -4579,7 +4570,7 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
 
         self.assertEqual(sent_replies, [])
-        self.assertEqual(warm_calls, [(209, ARMADA_DEFAULT_STREAM, ARMADA_DEFAULT_TOPIC)])
+        self.assertEqual(dispatcher.mock_calls, [])
 
     def test_embedded_bot_handler_reports_router_failure_once_per_cooldown(self) -> None:
         loaded_session = build_armada_active_session_summary_from_messages(
@@ -5161,41 +5152,6 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(event["message"]["content"], "@Onix what's up, bot?")
         self.assertEqual(message["content"], "what's up, bot?")
 
-    def test_queue_worker_dispatcher_enqueues_background_warm(self) -> None:
-        message = {
-            "id": 206,
-            "type": "stream",
-            "display_recipient": ARMADA_DEFAULT_STREAM,
-            "topic": ARMADA_DEFAULT_TOPIC,
-            "content": "Thanks, that makes sense.",
-        }
-        bot_handler = SimpleNamespace(user_profile=SimpleNamespace(id=17))
-
-        with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
-            ArmadaQueueWorkerDispatcher().warm(
-                bot_handler,
-                message,
-                stream=ARMADA_DEFAULT_STREAM,
-                topic=ARMADA_DEFAULT_TOPIC,
-            )
-
-        publish.assert_called_once_with(
-            armada_worker_queue_name(
-                17,
-                stream=ARMADA_DEFAULT_STREAM,
-                topic=ARMADA_DEFAULT_TOPIC,
-            ),
-            {
-                "warm_only": True,
-                "user_profile_id": 17,
-                "message_id": 206,
-                "stream": ARMADA_DEFAULT_STREAM,
-                "topic": ARMADA_DEFAULT_TOPIC,
-                "content": "Thanks, that makes sense.",
-                "message": message,
-            },
-        )
-
     def test_worker_queue_affinity_is_stable_and_bounded(self) -> None:
         first = armada_worker_queue_name(17, stream="devel", topic="one")
         self.assertEqual(first, armada_worker_queue_name(17, stream="devel", topic="one"))
@@ -5250,7 +5206,33 @@ class ArmadaSessionDefaultsTest(TestCase):
         ):
             worker._consume(event)
 
-    def test_only_the_home_worker_warms_a_topic(self) -> None:
+    def test_armada_worker_drops_a_queued_warm_event(self) -> None:
+        # A warm queued by an older server before a deploy must never start a
+        # run in the new one.
+        worker = object.__new__(armada_worker_module.ArmadaWorker)
+        worker.worker_slot = 0
+        event = {
+            "warm_only": True,
+            "user_profile_id": 17,
+            "message_id": 206,
+            "stream": ARMADA_DEFAULT_STREAM,
+            "topic": ARMADA_DEFAULT_TOPIC,
+            "content": "Thanks, that makes sense.",
+            "message": {"id": 206, "type": "stream", "content": "Thanks, that makes sense."},
+        }
+
+        with (
+            patch.object(armada_worker_module, "get_user_profile_by_id") as get_user,
+            patch.object(armada_worker_module, "ArmadaDatabaseWorkerRunStore") as run_store,
+            patch.object(armada_worker_module, "get_armada_worker_runtime") as get_runtime,
+        ):
+            worker._consume(event)
+
+        get_user.assert_not_called()
+        run_store.assert_not_called()
+        get_runtime.assert_not_called()
+
+    def test_only_the_home_worker_keeps_a_topic_warm(self) -> None:
         home_slot = armada_worker_home_slot(
             17,
             stream="devel",

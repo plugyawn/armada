@@ -4174,30 +4174,6 @@ class ArmadaDatabaseWorkerRunStore:
 
 
 class ArmadaQueueWorkerDispatcher:
-    def warm(
-        self,
-        bot_handler: Any,
-        message: dict[str, Any],
-        *,
-        stream: str,
-        topic: str,
-    ) -> None:
-        user_profile_id = getattr(bot_handler.user_profile, "id", None)
-        if not isinstance(user_profile_id, int):
-            raise AssertionError("Queue warm requires a bot user id")
-        queue_json_publish_rollback_unsafe(
-            armada_worker_queue_name(user_profile_id, stream=stream, topic=topic),
-            {
-                "warm_only": True,
-                "user_profile_id": user_profile_id,
-                "message_id": armada_message_id(message),
-                "stream": stream,
-                "topic": topic,
-                "content": str(message.get("content", "")),
-                "message": dict(message),
-            },
-        )
-
     def dispatch(
         self,
         _armada_handler: ArmadaEmbeddedBotHandler,

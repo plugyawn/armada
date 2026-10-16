@@ -2025,13 +2025,6 @@ class ArmadaWorkerRuntime:
         if callable(configure_turn):
             configure_turn(model=model, reasoning_effort=reasoning_effort)
 
-    def warm(self, active_session: ArmadaActiveSessionSummary) -> None:
-        if self.tool_runner is None:
-            return
-        warm = getattr(self.tool_runner, "warm", None)
-        if callable(warm):
-            warm(active_session)
-
     def runtime_value(self) -> str:
         if self.tool_runner is None:
             return "built-in"
@@ -2743,26 +2736,6 @@ class ArmadaEmbeddedBotHandler:
         )
         return progress_message_id
 
-    def warm_worker_topic(
-        self,
-        bot_handler: Any,
-        message: dict[str, Any],
-        *,
-        active_session: ArmadaActiveSessionSummary | None,
-        stream: str,
-        topic: str,
-    ) -> None:
-        if active_session is None or not active_session.get("latest_codex_thread_id"):
-            return
-        warm = getattr(self.worker_dispatcher, "warm", None)
-        if callable(warm):
-            warm(
-                bot_handler,
-                message,
-                stream=stream,
-                topic=topic,
-            )
-
     def handle_message(self, message: dict[str, Any], bot_handler: Any) -> None:
         if self.worker_dispatcher is None:
             raise RuntimeError("Message routing requires an injected worker dispatcher")
@@ -2866,13 +2839,8 @@ class ArmadaEmbeddedBotHandler:
                 explicitly_addressed=explicitly_addressed,
             )
             if not explicitly_addressed:
-                self.warm_worker_topic(
-                    bot_handler,
-                    message,
-                    active_session=active_session,
-                    stream=stream,
-                    topic=topic,
-                )
+                # People talking to each other start no Codex process: a run
+                # brings its own runtime up when it starts.
                 return
         steering_event = build_armada_explicit_steering_event(
             content,

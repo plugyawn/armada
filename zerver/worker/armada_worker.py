@@ -389,6 +389,11 @@ class ArmadaWorker(QueueProcessingWorker):
         *,
         side_runtime: ArmadaWorkerRuntime | None = None,
     ) -> None:
+        if event.get("warm_only") is True:
+            # Older servers queued speculative warms; a run now brings up its
+            # own runtime. One left in the queue across a deploy must never
+            # be taken for a run.
+            return
         redelivered = event.pop(QUEUE_REDELIVERED_EVENT_KEY, False) is True
         user_profile_id = event.get("user_profile_id")
         if (
@@ -458,61 +463,6 @@ class ArmadaWorker(QueueProcessingWorker):
                 # is the crash-recovery wakeup for this durable side row.
                 return
         worker_run_store = ArmadaDatabaseWorkerRunStore()
-        if event.get("warm_only") is True:
-            # Low-priority consumers may steal real turns to avoid head-of-line
-            # blocking.  A speculative warm has no latency value once stolen,
-            # and would create a duplicate process-local app-server instead.
-            if not armada_worker_slot_should_warm(
-                self.worker_slot,
-                user_profile.id,
-                stream=context_stream,
-                topic=context_topic,
-            ):
-                return
-            model = armada_worker_model_for_topic(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            reasoning_effort = armada_worker_reasoning_effort_for_topic(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            workdir = armada_worker_workdir_for_topic(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            process_isolation = armada_topic_process_isolation(
-                user_profile,
-                stream=context_stream,
-                topic=context_topic,
-            )
-            isolation_error = armada_worker_process_isolation_error(
-                process_isolation,
-                workdir=workdir,
-            )
-            runtime = get_armada_worker_runtime(
-                model,
-                workdir,
-                reasoning_effort,
-                process_isolation,
-                isolation_error,
-            )
-            try:
-                active_session = load_armada_active_session_from_zulip(message, bot_handler)
-                runtime.warm(active_session)
-            except Exception:
-                logger.warning(
-                    "Failed to warm the Codex thread for %s > %s.",
-                    context_stream,
-                    context_topic,
-                    exc_info=True,
-                )
-            finally:
-                release_armada_worker_runtime(runtime)
-            return
         if redelivered:
             wait_for_redelivered_armada_worker_run(
                 bot_profile_id=user_profile.id,

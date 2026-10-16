@@ -1497,14 +1497,6 @@ class ArmadaCodexAppServerToolRunner:
         self.model = model
         self.reasoning_effort = reasoning_effort
 
-    def warm(self, active_session: ArmadaActiveSessionSummary) -> None:
-        latest_thread_id = active_session.get("latest_codex_thread_id")
-        if not isinstance(latest_thread_id, str) or not latest_thread_id.strip():
-            return
-        with self.lock:
-            self.ensure_started()
-            self.ensure_thread(active_session, event_callback=None)
-
     def config_args(self) -> list[str]:
         args: list[str] = []
         if self.service_tier:

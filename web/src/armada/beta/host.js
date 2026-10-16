@@ -41,6 +41,7 @@ import {wireCaret} from "./caret.js";
 import {onPresence, startPresence} from "./presence.js";
 import {onPost, wirePages} from "./pages.js";
 import {loadLater, onReminders, onScheduled, openSendWhen, wireLater} from "./later.js";
+import {wireLightbox} from "./lightbox.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
@@ -76,7 +77,7 @@ async function boot() {
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
   addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home" && state.place.kind !== "page") f.forEach(upload); });   /* the editor takes its own drops (pages.js) */
   tx.addEventListener("focus", () => { state.threadTx = null; });
-  buildOver(); wireMentions(); wireCaret(); wireLater();
+  buildOver(); wireMentions(); wireCaret(); wireLater(); wireLightbox(document.body);   /* a picture opens whole (lightbox.js) */
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
   cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret"); go.classList.remove("armed");
@@ -91,7 +92,7 @@ async function boot() {
     if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop && editLast()) e.preventDefault(); });   /* Up in an empty field (the switch's pill alone is empty) edits my last message, while the realm lets me */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
-  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick]";
+  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick], a.im";
   document.addEventListener("mousedown", (e) => { if (e.target.closest && e.target.closest(KEEP)) e.preventDefault(); }, true);
   /* the field is ready after everything: a press that ends anywhere outside a control or a selection hands the caret back */
   document.addEventListener("mouseup", (e) => setTimeout(() => { const a = document.activeElement; if (a === tx || (a && a.closest("#lab, input, textarea, .thr-in .tx, .pal, .dlg, .pop")) || (e.target.closest && e.target.closest("#lab")) || !getSelection().isCollapsed) return; ready(); }, 0));

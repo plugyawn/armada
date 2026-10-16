@@ -1,6 +1,7 @@
 "use strict";
 
-// The interim beta's pictures (web/src/armada/beta/media.js, parts.js),
+// The interim beta's pictures (web/src/armada/beta/media.js, parts.js,
+// lightbox.js),
 // with a real DOM and a stand-in server: a picture's box is reserved from
 // the size the server writes on it, before a byte of it loads, and stays
 // that size when the thumbnail replaces the placeholder; a picture loads
@@ -8,7 +9,9 @@
 // only names a picture is its label, not words; my own picture shows at
 // once, with its size, and the server's copy takes its place without a
 // gap; a picture that cannot load says so in its own box; the field's
-// chip counts what has gone up. jsdom lays nothing out and loads no image:
+// chip counts what has gone up; a picture pressed opens whole, the arrows
+// step through the conversation's pictures, Tab stays inside, Esc closes
+// and focus goes back where it was. jsdom lays nothing out and loads no image:
 // the observer and the image loader are stand-ins the tests drive, and the
 // boxes are read as the page writes them. Deleted with
 // web/src/armada/beta/.
@@ -203,6 +206,7 @@ const composer = zrequire("armada/beta/composer.js");
 const send = zrequire("armada/beta/send.js");
 const media = zrequire("armada/beta/media.js");
 const hover = zrequire("armada/beta/hover.js");
+const lightbox = zrequire("armada/beta/lightbox.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
@@ -282,6 +286,7 @@ async function settle() {
     }
 }
 hover.buildOver();
+lightbox.wireLightbox(document.body);
 feed.drawLane();
 
 run_test(
@@ -501,4 +506,147 @@ run_test("a message that is only a picture can be stood on, and carries its cont
     // ... and standing on it brings up React, Reply in thread, Copy text and More.
     const controls = [...door.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
     assert.deepEqual(controls, ["React", "Reply in thread", "Copy text", "More"]);
+});
+
+// The lightbox: what it says, and where focus is.
+const viewer = () => document.querySelector('[role="dialog"]');
+const viewing = () =>
+    viewer().querySelector("b").textContent +
+    " " +
+    [...viewer().querySelectorAll("span")].find((x) => /^\d+ of \d+$/.test(x.textContent))
+        .textContent;
+// The message whose two pictures the lightbox tests open.
+let pair = null;
+function pressPicture(box) {
+    box.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
+}
+
+run_test(
+    "a picture pressed opens whole; the arrows step through the conversation's pictures",
+    async () => {
+        lane.textContent = "";
+        const m = arrive(
+            IAGO,
+            named("one.png", "two.png") +
+                preview("one.png", 1440, 900) +
+                preview("two.png", 900, 1440),
+        );
+        const n = arrive(AGENT, "<p>and a third</p>" + preview("three.png", 2880, 1800));
+        await settle();
+        pair = m.id;
+        const [one, two] = boxesOf(m.id);
+        const [three] = boxesOf(n.id);
+        comeNear(one);
+        comeNear(two);
+        field.focus();
+        pressPicture(two);
+        assert.ok(viewer());
+        assert.equal(viewing(), "two.png 2 of 3");
+        assert.ok(viewer().contains(document.activeElement));
+        // It opens at once with the picture already shown, and the original takes its place once decoded.
+        const img = viewer().querySelector("img");
+        assert.equal(img.getAttribute("src"), two.querySelector("img").dataset.src);
+        decoding.find((d) => d.src === upload_url("two.png")).resolve();
+        await settle();
+        assert.equal(img.getAttribute("src"), upload_url("two.png"));
+        // Right and Left step; at either end nothing moves on.
+        dom.press("ArrowRight");
+        assert.equal(viewing(), "three.png 3 of 3");
+        dom.press("ArrowRight");
+        assert.equal(viewing(), "three.png 3 of 3");
+        dom.press("ArrowLeft");
+        dom.press("ArrowLeft");
+        assert.equal(viewing(), "one.png 1 of 3");
+        dom.press("ArrowLeft");
+        assert.equal(viewing(), "one.png 1 of 3");
+        // The original opens in its own tab from the lightbox.
+        assert.equal(viewer().querySelector("a[href]").getAttribute("href"), upload_url("one.png"));
+        assert.ok(three);
+    },
+);
+
+run_test(
+    "Tab stays inside the lightbox; Esc closes it and focus goes back where it was",
+    async () => {
+        pair = arrive(
+            IAGO,
+            named("one.png", "two.png") +
+                preview("one.png", 1440, 900) +
+                preview("two.png", 900, 1440),
+        ).id;
+        await settle();
+        // Pressed with the pointer, while I was writing: Esc gives the field back.
+        field.focus();
+        pressPicture(boxesOf(pair)[0]);
+        assert.ok(viewer());
+        for (let i = 0; i < 8; i += 1) {
+            dom.press("Tab");
+            assert.ok(viewer().contains(document.activeElement));
+        }
+        dom.press("Tab", {shiftKey: true});
+        assert.ok(viewer().contains(document.activeElement));
+        // A key that is not the lightbox's does not reach the page behind it.
+        let reached = false;
+        const page = () => {
+            reached = true;
+        };
+        dom.window.addEventListener("keydown", page);
+        dom.press("h");
+        assert.equal(reached, false);
+        dom.press("Escape");
+        assert.equal(viewer(), null);
+        assert.equal(document.activeElement, field);
+        // Closed, it lets the page have its keys again.
+        dom.press("h");
+        dom.window.removeEventListener("keydown", page);
+        assert.equal(reached, true);
+
+        // From the keyboard: standing on a picture, Return opens it; Esc gives
+        // the picture back its focus.
+        const [box] = boxesOf(pair);
+        box.focus();
+        box.dispatchEvent(
+            new dom.window.MouseEvent("click", {bubbles: true, cancelable: true, detail: 0}),
+        );
+        assert.ok(viewer());
+        assert.match(viewing(), /^one\.png \d+ of \d+$/);
+        dom.press("Escape");
+        assert.equal(viewer(), null);
+        assert.equal(document.activeElement, box);
+
+        // The close control and a press beside the picture close it too.
+        pressPicture(box);
+        dom.click(viewer().querySelector('[aria-label="Close"]'));
+        assert.equal(viewer(), null);
+        pressPicture(box);
+        viewer().dispatchEvent(
+            new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}),
+        );
+        assert.equal(viewer(), null);
+    },
+);
+
+run_test("a picture that failed and a modified press open no lightbox", async () => {
+    pair = arrive(IAGO, named("one.png") + preview("one.png", 1440, 900)).id;
+    await settle();
+    const [box] = boxesOf(pair);
+    const modified = new dom.window.MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        metaKey: true,
+    });
+    box.dispatchEvent(modified);
+    assert.equal(viewer(), null);
+    assert.equal(modified.defaultPrevented, false);
+    const m = arrive(IAGO, named("gone2.png") + preview("gone2.png", 640, 480));
+    await settle();
+    const [gone] = boxesOf(m.id);
+    comeNear(gone);
+    gone.querySelector("img").dispatchEvent(new dom.window.Event("error"));
+    pressPicture(gone);
+    assert.equal(viewer(), null);
+    // A plain press on a picture that loaded does open it.
+    pressPicture(box);
+    assert.ok(viewer());
+    dom.press("Escape");
 });

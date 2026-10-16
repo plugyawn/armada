@@ -54,6 +54,7 @@ into the engineered client deletes the module it replaces.
 | `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`); a block of streamed words (`streamHTML`) | feed |
 | `code_blocks.js` | a code block: its code, its copy button, long output folded with Show all | feed |
 | `media.js` | pictures: the server's previews read into boxes of known size (`picOf`, `picHTML`), a Markdown image lifted out of its words, the name link that is a picture's label (`liftInline`, `dropNames`), loading when near (`loadPics`), my own pictures shown at once (`localPicture`, `rememberLocal`); its sheet is `media.css`; node tests in `web/tests/armada/beta_media.test.cjs` | feed |
+| `lightbox.js` | a picture opened whole: pressed, it travels to the window's middle; the original swapped in once decoded; Left and Right through the conversation's pictures; Actual size; Esc, and focus back where it was (`openLightbox`, `wireLightbox`, `lightboxOpen`); its rules are in `media.css`; tested in `beta_media.test.cjs` | feed |
 | `feed.js` | the conversation: its scroll, its turns, `drawLane()` | feed |
 | `agent_turn.js` | the agent's turn: the working mark, the footer, the streamed words (`agent_stream` events, written once a frame, a block at a time) followed in place | feed |
 | `reactions.js` | reactions | feed |

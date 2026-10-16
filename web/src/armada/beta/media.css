@@ -43,4 +43,23 @@
 .cz .att > .ap { flex: none; width: 20px; height: 20px; border-radius: var(--r-mark); object-fit: cover; }
 .cz .att > .pct { flex: none; width: 4ch; font: var(--t-caption); font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; }
 
+/* the lightbox (lightbox.js): a quiet surface over the whole window, the picture alone on it, one line of facts and
+   controls at its foot; above the Lab (80), under the focus ring (90) and tooltips (91). The stage scrolls when the picture is shown larger than it (actual size, a full-page screenshot);
+   auto margins centre a picture that fits and keep the start of one that does not in reach. */
+.lbx { position: fixed; inset: 0; z-index: 85; display: grid; grid-template-rows: minmax(0, 1fr) 52px; background: var(--ground); outline: none; }
+.lbx-stage { display: flex; overflow: auto; padding: var(--s-6) 40px 0; scrollbar-width: none; }
+.lbx-img { display: block; flex: none; margin: auto; border-radius: var(--r-block); transform-origin: 0 0; cursor: default; background: var(--block); }
+.lbx-stage[data-fit="width"] > .lbx-img { margin-top: 0; }
+.lbx:has(.lbx-zoom:not([hidden])) .lbx-img { cursor: zoom-in; }
+.lbx[data-zoom="actual"] .lbx-img { cursor: zoom-out; border-radius: 0; }
+.lbx-prev, .lbx-next { position: absolute; top: calc(50% - 26px - 14px); background: var(--raised); box-shadow: 0 0 0 1px var(--edge); }   /* raised: they may stand over the picture */
+.lbx-prev { left: var(--s-2); } .lbx-next { right: var(--s-2); }
+.lbx-prev > .ic { transform: scaleX(-1); }
+.lbx-bar { display: flex; align-items: center; gap: var(--s-5); padding: 0 var(--s-4) 0 40px; min-width: 0; }
+.lbx-t { display: flex; align-items: baseline; gap: var(--s-3); min-width: 0; flex: 1; white-space: nowrap; }
+.lbx-t > b { font: var(--t-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lbx-t > .k, .lbx-n { font: var(--t-caption); color: var(--ink-2); }
+.lbx-n { flex: none; font-variant-numeric: tabular-nums; }
+.lbx-bar > .lk { margin: 0; text-decoration: none; }
+
 }   /* @layer zulip.armada-beta */

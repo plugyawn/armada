@@ -36,7 +36,7 @@ const picsOf = (div) => $$("img", div).map((img) => picOf(img, img.closest("a"))
 function picHTML(items) {
   return items.map((p) => { const b = picBox(p.w, p.h), path = UPLOAD.test(p.href) ? p.href : "";
     const attrs = [`class="im"`, `href="${esc(p.href)}"`, `target="_blank"`, `rel="noopener noreferrer"`, `data-state="wait"`, `aria-label="${esc(p.name || "Image")}"`,
-      b ? `style="--ar:${b.ratio};--w:${p.w}px"` : `data-size="unknown"`, b && b.crop ? `data-crop="${b.crop}"` : "", path ? `data-path="${esc(path)}"` : "", p.link ? `data-kind="link"` : `data-full="${esc(p.full)}"`].filter(Boolean).join(" ");
+      b ? `style="--ar:${b.ratio};--w:${p.w}px" data-dim="${p.w}x${p.h}"` : `data-size="unknown"`, b && b.crop ? `data-crop="${b.crop}"` : "", path ? `data-path="${esc(path)}"` : "", p.link ? `data-kind="link"` : `data-full="${esc(p.full)}"`].filter(Boolean).join(" ");
     return `<a ${attrs}><img alt="" decoding="async"${p.src ? ` data-src="${esc(p.src)}"` : ""}${p.anim ? ` data-anim="${esc(p.anim)}"` : ""}></a>`; }).join("");
 }
 

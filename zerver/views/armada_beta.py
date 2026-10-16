@@ -24,6 +24,7 @@ from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
     evolve_partner,
+    fold_partner,
     load_pack,
     partners_state,
     put_off_choice,
@@ -169,8 +170,8 @@ def armada_beta_sprite(request: HttpRequest, path: str) -> HttpResponse:
 
 @typed_endpoint_without_parameters
 def get_armada_partners(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
-    """Every person's partner, the agent's, and mine in full, my
-    experience folded first."""
+    """Every person's partner, the agent's, and mine in full, as stored;
+    my experience is folded in the background when it is due."""
     return json_success(request, data=partners_state(user_profile))
 
 
@@ -178,6 +179,7 @@ def get_armada_partners(request: HttpRequest, user_profile: UserProfile) -> Http
 def post_armada_partner_fold(request: HttpRequest, user_profile: UserProfile) -> HttpResponse:
     """Count what I did since the last fold (at most once in 30 s); the
     page asks after a send and a reaction of mine."""
+    fold_partner(user_profile)
     return json_success(request, data=partners_state(user_profile))
 
 
@@ -196,7 +198,7 @@ def post_armada_partner(
         put_off_choice(user_profile)
     elif species is not None:
         choose_partner(user_profile, species, picks or [])
-    return json_success(request, data=partners_state(user_profile, fold=False))
+    return json_success(request, data=partners_state(user_profile))
 
 
 @typed_endpoint
@@ -209,4 +211,4 @@ def post_armada_partner_evolve(
 ) -> HttpResponse:
     """Take the change my level allows, or hold my partner as it is."""
     evolve_partner(user_profile, into, hold)
-    return json_success(request, data=partners_state(user_profile, fold=False))
+    return json_success(request, data=partners_state(user_profile))

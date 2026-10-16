@@ -39,10 +39,12 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
+from zerver.lib.armada_background_task import ArmadaBackgroundTask
 from zerver.lib.armada_gate import get_selected_armada_bot_user_id_for_realm
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.users import (
@@ -57,6 +59,9 @@ from zerver.tornado.django_api import send_event_on_commit
 # A person's experience is folded at most this often; a fold asked for
 # sooner returns the row as it stands.
 PARTNER_FOLD_SECONDS = 30
+# Whether the agent has evolved is counted from the realm's finished runs
+# at most this often (or again when a run finishes).
+AGENT_EVOLUTION_CACHE_SECONDS = 60
 # The agent's partner: Onix, which becomes Steelix and keeps its name.
 AGENT_SPECIES = "95"
 AGENT_EVOLVED_SPECIES = "208"
@@ -396,18 +401,37 @@ def arrival(pack: Pack, chosen: str, xp: int, picks: list[str]) -> tuple[str, bo
             row["species"] = picked[0]
 
 
-def agent_partner(pack: Pack, realm_id: int) -> dict[str, Any]:
+def agent_evolution_cache_key(realm_id: int) -> str:
+    return f"armada:agent-partner-evolved:{realm_id}"
+
+
+def invalidate_agent_evolution(realm_id: int) -> None:
+    cache.delete(agent_evolution_cache_key(realm_id))
+
+
+def agent_has_evolved(realm_id: int) -> bool:
     """Onix evolves into Steelix once the team's runs have done enough work
     in enough hands: PARTNER_AGENT_RUNS runs done, started by at least
     PARTNER_AGENT_HANDS people (or by every active person, in a smaller
-    team). Its name stays Onix."""
+    team). Counting reads every finished run, so the answer is kept for
+    AGENT_EVOLUTION_CACHE_SECONDS, or until a run finishes."""
+    key = agent_evolution_cache_key(realm_id)
+    evolved = cache.get(key)
+    if isinstance(evolved, bool):
+        return evolved
     done = AgentRun.objects.filter(realm_id=realm_id, status=AgentRun.DONE)
     evolved = False
     if done.count() >= settings.PARTNER_AGENT_RUNS:
         people = UserProfile.objects.filter(realm_id=realm_id, is_active=True, is_bot=False)
         hands = min(settings.PARTNER_AGENT_HANDS, people.count())
         evolved = done.values("requesting_user_id").distinct().count() >= hands
-    species = AGENT_EVOLVED_SPECIES if evolved else AGENT_SPECIES
+    cache.set(key, evolved, AGENT_EVOLUTION_CACHE_SECONDS)
+    return evolved
+
+
+def agent_partner(pack: Pack, realm_id: int) -> dict[str, Any]:
+    """The agent's partner; its name stays the agent's."""
+    species = AGENT_EVOLVED_SPECIES if agent_has_evolved(realm_id) else AGENT_SPECIES
     return {"species": species if pack.drawable(species) else None, "shiny": False}
 
 
@@ -511,24 +535,68 @@ def my_view(
     }
 
 
-def partners_state(user: UserProfile, *, fold: bool = True) -> dict[str, Any]:
+def fold_partner(user: UserProfile) -> None:
+    """Fold my experience, at most once in PARTNER_FOLD_SECONDS, holding my
+    row for the fold; my row is written only when the fold found
+    something, and the team is told when what they see changed."""
+    pack = load_pack()
+    if pack is None:
+        return
+    with transaction.atomic(savepoint=False):
+        mine = lock_row(user)
+        unfolded = dict(mine)
+        before = shown_view(pack, mine)
+        if fold_partner_xp(user, mine, timezone_now()) and {**mine, "folded_at": None} != {
+            **unfolded,
+            "folded_at": None,
+        }:
+            save_row(user, mine)
+            push_partner_change(pack, user, before, mine)
+
+
+def fold_partner_of_user_id(user_id: int) -> None:
+    user = UserProfile.objects.filter(id=user_id).first()
+    if user is not None:
+        fold_partner(user)
+
+
+# A read of the partners asks for my fold, which runs in the background:
+# a read never waits for the fold or holds a lock.
+partner_fold = ArmadaBackgroundTask[int]("armada-partner-fold", fold_partner_of_user_id)
+
+
+def fold_partner_after_run(user_id: int) -> None:
+    """A run of mine ended: count it now, as a send counts a message, and
+    count the agent's evolution again."""
+    user = UserProfile.objects.filter(id=user_id).first()
+    if user is None:
+        return
+    invalidate_agent_evolution(user.realm_id)
+    with transaction.atomic(savepoint=False):
+        fold_partners_of_senders([user])
+
+
+def partners_state(user: UserProfile) -> dict[str, Any]:
     """Every person's partner as the team sees it, the agent's, and mine in
-    full. My experience is folded first (at most once in
-    PARTNER_FOLD_SECONDS)."""
+    full, as stored: a read writes nothing. When my experience is due a
+    fold (PARTNER_FOLD_SECONDS), one is asked for in the background, once
+    in that time across processes; a change it makes reaches the team as
+    an armada_partner event."""
     pack = load_pack()
     agent = get_agent_bot(user.realm_id)
     if pack is None or agent is None:
         return {"on": False}
     now = timezone_now()
-    if fold:
-        with transaction.atomic(savepoint=False):
-            mine = lock_row(user)
-            before = shown_view(pack, mine)
-            if fold_partner_xp(user, mine, now):
-                save_row(user, mine)
-                push_partner_change(pack, user, before, mine)
     rows = get_rows(user.realm_id)
     mine = rows.get(user.id, new_row())
+    if (
+        not user.is_bot
+        and (
+            mine["folded_at"] is None or now.timestamp() - mine["folded_at"] >= PARTNER_FOLD_SECONDS
+        )
+        and cache.add(f"armada:partner-fold:{user.id}", True, PARTNER_FOLD_SECONDS)
+    ):
+        partner_fold.request(user.id)
     shown = set(
         UserProfile.objects.filter(
             realm_id=user.realm_id, is_active=True, id__in=list(rows)

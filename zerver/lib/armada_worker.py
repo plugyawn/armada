@@ -4040,6 +4040,17 @@ class ArmadaDatabaseWorkerRunStore:
             transaction.on_commit(
                 lambda: refresh_armada_workspace_after_terminal_run(workspace_node_id)
             )
+        if (
+            not same_status
+            and status in (AgentRun.DONE, AgentRun.FAILED)
+            and run.requesting_user_id is not None
+        ):
+            # A finished run counts toward its requester's partner, as a
+            # send counts toward the sender's.
+            from zerver.lib.partner import fold_partner_after_run
+
+            requesting_user_id = run.requesting_user_id
+            transaction.on_commit(lambda: fold_partner_after_run(requesting_user_id))
         return True
 
     def _record_transition_rejected(

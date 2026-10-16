@@ -16,6 +16,7 @@ import orjson
 import time_machine
 from django.apps import apps as django_apps
 from django.conf import settings
+from django.core.cache import cache
 from django.db import connection
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
@@ -26,15 +27,21 @@ from zerver.actions.create_user import do_create_user
 from zerver.actions.users import do_deactivate_user
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.armada_gate import invalidate_armada_selected_bot_cache
+from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
 from zerver.lib.event_schema import check_armada_partner_event
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.initial_password import initial_password
 from zerver.lib.partner import (
+    PARTNER_FOLD_SECONDS,
     armada_sprite_dir,
     choose_partner,
+    fold_partner,
+    fold_partner_after_run,
     get_row,
+    invalidate_agent_evolution,
     level_for_xp,
     load_pack,
+    partner_fold,
     save_row,
     stone_for_species,
     user_zone,
@@ -452,6 +459,8 @@ class PartnerTest(ZulipTestCase):
     def finish_run(self, user: UserProfile, moment: datetime, status: str) -> None:
         trigger = self.send_stream_message(user, "Verona", "a request")
         Message.objects.filter(id=trigger).update(date_sent=moment)
+        # As the worker does when a run finishes.
+        invalidate_agent_evolution(self.realm.id)
         AgentRun.objects.create(
             realm=self.realm,
             bot_profile=self.agent,
@@ -613,6 +622,14 @@ class PartnerTest(ZulipTestCase):
         # Late on Tuesday in UTC is Wednesday in Kolkata: a new day.
         self.send_at(aaron, tuesday.replace(hour=20), 2)
         with time_machine.travel(tuesday.replace(hour=21), tick=False):
+            # A read writes nothing; the fold it asks for runs after it.
+            self.login_user(aaron)
+            with (
+                mock.patch.object(partner_fold, "start", side_effect=partner_fold.work) as start,
+                self.captureOnCommitCallbacks(execute=True),
+            ):
+                self.assertEqual(self.partners(aaron)["me"]["xp"], 0)
+            start.assert_called_once_with(aaron.id)
             me = self.partners(aaron)["me"]
         self.assertEqual(me["xp"], (25 + 15 + 10) + (25 + 30 + 40 + 10) + (25 + 2))
         self.assertEqual(me["active_days"], 3)
@@ -715,6 +732,97 @@ class PartnerTest(ZulipTestCase):
         # A species with no shiny sprite stays as it is.
         self.assertIsNone(self.partners(othello)["me"]["ready"])
 
+    def test_partners_read_takes_no_lock_and_writes_nothing(self) -> None:
+        hamlet = self.example_user("hamlet")
+        self.assert_json_success(self.choose(hamlet, "1"))
+        self.partners(hamlet)
+        # My session, the agent's bot, the partners and the people shown;
+        # no lock, no write, and the agent's evolution from memcached.
+        with (
+            self.assert_database_query_count(4, keep_cache_warm=True),
+            CaptureQueriesContext(connection) as queries,
+        ):
+            self.assert_json_success(self.client_get("/json/armada/partners"))
+        statements = [query["sql"] for query in queries.captured_queries]
+        self.assertFalse([sql for sql in statements if "FOR UPDATE" in sql or "UPDATE " in sql])
+
+    def test_a_fold_writes_only_what_it_found(self) -> None:
+        hamlet = self.example_user("hamlet")
+        self.assert_json_success(self.choose(hamlet, "1"))
+        message_id = self.send_stream_message(hamlet, "Verona", "a message")
+        moment = timezone_now() + timedelta(seconds=PARTNER_FOLD_SECONDS)
+        with (
+            time_machine.travel(moment, tick=False),
+            CaptureQueriesContext(connection) as queries,
+        ):
+            fold_partner(hamlet)
+        self.assertFalse([q for q in queries.captured_queries if "UPDATE " in q["sql"]])
+
+        # Someone reacts: only a fold counts that.
+        Reaction.objects.create(
+            user_profile=self.example_user("othello"),
+            message_id=message_id,
+            emoji_name="tada",
+            emoji_code="1f389",
+            reaction_type="unicode_emoji",
+        )
+        xp = get_row(hamlet)["xp"]
+        later = moment + timedelta(seconds=PARTNER_FOLD_SECONDS)
+        # Without a pack there is nothing to fold for.
+        with mock.patch.dict(os.environ, {"ARMADA_SPRITE_DIR": "/nonexistent/sprites"}):
+            fold_partner(hamlet)
+        self.assertEqual(get_row(hamlet)["xp"], xp)
+        with time_machine.travel(later, tick=False):
+            fold_partner(hamlet)
+        self.assertEqual(get_row(hamlet)["xp"], xp + settings.PARTNER_XP_REACTION)
+
+    def test_a_finished_run_counts_toward_its_requesters_partner(self) -> None:
+        hamlet = self.example_user("hamlet")
+        self.assert_json_success(self.choose(hamlet, "1"))
+        trigger = self.send_stream_message(hamlet, "Verona", "a request")
+        run = AgentRun.objects.create(
+            realm=self.realm,
+            bot_profile=self.agent,
+            requesting_user=hamlet,
+            trigger_message_id=trigger,
+            stream_name="Verona",
+            topic_name="test",
+            status=AgentRun.RUNNING,
+        )
+        store = ArmadaDatabaseWorkerRunStore()
+        with (
+            mock.patch("zerver.lib.partner.fold_partner_after_run") as after_run,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            store.cancel_locked_run(run, summary="Stopped.")
+        # A cancelled run counts for nothing.
+        after_run.assert_not_called()
+
+        run.status = AgentRun.RUNNING
+        run.save(update_fields=["status"])
+        with (
+            mock.patch("zerver.lib.partner.fold_partner_after_run") as after_run,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.assertTrue(
+                store._update_run(
+                    run,
+                    AgentRun.DONE,
+                    stream="Verona",
+                    topic="test",
+                    result_message_id=None,
+                    error=None,
+                )
+            )
+        after_run.assert_called_once_with(hamlet.id)
+
+        before = get_row(hamlet)["xp"]
+        cache.set(f"armada:agent-partner-evolved:{self.realm.id}", True)
+        fold_partner_after_run(hamlet.id)
+        self.assertEqual(get_row(hamlet)["xp"], before + settings.PARTNER_XP_RUN)
+        self.assertIsNone(cache.get(f"armada:agent-partner-evolved:{self.realm.id}"))
+        fold_partner_after_run(0)
+
     def test_the_agent_evolves_with_the_teams_runs(self) -> None:
         cordelia = self.example_user("cordelia")
         moment = timezone_now()
@@ -725,6 +833,8 @@ class PartnerTest(ZulipTestCase):
             self.assertEqual(self.partners(cordelia)["agent"]["species"], "95")
             self.finish_run(self.example_user("hamlet"), moment, AgentRun.DONE)
             self.assertEqual(self.partners(cordelia)["agent"]["species"], "208")
+        # The thresholds are back to the server's: count again.
+        invalidate_agent_evolution(self.realm.id)
         # Without the drawing, the agent keeps its committed mark.
         PACK_WITHOUT = json.loads(json.dumps(PACK))
         PACK_WITHOUT["species"]["95"]["sprite"] = None

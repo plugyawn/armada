@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pyvips
 from typing_extensions import override
 
+from zerver.actions.realm_settings import do_change_realm_permission_group_setting
 from zerver.actions.streams import do_change_stream_group_based_setting
 from zerver.lib.armada import ARMADA_AGENT_NAME, ARMADA_EMBEDDED_BOT_SERVICE
 from zerver.lib.armada_agent import (
@@ -18,9 +19,10 @@ from zerver.lib.armada_agent import (
     ArmadaCodexAppServerToolRunner,
 )
 from zerver.lib.armada_worker import armada_worker_queue_name, load_armada_active_session_from_zulip
+from zerver.lib.streams import access_stream_by_name
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.topic import messages_for_topic
-from zerver.models import Attachment, Message, NamedUserGroup, UserMessage, UserProfile
+from zerver.models import Attachment, Message, NamedUserGroup, Stream, UserMessage, UserProfile
 from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.models.groups import SystemGroups
 from zerver.models.streams import get_stream
@@ -163,6 +165,13 @@ class MessageToolsTest(ZulipTestCase):
             "Limits: a run can start at most 5 runs, and runs started this way nest at most 2 "
             "deep (a run that deep starts none).",
             tools["armada_start_run"]["description"],
+        )
+        self.assertEqual(
+            (
+                set(tools["armada_create_channel"]["inputSchema"]["properties"]),
+                tools["armada_create_channel"]["inputSchema"]["required"],
+            ),
+            ({"name", "description", "private", "subscribers"}, ["name"]),
         )
 
     def test_a_post_in_another_topic_is_the_agents_message(self) -> None:
@@ -661,3 +670,160 @@ class MessageToolsTest(ZulipTestCase):
             [self.cordelia.id],
         )
         self.assertEqual(self.topic_messages("Verona", "new"), [])
+
+    def test_a_channel_is_created_for_the_asker(self) -> None:
+        realm = self.hamlet.realm
+        othello = self.example_user("othello")
+        run = self.ask(self.hamlet, "make a channel for the parser team, with Cordelia and Othello")
+        result, event = self.call(
+            run,
+            "armada_create_channel",
+            {
+                "name": "#parser-team ",
+                "description": "Where the parser\nis built.",
+                # As the transcript shows names, or as a mention.
+                "subscribers": [self.cordelia.full_name, f"@**{othello.full_name}**"],
+            },
+        )
+        stream = get_stream("parser-team", realm)
+        self.assertEqual(
+            self.answer(result),
+            {
+                "channel_id": stream.id,
+                "channel": "parser-team",
+                "private": False,
+                "subscribers": sorted(
+                    [self.hamlet.full_name, self.cordelia.full_name, othello.full_name]
+                ),
+                "link": "#**parser-team**",
+            },
+        )
+        self.assertEqual(event["title"], "Created #parser-team.")
+        # The asker made it, as if from Armada's own form: a public channel
+        # with the organization's defaults, them as its creator.
+        self.assertEqual(
+            (stream.invite_only, stream.description, stream.creator_id),
+            (False, "Where the parser is built.", self.hamlet.id),
+        )
+        # The agent needs no subscription to a public channel.
+        self.assertEqual(
+            {user.id for user in self.users_subscribed_to_stream("parser-team", realm)},
+            {self.hamlet.id, self.cordelia.id, othello.id},
+        )
+        # The notice a person's new channel gets.
+        notice = Message.objects.get(realm=realm, recipient=stream.recipient)
+        self.assertEqual(notice.topic_name(), "channel events")
+        self.assertIn(f"created by @_**{self.hamlet.full_name}|{self.hamlet.id}**", notice.content)
+
+    def test_a_private_channel_takes_the_agent_too(self) -> None:
+        realm = self.hamlet.realm
+        run = self.ask(self.hamlet, "make a private channel for the plans")
+        result, _event = self.call(run, "armada_create_channel", {"name": "plans", "private": True})
+        self.assertEqual(
+            (self.answer(result)["private"], get_stream("plans", realm).invite_only), (True, True)
+        )
+        self.assertEqual(
+            {user.id for user in self.users_subscribed_to_stream("plans", realm)},
+            {self.hamlet.id, self.agent.id},
+        )
+        # Its owner is not in the channel, so only its own subscription lets
+        # the agent post there, and read it as a run there does.
+        result, _event = self.call(
+            run, "armada_post", {"channel": "plans", "topic": "first steps", "content": "Ready."}
+        )
+        self.assertEqual(
+            Message.objects.get(id=self.answer(result)["message_id"]).sender_id, self.agent.id
+        )
+        access_stream_by_name(self.agent, "plans")
+
+    def test_creating_a_channel_has_the_askers_rights(self) -> None:
+        realm = self.hamlet.realm
+        administrators = NamedUserGroup.objects.get(
+            name=SystemGroups.ADMINISTRATORS, realm_for_sharding=realm, is_system_group=True
+        )
+        for setting in ["can_create_public_channel_group", "can_create_private_channel_group"]:
+            do_change_realm_permission_group_setting(
+                realm, setting, administrators, acting_user=None
+            )
+        polonius = self.example_user("polonius")
+        self.subscribe(polonius, "Denmark")
+        othello = self.example_user("othello")
+        othello.full_name = self.cordelia.full_name
+        othello.save(update_fields=["full_name"])
+        run = self.ask(self.hamlet, "make channels")
+        streams_before = Stream.objects.filter(realm=realm).count()
+        for asker, arguments, refusal in [
+            (
+                self.hamlet,
+                {"name": "plans", "private": True},
+                "King Hamlet may not create private channels in this organization, so neither "
+                "can you: an administrator can create it, or let them.",
+            ),
+            (
+                self.hamlet,
+                {"name": "plans"},
+                "King Hamlet may not create channels in this organization, so neither can you: "
+                "an administrator can create it, or let them.",
+            ),
+            (
+                polonius,
+                {"name": "plans"},
+                "Polonius may not create channels in this organization, so neither can you: an "
+                "administrator can create it, or let them.",
+            ),
+            (self.example_user("iago"), {"name": "verona"}, "Channel 'verona' already exists"),
+            (self.example_user("iago"), {"name": " "}, "Channel name can't be empty."),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "subscribers": ["Nobody At All"]},
+                "Nobody here is named Nobody At All.",
+            ),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "subscribers": [self.cordelia.full_name]},
+                f"More than one person here is named {self.cordelia.full_name}; ask which one "
+                "is meant.",
+            ),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "subscribers": ["@****"]},
+                "subscribers must be a list of full names.",
+            ),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "subscribers": "Cordelia"},
+                "subscribers must be a list of full names.",
+            ),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "private": "yes"},
+                "private must be true or false.",
+            ),
+            (
+                self.example_user("iago"),
+                {"name": "plans", "description": "x" * 1025},
+                "description is longer than 1024 characters.",
+            ),
+        ]:
+            asker_run = run if asker == self.hamlet else self.ask(asker, "make a channel")
+            result, _event = self.call(asker_run, "armada_create_channel", arguments)
+            self.assertEqual(self.refusal(result), refusal)
+        self.assertEqual(Stream.objects.filter(realm=realm).count(), streams_before)
+
+        # An administrator may, for whoever asked them.
+        result, _event = self.call(
+            self.ask(self.example_user("iago"), "make one"),
+            "armada_create_channel",
+            {"name": "plans", "private": True},
+        )
+        self.assertTrue(get_stream("plans", realm).invite_only)
+
+    def test_a_channel_made_in_the_meantime_is_refused(self) -> None:
+        run = self.ask(self.hamlet, "make an elsinore channel")
+        # Someone else creates it between the name check and the creation:
+        # the asker does not end up in their channel.
+        self.make_stream("elsinore")
+        with patch("zerver.lib.armada_message_tools.check_stream_name_available"):
+            result, _event = self.call(run, "armada_create_channel", {"name": "elsinore"})
+        self.assertEqual(self.refusal(result), "Channel 'elsinore' already exists")
+        self.assertEqual(self.users_subscribed_to_stream("elsinore", self.hamlet.realm), [])

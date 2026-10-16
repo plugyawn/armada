@@ -1,24 +1,28 @@
 """The agent's tools for talking in Armada (statement 38): post in a
 topic or a thread, with files such as screenshots, read a topic or a
-thread, and start a run in another topic with a brief. Each acts for the
-person whose message started the run, through Zulip's own checks: what
-that person could not send, read or start, the agent cannot either.
+thread, start a run in another topic with a brief, and create a channel.
+Each acts for the person whose message started the run, through Zulip's
+own checks: what that person could not send, read, start or create, the
+agent cannot either.
 
 Codex calls them as dynamic tools, as it calls the page tools
 (zerver/lib/armada_page_tools.py): zerver/lib/armada_agent.py offers the
 specs to a new thread and answers each call here.
 """
 
+import operator
 import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import reduce
 from pathlib import Path
 from typing import Any, Final
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils.html import escape
 from django.utils.translation import gettext as _
 
@@ -39,7 +43,7 @@ from zerver.lib.armada_page_tools import (
     tool_arguments,
 )
 from zerver.lib.bot_lib import EmbeddedBotHandler
-from zerver.lib.exceptions import JsonableError, StreamDoesNotExistError
+from zerver.lib.exceptions import ChannelExistsError, JsonableError, StreamDoesNotExistError
 from zerver.lib.message import access_message, messages_for_ids
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.mime_types import guess_type
@@ -49,12 +53,13 @@ from zerver.lib.narrow import (
     NarrowParameter,
     fetch_messages,
 )
-from zerver.lib.streams import access_stream_by_name
+from zerver.lib.streams import access_stream_by_name, check_stream_name_available, list_to_streams
 from zerver.lib.upload import (
     check_upload_within_quota,
     check_upload_within_size_limit,
     upload_message_attachment,
 )
+from zerver.lib.users import bulk_access_users_by_id
 from zerver.models import Message, Stream, UserProfile
 from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.models.clients import get_client
@@ -64,6 +69,7 @@ from zerver.models.streams import get_stream
 ARMADA_POST_TOOL: Final = "armada_post"
 ARMADA_READ_TOOL: Final = "armada_read"
 ARMADA_START_RUN_TOOL: Final = "armada_start_run"
+ARMADA_CREATE_CHANNEL_TOOL: Final = "armada_create_channel"
 
 # The run event log holds who started whom: the starting run records
 # run_started, the run it started records started_by, with its depth.
@@ -182,6 +188,48 @@ def armada_message_tool_specs() -> list[dict[str, Any]]:
                     },
                 },
                 "required": ["channel", "topic", "brief"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": ARMADA_CREATE_CHANNEL_TOOL,
+            "description": (
+                "Create a channel for the person who asked you, with their rights: the "
+                "organization decides who may create public and private channels. The person "
+                "is subscribed, as when they create a channel themselves; subscribers adds "
+                "others, by full name as the transcript shows them. A private channel also "
+                f"gets you ({ARMADA_AGENT_NAME}), so you can post and work in it. Fails if a "
+                "channel of that name exists. Returns the channel's name, id and a link "
+                "(#**name**) to give people."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The channel's name, without #.",
+                        "maxLength": Stream.MAX_NAME_LENGTH,
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "What the channel is for, in one line.",
+                        "maxLength": Stream.MAX_DESCRIPTION_LENGTH,
+                    },
+                    "private": {
+                        "type": "boolean",
+                        "description": "Whether only its subscribers can see it; false if not given.",
+                    },
+                    "subscribers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Full names of the people, or bots, to subscribe besides the person "
+                            "who asked."
+                        ),
+                    },
+                },
+                "required": ["name"],
                 "additionalProperties": False,
             },
         },
@@ -663,12 +711,142 @@ def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> Ar
     )
 
 
+def named_subscribers(asker: UserProfile, names: object) -> set[UserProfile]:
+    """The people (or bots) named, by full name as the transcript shows
+    them, whom the asker may subscribe: Zulip's own access rule decides."""
+    if not isinstance(names, list):
+        raise JsonableError(_("subscribers must be a list of full names."))
+    wanted: set[str] = set()
+    for name in names:
+        # A mention's markup, @**Full Name**, is tolerated around a name.
+        clean_name = (
+            name.strip().removeprefix("@").strip("*").strip() if isinstance(name, str) else ""
+        )
+        if not clean_name:
+            raise JsonableError(_("subscribers must be a list of full names."))
+        wanted.add(clean_name)
+    if not wanted:
+        return set()
+    ids_by_name: dict[str, list[int]] = {}
+    for user_id, full_name in UserProfile.objects.filter(
+        reduce(operator.or_, (Q(full_name__iexact=name) for name in wanted)),
+        realm_id=asker.realm_id,
+        is_active=True,
+    ).values_list("id", "full_name"):
+        ids_by_name.setdefault(full_name.lower(), []).append(user_id)
+    user_ids: list[int] = []
+    for name in sorted(wanted):
+        matches = ids_by_name.get(name.lower(), [])
+        if not matches:
+            raise JsonableError(_("Nobody here is named {name}.").format(name=name))
+        if len(matches) > 1:
+            raise JsonableError(
+                _("More than one person here is named {name}; ask which one is meant.").format(
+                    name=name
+                )
+            )
+        user_ids.extend(matches)
+    return bulk_access_users_by_id(
+        user_ids, acting_user=asker, allow_deactivated=False, allow_bots=True, for_admin=False
+    )
+
+
+def create_channel_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaToolAnswer:
+    """Create a channel as a person creates one in Armada, by the path
+    POST /json/users/me/subscriptions takes (add_subscriptions_backend):
+    Zulip's name and creation checks, the organization's default
+    permissions with the asker as creator, the asker subscribed, and the
+    "channel events" notice. Unlike that path, an existing channel is
+    refused rather than joined."""
+    # Lazy imports: Zulip's stream actions import armada_worker, which
+    # imports the agent runtime, which imports this module.
+    from zerver.actions.streams import bulk_add_subscriptions
+    from zerver.views.streams import send_user_subscribed_and_new_channel_notifications
+
+    asker = caller.asker
+    realm = asker.realm
+    name = string_argument(arguments, "name").strip().removeprefix("#").strip()
+    description = (optional_string_argument(arguments, "description") or "").strip()
+    if len(description) > Stream.MAX_DESCRIPTION_LENGTH:
+        raise JsonableError(
+            _("description is longer than {limit} characters.").format(
+                limit=Stream.MAX_DESCRIPTION_LENGTH
+            )
+        )
+    private = arguments.get("private", False)
+    if not isinstance(private, bool):
+        raise JsonableError(_("private must be true or false."))
+    may_create = (
+        asker.can_create_private_streams() if private else asker.can_create_public_streams()
+    )
+    if asker.is_guest or not may_create:
+        raise JsonableError(
+            (
+                _(
+                    "{person} may not create private channels in this organization, so neither "
+                    "can you: an administrator can create it, or let them."
+                )
+                if private
+                else _(
+                    "{person} may not create channels in this organization, so neither can "
+                    "you: an administrator can create it, or let them."
+                )
+            ).format(person=asker.full_name)
+        )
+    check_stream_name_available(realm, name)
+    subscribers = {asker, *named_subscribers(asker, arguments.get("subscribers", []))}
+    if private:
+        # The agent reads and runs in a channel as itself: a private one
+        # it is not subscribed to is closed to it.
+        subscribers.add(caller.run.bot_profile)
+    with transaction.atomic(durable=True):
+        existing, created = list_to_streams(
+            [
+                {
+                    "name": name,
+                    # As a person's description: one line.
+                    "description": description.replace("\n", " "),
+                    "invite_only": private,
+                    "is_web_public": False,
+                }
+            ],
+            asker,
+            autocreate=True,
+            # Every permission as the organization's defaults set it.
+            request_settings_dict=dict.fromkeys(Stream.stream_permission_group_settings),
+        )
+        if existing:
+            # Someone else made it since the check above.
+            raise ChannelExistsError(name)
+        [stream] = created
+        bulk_add_subscriptions(realm, [stream], subscribers, acting_user=asker)
+        send_user_subscribed_and_new_channel_notifications(
+            user_profile=asker,
+            subscribers=set(),
+            new_subscriptions={},
+            id_to_user_profile={},
+            created_streams=[stream],
+            announce=False,
+        )
+    return read_answer(
+        {
+            "channel_id": stream.id,
+            "channel": stream.name,
+            "private": stream.invite_only,
+            "subscribers": sorted(subscriber.full_name for subscriber in subscribers),
+            "link": f"#**{stream.name}**",
+        },
+        _("Created #{channel}.").format(channel=stream.name),
+    )
+
+
 ARMADA_MESSAGE_TOOLS: Final[
     dict[str, Callable[[ArmadaToolCaller, dict[str, object]], ArmadaToolAnswer]]
 ] = {
     ARMADA_POST_TOOL: post_tool,
     ARMADA_READ_TOOL: read_tool,
     ARMADA_START_RUN_TOOL: start_run_tool,
+    ARMADA_CREATE_CHANNEL_TOOL: create_channel_tool,
 }
 ARMADA_MESSAGE_TOOL_NAMES: Final = frozenset(ARMADA_MESSAGE_TOOLS)
 

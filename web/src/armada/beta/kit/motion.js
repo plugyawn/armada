@@ -36,6 +36,9 @@
   const now = () => performance.now() / SLOW;             /* prototype time, ms */
   const after = (ms, fn) => setTimeout(fn, ms * SLOW);    /* for simulated remote events and thresholds only: never between an input and its state */
   const reduced = () => SPR.move.t <= 1;
+  /* a page nobody sees does not animate: Web Animations do not advance while it is hidden, so an animation started then is
+     finished at once, its end state written and its promise kept, instead of waiting, with whatever it holds, to be seen */
+  const play = (e, kf, o) => { const a = e.animate(kf, o); if (document.hidden) a.finish(); return a; };
 
   /* ---------- the spring: closed form, sampled into keyframes, state kept per element and channel set ---------- */
   const springs = new WeakMap();
@@ -57,7 +60,7 @@
       if (o.clamp && k in o.clamp) x0[k] = Math.max(-o.clamp[k], Math.min(o.clamp[k], x0[k]));
       far = Math.max(far, (Math.abs(x0[k]) + Math.abs(v0[k]) / 20) * (k[0] === "s" ? 300 : 1)); }
     halt(e, id);
-    if (sp.t <= 1 || far < 0.5) return null;              /* reduced motion, or nothing to release: the state is already there */
+    if (sp.t <= 1 || far < 0.5 || document.hidden) return null;   /* reduced motion, nothing to release, or nobody to see it: the state is already there */
     const s = {t0: now(), dur: sp.t, w: 2 * Math.PI / sp.r, z: sp.z, x0, v0}, n = Math.max(2, Math.round(sp.t / 12)), kf = [];
     for (let i = 0; i <= n; i++) kf.push({transform: fmt(i === n ? {} : sample(s, sp.t / 1000 * i / n)[0])});
     s.a = e.animate(kf, {duration: sp.t * SLOW, easing: "linear", composite: "add", pseudoElement: o.pseudo});
@@ -75,12 +78,12 @@
   const fades = new WeakMap();
   function fade(e, to, ms) { const from = +getComputedStyle(e).opacity; const old = fades.get(e); if (old) old.cancel();
     e.style.opacity = to; if (from === to) return null;
-    const a = e.animate({opacity: [from, to]}, {duration: (ms ?? (to > from ? T["fade-in"] : T["fade-out"])) * SLOW, easing: "linear"}); fades.set(e, a); return a; }
-  const appear = (e, from = 0, ms, o = {}) => e.animate({opacity: [from, 1]}, {duration: (ms ?? T["fade-in"]) * SLOW, easing: "linear", delay: (o.delay || 0) * SLOW, fill: o.delay ? "backwards" : "none", pseudoElement: o.pseudo});
+    const a = play(e, {opacity: [from, to]}, {duration: (ms ?? (to > from ? T["fade-in"] : T["fade-out"])) * SLOW, easing: "linear"}); fades.set(e, a); return a; }
+  const appear = (e, from = 0, ms, o = {}) => play(e, {opacity: [from, 1]}, {duration: (ms ?? T["fade-in"]) * SLOW, easing: "linear", delay: (o.delay || 0) * SLOW, fill: o.delay ? "backwards" : "none", pseudoElement: o.pseudo});
   /* the thing is already gone as far as the app is concerned (inert, out of the tab order); this lets it be seen leaving */
-  function leave(e, then) { e.inert = true; const a = e.animate({opacity: [+getComputedStyle(e).opacity, 0]}, {duration: T["fade-out"] * SLOW, easing: "linear", fill: "forwards"});
+  function leave(e, then) { e.inert = true; const a = play(e, {opacity: [+getComputedStyle(e).opacity, 0]}, {duration: T["fade-out"] * SLOW, easing: "linear", fill: "forwards"});
     a.finished.then(() => { e.remove(); then && then(); }, () => {}); return a; }
-  const hold = (e, n = 1) => reduced() ? null : e.animate({opacity: [0, 0]}, {duration: T.step * n * SLOW});   /* the agent's forms change in steps: this part appears n steps late, as a cut */
+  const hold = (e, n = 1) => reduced() ? null : play(e, {opacity: [0, 0]}, {duration: T.step * n * SLOW});   /* the agent's forms change in steps: this part appears n steps late, as a cut */
 
   /* ---------- selection thumb ---------- */
   function thumb(th, target, token = "touch") {
@@ -169,10 +172,10 @@
   function burst(at, text, n = 3) {   /* text, never markup: it is a reaction's emoji, which comes from the server */ if (reduced()) return; const r = at.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     for (let i = 0; i < n; i++) { const p = document.createElement("i"); p.className = "m-bit"; p.textContent = text; document.body.append(p);
       const ang = (-150 + i * 60 + (i % 2) * 14) * Math.PI / 180, d = 22 + i * 4, x = cx - 6, y = cy - 6;
-      p.animate({transform: [`translate(${x}px, ${y}px) scale(0.9)`, `translate(${x + Math.cos(ang) * d}px, ${y + Math.sin(ang) * d}px) scale(0.6)`], opacity: [1, 1, 0], offset: [0, 0.55, 1]}, {duration: T.burst * SLOW, easing: SPR.move.css, delay: i * 20 * SLOW, fill: "both"}).finished.then(() => p.remove()); } }
+      play(p, {transform: [`translate(${x}px, ${y}px) scale(0.9)`, `translate(${x + Math.cos(ang) * d}px, ${y + Math.sin(ang) * d}px) scale(0.6)`], opacity: [1, 1, 0], offset: [0, 0.55, 1]}, {duration: T.burst * SLOW, easing: SPR.move.css, delay: i * 20 * SLOW, fill: "both"}).finished.then(() => p.remove()); } }
   /* a refused action: the thing shakes once. With motion reduced its edge takes the failure ink and lets it go (--shake), so the refusal still reads without sound */
-  function refuse(e) { if (!reduced()) return shake(e); const n = document.createElement("i"); n.className = "m-no"; e.append(n); const a = n.animate({opacity: [1, 1, 0], offset: [0, 0.3, 1]}, {duration: 200 * SLOW, easing: "linear"}); a.finished.then(() => n.remove(), () => n.remove()); return a; }
-  const shake = (e) => reduced() ? null : e.animate({transform: ["translateX(0)", "translateX(-3px)", "translateX(3px)", "translateX(-2px)", "translateX(0)"]}, {duration: T.shake * SLOW, easing: "linear", composite: "add"});
+  function refuse(e) { if (!reduced()) return shake(e); const n = document.createElement("i"); n.className = "m-no"; e.append(n); const a = play(n, {opacity: [1, 1, 0], offset: [0, 0.3, 1]}, {duration: 200 * SLOW, easing: "linear"}); a.finished.then(() => n.remove(), () => n.remove()); return a; }
+  const shake = (e) => reduced() ? null : play(e, {transform: ["translateX(0)", "translateX(-3px)", "translateX(3px)", "translateX(-2px)", "translateX(0)"]}, {duration: T.shake * SLOW, easing: "linear", composite: "add"});
 
   /* ---------- the focus ring: one object. It arrives from 3 px out; between neighbours it travels ---------- */
   let ringEl, ringAt = null, ringFor = null, ringDue = 0, kbd = false;

@@ -87,6 +87,9 @@ function tab_to(target) {
     dom.press("Tab", {target: dom.document.activeElement ?? dom.body});
     target.focus();
 }
+// Whether a promise has settled by now.
+const PENDING = Symbol("pending");
+const settled = async (promise) => (await Promise.race([promise, PENDING])) !== PENDING;
 // A mutation observer's records arrive as a microtask.
 async function settle() {
     for (let i = 0; i < 5; i += 1) {
@@ -146,4 +149,31 @@ run_test("a press takes the ring away, and nothing it watched asks for a frame a
     await settle();
     clock.tick(1000);
     assert.equal(frames, 0);
+});
+
+run_test("while the page is hidden nothing animates: what starts is finished at once", async () => {
+    let hidden = true;
+    Object.defineProperty(dom.document, "hidden", {configurable: true, get: () => hidden});
+    const word = dom.document.createElement("span");
+    dom.find("#pane").append(word);
+    const fade = M.appear(word, 0.45).finished;
+    const gone = dom.document.createElement("i");
+    dom.find("#pane").append(gone);
+    M.leave(gone);
+    assert.equal(M.release(a, {y: 12}, "touch"), null, "a spring nobody sees is not kept");
+    assert.deepEqual(M.current(a), [{}, {}]);
+    await settle();
+    assert.ok(
+        await settled(fade),
+        "a streamed word's fade has ended, so its span is unwrapped now",
+    );
+    assert.ok(!gone.isConnected, "what leaves is gone now, not when the page is seen");
+
+    hidden = false;
+    const seen = dom.document.createElement("span");
+    dom.find("#pane").append(seen);
+    const runs = M.appear(seen).finished;
+    assert.notEqual(M.release(a, {y: 12}, "touch"), null);
+    await settle();
+    assert.ok(!(await settled(runs)), "on a page that is seen, an animation runs its course");
 });

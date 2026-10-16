@@ -35,7 +35,7 @@ function drawRunState(cut) {
 const QUIET_AFTER = 15 * 60;
 const lastSign = (r) => Math.max(r.date_updated || 0, r.date_created || 0, r.resumedAt || 0);
 const quietRun = (r) => r.status === "running" && !r.waiting && now() / 1000 - lastSign(r) > QUIET_AFTER;
-function tick(force) { if (!state.P) return; const r = liveRun(state.P); if (!r || band.run.classList.contains("off") && !force) return; if (!r.waiting && quietRun(r) && !/Quiet/.test(band.st.textContent)) { drawRunState(); return; }
+function tick(force) { if (!state.P || (document.hidden && !force)) return;   /* nobody reads a hidden clock: it is drawn again when seen */ const r = liveRun(state.P); if (!r || band.run.classList.contains("off") && !force) return; if (!r.waiting && quietRun(r) && !/Quiet/.test(band.st.textContent)) { drawRunState(); return; }
   const v = mmss(Math.max(0, Math.floor(now() / 1000 - (r.waiting ? askedAt(state.P, r) : quietRun(r) ? lastSign(r) : r.resumedAt || r.date_created)))); if (force) band.clock.innerHTML = fig(v); else M.figure(band.clock, v, {cut: true}); }   /* asking: since the question; working: since the run started or went on after a question */
 async function stop() { const r = state.P && liveRun(state.P); if (!r || stopping === r.id) { ready(); return; } stopping = r.id; drawRunState(); ready();
   try { await api("POST", `armada/runs/${r.id}/cancel`); } catch (e) { stopping = 0; drawRunState(); note(e.message); } }

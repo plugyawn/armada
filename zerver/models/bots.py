@@ -3,7 +3,7 @@ from typing import Final
 
 from django.db import models
 from django.db.models import CASCADE, SET_NULL
-from django.db.models.functions import Lower
+from django.db.models.functions import Upper
 from django.utils.timezone import now as timezone_now
 
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
@@ -169,6 +169,14 @@ class AgentRun(models.Model):
             models.Index(
                 fields=["realm", "status", "heartbeat_at"],
                 name="zerver_agentrun_st_hb",
+            ),
+            # A topic's runs, looked up the way Django compiles
+            # stream_name__iexact and topic_name__iexact.
+            models.Index(
+                "realm",
+                Upper("stream_name"),
+                Upper("topic_name"),
+                name="zerver_agentrun_topic",
             ),
         ]
 
@@ -336,11 +344,14 @@ class Workspace(models.Model):
 
     class Meta:
         constraints = [
+            # Upper, as Zulip folds a topic's case and as Django compiles
+            # __iexact, so that every lookup of a topic's worktree uses
+            # this index.
             models.UniqueConstraint(
                 "realm",
-                Lower("stream_name"),
-                Lower("topic_name"),
-                name="zerver_workspace_scope_ci_uniq",
+                Upper("stream_name"),
+                Upper("topic_name"),
+                name="zerver_workspace_scope_uniq",
             ),
         ]
         indexes = [

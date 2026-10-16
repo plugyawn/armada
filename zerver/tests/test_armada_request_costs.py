@@ -7,6 +7,7 @@ them has to change a number here.
 
 from unittest.mock import patch
 
+from django.db import connection
 from typing_extensions import override
 
 from zerver.actions.armada import (
@@ -21,8 +22,9 @@ from zerver.lib.armada import (
     ARMADA_EMBEDDED_BOT_SERVICE,
 )
 from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.test_helpers import queries_captured
 from zerver.models import UserProfile
-from zerver.models.bots import AgentRun, AgentRunEvent
+from zerver.models.bots import AgentRun, AgentRunEvent, Workspace
 
 
 class ArmadaRequestCostTest(ZulipTestCase):
@@ -110,3 +112,58 @@ class ArmadaRequestCostTest(ZulipTestCase):
         side_run = self.make_run()
         side_run.session_kind = AgentRun.SIDE
         self.assertEqual(armada_run_recipient_ids(side_run), [self.owner.id])
+
+    def plans_of(self, queries: list[str], table: str) -> list[str]:
+        """The plans of the queries that look a topic up in this table."""
+        from psycopg2.sql import SQL
+
+        plans = []
+        with connection.cursor() as cursor:
+            for sql in queries:
+                if f'FROM "{table}"' in sql and "UPPER(" in sql:
+                    cursor.execute(SQL("EXPLAIN {}").format(SQL(sql)))
+                    plans.append("\n".join(row[0] for row in cursor.fetchall()))
+        self.assertNotEqual(plans, [], f"no query read {table}")
+        return plans
+
+    def test_topic_lookups_use_an_index(self) -> None:
+        """Opening a topic finds its worktree and its runs through an index
+        on the case-folded names, never by reading every worktree and run
+        the realm ever had."""
+        realm = self.owner.realm
+        Workspace.objects.bulk_create(
+            Workspace(realm=realm, stream_name=ARMADA_DEFAULT_STREAM, topic_name=f"other {i}")
+            for i in range(300)
+        )
+        Workspace.objects.create(
+            realm=realm, stream_name=ARMADA_DEFAULT_STREAM, topic_name=ARMADA_DEFAULT_TOPIC
+        )
+        AgentRun.objects.bulk_create(
+            AgentRun(
+                realm=realm,
+                bot_profile=self.agent,
+                requesting_user=self.owner,
+                trigger_message_id=1_000_000 + i,
+                stream_name=ARMADA_DEFAULT_STREAM,
+                topic_name=f"other {i % 300}",
+                status=AgentRun.DONE,
+            )
+            for i in range(3000)
+        )
+        self.make_run()
+        with connection.cursor() as cursor:
+            cursor.execute("ANALYZE zerver_workspace, zerver_agentrun")
+
+        self.login_user(self.owner)
+        topic = {"stream": ARMADA_DEFAULT_STREAM.upper(), "topic": ARMADA_DEFAULT_TOPIC.upper()}
+        with queries_captured() as queries:
+            result = self.client_get("/json/armada/runs", topic, intentionally_undocumented=True)
+        self.assert_length(self.assert_json_success(result)["armada_runs"], 1)
+        sql = [query.sql for query in queries]
+
+        for plan in self.plans_of(sql, "zerver_workspace"):
+            self.assertIn("zerver_workspace_scope_uniq", plan)
+            self.assertRegex(plan, r"Index Cond: .*upper\(\(stream_name\)::text\)")
+        for plan in self.plans_of(sql, "zerver_agentrun"):
+            self.assertIn("zerver_agentrun_topic", plan)
+            self.assertNotIn("Seq Scan on zerver_agentrun", plan)

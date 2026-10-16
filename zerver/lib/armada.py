@@ -87,7 +87,10 @@ ARMADA_AGENT_WORKING_SUMMARY: Final = "Working."
 ARMADA_NO_VISIBLE_RESPONSE_MESSAGE: Final = (
     f"{ARMADA_AGENT_NAME} completed without a visible response."
 )
-ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 0.2
+# While Onix writes, its message is saved (rendered, stored, indexed and
+# sent whole to everyone) at most this often, and once at the end; its
+# words reach the clients that show them as agent_stream events.
+ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS: Final = 2.0
 # While Onix's words stream, cancel and steering are read at most this
 # often; every other event of a run still reads them at once.
 ARMADA_STREAM_CONTROL_POLL_SECONDS: Final = 0.5
@@ -525,7 +528,7 @@ def get_armada_session_defaults() -> ArmadaSessionDefaults:
 
 def build_armada_seed_message(task: str = "") -> str:
     task = task.strip()
-    task_line = task if task else "Start the topic Codex thread:"
+    task_line = task or "Start the topic Codex thread:"
     return f"{ARMADA_AGENT_MENTION} {task_line}"
 
 
@@ -750,7 +753,7 @@ def build_armada_draft_artifact_message(artifact: str = "") -> str:
 
 def armada_worker_task_line(task: str = "") -> str:
     task = clean_armada_task_text(task)
-    return task if task else "Continue the topic Codex thread."
+    return task or "Continue the topic Codex thread."
 
 
 def armada_transcript_status_label(status: str) -> str:
@@ -3255,6 +3258,8 @@ class ArmadaWorkerTurn:
         self.live_operation: ArmadaLiveRunOperation | None = None
         self.task = armada_worker_task_line(content)
         self.last_transcript_flush_at = 0.0
+        # The answer changed since it was last saved.
+        self.assistant_text_unsaved = False
         self.last_control_poll_at: float | None = None
         self.last_persisted_transcript_source: str | None = None
         self.assistant_persistent_flush_seen = False
@@ -3337,13 +3342,64 @@ class ArmadaWorkerTurn:
         if self.answer_stream is not None:
             self.answer_stream.flush(now=time.monotonic())
 
-    def idle_due_in(self) -> float | None:
-        if self.answer_stream is None:
+    def save_due_in(self, *, now: float) -> float | None:
+        if (
+            not self.assistant_text_unsaved
+            or (self.result_message_id or self.progress_message_id) is None
+        ):
             return None
-        return self.answer_stream.due_in(now=time.monotonic())
+        return max(
+            0,
+            self.last_transcript_flush_at
+            + ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS
+            - now,
+        )
+
+    def idle_due_in(self) -> float | None:
+        now = time.monotonic()
+        due = [
+            seconds
+            for seconds in (
+                self.answer_stream.due_in(now=now) if self.answer_stream is not None else None,
+                self.save_due_in(now=now),
+            )
+            if seconds is not None
+        ]
+        return min(due, default=None)
 
     def on_idle(self) -> None:
         self.flush_answer_stream()
+        if self.save_due_in(now=time.monotonic()) == 0:
+            self.save_assistant_text()
+
+    def save_assistant_text(self) -> None:
+        """Save the answer into Onix's message, when
+        ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS have passed since
+        it was last saved; at once for the first words, so the message
+        stops saying it is working. What is not saved yet is saved when its
+        time comes (the turn's idle hook), or at the end."""
+        has_visible_assistant_text = self.assistant_text.has_visible_text
+        force_flush = not self.assistant_persistent_flush_seen or (
+            has_visible_assistant_text and not self.assistant_visible_event_seen
+        )
+        if not self.update_live_transcript("running", force=force_flush):
+            return
+        self.assistant_text_unsaved = False
+        self.assistant_persistent_flush_seen = True
+        if has_visible_assistant_text and not self.assistant_visible_event_seen:
+            self.assistant_visible_event_seen = True
+            # Streaming assistant deltas deliberately stay out of the
+            # durable transcript event log. Emit one typed boundary
+            # when the first real prose reaches the message so every
+            # client can retire the initial Working placeholder at
+            # the same instant, without inspecting rendered words.
+            self.handler.record_worker_event(
+                self.bot_handler,
+                self.message_id,
+                "assistant_visible",
+                summary="Assistant response started.",
+                payload={},
+            )
 
     def control_poll_due(self, event: ArmadaWorkerTranscriptEvent) -> bool:
         """Whether this event reads cancel and steering. A streamed delta
@@ -3380,6 +3436,9 @@ class ArmadaWorkerTurn:
         current_time = time.monotonic()
         if not force and current_time - self.last_transcript_flush_at < flush_interval:
             return False
+        # An edit the server refuses waits its turn too, rather than being
+        # tried again at once.
+        self.last_transcript_flush_at = current_time
         if status in {"queued", "running"}:
             content_to_update = armada_visible_assistant_text(self.assistant_text.text)
             if not content_to_update:
@@ -3392,7 +3451,6 @@ class ArmadaWorkerTurn:
                 tool_results=tool_results,
             )
         if content_to_update == self.last_persisted_transcript_source:
-            self.last_transcript_flush_at = current_time
             self.update_volatile_run_state(status)
             return True
         updated = update_armada_worker_status_message(
@@ -3403,7 +3461,6 @@ class ArmadaWorkerTurn:
         )
         if updated:
             self.result_message_id = target_message_id
-            self.last_transcript_flush_at = current_time
             self.last_persisted_transcript_source = content_to_update
             self.update_volatile_run_state(status)
         return updated
@@ -3699,30 +3756,8 @@ class ArmadaWorkerTurn:
             "tool",
         }
         if event_kind == "assistant":
-            has_visible_assistant_text = self.assistant_text.has_visible_text
-            force_flush = not self.assistant_persistent_flush_seen or (
-                has_visible_assistant_text and not self.assistant_visible_event_seen
-            )
-            if self.update_live_transcript(
-                "running",
-                force=force_flush,
-                flush_interval=ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS,
-            ):
-                self.assistant_persistent_flush_seen = True
-                if has_visible_assistant_text and not self.assistant_visible_event_seen:
-                    self.assistant_visible_event_seen = True
-                    # Streaming assistant deltas deliberately stay out of the
-                    # durable transcript event log. Emit one typed boundary
-                    # when the first real prose reaches the message so every
-                    # client can retire the initial Working placeholder at
-                    # the same instant, without inspecting rendered words.
-                    self.handler.record_worker_event(
-                        self.bot_handler,
-                        self.message_id,
-                        "assistant_visible",
-                        summary="Assistant response started.",
-                        payload={},
-                    )
+            self.assistant_text_unsaved = True
+            self.save_assistant_text()
         else:
             if sparse_event:
                 self.update_volatile_run_state("running")
@@ -4201,7 +4236,7 @@ def clean_armada_session_target(
     value = value.strip()
     if allow_empty:
         return value
-    return value if value else default
+    return value or default
 
 
 def get_armada_session_payload(

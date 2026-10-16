@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from itertools import pairwise
 from typing import Any
 from unittest.mock import patch
 
@@ -26,6 +27,7 @@ from zerver.lib.armada_agent import (
     ArmadaAppServerTurnContext,
     ArmadaCodexAppServerToolRunner,
 )
+from zerver.lib.exceptions import JsonableError
 from zerver.lib.test_classes import ZulipTestCase
 
 TRIGGER_MESSAGE_ID = 9301
@@ -99,14 +101,17 @@ class StreamRunStore:
 class StreamBotHandler:
     """The agent's bot: Onix's message is edited in place, never posted again."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = lambda: 0.0) -> None:
+        self.clock = clock
         self.edits: list[str] = []
+        self.edited_at: list[float] = []
 
     def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
         raise AssertionError("the progress message is edited in place")
 
     def update_message(self, message: dict[str, object]) -> None:
         self.edits.append(str(message["content"]))
+        self.edited_at.append(self.clock())
 
 
 def streamed(text: str, *, item_id: str = "item-1") -> ArmadaWorkerTranscriptEvent:
@@ -156,7 +161,7 @@ class ArmadaStreamTest(ZulipTestCase):
         """Run one turn whose runtime plays `script`, which sends the turn's
         events and returns the answer."""
         store = store or StreamRunStore(lambda: self.clock)
-        bot_handler = bot_handler or StreamBotHandler()
+        bot_handler = bot_handler or StreamBotHandler(lambda: self.clock)
 
         def tool_runner(
             active_session: ArmadaActiveSessionSummary,
@@ -423,3 +428,65 @@ class ArmadaStreamTest(ZulipTestCase):
                 runner.next_turn_message(context)
         finally:
             armada_turn_idle_hook.reset(token)
+
+    def test_the_message_is_saved_every_two_seconds_while_words_stream(self) -> None:
+        # 400 tokens a second for 6 seconds (4,800 characters: one message).
+        words = [f"{i % 10} " for i in range(2400)]
+        words[-1] = "end."
+        _store, bot_handler = self.run_turn(self.stream_words(words, every=0.0025))
+
+        # The placeholder, the first words at once (the message stops
+        # saying it is working), then a save every 2 s, then the end.
+        self.assertEqual(bot_handler.edits[0], "· Working")
+        self.assertEqual(bot_handler.edits[1], words[0].strip())
+        saves = bot_handler.edited_at[1:-1]
+        self.assert_length(saves, 3)
+        gaps = [b - a for a, b in pairwise(saves)]
+        self.assertGreaterEqual(min(gaps), 2.0)
+        self.assertEqual(bot_handler.edits[-1].strip(), "".join(words).strip())
+
+    def test_words_not_saved_yet_are_saved_when_codex_goes_quiet(self) -> None:
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("First words"))
+            self.tick(0.5)
+            event_callback(streamed(" and the rest of them."))
+            # Codex says nothing more for a while: the turn's wait wakes when
+            # the save is due.
+            hook = armada_turn_idle_hook.get()
+            assert hook is not None
+            due = hook.idle_due_in()
+            self.assertIsNotNone(due)
+            assert due is not None
+            self.tick(due)
+            hook.on_idle()
+            self.assertEqual(bot_handler.edits[-1], "First words and the rest of them.")
+            self.assertIsNone(hook.idle_due_in())
+            return "First words and the rest of them."
+
+        bot_handler = StreamBotHandler(lambda: self.clock)
+        self.run_turn(script, bot_handler=bot_handler)
+
+    def test_a_refused_save_waits_its_turn(self) -> None:
+        class RefusingBotHandler(StreamBotHandler):
+            @override
+            def update_message(self, message: dict[str, object]) -> None:
+                super().update_message(message)
+                if message["content"] == "First words":
+                    raise JsonableError("Not now.")
+
+        bot_handler = RefusingBotHandler(lambda: self.clock)
+
+        def script(event_callback: ArmadaWorkerTranscriptCallback) -> str:
+            event_callback(streamed("First words"))
+            tries = len(bot_handler.edits)
+            hook = armada_turn_idle_hook.get()
+            assert hook is not None
+            # Not again at once, however often the turn's wait wakes.
+            for _ in range(5):
+                hook.on_idle()
+            self.assert_length(bot_handler.edits, tries)
+            self.assertAlmostEqual(hook.idle_due_in() or 0, 2.0)
+            return "First words"
+
+        with self.assertLogs("zerver.lib.armada", level="WARNING"):
+            self.run_turn(script, bot_handler=bot_handler)

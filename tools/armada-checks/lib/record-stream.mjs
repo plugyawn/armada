@@ -2,10 +2,12 @@
 //
 //   limactl shell armada -- arm sh "source ~/shot.env; node tools/armada-checks/lib/record-stream.mjs"
 //
-// A run is what the server sends while an agent answers: today, an
-// `update_message` event every 200 ms carrying the whole text so far and
-// the server's rendering of it (zerver/lib/armada.py,
-// ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS). The text is
+// A run is what the server sent while an agent answered when these were
+// recorded: an `update_message` event every 200 ms carrying the whole
+// text so far and the server's rendering of it. The server now sends
+// the new words as `agent_stream` events and edits the message every 2 s
+// (zerver/lib/armada.py, ARMADA_PERSISTENT_ASSISTANT_FLUSH_INTERVAL_SECONDS);
+// the old interface these replay into still follows the edits. The text is
 // fixtures/stream-source.md, repeated until it is long enough; each prefix
 // is rendered by the running development server, so the HTML is exactly
 // what the server would have put in the event. The words-per-second rate

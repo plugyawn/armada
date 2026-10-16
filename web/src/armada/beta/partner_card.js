@@ -140,7 +140,8 @@ let moment = null, momentTimer = 0;
 function momentDue() { clearTimeout(momentTimer); const me = me_(); if (!pack || !me || !me.ready || me.held || moment) return; if (withIcons(me.ready.choices).length > 1) { drawMeRow(); return; }
   const idle = document.visibilityState === "visible" && !state.pressing && performance.now() - state.lastKey >= 3000 && !(document.activeElement === tx && tx.textContent.trim()) && !pal && !menu && !pop && !dialogOpen && !info && !(state.place && state.place.kind === "partner");
   if (idle) playMoment(withIcons(me.ready.choices)[0]); else momentTimer = setTimeout(momentDue, 500); }
-function playMoment(into) { const me = me_(), from = me.species, shiny = me.ready.kind === "shiny"; if (card) { card.remove(); card = null; }
+function playMoment(into) { const me = me_(), from = me.species, shiny = me.ready.kind === "shiny";
+  if (card) { const was = card; card = null; if (was.contains(document.activeElement)) giveFocusBack(was); was.remove(); }   /* the moment takes the card's place, never focus: a card that held it (Evolve is in it) gives it back, as closeCard does */
   moment = {into, from, shiny, done: false, timers: []}; const c = card = el("div", "pcard raised float moment"); c.dataset.uid = state.ME; c.setAttribute("role", "status"); document.body.append(c);
   const oldImg = pkBig(from, me.shiny, 2, "old"), newImg = pkBig(into, shiny || me.shiny, 2, "new");
   c.innerHTML = `<div class="ih"><b>${esc(pack.species[from].name)} is evolving</b><span class="e">Level <span class="fig">${fig(me.level)}</span></span></div><div class="stage">${oldImg}${newImg}<span class="bits"></span></div><p class="say"></p><p class="cap"></p><div class="btns"><button class="btn" data-stop>Stop</button></div>`;

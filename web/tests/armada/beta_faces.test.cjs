@@ -4,7 +4,8 @@
 // partners.js, partner_card.js), with a real DOM: a face stands its
 // partner's Scarlet/Violet icon on a circle, initials stand in where there
 // is no icon, the agent has no face, the picker offers only species with
-// an icon, and a press on a face opens that person's card. The beta reads
+// an icon, a press on a face opens that person's card, and Evolve on my
+// own card leaves focus where the card found it. The beta reads
 // the kit's window globals when it draws; the few it needs here are given
 // as stand-ins that draw nothing of their own.
 
@@ -29,6 +30,8 @@ set_global(
         postMessage() {}
     },
 );
+// Where the caret goes when the field takes it back (composer.js, ready).
+set_global("getSelection", () => dom.window.getSelection());
 set_global("innerWidth", 1440);
 set_global("innerHeight", 900);
 const noop = () => {};
@@ -37,6 +40,8 @@ set_global("M", {
     SLOW: 1,
     release: noop,
     appear: noop,
+    // The evolution moment's shorter form, which plays without motion.
+    reduced: () => true,
     leave(element) {
         element.remove();
     },
@@ -143,6 +148,10 @@ const NOW = Date.now();
 const ANSWERS = [
     [/^\/beta\/sprites\/species\.json/, () => PACK],
     [/^\/json\/armada\/partners$/, () => PARTNERS],
+    [
+        /^\/json\/armada\/partner\/evolve$/,
+        () => ({...PARTNERS, me: {...PARTNERS.me, species: "26", ready: null, held: false}}),
+    ],
     [/^\/json\/users\/5$/, () => ({result: "success", user: {timezone: "Asia/Kolkata"}})],
     [/^\/json\/users\/7$/, () => ({result: "success", user: {timezone: ""}})],
     [/^\/json\/users\/8$/, () => ({result: "success", user: {timezone: `Asia/${EVIL}`}})],
@@ -187,6 +196,7 @@ set_global("fetch", async (url) => {
     return {ok: true, status: 200, json: async () => body};
 });
 
+const util = zrequire("armada/beta/util.js");
 const beta_state = zrequire("armada/beta/state.js");
 const partners = zrequire("armada/beta/partners.js");
 const faces = zrequire("armada/beta/faces.js");
@@ -464,6 +474,75 @@ run_test("Mention writes the person into the open field and closes the card", ()
     dom.click(document.querySelector("[data-card-mention]"));
     assert.equal(field.textContent, "hi @**Iago Smith** ");
     assert.equal(document.querySelector('[role="dialog"]'), null);
+    beta_state.state.threadTx = null;
+    beta_state.state.place = null;
+});
+
+run_test("Evolve on my own card gives focus back to what opened the card", async () => {
+    // As host.js wires it: Evolve plays the moment, which takes the card's place.
+    util.press(document.body, ".pcard [data-evolve]", (b) => card.playMoment(b.dataset.evolve));
+    // Pikachu is ready to become Raichu, and I kept it as it was: my card
+    // offers Evolve.
+    partners.applyPartners({
+        ...PARTNERS,
+        me: {...PARTNERS.me, ready: {kind: "evolve", choices: ["26", "26-alola"]}, held: true},
+    });
+    beta_state.state.place = {key: "s:10:option-groups", kind: "topic"};
+
+    // My card, opened from the account row with the keyboard; Tab to
+    // Evolve, and Return presses it (as a browser does, which jsdom does
+    // not do itself).
+    const row = shown(`<button class="row me">Desdemona</button>`);
+    row.focus();
+    card.openCard();
+    clock.tick(0);
+    assert.equal(document.activeElement, document.querySelector('[role="dialog"]'));
+    dom.press("Tab");
+    assert.equal(document.activeElement.textContent, "Evolve");
+    document.activeElement.click();
+    // The moment plays where the card was, and the row has focus again.
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.match(document.querySelector('[role="status"]').textContent, /Pikachu is evolving/);
+    assert.equal(document.activeElement, row);
+    // Any key ends the moment where it stands: the evolution happens.
+    card.cutMoment();
+    await settle();
+    assert.equal(document.querySelector('[role="status"]'), null);
+
+    // Opened from my face while I was writing, and Evolve pressed: the
+    // field has the caret again.
+    partners.applyPartners({
+        ...PARTNERS,
+        me: {...PARTNERS.me, ready: {kind: "evolve", choices: ["26", "26-alola"]}, held: true},
+    });
+    const field = shown(`<div class="tx" contenteditable="true">hi</div>`);
+    field.focus();
+    dom.click(shown(faces.faceOf(ME)));
+    clock.tick(0);
+    assert.equal(document.querySelector('[role="dialog"]').getAttribute("aria-label"), "You");
+    dom.click(document.querySelector(".pcard [data-evolve]"));
+    assert.ok(document.querySelector('[role="status"]'));
+    assert.equal(document.activeElement, field);
+    card.cutMoment();
+    await settle();
+
+    // Opened with nothing in focus: the card lets go of it before it
+    // leaves, and the field I am writing in takes the caret.
+    partners.applyPartners({
+        ...PARTNERS,
+        me: {...PARTNERS.me, ready: {kind: "evolve", choices: ["26", "26-alola"]}, held: true},
+    });
+    document.activeElement.blur();
+    beta_state.state.threadTx = field;
+    card.openCard();
+    clock.tick(0);
+    dom.click(document.querySelector(".pcard [data-evolve]"));
+    assert.ok(document.querySelector('[role="status"]'));
+    assert.equal(document.activeElement, field);
+    card.cutMoment();
+    await settle();
+
+    partners.applyPartners(PARTNERS);
     beta_state.state.threadTx = null;
     beta_state.state.place = null;
 });

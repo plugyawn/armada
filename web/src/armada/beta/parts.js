@@ -48,6 +48,9 @@ function blockPart(n) {
   return {t: "blk", html: n.innerHTML};
 }
 const QUESTION = /needs your input to continue/;
+/* the caption under a question, as the server writes it (build_armada_question_message, zerver/lib/armada.py; both sides'
+   tests read zerver/tests/fixtures/armada_question_message.json). runs.js's drawAsks says when the run no longer waits. */
+const ASK_CAPTION = /^Press an answer, or reply to Onix in the topic\./;
 /* one option a list item: `label` — what it means. The label is what the run asked for, so it is what an answer says. */
 function askPart(ul) { const opts = $$(":scope > li", ul).map((li) => { const c = li.querySelector("code"), label = (c ? c.textContent : li.textContent.split(" — ")[0]).trim(), desc = li.textContent.slice(li.textContent.indexOf(label) + label.length).replace(/^\s*[—-]\s*/, "").trim(); return {label, desc}; });
   return {t: "ask", html: opts.map((o, i) => `<button class="opt" data-answer="${esc(o.label)}"${o.desc ? ` data-tip="${esc(o.desc)}"` : ""}><span class="k">${i + 1}</span><span class="t">${esc(o.label)}</span>${o.desc ? `<span class="d">${esc(o.desc)}</span>` : ""}</button>`).join("")}; }
@@ -70,7 +73,7 @@ function partsOf(m) {
   for (const n of [...root.children]) { if (n.tagName === "HR") continue;
     if (asking && n.tagName === "UL") { flush(); out.push(askPart(n)); continue; }   /* the question's options are buttons, under the question */
     if (asking && n.tagName === "P" && QUESTION.test(n.textContent)) { n.textContent = "Onix needs your answer to go on."; }
-    if (asking && n.tagName === "P" && /^_?Reply in this thread to answer/.test(n.textContent.trim())) { const m_ = /waiting up to (\d+) minutes/.exec(n.textContent); n.className = "askcap"; n.innerHTML = `<em>Press an answer, or write your own to @Onix. The run waits${m_ ? ` up to ${m_[1]} minutes` : ""}.</em>`; }   /* in words, the answer names Onix (or the place's switch is on): people talking here do not answer it */
+    if (asking && n.tagName === "P" && ASK_CAPTION.test(n.textContent.trim())) n.className = "askcap";   /* the server's words say what answers it: in words, the answer names Onix (or the place's switch is on), so people talking here do not answer it */
     if (BLOCK(n)) { flush(); out.push(blockPart(n)); } else run.push(n); }
   flush();
   if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }

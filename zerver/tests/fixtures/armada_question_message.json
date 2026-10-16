@@ -1,0 +1,22 @@
+{
+    "questions": [
+        {
+            "id": "color",
+            "header": "Color",
+            "question": "Which color?",
+            "isOther": true,
+            "isSecret": false,
+            "options": [
+                {
+                    "label": "Red",
+                    "description": "Choose red."
+                },
+                {
+                    "label": "Blue",
+                    "description": "Choose blue."
+                }
+            ]
+        }
+    ],
+    "rendered": "<p>Onix needs your input to continue:</p>\n<p><strong>Color</strong> — Which color?</p>\n<ul>\n<li><code>Red</code> — Choose red.</li>\n<li><code>Blue</code> — Choose blue.</li>\n</ul>\n<p><em>Press an answer, or reply to Onix in the topic. The run waits up to 10 minutes.</em></p>"
+}

@@ -1318,9 +1318,14 @@ def build_armada_question_message(questions: list[dict[str, Any]]) -> str:
                         f"- `{label}` — {description}" if description else f"- `{label}`"
                     )
     question_lines.append("")
+    # What answers it: a reply addressed to the run, not in a thread (that
+    # starts a side conversation). In italics: Zulip's markdown leaves
+    # _underscores_ as they are. The beta knows the caption by its first
+    # sentence (web/src/armada/beta/parts.js); armada_question_message.json
+    # holds the rendered message, which both sides' tests read.
     question_lines.append(
-        "_Reply in this thread to answer; the run resumes with your reply "
-        f"(waiting up to {ARMADA_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
+        f"*Press an answer, or reply to {ARMADA_AGENT_NAME} in the topic. "
+        f"The run waits up to {ARMADA_QUESTION_TIMEOUT_SECONDS // 60} minutes.*"
     )
     return "\n".join(question_lines)
 

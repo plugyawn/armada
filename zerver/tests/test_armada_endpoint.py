@@ -44,6 +44,7 @@ from zerver.lib.armada import (
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRuntime,
     build_armada_active_session_summary_from_messages,
+    build_armada_question_message,
     get_armada_session_payload,
     write_armada_live_run_state,
 )
@@ -110,11 +111,13 @@ from zerver.lib.armada_worker import (
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_armada_run_event, check_armada_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
+from zerver.lib.markdown import markdown_convert
 from zerver.lib.message_cache import MessageDict
 from zerver.lib.partner import get_agent_bot
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.models import Message, Recipient, Subscription, UserProfile
 from zerver.models.bots import AgentMonitor, AgentRun, AgentRunEvent, Repository, Workspace
+from zerver.models.realms import get_realm
 from zerver.models.streams import get_stream
 from zerver.views.armada import (
     ARMADA_MODEL_CATALOG_CACHE_SECONDS,
@@ -6514,6 +6517,20 @@ class ArmadaMathNormalizationTest(ZulipTestCase):
         # Idempotent, and a no-op for plain content.
         self.assertEqual(normalize_armada_math_delimiters(normalized), normalized)
         self.assertEqual(normalize_armada_math_delimiters("plain"), "plain")
+
+
+class ArmadaQuestionMessageTest(ZulipTestCase):
+    def test_a_question_renders_as_the_beta_reads_it(self) -> None:
+        # The message that asks Codex's question, as Zulip renders it. The
+        # beta's test reads the same fixture (web/tests/armada/beta_ask.test.cjs):
+        # the options become buttons, and the caption, known by its words,
+        # says what answers the question while the run waits.
+        fixture = orjson.loads(self.fixture_data("armada_question_message.json"))
+        rendered = markdown_convert(
+            build_armada_question_message(fixture["questions"]),
+            message_realm=get_realm("zulip"),
+        ).rendered_content
+        self.assertEqual(rendered, fixture["rendered"])
 
 
 class ArmadaWorkspaceMapTest(ZulipTestCase):

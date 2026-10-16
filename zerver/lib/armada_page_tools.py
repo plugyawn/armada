@@ -73,7 +73,7 @@ ARMADA_PAGE_TOOL_SPECS: Final[list[dict[str, Any]]] = [
 ARMADA_PAGE_TOOL_NAMES: Final = frozenset(spec["name"] for spec in ARMADA_PAGE_TOOL_SPECS)
 
 
-class ArmadaPageToolAnswer(TypedDict):
+class ArmadaToolAnswer(TypedDict):
     success: bool
     # What the agent reads.
     text: str
@@ -81,7 +81,7 @@ class ArmadaPageToolAnswer(TypedDict):
     title: str
 
 
-def page_tool_arguments(arguments: object) -> dict[str, object]:
+def tool_arguments(arguments: object) -> dict[str, object]:
     if isinstance(arguments, str):
         try:
             arguments = json.loads(arguments)
@@ -108,11 +108,11 @@ def string_argument(arguments: dict[str, object], name: str) -> str:
     return value
 
 
-def read_answer(data: dict[str, Any], title: str) -> ArmadaPageToolAnswer:
+def read_answer(data: dict[str, Any], title: str) -> ArmadaToolAnswer:
     return {"success": True, "text": json.dumps(data, ensure_ascii=False), "title": title}
 
 
-def read_pages_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaPageToolAnswer:
+def read_pages_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaToolAnswer:
     user_id = optional_int_argument(arguments, "user_id")
     post_id = optional_int_argument(arguments, "post_id")
     if user_id is not None and post_id is not None:
@@ -143,7 +143,7 @@ def read_pages_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaP
     )
 
 
-def draft_post_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaPageToolAnswer:
+def draft_post_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaToolAnswer:
     post = draft_post(
         asker, string_argument(arguments, "title"), string_argument(arguments, "content")
     )
@@ -161,27 +161,18 @@ def draft_post_tool(asker: UserProfile, arguments: dict[str, object]) -> ArmadaP
 
 
 ARMADA_PAGE_TOOLS: Final[
-    dict[str, Callable[[UserProfile, dict[str, object]], ArmadaPageToolAnswer]]
+    dict[str, Callable[[UserProfile, dict[str, object]], ArmadaToolAnswer]]
 ] = {
     ARMADA_PAGE_READ_TOOL: read_pages_tool,
     ARMADA_PAGE_DRAFT_TOOL: draft_post_tool,
 }
 
 
-def answer_armada_page_tool(
-    asker_id: int | None, tool: str, arguments: object
-) -> ArmadaPageToolAnswer:
-    """Answer one of the page tools for the person who asked for the
-    turn; a refusal is an answer the agent reads, never an exception."""
+def answer_tool_call(answer: Callable[[], ArmadaToolAnswer]) -> ArmadaToolAnswer:
+    """Answer one of the agent's tool calls: a refusal is an answer the
+    agent reads, never an exception."""
     try:
-        asker = (
-            UserProfile.objects.filter(id=asker_id, is_active=True, is_bot=False).first()
-            if asker_id is not None
-            else None
-        )
-        if asker is None:
-            raise JsonableError(_("No person asked for this turn, so it has no page to use."))
-        return ARMADA_PAGE_TOOLS[tool](asker, page_tool_arguments(arguments))
+        return answer()
     except JsonableError as error:
         return {"success": False, "text": error.msg, "title": error.msg}
     finally:
@@ -191,3 +182,20 @@ def answer_armada_page_tool(
         # (a test's), the connection is its owner's.
         if not connection.in_atomic_block:
             connection.close()
+
+
+def answer_armada_page_tool(asker_id: int | None, tool: str, arguments: object) -> ArmadaToolAnswer:
+    """Answer one of the page tools for the person who asked for the
+    turn."""
+
+    def answer() -> ArmadaToolAnswer:
+        asker = (
+            UserProfile.objects.filter(id=asker_id, is_active=True, is_bot=False).first()
+            if asker_id is not None
+            else None
+        )
+        if asker is None:
+            raise JsonableError(_("No person asked for this turn, so it has no page to use."))
+        return ARMADA_PAGE_TOOLS[tool](asker, tool_arguments(arguments))
+
+    return answer_tool_call(answer)

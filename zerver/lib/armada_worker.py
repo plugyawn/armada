@@ -305,11 +305,6 @@ def maybe_enqueue_armada_run_presentation(run_id: int, source_event_id: int) -> 
 
 
 ARMADA_REPOSITORY_CLONE_TIMEOUT_SECONDS = 180
-ARMADA_GIT_STATUS_DELTA_TTL_SECONDS = 3
-armada_git_status_delta_cache: dict[
-    tuple[str, str, str],
-    tuple[float, dict[str, object]],
-] = {}
 logger = logging.getLogger(__name__)
 
 
@@ -2387,73 +2382,6 @@ def parse_armada_git_status_delta(
     }
 
 
-def invalidate_armada_git_status_delta(workdir: str | None = None) -> None:
-    if workdir is None:
-        armada_git_status_delta_cache.clear()
-        return
-    for cache_key in list(armada_git_status_delta_cache):
-        if cache_key[0] == workdir:
-            del armada_git_status_delta_cache[cache_key]
-
-
-def armada_git_status_delta(
-    workdir: str,
-    *,
-    topic: str = "",
-    isolation_username: str | None = None,
-) -> dict[str, object]:
-    if not workdir:
-        return {"available": False}
-
-    topic = topic.lower()
-    cache_key = (workdir, isolation_username or "", topic)
-    current_time = time.monotonic()
-    cached = armada_git_status_delta_cache.get(cache_key)
-    if cached is not None:
-        cached_at, delta = cached
-        if current_time - cached_at < ARMADA_GIT_STATUS_DELTA_TTL_SECONDS:
-            return dict(delta)
-
-    status_output = armada_git_output(
-        workdir,
-        ["status", "--porcelain=v2", "--branch"],
-        isolation_username=isolation_username,
-    )
-    if not status_output:
-        return {"available": False, "workdir": workdir}
-
-    delta = parse_armada_git_status_delta(status_output, workdir=workdir, topic=topic)
-    # The topic header's commit sentence (design §8.2): latest commit
-    # identity plus the total count, fetched with the same isolation and
-    # cached under the same TTL as the rest of the delta. An unborn HEAD
-    # (branch.oid "(initial)" clears head_short) has no commits to
-    # describe, so skip the reads instead of letting git fail them
-    # noisily on every refresh of a freshly initialized workspace.
-    if delta["head_short"]:
-        log_output = armada_git_output(
-            workdir,
-            ["log", "-1", "--format=%h%x1f%s%x1f%an%x1f%ct"],
-            isolation_username=isolation_username,
-        )
-        log_parts = log_output.strip().split("\x1f")
-        if len(log_parts) == 4 and log_parts[0]:
-            delta["last_commit"] = {
-                "sha": log_parts[0],
-                "subject": trim_armada_text(log_parts[1], limit=200),
-                "author": trim_armada_text(log_parts[2], limit=80),
-                "timestamp": int(log_parts[3]) if log_parts[3].isdigit() else None,
-            }
-        count_output = armada_git_output(
-            workdir,
-            ["rev-list", "--count", "HEAD"],
-            isolation_username=isolation_username,
-        ).strip()
-        if count_output.isdigit():
-            delta["commit_count"] = int(count_output)
-    armada_git_status_delta_cache[cache_key] = (current_time, dict(delta))
-    return delta
-
-
 def armada_git_remote_label(remote_url: str, repo_root: str) -> str:
     clean_url = remote_url.strip()
     if clean_url:
@@ -4102,8 +4030,6 @@ class ArmadaDatabaseWorkerRunStore:
                 "date_finished",
             ]
         )
-        if run.workdir:
-            invalidate_armada_git_status_delta(run.workdir)
         if (
             not same_status
             and status in (AgentRun.DONE, AgentRun.FAILED, AgentRun.CANCELLED)
@@ -4181,8 +4107,11 @@ class ArmadaDatabaseWorkerRunStore:
                     tool_count=F("tool_count") + event_tool_count
                 )
                 run.tool_count += event_tool_count
-            if run.workdir:
-                invalidate_armada_git_status_delta(run.workdir)
+            if event_type == "tool_results" and run.workspace_node_id is not None:
+                # The tools may have changed the worktree.
+                from zerver.lib.armada_workspace_git import request_workspace_git_refresh
+
+                request_workspace_git_refresh(run.workspace_node_id)
             current_time = timezone_now()
             if self._heartbeat_due(run, current_time=current_time):
                 run.heartbeat_at = current_time

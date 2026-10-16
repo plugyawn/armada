@@ -1464,6 +1464,11 @@ def refresh_workspace_snapshot(
 
 
 def _update_workspace_metadata(node: Workspace, snapshot: WorkspaceSnapshot) -> None:
+    """Note what a fresh look at the worktree found. Its git facts for the
+    topic's header are read again too, in the background."""
+    from zerver.lib.armada_workspace_git import request_workspace_git_refresh
+
+    request_workspace_git_refresh(node.id)
     update_fields: list[str] = []
     for field, value in (
         ("branch_name", snapshot.branch),

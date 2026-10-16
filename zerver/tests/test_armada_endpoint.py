@@ -76,7 +76,6 @@ from zerver.lib.armada_worker import (
     armada_git_branch_name_is_valid,
     armada_git_current_branch_name,
     armada_git_output,
-    armada_git_status_delta,
     armada_initialize_bare_origin,
     armada_read_text_path,
     armada_referenced_conversations,
@@ -101,7 +100,6 @@ from zerver.lib.armada_worker import (
     ensure_armada_project_origin,
     ensure_armada_topic_workdir,
     ensure_armada_workspace_node,
-    invalidate_armada_git_status_delta,
     latest_armada_codex_run_for_topic,
     load_armada_active_session_from_zulip,
     load_armada_referenced_threads,
@@ -111,6 +109,7 @@ from zerver.lib.armada_worker import (
     reap_stale_armada_worker_runs,
     wait_for_redelivered_armada_worker_run,
 )
+from zerver.lib.armada_workspace_git import workspace_git_isolation_username
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.lib.event_schema import check_armada_run_event, check_armada_workspace_changed_event
 from zerver.lib.events import fetch_initial_state_data
@@ -128,8 +127,6 @@ from zerver.views.armada import (
     armada_model_catalog,
     armada_worker_run_summary_events,
     armada_worker_runtime_auth_status,
-    armada_workspace_isolation_username,
-    build_armada_git_context,
     build_armada_runtime_config_payload,
     ensure_armada_configured_bot,
     extract_armada_codex_model_catalog,
@@ -1633,7 +1630,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 ARMADA_WORKER_REASONING_EFFORT="medium",
                 ARMADA_WORKER_WORKDIR="/workspace/base",
             ),
-            patch("zerver.views.armada.build_armada_git_context") as build_git_context,
+            patch("zerver.views.armada.workspace_git_context") as git_context,
         ):
             topic_result = self.client_get(
                 f"/json{ARMADA_TOPIC_CONTEXT_ENDPOINT}",
@@ -1661,7 +1658,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertNotIn("git", runs_payload)
         self.assertEqual(topic_payload["model"], "gpt-5.5")
         self.assertEqual(runs_payload["reasoning_effort"], "medium")
-        build_git_context.assert_not_called()
+        git_context.assert_not_called()
 
     def test_ensure_armada_workspace_node_does_not_create_readme(self) -> None:
         owner = self.example_user("hamlet")
@@ -2833,167 +2830,6 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             ).stdout.strip()
             self.assertEqual(email, "human@example.com")
 
-    def test_git_context_reports_status_delta_for_worktree(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            base_workdir = Path(temp_dir) / "base"
-            topic_workdir = Path(temp_dir) / "devel-armada-efficient-smoke"
-            self.create_git_repository(base_workdir)
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(base_workdir),
-                    "remote",
-                    "add",
-                    "origin",
-                    "https://github.com/zulip/zulip.git",
-                ],
-                check=True,
-                timeout=10,
-            )
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(base_workdir),
-                    "worktree",
-                    "add",
-                    "--detach",
-                    str(topic_workdir),
-                    "HEAD",
-                ],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                timeout=30,
-            )
-
-            git_context = build_armada_git_context(
-                str(topic_workdir),
-                topic="devel-armada-efficient-smoke",
-            )
-
-            self.assertEqual(git_context["worktree_name"], "devel-armada-efficient-smoke")
-            self.assertEqual(git_context["branch"], "")
-            self.assertEqual(git_context["ahead"], 0)
-            self.assertEqual(git_context["behind"], 0)
-            self.assertFalse(git_context["dirty"])
-            self.assertEqual(git_context["changed_count"], 0)
-            self.assertTrue(git_context["detached"])
-            self.assertFalse(git_context["branch_matches_topic"])
-            # The header commit sentence: latest commit identity + total
-            # count ride the same cached delta.
-            last_commit = git_context["last_commit"]
-            assert isinstance(last_commit, dict)
-            self.assertGreaterEqual(len(str(last_commit["sha"])), 7)
-            self.assertTrue(str(last_commit["subject"]))
-            self.assertTrue(str(last_commit["author"]))
-            self.assertIsInstance(last_commit["timestamp"], int)
-            self.assertGreaterEqual(int(str(git_context["commit_count"])), 1)
-
-    def test_armada_git_status_delta_uses_cache_until_invalidated(self) -> None:
-        invalidate_armada_git_status_delta()
-        clean_status = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.upstream origin/topic-a\n# branch.ab +2 -1"
-        dirty_status = f"{clean_status}\n1 .M N... 100644 100644 100644 a b file.txt"
-
-        # Each refresh issues three git commands (status, log -1,
-        # rev-list --count); the commit-info calls return "" here.
-        with patch(
-            "zerver.lib.armada_worker.armada_git_output",
-            side_effect=[clean_status, "", "", dirty_status, "", ""],
-        ) as git_output:
-            clean_delta = armada_git_status_delta("/repo", topic="topic-a")
-            cached_delta = armada_git_status_delta("/repo", topic="TOPIC-A")
-            invalidate_armada_git_status_delta("/repo")
-            dirty_delta = armada_git_status_delta("/repo", topic="topic-a")
-
-        self.assertEqual(git_output.call_count, 6)
-        self.assertEqual(clean_delta["head"], "1234567")
-        self.assertEqual(clean_delta["ahead"], 2)
-        self.assertEqual(clean_delta["behind"], 1)
-        self.assertTrue(clean_delta["branch_matches_topic"])
-        self.assertFalse(clean_delta["dirty"])
-        self.assertEqual(cached_delta, clean_delta)
-        self.assertTrue(dirty_delta["dirty"])
-        self.assertEqual(dirty_delta["changed_count"], 1)
-
-    def test_armada_git_status_delta_reports_structured_changed_files(self) -> None:
-        invalidate_armada_git_status_delta()
-        status_output = "# branch.oid 1234567890abcdef\n# branch.head topic-a\n1 .M N... 100644 100644 100644 a b modified.txt\n1 A. N... 000000 100644 100644 a b added.txt\n1 D. N... 100644 000000 000000 a b deleted.txt\n2 R. N... 100644 100644 100644 a b R100 renamed.txt\told-name.txt\nu UU N... 100644 100644 100644 100644 a b c conflicted.txt\n? untracked.txt"
-
-        with patch(
-            "zerver.lib.armada_worker.armada_git_output",
-            return_value=status_output,
-        ):
-            delta = armada_git_status_delta("/repo", topic="topic-a")
-
-        self.assertEqual(delta["changed_count"], 6)
-        self.assertFalse(delta["changed_files_truncated"])
-        self.assertEqual(
-            delta["changed_files"],
-            [
-                {"status": "M", "kind": "modified", "path": "modified.txt"},
-                {"status": "A", "kind": "added", "path": "added.txt"},
-                {"status": "D", "kind": "deleted", "path": "deleted.txt"},
-                {"status": "R", "kind": "renamed", "path": "renamed.txt"},
-                {"status": "U", "kind": "changed", "path": "conflicted.txt"},
-                {"status": "??", "kind": "untracked", "path": "untracked.txt"},
-            ],
-        )
-
-    def test_armada_git_status_delta_runs_bounded_git_commands(self) -> None:
-        invalidate_armada_git_status_delta()
-        status_output = (
-            "# branch.oid 1234567890abcdef\n# branch.head topic-a\n# branch.ab +0 -0\n? new.txt"
-        )
-        completed = subprocess.CompletedProcess(
-            ["git"],
-            0,
-            stdout=status_output,
-            stderr="",
-        )
-        with (
-            tempfile.TemporaryDirectory() as workdir,
-            patch("zerver.lib.armada_worker.subprocess.run", return_value=completed) as run_mock,
-        ):
-            Path(workdir, ".git").touch()
-            delta = armada_git_status_delta(workdir, topic="topic-b")
-
-        # Exactly one porcelain status plus the two commit-info commands
-        # per (cached) refresh — never N+1 per file or per commit.
-        self.assertEqual(run_mock.call_count, 3)
-        self.assertEqual(
-            [call.args[0][3] for call in run_mock.call_args_list],
-            ["status", "log", "rev-list"],
-        )
-        self.assertTrue(delta["dirty"])
-        self.assertEqual(delta["changed_count"], 1)
-        self.assertFalse(delta["branch_matches_topic"])
-
-    def test_armada_git_status_delta_skips_commit_reads_on_unborn_head(self) -> None:
-        invalidate_armada_git_status_delta()
-        status_output = "# branch.oid (initial)\n# branch.head topic-a\n? new.txt"
-        completed = subprocess.CompletedProcess(
-            ["git"],
-            0,
-            stdout=status_output,
-            stderr="",
-        )
-        with (
-            tempfile.TemporaryDirectory() as workdir,
-            patch("zerver.lib.armada_worker.subprocess.run", return_value=completed) as run_mock,
-        ):
-            Path(workdir, ".git").touch()
-            delta = armada_git_status_delta(workdir, topic="topic-a")
-
-        # A freshly initialized workspace has no HEAD yet; running the
-        # commit-info commands would make git fail (and warn) on every
-        # refresh, so only the status command may run.
-        self.assertEqual(run_mock.call_count, 1)
-        self.assertEqual(run_mock.call_args_list[0].args[0][3], "status")
-        self.assertNotIn("last_commit", delta)
-        self.assertNotIn("commit_count", delta)
-        self.assertEqual(delta["head_short"], "")
-
     def test_armada_git_output_logs_stderr_on_failure(self) -> None:
         completed = subprocess.CompletedProcess(
             ["git"],
@@ -3381,50 +3217,28 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
 
     def test_context_isolation_username_waits_for_existing_os_user(self) -> None:
         owner = self.example_user("hamlet")
+        expected_username = armada_topic_isolation_username(
+            owner,
+            stream="devel",
+            topic="general chat",
+        )
+        context = Workspace.objects.create(
+            realm=owner.realm,
+            stream_name="devel",
+            topic_name="general chat",
+            workdir="/srv/armada-workspaces/devel-general-chat",
+        )
+        self.assertIsNone(workspace_git_isolation_username(context))
 
-        with (
-            tempfile.TemporaryDirectory() as temp_dir,
-            self.settings(
-                ARMADA_TOPIC_ISOLATION_BACKEND="os-user",
-                ARMADA_TOPIC_WORKDIR_ROOT=temp_dir,
-            ),
+        context.isolation_username = expected_username
+        with patch("zerver.lib.armada_worker.pwd.getpwnam", side_effect=KeyError):
+            self.assertIsNone(workspace_git_isolation_username(context))
+
+        with patch(
+            "zerver.lib.armada_worker.pwd.getpwnam",
+            return_value=SimpleNamespace(pw_name=expected_username),
         ):
-            workdir = Path(temp_dir) / "devel-general-chat"
-            context = Workspace.objects.create(
-                realm=owner.realm,
-                stream_name="devel",
-                topic_name="general chat",
-                workdir=str(workdir),
-            )
-            expected_username = armada_topic_isolation_username(
-                owner,
-                stream="devel",
-                topic="general chat",
-            )
-
-            with patch("zerver.lib.armada_worker.pwd.getpwnam", side_effect=KeyError):
-                self.assertIsNone(
-                    armada_workspace_isolation_username(
-                        context,
-                        stream_name="devel",
-                        topic_name="general chat",
-                        workdir=str(workdir),
-                    )
-                )
-
-            with patch(
-                "zerver.lib.armada_worker.pwd.getpwnam",
-                return_value=SimpleNamespace(pw_name=expected_username),
-            ):
-                self.assertEqual(
-                    armada_workspace_isolation_username(
-                        context,
-                        stream_name="devel",
-                        topic_name="general chat",
-                        workdir=str(workdir),
-                    ),
-                    expected_username,
-                )
+            self.assertEqual(workspace_git_isolation_username(context), expected_username)
 
     def test_topic_isolation_user_exists_rejects_missing_user(self) -> None:
         self.assertFalse(armada_topic_isolation_user_exists("armada-user-that-should-not-exist"))

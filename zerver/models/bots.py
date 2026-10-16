@@ -327,6 +327,9 @@ class Workspace(models.Model):
     upstream_ref = models.TextField(blank=True)
     dirty = models.BooleanField(default=False)
     changed_count = models.PositiveIntegerField(default=0)
+    # The worktree's git facts for its topic's header, as last read in
+    # the background (zerver/lib/armada_workspace_git.py).
+    git_state = models.JSONField(default=dict)
     content_revision = models.PositiveBigIntegerField(default=0)
     lifecycle_status = models.CharField(
         max_length=16,

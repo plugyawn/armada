@@ -39,6 +39,9 @@ FILES_WITH_LEGACY_SUBJECT = {
     "zerver/tests/test_message_topics.py",
     # This is actually email subjects
     "zerver/lib/email_mirror_server.py",
+    # A commit's subject, in git's sense
+    "zerver/lib/armada_workspace_git.py",
+    "zerver/tests/test_armada_workspace_git.py",
 }
 
 shebang_rules: list["Rule"] = [

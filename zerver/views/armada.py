@@ -67,14 +67,10 @@ from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     ArmadaQueueWorkerDispatcher,
     armada_default_worker_reasoning_effort,
-    armada_git_status_delta,
     armada_logical_repository_label,
     armada_logical_worktree_label,
     armada_pinned_repository_value,
     armada_repo_artifact_value_is_durable,
-    armada_topic_isolation_user_exists,
-    armada_topic_isolation_username_for_realm,
-    armada_topic_os_user_isolation_enabled,
     armada_user_is_trusted,
     armada_worker_model_for_topic,
     armada_worker_reasoning_effort_for_topic,
@@ -88,6 +84,7 @@ from zerver.lib.armada_worker import (
     maybe_enqueue_armada_run_presentation,
     set_armada_workspace_paused,
 )
+from zerver.lib.armada_workspace_git import workspace_git_context
 from zerver.lib.armada_workspace_map import armada_workspace_topics_for_stream
 from zerver.lib.bot_config import get_bot_configs, set_bot_config
 from zerver.lib.exceptions import JsonableError
@@ -410,42 +407,6 @@ def build_armada_codex_model_catalog(model_choices: list[str]) -> list[dict[str,
     return catalog
 
 
-def build_armada_git_context(
-    workdir: str,
-    *,
-    topic: str = "",
-    isolation_username: str | None = None,
-) -> dict[str, object]:
-    return armada_git_status_delta(
-        workdir,
-        topic=topic,
-        isolation_username=isolation_username,
-    )
-
-
-def armada_workspace_isolation_username(
-    workspace_node: Workspace | None,
-    *,
-    stream_name: str,
-    topic_name: str,
-    workdir: str,
-) -> str | None:
-    if (
-        workspace_node is not None
-        and armada_topic_os_user_isolation_enabled()
-        and armada_repo_artifact_value_is_durable(workdir)
-    ):
-        username = armada_topic_isolation_username_for_realm(
-            workspace_node.realm_id,
-            stream=stream_name,
-            topic=topic_name,
-        )
-        if not armada_topic_isolation_user_exists(username):
-            return None
-        return username
-    return None
-
-
 def armada_workspace_for_request(
     user_profile: UserProfile,
     *,
@@ -535,12 +496,6 @@ def serialize_armada_workspace_context(
         if workspace_node is not None and workspace_node.branch_name.strip()
         else armada_workspace_node_default_branch()
     )
-    isolation_username = armada_workspace_isolation_username(
-        workspace_node,
-        stream_name=stream_name,
-        topic_name=topic_name,
-        workdir=workdir,
-    )
     payload: dict[str, object] = {
         "stream": stream_name,
         "topic": topic_name,
@@ -585,10 +540,8 @@ def serialize_armada_workspace_context(
         "parent_workspace_id": None,
     }
     if include_git:
-        payload["git"] = build_armada_git_context(
-            workdir,
-            topic=expected_branch,
-            isolation_username=isolation_username,
+        payload["git"] = workspace_git_context(
+            workspace_node, workdir=workdir, branch=expected_branch
         )
     return payload
 

@@ -1,3 +1,6 @@
+import threading
+import time
+from collections import OrderedDict
 from typing import Any
 
 from zerver.lib.armada_agent_threads import (
@@ -56,21 +59,61 @@ def _armada_agent_event_needs_snapshot(
     return payload.get("kind") in {"error", "session"}
 
 
-def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
-    """Push one reducer-friendly agent run delta to users who can see its trigger."""
+# A live run pushes an event per transcript item, and its audience
+# hardly changes while it runs, so its recipients are reused for a few
+# seconds instead of costing 4 queries an event. A subscription change
+# reaches a live run's events within that time. Only live runs are kept,
+# and never more than the limit.
+ARMADA_RUN_RECIPIENTS_SECONDS = 5
+ARMADA_RUN_RECIPIENTS_LIMIT = 256
+
+armada_run_recipients: OrderedDict[int, tuple[float, list[int]]] = OrderedDict()
+armada_run_recipients_lock = threading.Lock()
+
+
+def _armada_run_recipient_ids_now(run: AgentRun) -> list[int]:
     try:
         trigger_message = Message.objects.only("id", "is_channel_message").get(
             id=run.trigger_message_id
         )
     except Message.DoesNotExist:
-        return
-
+        return []
     if run.session_kind == AgentRun.SIDE and run.requesting_user_id is not None:
-        recipient_ids = {run.requesting_user_id}
-    else:
-        recipient_ids = event_recipient_ids_for_action_on_messages(
+        return [run.requesting_user_id]
+    return sorted(
+        event_recipient_ids_for_action_on_messages(
             [trigger_message.id], trigger_message.is_channel_message
         )
+    )
+
+
+def armada_run_recipient_ids(run: AgentRun) -> list[int]:
+    """The people who receive this run's events: those who can see its
+    trigger message, or only its requester for a side run; none once the
+    trigger message is gone."""
+    if run.status not in {AgentRun.QUEUED, AgentRun.RUNNING}:
+        with armada_run_recipients_lock:
+            armada_run_recipients.pop(run.id, None)
+        return _armada_run_recipient_ids_now(run)
+    now = time.monotonic()
+    with armada_run_recipients_lock:
+        kept = armada_run_recipients.get(run.id)
+        if kept is not None and now < kept[0]:
+            return list(kept[1])
+    user_ids = _armada_run_recipient_ids_now(run)
+    with armada_run_recipients_lock:
+        armada_run_recipients[run.id] = (now + ARMADA_RUN_RECIPIENTS_SECONDS, user_ids)
+        armada_run_recipients.move_to_end(run.id)
+        while len(armada_run_recipients) > ARMADA_RUN_RECIPIENTS_LIMIT:
+            armada_run_recipients.popitem(last=False)
+    return user_ids
+
+
+def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
+    """Push one reducer-friendly agent run delta to users who can see its trigger."""
+    recipient_ids = armada_run_recipient_ids(run)
+    if not recipient_ids:
+        return
 
     payload = run_event.payload if isinstance(run_event.payload, dict) else {}
     overview = payload.get("overview") if run_event.event_type == "presentation" else None
@@ -131,7 +174,7 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
         event["agent"] = agent
     if agents is not None:
         event["agents"] = agents
-    send_event_on_commit(run.realm, event, list(recipient_ids))
+    send_event_on_commit(run.realm, event, recipient_ids)
 
 
 def send_armada_workspace_changed_event(node: Workspace, revision: int) -> None:

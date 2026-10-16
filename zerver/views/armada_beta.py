@@ -21,6 +21,7 @@ from zerver.decorator import (
 )
 from zerver.lib.armada import ARMADA_QUESTION_TIMEOUT_SECONDS
 from zerver.lib.armada_identity import armada_bot_user_ids_for_realm
+from zerver.lib.armada_worker import armada_user_is_trusted
 from zerver.lib.partner import (
     armada_sprite_dir,
     choose_partner,
@@ -128,13 +129,17 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
     registers an event queue over the session (/json/register) like the
     old interface, and every write goes through /json/ with the session's
     CSRF token. The page is given two facts it cannot ask for: how long a
-    run waits for an answer to its question, and which runs are live now;
-    the version of the partner pack, so that its species.json can be
-    kept for good under each version; and the little it would otherwise
-    register for whole bundles to learn: the agent's user ids (from
-    realm_bot), the rules for editing and deleting, which links the
-    server previews, and how often to report presence and when a person
-    counts as gone (from realm)."""
+    run waits for an answer to its question, which runs are live now, and
+    whether a mention of the agent by this person can start a run (the
+    embedded bots are on and the person may drive runs: the rules
+    handle_message and start_blocked_reason apply, so the field offers
+    the agent only where a mention of it does something); the version of
+    the partner pack, so that its species.json can be kept for good under
+    each version; and the little it would otherwise register for whole
+    bundles to learn: the agent's user ids (from realm_bot), the rules
+    for editing and deleting, which links the server previews, and how
+    often to report presence and when a person counts as gone (from
+    realm)."""
     pack = load_pack()
     return render(
         request,
@@ -143,6 +148,8 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
             "doc_root_title": "Armada",
             "question_timeout_seconds": ARMADA_QUESTION_TIMEOUT_SECONDS,
             "live_run_ids": orjson.dumps(live_run_ids_for_user(user_profile)).decode(),
+            "may_start_runs": settings.EMBEDDED_BOTS_ENABLED
+            and armada_user_is_trusted(user_profile),
             "read_receipts": user_profile.realm.enable_read_receipts,
             "sprite_version": pack.version if pack is not None else "",
             "agent_user_ids": orjson.dumps(

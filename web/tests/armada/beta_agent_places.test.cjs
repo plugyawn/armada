@@ -1,0 +1,232 @@
+"use strict";
+
+// Where the interim beta offers Onix (web/src/armada/beta/runs.js,
+// agentCanRun; mentions.js; send.js), with a real DOM and a stand-in
+// server. By the server's rules (zerver/lib/armada.py handle_message,
+// zerver/lib/armada_worker.py start_blocked_reason), a mention of the
+// agent starts a run in any channel's topic, the first run in a channel
+// with no repository making its repository, and never in a direct
+// message; only for a person allowed to start runs, and not in a topic
+// its people paused. The `@` picker offers Onix exactly there, and a
+// message that names Onix there is sent as one to Onix. Deleted with
+// web/src/armada/beta/.
+
+const assert = require("node:assert/strict");
+
+const {clock, mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
+const real_dom = require("../lib/real_dom.cjs");
+const {run_test} = require("../lib/test.cjs");
+
+const dom = real_dom.make_real_dom(`
+<div id="beta-data" data-may-start-runs="on"></div>
+<nav><div class="scroll"></div></nav>
+<main>
+  <div class="band"><div class="lane">
+    <div id="run" class="off"><span id="run-st"></span><span id="clock"></span><span id="act"></span><button id="stop">Stop</button></div>
+    <div id="ty" class="off"></div><button id="jump" class="off">Jump to latest</button>
+  </div></div>
+  <div class="feed" id="pane"><div class="clip"><div class="lane" id="col"></div></div></div>
+  <div class="dock"><div class="cz"><div class="sh">
+    <span class="txw"><div class="tx" contenteditable="true"></div><span class="ph"></span></span>
+    <button class="k to"></button><button class="k mode"></button>
+    <button class="disc" aria-label="Send"><span class="cell"><span>Send</span></span></button>
+  </div></div></div>
+  <aside class="side" id="side"><div class="out" id="outline"></div></aside>
+  <div class="pane" data-pane="Home" hidden><div class="lane" id="home"></div></div>
+</main>`);
+set_global("window", dom.window);
+set_global("location", dom.window.location);
+set_global("history", dom.window.history);
+set_global("localStorage", dom.window.localStorage);
+set_global("addEventListener", (...args) => dom.window.addEventListener(...args));
+set_global("getSelection", () => dom.window.getSelection());
+set_global("innerWidth", 1440);
+set_global("innerHeight", 900);
+set_global("requestAnimationFrame", (f) => setTimeout(f, 16));
+set_global(
+    "ResizeObserver",
+    class {
+        observe() {}
+    },
+);
+set_global("BroadcastChannel", class {});
+const noop = () => {};
+set_global("M", {
+    T: {},
+    SLOW: 1,
+    release: noop,
+    appear: noop,
+    fade: noop,
+    flip: noop,
+    halt: noop,
+    land: noop,
+    refuse: noop,
+    figure: noop,
+    say: noop,
+});
+set_global("S", {play: noop});
+set_global("host", noop);
+set_global("fig", String);
+set_global("wk", () => `<span class="mk wk"></span>`);
+set_global(
+    "face",
+    (spec, cls) => `<i class="av ${cls}">${spec.split(" ")[0].split(":")[0]}</i>`,
+);
+
+// The stand-in server: every request is kept; a message sent is given the
+// next id.
+const requests = [];
+let next_id = 900;
+set_global("fetch", async (url, init) => {
+    const method = init.method;
+    const body = Object.fromEntries(new URLSearchParams(init.body));
+    requests.push({method, url: url.split("?")[0], body});
+    const sent = {};
+    if (method === "POST" && url === "/json/messages") {
+        sent.id = next_id;
+        next_id += 1;
+    }
+    return {
+        ok: true,
+        status: 200,
+        json: async () => ({result: "success", msg: "", messages: [], armada_runs: [], ...sent}),
+    };
+});
+
+const find = (selector) => document.querySelector(selector);
+const field = find(".tx");
+mock_esm("../../src/armada/beta/frame.js", {
+    main: find("main"),
+    feed: find("#pane"),
+    lane: find("#col"),
+    nav: find("nav"),
+    navScroll: find("nav .scroll"),
+    side: find("#side"),
+    outline: find("#outline"),
+    panes: {Chat: find("#pane"), Home: find('[data-pane="Home"]')},
+    band: {
+        el: find(".band"),
+        run: find("#run"),
+        st: find("#run-st"),
+        clock: find("#clock"),
+        act: find("#act"),
+        stop: find("#stop"),
+        ty: find("#ty"),
+        jump: find("#jump"),
+    },
+    cz: find(".cz"),
+    sh: find(".sh"),
+    tx: field,
+    go: find(".disc"),
+    goc: find(".disc .cell"),
+    ph: find(".ph"),
+    toBtn: find(".k.to"),
+    modeBtn: find(".k.mode"),
+});
+mock_esm("../../src/armada/beta/column.js", {drawSide: noop});
+
+const beta_state = zrequire("armada/beta/state.js");
+const routing = zrequire("armada/beta/routing.js");
+const mentions = zrequire("armada/beta/mentions.js");
+const send = zrequire("armada/beta/send.js");
+
+const ME = 3;
+const IAGO = 5;
+const AGENT = 9;
+const OPS = 4;
+beta_state.state.ME = ME;
+beta_state.state.meName = "King Hamlet";
+beta_state.armadaBots.add(AGENT);
+for (const [id, name, bot] of [
+    [ME, "King Hamlet", false],
+    [IAGO, "Iago", false],
+    [AGENT, "Onix", true],
+]) {
+    beta_state.people.set(id, {id, name, email: `${id}@example.com`, bot, active: true});
+}
+// #ops, a channel with no repository yet, as in a fresh organisation.
+beta_state.streams.set(OPS, {stream_id: OPS, name: "ops"});
+mentions.wireMentions();
+
+// A place opened, its messages read.
+function open(p) {
+    beta_state.state.place = p;
+    const c = routing.cacheOf(p);
+    c.loaded = true;
+    c.oldest = true;
+    beta_state.state.P = c;
+    return c;
+}
+const topic = (name) => open(routing.placeFromKey(routing.tkey(OPS, name)));
+const direct = () => open(routing.placeFromKey(routing.dkey([IAGO])));
+
+// Every promise the page waits on resolves through promises alone; its
+// timers run on the fake clock.
+async function settle() {
+    for (let i = 0; i < 50; i += 1) {
+        await Promise.resolve();
+    }
+    clock.tick(20);
+}
+
+// "@" typed at the field's start, as the keyboard leaves it: the caret
+// after it.
+function typeAt() {
+    field.textContent = "@";
+    dom.window.getSelection().collapse(field.firstChild, 1);
+    field.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+}
+const offered = () => [...document.querySelectorAll("#mpk .mi .lab")].map((x) => x.textContent);
+function close() {
+    field.textContent = "";
+    field.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+}
+
+run_test("Onix is offered in a channel's topic before the channel has a repository", () => {
+    topic("file-backup");
+    typeAt();
+    assert.deepEqual(offered(), ["Iago", "Onix", "topic"]);
+    close();
+});
+
+run_test("Onix is not offered where a mention of it starts no run", () => {
+    // A direct message: the server answers that runs need a channel's topic.
+    direct();
+    typeAt();
+    assert.deepEqual(offered(), ["Iago"]);
+    close();
+
+    // A topic its people paused.
+    topic("paused").ctx = {is_paused: true};
+    typeAt();
+    assert.deepEqual(offered(), ["Iago", "topic"]);
+    close();
+
+    // Someone the server does not let start runs.
+    topic("file-backup");
+    beta_state.DATA.mayStartRuns = "off";
+    typeAt();
+    assert.deepEqual(offered(), ["Iago", "topic"]);
+    close();
+    beta_state.DATA.mayStartRuns = "on";
+});
+
+run_test("a message that names Onix there is sent as one to Onix", async () => {
+    const c = topic("file-backup");
+    requests.length = 0;
+    field.textContent = "@onix why did the backup stop?";
+    send.send({at: 0});
+    // Onix's turn stands under mine at once, and the server is told the
+    // message is for Onix, as from a repository's topic.
+    assert.deepEqual(
+        c.msgs.map((m) => [m.sender_id, Boolean(m.local)]),
+        [
+            [ME, true],
+            [AGENT, true],
+        ],
+    );
+    await settle();
+    const post = requests.find((r) => r.method === "POST" && r.url === "/json/messages");
+    assert.equal(post.body.content, "@**Onix** why did the backup stop?");
+    assert.equal(post.body.agent_followup, "true");
+});

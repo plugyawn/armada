@@ -11,7 +11,7 @@ import {seedField, takeReply} from "./mentions.js";
 import {wireOf, withPath} from "./mention_text.js";
 import {appendMessage, grown, haltLane, hush, sectionOf} from "./feed.js";
 import {drawTrail} from "./nav.js";
-import {answered, drawAsks, liveRun, runMark, waitingRun} from "./runs.js";
+import {agentCanRun, answered, drawAsks, liveRun, runMark, waitingRun} from "./runs.js";
 import {transmit} from "./outbox.js";
 import {drawRunState} from "./band.js";
 import {drawSide} from "./column.js";
@@ -39,11 +39,11 @@ function send(o = {}) {
   if (!state.P.loaded && !state.P.error) { M.refuse(sh); return; }
   const inView = state.tab === "Files" ? state.P.filePath : state.tab === "README" ? state.P.readmePath : null;   /* sent from a view, the words say what was in view */
   if (state.tab !== "Chat") setTab("Chat", true);   /* the field is the same on every view; what it sends is read in Chat */
-  /* To Onix: in a repository, when the words mention it (the switch's pill, one chosen from the picker, or @onix typed), or an
-     option of its question pressed. The message is flagged agent_followup, as today's client flags it; the mention is what
+  /* To Onix: where a mention of it starts a run (runs.js, agentCanRun), when the words mention it (the switch's pill, one chosen
+     from the picker, or @onix typed), or an option of its question pressed. The message is flagged agent_followup, as today's client flags it; the mention is what
      the server admits a run on, and what a waiting run takes as its answer. Nothing is added to the words: people talking
      to each other here do not answer a run that waits. */
-  const p = state.place, c = state.P, live = liveRun(c), ask = waitingRun(c), toOnix = p.kind === "topic" && !!p.repo && (!!o.onix || text.includes(state.agentMention)), starts = toOnix && !live;
+  const p = state.place, c = state.P, live = liveRun(c), ask = waitingRun(c), toOnix = agentCanRun(p, c) && (!!o.onix || text.includes(state.agentMention)), starts = toOnix && !live;
   if (inView && toOnix && o.text == null) text = withPath(text, inView, state.agentMention);
   if (o.text == null) text = takeReply() + text;   /* a reply: its one-line quote goes first */
   const raw = text, shown = echoHTML(text);

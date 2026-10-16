@@ -383,6 +383,24 @@ class ArmadaBetaTest(ZulipTestCase):
         html = self.client_get("/beta/").content.decode()
         self.assertIn('data-read-receipts="off"', html)
 
+    def test_the_page_says_whether_a_mention_can_start_a_run(self) -> None:
+        # The field offers the agent where a mention of it starts a run: by
+        # the server's rules, only for someone who may drive runs, while the
+        # embedded bots are on.
+        def may_start_runs(name: str) -> str:
+            self.login(name)
+            return self.beta_data(self.client_get("/beta/").content.decode())["may-start-runs"]
+
+        self.assertEqual(may_start_runs("hamlet"), "on")
+        with override_settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
+            self.assertEqual(may_start_runs("hamlet"), "off")
+            self.assertEqual(may_start_runs("iago"), "on")
+        with override_settings(ARMADA_WORKER_TRUSTED_USER_IDS=[self.example_user("hamlet").id]):
+            self.assertEqual(may_start_runs("hamlet"), "on")
+            self.assertEqual(may_start_runs("othello"), "off")
+        with override_settings(EMBEDDED_BOTS_ENABLED=False):
+            self.assertEqual(may_start_runs("iago"), "off")
+
     def test_the_page_names_the_partner_pack_version(self) -> None:
         self.login("hamlet")
         with self.sprite_dir() as sprites:

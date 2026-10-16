@@ -9,6 +9,7 @@ import {note, onixNow, ready, syncField} from "./composer.js";
 import {loadTopics, subs} from "./nav.js";
 import {fetchMsgs, tkey} from "./routing.js";
 import {catchUp, dist, edge, haltLane, syncJump} from "./feed.js";
+import {agentCanRun} from "./runs.js";
 import {editing} from "./hover.js";
 import {fillField, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople, rankPlaces, seedOf, triggerAt} from "./mention_text.js";
 
@@ -39,7 +40,7 @@ function readTrigger(f) {
 }
 function candidates(t) {
   const p = state.place, topic = !!p && p.kind === "topic";
-  if (t.kind === "@") return rankPeople(t.q, team(), {agent: inWorktree() && armadaBots.size ? {id: agentId(), name: "Onix"} : null, topic});
+  if (t.kind === "@") return rankPeople(t.q, team(), {agent: agentCanRun() ? {id: agentId(), name: "Onix"} : null, topic});   /* Onix where a mention of it starts a run */
   const all = subs(), gt = t.q.indexOf(">");
   if (gt >= 0) for (const s of all) if (s.name.toLowerCase() === t.q.slice(0, gt).trim().toLowerCase() && !topicsOf.has(s.stream_id)) loadTopics(s.stream_id).then(() => { if (pk) drawPk(); });
   return rankPlaces(t.q, all, topicList);

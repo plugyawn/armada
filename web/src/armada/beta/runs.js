@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): runs: their marks, the live runs at load, the questions they wait on. */
 
 import {$, $$} from "./util.js";
-import {LIVE_RUN_IDS, marks, places, QUESTION_TIMEOUT, state, streams, topicsOf} from "./state.js";
+import {armadaBots, DATA, LIVE_RUN_IDS, marks, places, QUESTION_TIMEOUT, state, streams, topicsOf} from "./state.js";
 import {now} from "./time.js";
 import {api} from "./connection.js";
 import {tkey} from "./routing.js";
@@ -71,8 +71,13 @@ function drawAsks() { if (!state.P || !lane) return; const r = waitingRun(state.
     /* the caption under the options says what is true now: a question the run no longer waits on does not say it waits */
     const cap = q.nextElementSibling && $("p.askcap > em", q.nextElementSibling); if (cap) { if (cap.dataset.live == null) cap.dataset.live = cap.textContent; const t = on ? cap.dataset.live : "The run no longer waits for an answer here."; if (cap.textContent !== t) cap.textContent = t; } }); }
 const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === "running");
+/* where a mention of Onix starts a run, by the server's own rules (zerver/lib/armada.py, handle_message; armada_worker.py,
+   start_blocked_reason): any channel's topic and never a direct message, with the agent set up, a person allowed to start
+   its runs (the page's data, may-start-runs) and a topic its people have not paused. A channel with no repository is no
+   exception: Onix's first run there makes one. */
+const agentCanRun = (p = state.place, c = state.P) => !!p && p.kind === "topic" && armadaBots.size > 0 && DATA.mayStartRuns !== "off" && !(c && c.ctx && c.ctx.is_paused);
 const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
 
-export {answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
+export {agentCanRun, answered, askedAt, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
   runMark, runOfMsg, runsSeen, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};

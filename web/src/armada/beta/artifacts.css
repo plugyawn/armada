@@ -1,0 +1,53 @@
+/* INTERIM BETA (README.md): Onix's artifacts (artifacts.js). Tokens only. */
+@layer zulip.armada-beta {   /* see index.js: the beta's sheets sit at the bottom of the cascade */
+
+/* in the conversation: the design's block (mock.css .blk.art): the kind glyph, the title, one caption, the verb in a cell as
+   wide as Close, so the row never changes its width when it opens */
+.blk.apanel > .at { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--t-text); }
+.blk.apanel > .k { flex: none; white-space: nowrap; }
+
+/* open: it borrows the column, whose lists wait under it (or, below 1408, a raised sheet in the checklist's place). One
+   heading line, its title in Strong and Close at its end; then the document, which scrolls in its own bounds. */
+aside.side[data-borrowed] > .out { display: none; }
+aside.side > .apanel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.apanel.sheet-chk { display: flex; flex-direction: column; max-height: min(70vh, 640px); }
+.apanel > .aph { display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-l); flex: none; }
+.apanel > .aph > b { flex: 1; min-width: 0; font: var(--t-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apanel > .aph > .c { margin-right: -6px; }
+.apanel > .abody { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--s-2) 0 var(--s-5); scrollbar-width: none; }
+.apanel .ablk + .ablk { margin-top: var(--s-5); }
+/* a block's label line: its state's mark, its label, and a figure at its end */
+.apanel .ah { display: flex; align-items: center; gap: var(--s-2); min-height: 20px; margin-bottom: var(--s-1); font: var(--t-label); color: var(--ink-2); }
+.apanel .ah > span:not(.e) { min-width: 0; overflow-wrap: anywhere; }
+.apanel .ah > .e, .apanel .ah > .acp { margin-left: auto; flex: none; font: var(--t-caption); font-variant-numeric: tabular-nums; }
+.apanel .ae { font: var(--t-caption); color: var(--ink-2); }
+.apanel .ahd { font: var(--t-strong); margin: var(--s-1) 0; }
+.apanel .ab { font: var(--t-text); white-space: pre-line; overflow-wrap: anywhere; }
+.apanel .ad { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); white-space: pre-line; }
+/* maths: in the code face as written, until KaTeX sets it; ```math stands on lines of its own */
+.apanel .am { font: var(--t-code); color: var(--ink-2); white-space: pre-wrap; }
+.apanel .am[data-display] { display: block; margin: var(--s-2) 0; overflow-x: auto; }
+.apanel .am.on { font: var(--t-text); color: var(--ink-1); white-space: normal; }
+/* a figure: the value in the title size, its unit and its change in the caption */
+.apanel .av2 { display: flex; align-items: baseline; gap: var(--s-1); flex-wrap: wrap; }
+.apanel .av2 > .fig { font: var(--t-title); font-variant-numeric: tabular-nums; }
+.apanel .av2 > .u, .apanel .av2 > .dl { font: var(--t-caption); color: var(--ink-2); }
+.apanel .av2 > .dl { margin-left: var(--s-2); }
+/* a meter: a quiet track and how much of it is done */
+.apanel .amt { height: 4px; border-radius: 2px; background: var(--fill-2); overflow: hidden; }
+.apanel .amt > i { display: block; height: 100%; width: calc(var(--f) * 100%); background: var(--ink-1); }
+/* a series: one line in the first ink; its lowest and highest figures are on its label's line */
+.apanel .asr > svg { display: block; width: 100%; height: 48px; overflow: visible; }
+.apanel .asr polyline { fill: none; stroke: var(--ink-1); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+/* a log: code on the block's fill, scrolling in its own bounds */
+.apanel .alog { margin: 0; padding: var(--s-2) var(--s-3); border-radius: var(--r-block); background: var(--block); font: var(--t-code); white-space: pre; overflow: auto; max-height: calc(15 * 20px); scrollbar-width: none; }
+/* keys and values: the key in the second ink, the value in the first, a row each */
+.apanel .akv { width: 100%; border-collapse: collapse; font: var(--t-text); }
+.apanel .akv th { text-align: left; font-weight: 400; color: var(--ink-2); padding: var(--s-1) var(--s-3) var(--s-1) 0; vertical-align: top; white-space: nowrap; }
+.apanel .akv td { padding: var(--s-1) 0; overflow-wrap: anywhere; }
+/* a picture or a video: the column's width; a picture opens in the lightbox */
+.apanel .blk.pic { --lim: 100%; width: 100%; }
+.apanel .avd { display: block; width: 100%; border-radius: var(--r-block); background: var(--block); }
+.apanel .aact { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-5); }
+
+}   /* @layer zulip.armada-beta */

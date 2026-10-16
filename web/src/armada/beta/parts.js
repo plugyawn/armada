@@ -10,6 +10,7 @@ import {quoteHTML, refLook} from "./mentions.js";
 import {tkey} from "./routing.js";
 import {dropNames, liftInline, loadPics, localSize, picHTML, picsOf} from "./media.js";
 import {widgetPart} from "./widgets.js";
+import {artifactPart} from "./artifacts.js";
 
 /* ---------- the rule: a server-rendered message becomes bubbles and blocks ----------
    The message's rendered HTML is read as a list of its top-level elements. Each is prose or a block.
@@ -83,6 +84,7 @@ function partsOf(m) {
       if (p.t === "pic" && last && last.t === "pic" && last.items && last._end === n.previousElementSibling) { last.items.push(...p.items); last.html = picHTML(last.items); last._end = n; } else { if (p.t === "pic") p._end = n; out.push(p); } }   /* previews side by side are one group */
     else run.push(n); }
   flush();
+  const art = artifactPart(m); if (art) out.push(art);   /* the artifact a run attached: a block after its words (artifacts.js) */
   if (!out.some((x) => x.t !== "rq") && !onix) { const t = (root.textContent || "").trim(); out.push({t: "b", tag: "p", html: esc(t || " ")}); }
   return out;
 }
@@ -96,6 +98,7 @@ function partEl(p, m) {
   else if (p.t === "ask") e = el("div", "blk ask", p.html);
   else if (p.t === "pic") e = el("div", "blk pic", p.html);
   else if (p.t === "wdg") e = el("div", "blk wdg", p.html);
+  else if (p.t === "art") e = el("div", "blk art", p.html);
   else if (p.t === "rq") { e = el("button", "rq", p.html); e.dataset.quote = p.ref; e.setAttribute("aria-label", "Go to the message this replies to"); }
   else e = el("div", "blk", p.html);
   e.dataset.mid = m.id; e.dataset.part = p.t; e._src = p.html; loadPics(e); return e;

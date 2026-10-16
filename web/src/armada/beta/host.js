@@ -43,12 +43,13 @@ import {onPost, wirePages} from "./pages.js";
 import {loadLater, onReminders, onScheduled, openSendWhen, wireLater} from "./later.js";
 import {wireLightbox} from "./lightbox.js";
 import {onSubmessage, wireWidgets} from "./widgets.js";
+import {onArtifactEvent, wireArtifacts} from "./artifacts.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
-on("armada_post", onPost); on("submessage", onSubmessage); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
+on("armada_post", onPost); on("submessage", (ev) => { onSubmessage(ev); onArtifactEvent(ev); }); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
 on("scheduled_messages", onScheduled); on("reminders", onReminders);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */
@@ -80,6 +81,7 @@ async function boot() {
   tx.addEventListener("focus", () => { state.threadTx = null; });
   buildOver(); wireMentions(); wireCaret(); wireLater(); wireLightbox(document.body);   /* a picture opens whole (lightbox.js) */
   wireWidgets(main, msgOf);   /* polls and to-do lists (widgets.js) */
+  wireArtifacts(main, msgOf);   /* artifacts, opened in the column (artifacts.js) */
   /* the field */
   toBtn.insertAdjacentHTML("beforeend", '<span class="tl">Onix</span>'); toBtn.classList.replace("sq", "w");   /* the switch says its name, in both states */
   cz.classList.remove("is-focus", "has-text", "is-off"); tx.innerHTML = ""; tx.contentEditable = "plaintext-only"; tx.classList.add("m-caret"); go.classList.remove("armed");
@@ -94,7 +96,7 @@ async function boot() {
     if (e.key === "ArrowUp" && !tx.textContent.trim() && !editing && !e.shiftKey && !state.atts.length && !pop && editLast()) e.preventDefault(); });   /* Up in an empty field (the switch's pill alone is empty) edits my last message, while the realm lets me */
   go.addEventListener("click", (e) => { send({at: e.timeStamp}); go.classList.remove("armed"); });
   /* a press on a control does not take focus from the field */
-  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick], a.im, [data-part='wdg'] button";
+  const KEEP = ".tab, nav .row, nav .mo, .cz button, .rc, .jump, .stop, .prog, .sec .lk, .ls > li, [data-thread], .tree .row, .line .lk, .bl > .lk, .hd button, .mo, .over .c, .menu .mi, .pop button, .pal .mi, .opt, .hrow, .dlg button, .rt, .info button, .pcard button, .pkc, .pkseg button, [data-later], [data-pick], a.im, [data-part='wdg'] button, [data-art-open], .apanel button";
   document.addEventListener("mousedown", (e) => { if (e.target.closest && e.target.closest(KEEP)) e.preventDefault(); }, true);
   /* the field is ready after everything: a press that ends anywhere outside a control or a selection hands the caret back */
   document.addEventListener("mouseup", (e) => setTimeout(() => { const a = document.activeElement; if (a === tx || (a && a.closest("#lab, input, textarea, .thr-in .tx, .pal, .dlg, .pop")) || (e.target.closest && e.target.closest("#lab")) || !getSelection().isCollapsed) return; ready(); }, 0));

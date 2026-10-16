@@ -8,7 +8,7 @@ import {addMsg, dkey, placeOfMsg, refreshCtx, tkey} from "./routing.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
-import {appendMessage, drawLane, grown, sectionOf, show} from "./feed.js";
+import {appendMessage, edge, ends, grown, pin, removeRow, sectionOf, show, syncJump} from "./feed.js";
 import {drawNav, drawTrail} from "./nav.js";
 import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, settleAsk} from "./runs.js";
 import {drawProg} from "./checklist.js";
@@ -77,7 +77,11 @@ function onRun(ev) {
 }
 function onReaction(ev) { const c = msgIndex.get(ev.message_id); if (!c) return; const m = c.byId.get(ev.message_id); if (m) applyReaction(c, m, ev, false); }
 function onFlags(ev) { if (ev.flag !== "read" || ev.op !== "add") return; if (ev.all) { unread.clear(); drawNav(); return; } const ids = new Set(ev.messages); for (const [k, s] of unread) { let ch = false; for (const i of ids) if (s.delete(i)) ch = true; if (ch) { if (!s.size) unread.delete(k); drawTrail(k); } } }
-function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let redraw = false; for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); forgetReceipts(id); c.msgs = c.msgs.filter((x) => x !== m); if (c === state.P) redraw = true; } if (redraw) drawLane({keep: !state.pinned}); }
+/* a deleted message leaves its place's rows in place: the rest of the conversation is not drawn again */
+function onDelete(ev) { const ids = ev.message_ids || [ev.message_id]; let here = false;
+  for (const id of ids) { const c = msgIndex.get(id); if (!c) continue; const m = c.byId.get(id); c.byId.delete(id); msgIndex.delete(id); forgetReceipts(id); c.msgs = c.msgs.filter((x) => x !== m); if (c !== state.P) continue;
+    removeRow(c, id); here = true; const root = m && m.thread_root_message_id && c.byId.get(m.thread_root_message_id), rc = root && sectionOf(root.id); if (rc) drawThreadLine(rc, root); }
+  if (here) { ends(state.P); if (state.pinned) pin(); edge(); syncJump(); } }
 function onTyping(ev) { const key = ev.message_type === "stream" ? tkey(ev.stream_id, ev.topic || "") : dkey((ev.recipients || []).map((u) => u.user_id).filter((i) => i !== state.ME)), c = places.get(key), id = ev.sender.user_id; if (!c || id === state.ME || isOnix(id)) return;   /* Onix's own sign that it is working is its mark, not a typing bubble */
   clearTimeout(c.typers.get(id)); if (ev.op === "start") c.typers.set(id, setTimeout(() => { c.typers.delete(id); if (c === state.P) drawTyping(); }, 16000)); else c.typers.delete(id); if (c === state.P) drawTyping(); }
 /* the realm's rules for editing and deleting, changed by an administrator: the next Up or More reads them (hover.js, canEdit

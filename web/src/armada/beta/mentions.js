@@ -8,7 +8,7 @@ import {faceOf, nameOf, presOf} from "./faces.js";
 import {note, onixNow, ready, syncField} from "./composer.js";
 import {loadTopics, subs} from "./nav.js";
 import {fetchMsgs, tkey} from "./routing.js";
-import {dist, drawLane, edge, haltLane, syncJump} from "./feed.js";
+import {catchUp, dist, edge, haltLane, syncJump} from "./feed.js";
 import {editing} from "./hover.js";
 import {fillField, pillFor, pillNode, quoteLine, quoteOf, quoteWire, rankPeople, rankPlaces, seedOf, triggerAt} from "./mention_text.js";
 
@@ -114,7 +114,7 @@ function restoreReply(was) { replyTo = was && state.place && was.key === state.p
 /* the quote above a bubble: pressed, the conversation goes to the message it quotes */
 async function jumpTo(id) {
   const c = state.P, find = () => $(`[data-part][data-mid="${id}"]:not(.rq)`, lane);
-  let n = find(); for (let i = 0; !n && i < 4 && c.loaded && !c.oldest && state.P === c; i++) { await fetchMsgs(c, true); if (c.byId.has(id)) { drawLane({keep: true}); n = find(); } }
+  let n = find(); for (let i = 0; !n && i < 4 && c.loaded && !c.oldest && state.P === c; i++) { await fetchMsgs(c, true); if (state.P !== c) return; catchUp(c, {keep: true}); n = find(); }
   if (state.P !== c) return; if (!n) { note("That message is not in this conversation"); ready(); return; }
   haltLane(); const r = n.getBoundingClientRect(), fr = feed.getBoundingClientRect(); feed.scrollTop += r.top - fr.top - fr.height / 3; state.lastSet = feed.scrollTop; state.pinned = dist() < 4; edge(); syncJump(); M.appear(n, 0.3); ready();
 }

@@ -13,7 +13,7 @@ import {api, handle, on, onRestart, poll, register, session} from "./connection.
 import {cacheOf, dkey, fetchMsgs, markRead, openPlace, placeFromHash, placeFromKey, tkey} from "./routing.js";
 import {band, bindFrame, cz, feed, go, lane, main, nav, navFixed, navScroll, outline, panes, side, toBtn, tx} from "./frame.js";
 import {answering, drawAtts, drawComposer, onixHere, onixKey, ready, syncField, upload, verb} from "./composer.js";
-import {dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, releaseRows, syncJump, toHug} from "./feed.js";
+import {catchUp, dist, drawLane, edge, firstRow, haltLane, hugAll, laneMoving, pin, releaseRows, syncJump, toHug} from "./feed.js";
 import {drawNav, loadTopics, navMore, subs, toggleStream} from "./nav.js";
 import {drawAsks, runsSeen, sweepAsks, waitingRun} from "./runs.js";
 import {drawHeader} from "./header.js";
@@ -118,7 +118,7 @@ async function boot() {
   /* a double press on a message is my thumbs-up (React in the overlay does the same) */
   lane.addEventListener("dblclick", (e) => { const n = e.target.closest("[data-mid]"); if (!n || e.target.closest(".rc, button, a")) return; const m = state.P.byId.get(+n.dataset.mid); if (m) { getSelection().removeAllRanges(); react(m, {emoji_name: "+1", emoji_code: "1f44d", reaction_type: "unicode_emoji"}); } ready(); });
   feed.addEventListener("scroll", () => { edge(); if (state.tab !== "Chat") return; if (Math.abs(feed.scrollTop - state.lastSet) < 1) return; state.lastSet = -1; state.pinned = dist() < 4; syncJump();
-    if (feed.scrollTop < 240 && state.P && state.P.loaded && !state.P.oldest && !state.P.loading) { const c = state.P; fetchMsgs(c, true).then(() => { if (state.P === c) drawLane({keep: true}); }); const mu = $(".more-up", lane); if (mu) mu.textContent = "Loading earlier messages"; } }, {passive: true});
+    if (feed.scrollTop < 240 && state.P && state.P.loaded && !state.P.oldest && !state.P.loading) { const c = state.P; fetchMsgs(c, true).then(() => { if (state.P === c) catchUp(c, {keep: true}); }); const mu = $(".more-up", lane); if (mu) mu.textContent = "Loading earlier messages"; } }, {passive: true});
   navScroll.addEventListener("scroll", navMore, {passive: true}); new ResizeObserver(navMore).observe(navScroll);
   /* a wrapped bubble keeps hugging its words when the lane's width changes, and once the faces have loaded */
   let laneW = 0; new ResizeObserver(() => { const w = lane.clientWidth; if (w === laneW) return; laneW = w; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); }).observe(lane);

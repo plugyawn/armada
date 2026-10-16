@@ -229,9 +229,10 @@ for (const [id, name] of [
 }
 beta_state.streams.set(10, {stream_id: 10, name: "devel"});
 
-// Every message is on one day, a minute apart, so that each person's
-// message after someone else's is a turn of its own.
-const T0 = Math.floor(Date.now() / 1000) - 7200;
+// Messages are a minute apart from 8:00 on one day (local time), so that
+// each person's message after someone else's is a turn of its own and no
+// day line falls between two of them unless a test puts one there.
+const T0 = new Date(2026, 9, 14, 8, 0).getTime() / 1000;
 const message = (id, sender_id, topic = "lane", minute = id) => ({
     id,
     type: "stream",
@@ -397,4 +398,72 @@ run_test("who read a message is kept only while a place holds the message", () =
     assert.ok(receipts.rcpt.has(501));
     events.onDelete({message_ids: [501]});
     assert.ok(!receipts.rcpt.has(501));
+});
+
+// A lane as a canonical string (each element's tag, classes and other
+// attributes in order, and its text): two lanes that read the same give
+// the same string, whatever order their classes were set in.
+const shape = (node) =>
+    [...node.childNodes]
+        .map((n) => {
+            if (n.nodeType === 3) {
+                return JSON.stringify(n.data);
+            }
+            const attrs = [...n.attributes]
+                .filter((a) => a.name !== "class")
+                .map((a) => `${a.name}=${a.value}`)
+                .toSorted();
+            return `<${n.tagName} ${[...n.classList].toSorted().join(".")} ${attrs.join(" ")}>${shape(n)}</>`;
+        })
+        .join("");
+
+run_test("an older page adds only its own rows, and the lane reads as if drawn whole", () => {
+    // The lane's newest forty, and a page of forty before them that ends
+    // with Iago a minute before Iago's turn begins the lane.
+    const c = open_with(
+        "pages",
+        Array.from({length: 40}, (_, i) => message(1000 + i, i % 2 ? ME : IAGO, "pages", 100 + i)),
+    );
+    c.oldest = false;
+    feed_js.ends(c);
+    const there = [...lane.querySelectorAll(".cl")];
+    for (const m of Array.from({length: 40}, (_, i) =>
+        message(960 + i, i % 2 ? IAGO : ME, "pages", 60 + i),
+    )) {
+        routing.addMsg(c, m);
+    }
+    feed_js.catchUp(c, {keep: true});
+    // Every turn that was there is there still, Iago's first one now with
+    // the page's last message at its head ...
+    assert.ok(there.every((t) => lane.contains(t)));
+    assert.equal(turn_of(999), turn_of(1000));
+    assert.equal(lane.querySelectorAll(".day").length, 1);
+    // ... and the lane reads as the same messages drawn whole would.
+    const added = shape(lane);
+    feed_js.drawLane();
+    assert.equal(added, shape(lane));
+});
+
+run_test("a deleted message leaves in place, and the turns either side join as drawn", () => {
+    const c = open_with("deletes", [
+        message(1990, IAGO, "deletes", -1500),
+        message(2000, IAGO, "deletes", 10),
+        message(2001, ME, "deletes", 11),
+        message(2002, IAGO, "deletes", 12),
+        message(2003, ME, "deletes", 13),
+        message(2004, IAGO, "deletes", 14),
+    ]);
+    assert.equal(lane.querySelectorAll(".day").length, 2);
+    const first = turn_of(2000);
+    const last = turn_of(2004);
+    // Mine goes from between Iago's two turns, which become one; the day
+    // before loses its only message, and its day line with it.
+    events.onDelete({message_ids: [2001, 1990]});
+    assert.equal(turn_of(2002), first);
+    assert.equal(turn_of(2004), last);
+    assert.equal(lane.querySelectorAll(".day").length, 1);
+    assert.ok(!c.rows.has(2001));
+    const removed = shape(lane);
+    feed_js.drawLane();
+    assert.equal(removed, shape(lane));
 });

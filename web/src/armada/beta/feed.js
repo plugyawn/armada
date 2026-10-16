@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): the conversation: its scroll, its turns, the lane drawn. */
 
-import {$$, clamp, el, esc} from "./util.js";
+import {$, $$, clamp, el, esc} from "./util.js";
 import {msgIndex, state, unread} from "./state.js";
 import {dayKey, dayLabel, hhmm} from "./time.js";
 import {band, feed, lane} from "./frame.js";
@@ -73,7 +73,7 @@ function finish(cl) { if (cl.classList.contains("onix")) return; const bs = $$("
   if (lastPart.classList.contains("bl")) lastPart.append(cell); else { const r = el("div", "rcpt at" + (cl.classList.contains("me") ? " end" : "")); r.append(cell); lastPart.after(r); } }
 function appendMessage(c, m, o = {}) {
   const kind = kindOf(m), d = dayKey(m.timestamp);
-  if (!o.thread && c._day !== d) { c.append(el("div", "day", dayLabel(m.timestamp))); c._day = d; }
+  if (!o.thread && c._day !== d) { const line = el("div", "day", dayLabel(m.timestamp)); line.dataset.day = d; c.append(line); c._day = d; }
   if (o.unreadAt === m.id) c.append(el("div", "unread", "New"));
   let cl = c.lastElementChild;
   const join = kind !== "onix" && cl && cl.classList.contains("cl") && +cl.dataset.sid === m.sender_id && !cl.dataset.closed && m.timestamp - +cl.dataset.ts < 600 && !cl.classList.contains("onix");
@@ -112,5 +112,67 @@ function drawLane(o = {}) {
    that has left the lane (a thread closed under it) is forgotten when it is asked for. */
 function sectionOf(id) { const c = state.P, cl = c && c.rows && c.rows.get(id); if (!cl) return null; if (lane.contains(cl)) return cl; c.rows.delete(id); return null; }
 
-export {appendMessage, dist, drawLane, edge, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin, releaseRows,
-  sectionOf, show, syncJump, toHug};
+/* ---------- the conversation changed in place: rows added above or below, a message taken out ----------
+   What is written keeps the shape drawLane gives the same messages (a turn is one speaker within ten minutes, a day line
+   heads each day once, a turn names its speaker unless the turn before it was theirs), and a row that is there is not
+   built again. */
+const idOf = (mid) => (/^\d+$/.test(mid) ? +mid : mid);
+const isHead = (x) => x.matches(".av, .pk, .who");                 /* what a turn begins with: the face and the name */
+const firstMsgOf = (c, cl) => { const p = $(":scope > [data-mid]", cl); return p ? c.byId.get(idOf(p.dataset.mid)) : null; };
+/* whether drawLane would have written turn b's messages into turn a, the turn above it */
+function joinable(c, a, b) { if (!a || !b || !a.matches(".cl:not(.onix)") || !b.matches(".cl:not(.onix)") || a.dataset.sid !== b.dataset.sid || a.dataset.closed) return false;
+  const m = firstMsgOf(c, b); return !!m && m.timestamp - +a.dataset.ts < 600; }
+/* turn `from` joins turn `into` ("before": its words go first, the earlier turn; "after": last); `into` stays */
+function merge(c, into, from, where) { const moved = [...from.children].filter((x) => !isHead(x));
+  if (where === "before") { const at = [...into.children].find((x) => !isHead(x)); if (at) at.before(...moved); else into.append(...moved); label(into, from.classList.contains("lab")); }
+  else { into.append(...moved); into.dataset.ts = from.dataset.ts; if (from.dataset.closed) into.dataset.closed = from.dataset.closed; }
+  for (const x of moved) if (x.dataset.mid && c.rows.get(idOf(x.dataset.mid)) === from) c.rows.set(idOf(x.dataset.mid), into);
+  from.remove(); finish(into); hush(into); toHug.add(into); }
+/* whether a turn names its speaker, set in place */
+function label(cl, lab) { if (cl.classList.contains("me") || cl.classList.contains("lab") === lab) return; cl.classList.toggle("lab", lab); const who = $(":scope > .who", cl);
+  if (!lab) { if (who) who.remove(); return; }
+  const w = el("div", "who", cl.classList.contains("onix") ? "Onix" : esc(nameOf(+cl.dataset.sid))), face = $(":scope > .av, :scope > .pk", cl); if (face) face.after(w); else cl.prepend(w); }
+/* the first turn from x on that names its speaker by the turn before it (mine never do) is named as drawLane would name it */
+function relabelFrom(x) { for (; x; x = x.nextElementSibling) if (x.matches(".cl:not(.me)")) { const solo = x.classList.contains("them") && state.place.kind === "dm" && state.place.ids.length === 1; label(x, !solo && named(x)); return; } }
+/* the turns written inside x forget their messages' rows and ticks */
+function forgetRows(c, x) { for (const b of $$(".rt[data-info]", x)) untick(b); for (const s of [x, ...$$(".cl", x)]) if (s.matches(".cl")) for (const p of $$(":scope > [data-mid]", s)) { const i = idOf(p.dataset.mid); if (c.rows.get(i) === s) c.rows.delete(i); } }
+/* a message taken out of its place's rows (deleted, dropped, let go): its parts leave its turn; a turn left with nothing
+   leaves too, with the day line or the New line that headed only it, and the turns either side join where drawLane would
+   join them. It reads no layout, and works on the rows of a place that is not in view as well. */
+function removeRow(c, id) { const cl = c.rows.get(id); c.rows.delete(id); if (!cl || !cl.parentNode) return;
+  for (const x of $$(`:scope > [data-mid="${id}"]`, cl)) { forgetRows(c, x); x.remove(); }
+  if (cl.dataset.mid !== String(id) && $(":scope > [data-part]", cl)) { finish(cl); return; }
+  const parent = cl.parentNode, next = cl.nextElementSibling; forgetRows(c, cl); cl.remove(); if (parent.classList && parent.classList.contains("thr-in")) return;
+  for (let x = next ? next.previousElementSibling : parent.lastElementChild; x && x.matches(".day, .unread") && !(next && next.matches(".cl")); ) { const p = x.previousElementSibling; x.remove(); x = p; }
+  if (!next) { const line = $$(":scope > .day", parent).pop(); parent._day = line ? +line.dataset.day : null; }
+  if (next && joinable(c, next.previousElementSibling, next)) merge(c, next.previousElementSibling, next, "after"); else relabelFrom(next); }
+/* older messages a page brought, written above the lane's first row: the page's last day line goes when the lane begins on
+   that day, and its last turn joins the lane's first where drawLane would have written them as one */
+function prepend(c, list, at) { const f = document.createDocumentFragment(); for (const m of list) appendMessage(f, m, {unreadAt: at});
+  const up = $(":scope > .more-up", lane); let head = up ? up.nextElementSibling : lane.firstElementChild;
+  if (head && head.matches(".day") && +head.dataset.day === f._day) { const line = head; head = head.nextElementSibling; line.remove(); }
+  const tail = f.lastElementChild; if (up) up.after(f); else lane.prepend(f);
+  if (joinable(c, tail, head)) merge(c, head, tail, "before"); else relabelFrom(head); }
+/* the lane's two ends: the line that offers earlier messages, and what an empty place says */
+function ends(c) { let up = $(":scope > .more-up", lane); const want = c.loaded && !c.oldest;
+  if (want && !up) { up = el("div", "more-up"); lane.prepend(up); } else if (!want && up) { up.remove(); up = null; }
+  if (up) up.textContent = c.loading ? "Loading earlier messages" : "Scroll up for earlier messages";
+  const empty = $(":scope > .empty", lane); if (c.msgs.some((m) => !m.thread_root_message_id)) { if (empty) empty.remove(); return; }
+  const words = c.error ? c.error : !c.loaded ? "Loading" : state.place.kind === "dm" ? "No messages yet." : "Nothing here yet. Say something.";
+  if (empty) empty.textContent = words; else lane.append(el("div", "empty", esc(words))); }
+/* the place in view's rows and its messages agree again: messages that a page brought, or that arrived while its rows were
+   not being written, are added (older ones above the first row, newer ones after the last); no row that is there is touched.
+   keep: the rows in view stay where they are on screen (a page added above them). */
+function catchUp(c, o = {}) { if (c !== state.P) return;
+  const h0 = o.keep ? feed.scrollHeight : 0, y0 = o.keep ? feed.scrollTop : 0, list = c.msgs.filter((m) => !m.thread_root_message_id); let first = -1, last = -1;
+  list.forEach((m, i) => { if (c.rows.has(m.id)) { if (first < 0) first = i; last = i; } });
+  if (first >= 0 && list.slice(first, last + 1).some((m) => !c.rows.has(m.id))) { drawLane({keep: o.keep}); return; }   /* a message between two written ones (never expected): drawn again whole */
+  const set = unread.get(c.place.key), firstUnread = set && set.size ? Math.min(...[...set].filter((i) => typeof i === "number")) : null, at = $(":scope > .unread", lane) ? null : firstUnread;
+  if (first > 0) prepend(c, list.slice(0, first), at);
+  const newer = first < 0 ? list : list.slice(last + 1); for (const m of newer) appendMessage(lane, m, {unreadAt: at});
+  ends(c); hugAll();
+  if (o.keep) { feed.scrollTop = y0 + (feed.scrollHeight - h0); state.lastSet = feed.scrollTop; } else if (state.pinned) pin();
+  edge(); syncJump(); }
+
+export {appendMessage, catchUp, dist, drawLane, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
+  releaseRows, removeRow, sectionOf, show, syncJump, toHug};

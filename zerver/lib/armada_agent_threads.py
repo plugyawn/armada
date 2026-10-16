@@ -206,6 +206,31 @@ def _complete_visible_descriptor_ids(
     return selected
 
 
+def apply_armada_agent_event(thread: dict[str, object], event: AgentRunEvent) -> None:
+    """Bring a child thread's status and current activity up to date with
+    one of its events."""
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    metadata = armada_agent_event_metadata(event)
+    method = metadata.get("codex_method")
+    kind = payload.get("kind")
+    if method == "thread/status/changed":
+        thread_status = normalize_armada_agent_status(metadata.get("thread_status"))
+        if thread_status != "idle" or thread["status"] != "failed":
+            thread["status"] = thread_status
+    elif method == "turn/started":
+        thread["status"] = "active"
+    elif method == "turn/completed":
+        turn_status = metadata.get("turn_status")
+        thread["status"] = (
+            "failed" if normalize_armada_agent_status(turn_status) == "failed" else "idle"
+        )
+    if kind == "error":
+        thread["status"] = "failed"
+    title = payload.get("title")
+    if kind in ARMADA_AGENT_ACTIVITY_KINDS and isinstance(title, str):
+        thread["current_activity"] = normalize_armada_agent_text(title, limit=180) or ""
+
+
 def serialize_armada_agent_threads(
     run: AgentRun,
     events: Iterable[AgentRunEvent] | None = None,
@@ -257,26 +282,8 @@ def serialize_armada_agent_threads(
 
         event_thread_id = metadata.get("codex_thread_id")
         descriptor = descriptors.get(event_thread_id) if isinstance(event_thread_id, str) else None
-        if descriptor is None:
-            continue
-        method = metadata.get("codex_method")
-        kind = payload.get("kind")
-        if method == "thread/status/changed":
-            thread_status = normalize_armada_agent_status(metadata.get("thread_status"))
-            if thread_status != "idle" or descriptor["status"] != "failed":
-                descriptor["status"] = thread_status
-        elif method == "turn/started":
-            descriptor["status"] = "active"
-        elif method == "turn/completed":
-            turn_status = metadata.get("turn_status")
-            descriptor["status"] = (
-                "failed" if normalize_armada_agent_status(turn_status) == "failed" else "idle"
-            )
-        if kind == "error":
-            descriptor["status"] = "failed"
-        title = payload.get("title")
-        if kind in ARMADA_AGENT_ACTIVITY_KINDS and isinstance(title, str):
-            descriptor["current_activity"] = normalize_armada_agent_text(title, limit=180) or ""
+        if descriptor is not None:
+            apply_armada_agent_event(descriptor, event)
 
     selected_ids = _complete_visible_descriptor_ids(descriptors, run.codex_thread_id)
     visible = [descriptor for key, descriptor in descriptors.items() if key in selected_ids]

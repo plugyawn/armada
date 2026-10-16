@@ -1,0 +1,129 @@
+{
+    "id": "gpus",
+    "name": "GPUs",
+    "version": "0.1.0",
+    "author": "plugyawn",
+    "license": "MIT",
+    "description": "Free GPUs on Prime Intellect pods and on your own machines, and the jobs on them. Onix finds room and makes pods.",
+    "glyph": "gpu",
+    "requires": {
+        "armada": ">=1"
+    },
+    "run": {
+        "setup": [
+            "uv",
+            "sync",
+            "--frozen"
+        ],
+        "command": [
+            "uv",
+            "run",
+            "armada-gpus"
+        ]
+    },
+    "settings": {
+        "type": "object",
+        "required": [
+            "manage_prefix"
+        ],
+        "properties": {
+            "manage_prefix": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,32}$",
+                "title": "Pods it may manage",
+                "description": "Onix makes and ends only pods whose name begins with this."
+            },
+            "ssh_hosts": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "maxItems": 16,
+                "default": [],
+                "title": "Machines over SSH"
+            }
+        }
+    },
+    "secrets": {
+        "prime_api_key": {
+            "title": "Prime Intellect API key",
+            "env": "PRIME_API_KEY",
+            "help": "From app.primeintellect.ai, Settings, API keys."
+        },
+        "ssh_key": {
+            "title": "SSH private key",
+            "env": "GPUS_SSH_KEY"
+        }
+    },
+    "provides": {
+        "widgets": [
+            {
+                "key": "gpus",
+                "label": "GPUs",
+                "in": [
+                    "nav",
+                    "column"
+                ],
+                "column_slots": 3,
+                "cadence": 10,
+                "options": {
+                    "figures": [
+                        {
+                            "key": "free",
+                            "title": "Free GPUs",
+                            "figure": "data.free",
+                            "sizer": "88 free"
+                        },
+                        {
+                            "key": "jobs",
+                            "title": "Jobs running",
+                            "figure": "data.running",
+                            "sizer": "88 jobs"
+                        }
+                    ],
+                    "facets": [
+                        {
+                            "key": "gpu",
+                            "title": "GPU"
+                        },
+                        {
+                            "key": "user",
+                            "title": "Started by"
+                        }
+                    ],
+                    "alerts": [
+                        {
+                            "key": "free_at_least",
+                            "title": "When this many are free",
+                            "value": "data.free_count",
+                            "op": ">=",
+                            "min": 1,
+                            "max": 64
+                        }
+                    ]
+                }
+            }
+        ],
+        "links": {
+            "pool": {
+                "title": "Machines",
+                "to": [
+                    "topic"
+                ],
+                "pattern": "^[a-z0-9-]+(?:,[a-z0-9-]+)*$"
+            }
+        },
+        "tools": {
+            "path": "/mcp",
+            "instructions": "Use for GPUs: where there is room, what runs where, and pods to make or end."
+        },
+        "events": [
+            "message"
+        ],
+        "posts": true
+    },
+    "reaches": [
+        "api.primeintellect.ai"
+    ]
+}

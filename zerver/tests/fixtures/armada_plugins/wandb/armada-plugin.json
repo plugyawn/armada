@@ -1,0 +1,120 @@
+{
+    "id": "wandb",
+    "name": "Weights & Biases",
+    "version": "0.4.1",
+    "author": "plugyawn",
+    "license": "MIT",
+    "description": "Live runs and their metrics, beside the repository that trains them. Onix reads them too.",
+    "glyph": "chart",
+    "requires": {
+        "armada": ">=1"
+    },
+    "run": {
+        "setup": [
+            "uv",
+            "sync",
+            "--frozen"
+        ],
+        "command": [
+            "uv",
+            "run",
+            "armada-wandb"
+        ]
+    },
+    "settings": {
+        "type": "object",
+        "required": [
+            "entity"
+        ],
+        "properties": {
+            "entity": {
+                "type": "string",
+                "title": "Entity"
+            },
+            "posts": {
+                "enum": [
+                    "both",
+                    "crashes",
+                    "never"
+                ],
+                "default": "both",
+                "title": "Lines in the topic"
+            }
+        }
+    },
+    "secrets": {
+        "api_key": {
+            "title": "API key",
+            "env": "WANDB_API_KEY",
+            "required": true,
+            "help": "From wandb.ai/authorize."
+        }
+    },
+    "provides": {
+        "widgets": [
+            {
+                "key": "runs",
+                "label": "Training",
+                "in": [
+                    "nav",
+                    "column"
+                ],
+                "column_slots": 3,
+                "cadence": 30,
+                "team_default": "shown",
+                "options": {
+                    "figures": [
+                        {
+                            "key": "running",
+                            "title": "Runs running",
+                            "figure": "data.running",
+                            "sizer": "88 running"
+                        },
+                        {
+                            "key": "crashed",
+                            "title": "Runs crashed today",
+                            "figure": "data.crashed",
+                            "sizer": "88 crashed"
+                        }
+                    ],
+                    "facets": [
+                        {
+                            "key": "user",
+                            "title": "Started by"
+                        }
+                    ]
+                }
+            },
+            {
+                "key": "run",
+                "label": "Run",
+                "in": [
+                    "open"
+                ],
+                "cadence": 60
+            }
+        ],
+        "links": {
+            "project": {
+                "title": "Project",
+                "to": [
+                    "channel",
+                    "topic"
+                ],
+                "pattern": "^[^/]+/[^/]+$"
+            }
+        },
+        "tools": {
+            "path": "/mcp",
+            "instructions": "Use for anything about training runs: state, metrics, crashes."
+        },
+        "events": [
+            "message",
+            "agent_run"
+        ],
+        "posts": true
+    },
+    "reaches": [
+        "api.wandb.ai"
+    ]
+}

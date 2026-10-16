@@ -99,5 +99,10 @@ class JsonSchemaTest(ZulipTestCase):
         self.assertEqual(self.error(closed, {"b": 1}), "$.b: unsupported property")
         typed = {"additionalProperties": {"type": "number"}}
         self.assertEqual(self.error(typed, {"b": "1"}), "$.b: expected type number")
+        named = {"propertyNames": {"pattern": "^[a-z]+$"}}
+        self.assertIsNone(self.error(named, {"api": 1}))
+        self.assertEqual(
+            self.error(named, {"API": 1}), "$.API: value \"API\" does not match '^[a-z]+$'"
+        )
         self.assertEqual(self.error({"const": 1}, 2), "$: expected 1, got 2")
         self.assertEqual(self.error({"enum": ["a"]}, "b"), '$: expected one of ["a"], got "b"')

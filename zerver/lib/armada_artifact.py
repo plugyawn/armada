@@ -186,6 +186,13 @@ def _validate_scene_steps(block: dict[str, Any], scene_text: int) -> None:
         raise ArmadaArtifactError("scene step text budget exceeded")
 
 
+def validate_armada_scene_block(block: dict[str, Any]) -> None:
+    """What a scene block must satisfy beyond its schema: its node and text
+    budgets, its ids, its connectors and its steps. A plugin's widget
+    document holds scenes too (zerver/lib/armada_plugin_validation.py)."""
+    _validate_scene_steps(block, _validate_scene(block["root"]))
+
+
 def _validate_media(block: dict[str, Any], *, allow_unresolved_media: bool) -> None:
     source_keys = {"source", "sourceDark", "posterSource", "posterSourceDark"}
     resolved_keys = {"src", "srcDark", "poster", "posterDark"}
@@ -262,8 +269,7 @@ def canonicalize_armada_artifact(
         )
     for block in decoded["blocks"]:
         if block["type"] == "scene":
-            scene_text = _validate_scene(block["root"])
-            _validate_scene_steps(block, scene_text)
+            validate_armada_scene_block(block)
         elif block["type"] == "media":
             _validate_media(block, allow_unresolved_media=allow_unresolved_media)
     return decoded, encoded

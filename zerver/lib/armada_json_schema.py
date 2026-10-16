@@ -1,9 +1,10 @@
 """The subset of JSON Schema that Armada's contracts are written in,
 checked without a dependency: types, const and enum, string lengths and
 patterns, number bounds, array lengths and items (prefixItems too),
-object properties, required and additionalProperties, local $refs, and
-oneOf and anyOf. The artifact contract (zerver/lib/armada_artifact.py)
-is checked with it. An error names the first failing path, as $.a.b[2].
+object properties, propertyNames, required and additionalProperties,
+local $refs, and oneOf and anyOf. The artifact contract (zerver/lib/armada_artifact.py)
+and the plugin contract (zerver/lib/armada_plugin_validation.py) are
+checked with it. An error names the first failing path, as $.a.b[2].
 """
 
 import json
@@ -179,6 +180,12 @@ def _validation_error(
             for key in required:
                 if isinstance(key, str) and key not in value:
                     return f"{path}: missing required property {key!r}"
+        names = schema.get("propertyNames")
+        if isinstance(names, dict):
+            for key in value:
+                error = _validation_error(root, names, key, path=f"{path}.{key}")
+                if error is not None:
+                    return error
         properties = schema.get("properties")
         property_schemas = properties if isinstance(properties, dict) else {}
         for key, child in value.items():

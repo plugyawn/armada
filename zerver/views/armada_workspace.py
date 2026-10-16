@@ -81,6 +81,7 @@ from zerver.lib.armada_workspace_resources import (
     workspace_entry_mutation_capabilities,
     workspace_entry_mutation_lookup_payload,
     workspace_entry_mutation_staging_path,
+    workspace_has_recoverable_entry_mutation,
     workspace_language,
     workspace_metrics_snapshot,
     workspace_mime_type,
@@ -920,6 +921,8 @@ def _reconcile_interrupted_entry_mutations(
     prepared_before = timezone_now() - timedelta(
         seconds=ARMADA_WORKSPACE_PREPARED_RECOVERY_GRACE_SECONDS
     )
+    if not workspace_has_recoverable_entry_mutation(node, prepared_before=prepared_before):
+        return None
     latest_snapshot: WorkspaceSnapshot | None = None
     for _attempt in range(ARMADA_WORKSPACE_RECOVERY_BATCH_SIZE):
         with lock_next_recoverable_workspace_entry_mutation(

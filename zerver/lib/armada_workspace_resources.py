@@ -24,7 +24,7 @@ from typing import Literal
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils.timezone import now as timezone_now
 
 from zerver.lib.armada_workspace_index import WorkspaceIndex, WorkspacePath
@@ -689,6 +689,27 @@ def lock_workspace_entry_mutation_receipt(
         ):
             raise WorkspaceMutationStaleError(int(locked_node.content_revision))
         yield locked_node, locked_receipt
+
+
+def workspace_has_recoverable_entry_mutation(node: Workspace, *, prepared_before: datetime) -> bool:
+    """Whether lock_next_recoverable_workspace_entry_mutation has anything
+    to lock, asked without a lock: every read of a worktree asks, and an
+    interrupted mutation is rare. One that commits while a read runs is
+    the read's to miss, as any write committing after it would be."""
+    return WorkspaceEntryMutationReceipt.objects.filter(
+        Q(
+            state__in=(
+                WorkspaceEntryMutationReceipt.STAGED,
+                WorkspaceEntryMutationReceipt.APPLIED,
+            )
+        )
+        | Q(
+            operation="create",
+            state=WorkspaceEntryMutationReceipt.PREPARED,
+            date_updated__lte=prepared_before,
+        ),
+        workspace_node=node,
+    ).exists()
 
 
 @contextmanager

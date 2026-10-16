@@ -14,7 +14,9 @@ from uuid import UUID
 
 import orjson
 from django.core.cache import cache
+from django.db import connection
 from django.http import HttpResponse, StreamingHttpResponse
+from django.test.utils import CaptureQueriesContext
 from typing_extensions import override
 
 from zerver.lib.armada_workspace_index import WorkspaceIndex, WorkspacePath
@@ -1254,6 +1256,28 @@ class ArmadaWorkspaceResourceEndpointTest(ZulipTestCase):
 
         self.assertEqual(receipt.state, WorkspaceEntryMutationReceipt.CONFLICTED)
         self.assertEqual(replaced_staging_content, "wrong replacement\n")
+
+    def test_reads_take_no_lock_without_an_interrupted_mutation(self) -> None:
+        user = self.example_user("hamlet")
+        stream = self.subscribe(user, "workspace-resource")
+        self.login_user(user)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo = self.make_workspace(Path(temp_dir).resolve())
+            node = self.make_node(user, stream.name, repo)
+            self.descriptor(node)
+            # Each read: the session (and the first, me and my client), the
+            # worktree, the channel, my subscription, and one look for
+            # interrupted mutations.
+            with (
+                self.assert_database_query_count(12),
+                CaptureQueriesContext(connection) as queries,
+            ):
+                self.descriptor(node)
+                self.tree(node)
+        statements = [query["sql"] for query in queries.captured_queries]
+        self.assertFalse(
+            [sql for sql in statements if "FOR UPDATE" in sql or "SAVEPOINT" in sql], statements
+        )
 
     def test_fresh_prepared_receipts_do_not_trigger_unbounded_recovery_work(self) -> None:
         user = self.example_user("hamlet")

@@ -1300,6 +1300,31 @@ def armada_steering_client_user_message_id(event: ArmadaPendingSteeringEvent) ->
     return str(event["message_id"]) if event["message_id"] > 0 else None
 
 
+def build_armada_question_message(questions: list[dict[str, Any]]) -> str:
+    """The message that asks the people what Codex asked with its
+    question tool: each question, its options, and how to answer."""
+    question_lines = [f"{ARMADA_AGENT_NAME} needs your input to continue:", ""]
+    for question in questions:
+        header = str(question.get("header") or "").strip()
+        text = str(question.get("question") or "").strip()
+        question_lines.append(f"**{header}** — {text}" if header else f"**{text}**")
+        options = question.get("options")
+        if isinstance(options, list):
+            for option in options:
+                if isinstance(option, dict):
+                    label = str(option.get("label") or "").strip()
+                    description = str(option.get("description") or "").strip()
+                    question_lines.append(
+                        f"- `{label}` — {description}" if description else f"- `{label}`"
+                    )
+    question_lines.append("")
+    question_lines.append(
+        "_Reply in this thread to answer; the run resumes with your reply "
+        f"(waiting up to {ARMADA_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
+    )
+    return "\n".join(question_lines)
+
+
 def format_armada_referenced_threads(
     referenced_threads: Sequence[ArmadaReferencedThread],
 ) -> list[str]:
@@ -3231,26 +3256,7 @@ class ArmadaWorkerTurn:
         steering store: a reply addressed to the run IS the answer."""
         if not questions or not callable(self.steering_events_after):
             return None
-        question_lines = [f"{ARMADA_AGENT_NAME} needs your input to continue:", ""]
-        for question in questions:
-            header = str(question.get("header") or "").strip()
-            text = str(question.get("question") or "").strip()
-            question_lines.append(f"**{header}** — {text}" if header else f"**{text}**")
-            options = question.get("options")
-            if isinstance(options, list):
-                for option in options:
-                    if isinstance(option, dict):
-                        label = str(option.get("label") or "").strip()
-                        description = str(option.get("description") or "").strip()
-                        question_lines.append(
-                            f"- `{label}` — {description}" if description else f"- `{label}`"
-                        )
-        question_lines.append("")
-        question_lines.append(
-            "_Reply in this thread to answer; the run resumes with your reply "
-            f"(waiting up to {ARMADA_QUESTION_TIMEOUT_SECONDS // 60} minutes)._"
-        )
-        self.bot_handler.send_reply(self.message, "\n".join(question_lines))
+        self.bot_handler.send_reply(self.message, build_armada_question_message(questions))
         self.live_operation = {"kind": "question", "label": "waiting on you"}
         self.transcript_events.append(
             {

@@ -1933,7 +1933,10 @@ paths:
                               description: |
                                 Event sent to a user's clients when details of a file that user
                                 uploaded are changed. Most updates will be changes in the list of
-                                messages that reference the uploaded file.
+                                messages or pages posts that reference the uploaded file.
+
+                                **Changes**: Before Zulip 13.0 (feature level ZF-2acc5b), this
+                                event was not sent when the pages posts using the file changed.
                               properties:
                                 id:
                                   $ref: "#/components/schemas/EventIdSchema"

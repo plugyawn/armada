@@ -14,7 +14,7 @@ from django.utils.timezone import now as timezone_now
 from zerver.actions.message_delete import do_delete_messages
 from zerver.actions.uploads import do_delete_old_unclaimed_attachments
 from zerver.lib.armada_pages import draft_post, list_pages, read_page, read_post, update_bio
-from zerver.lib.event_schema import check_armada_post_event
+from zerver.lib.event_schema import check_armada_post_event, check_attachment_update
 from zerver.lib.exceptions import JsonableError, MarkdownRenderingError
 from zerver.lib.markdown import markdown_convert
 from zerver.lib.retention import clean_archived_data, delete_expired_attachments
@@ -538,6 +538,47 @@ class PagesTest(UploadSerializeMixin, ZulipTestCase):
         self.login_user(cordelia)
         self.assertEqual(self.client_get(f"/user_uploads/{shown.path_id}").status_code, 404)
         self.assertEqual(in_use(), {drafted.path_id: ([], [draft_id]), unused.path_id: ([], [])})
+
+    def test_an_uploads_owner_hears_when_the_posts_using_it_change(self) -> None:
+        hamlet = self.example_user("hamlet")
+        cordelia = self.example_user("cordelia")
+        shown = self.upload(hamlet)
+
+        def told(events: list[Mapping[str, Any]]) -> list[tuple[list[int], set[int]]]:
+            updates = []
+            for event in events:
+                if event["event"]["type"] == "attachment":
+                    check_attachment_update("events[0]", {**event["event"], "id": 0})
+                    self.assertEqual(event["event"]["attachment"]["path_id"], shown.path_id)
+                    post_ids = sorted(event["event"]["attachment"]["post_ids"])
+                    updates.append((post_ids, set(event["users"])))
+            return updates
+
+        with self.capture_send_event_calls(expected_num_events=3) as events:
+            his_post = self.write(hamlet, "His", self.link(shown))
+        self.assertEqual(told(events), [([his_post], {hamlet.id})])
+
+        # Cordelia's draft claims Hamlet's upload: he alone hears of it,
+        # and her draft stays hers until she publishes it.
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            her_post = self.write(cordelia, "Hers", self.link(shown), draft="true")
+        self.assertEqual(told(events), [([his_post], {hamlet.id})])
+        with self.capture_send_event_calls(expected_num_events=3) as events:
+            self.client_patch(f"/json/armada/posts/{her_post}", {"draft": "false"})
+        self.assertEqual(told(events), [(sorted([his_post, her_post]), {hamlet.id})])
+
+        self.login_user(hamlet)
+        with self.capture_send_event_calls(expected_num_events=3) as events:
+            self.client_patch(f"/json/armada/posts/{his_post}", {"content": "Gone."})
+        self.assertEqual(told(events), [([her_post], {hamlet.id})])
+        with self.capture_send_event_calls(expected_num_events=2) as events:
+            self.client_patch(f"/json/armada/posts/{his_post}", {"title": "Renamed"})
+        self.assertEqual(told(events), [])
+
+        self.login_user(cordelia)
+        with self.capture_send_event_calls(expected_num_events=3) as events:
+            self.client_delete(f"/json/armada/posts/{her_post}")
+        self.assertEqual(told(events), [([], {hamlet.id})])
 
     def test_posts_from_before_claims_claim_their_authors_uploads(self) -> None:
         # Migrations are not in the coverage report; the backfill is

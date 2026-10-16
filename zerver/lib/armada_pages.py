@@ -19,7 +19,9 @@ leaves).
 Uploads. A post claims the uploads its content links to, as a message
 does (zerver/actions/uploads.py): whoever may read the post may read
 them (zerver/lib/attachments.py asks may_read_upload_in_a_post), and
-they are not unclaimed while it holds them.
+they are not unclaimed while it holds them. An upload's owner sees the
+posts that use it in the list of their uploads, and hears an attachment
+update when that changes.
 """
 
 import logging
@@ -183,20 +185,20 @@ def render_post(author: UserProfile, content: str) -> MessageRenderingResult:
         raise JsonableError(_("Unable to render the post."))
 
 
-def claim_post_uploads(post: Post, path_ids: Iterable[str]) -> None:
+def claim_post_uploads(post: Post, path_ids: Iterable[str]) -> list[Attachment]:
     """Makes the post's claims the uploads its content links to, as
     check_attachment_reference_change does for an edited message: a
     link the content dropped releases its upload, and a new one claims
     its upload only if the author may read it already, so that naming
     someone else's file in a post never opens it to the post's
-    readers."""
+    readers. Returns the uploads it claimed or released."""
     linked = set(path_ids)
     held = set(post.attachments.values_list("path_id", flat=True))
-    released = held - linked
+    released = list(
+        Attachment.objects.filter(path_id__in=held - linked).select_for_update(no_key=True)
+    )
     if released:
-        post.attachments.remove(
-            *Attachment.objects.filter(path_id__in=released).select_for_update(no_key=True)
-        )
+        post.attachments.remove(*released)
     # Imported here: zerver.lib.attachments imports this module, for
     # may_read_upload_in_a_post.
     from zerver.lib.attachments import validate_attachment_request
@@ -218,6 +220,21 @@ def claim_post_uploads(post: Post, path_ids: Iterable[str]) -> None:
         assert attachment is not None
         claimed.append(attachment)
     post.attachments.add(*claimed)
+    return [*released, *claimed]
+
+
+def tell_owners(author: UserProfile, attachments: Iterable[Attachment]) -> None:
+    """Each upload's owner hears that the posts using it changed, as a
+    message's sender hears of the message's claim (do_claim_attachments),
+    so that the list of their uploads stays true. The update goes to the
+    owner alone, whoever wrote the post."""
+    # Imported here: zerver.actions.uploads imports
+    # zerver.lib.attachments, which imports this module.
+    from zerver.actions.uploads import notify_attachment_update
+
+    for attachment in attachments:
+        owner = author if attachment.owner_id == author.id else attachment.owner
+        notify_attachment_update(owner, "update", attachment.to_dict())
 
 
 def check_title(title: str) -> str:
@@ -296,8 +313,9 @@ def create_post(
             draft=draft,
             drafted_by_agent=drafted_by_agent,
         )
-        claim_post_uploads(post, rendering.potential_attachment_path_ids)
+        claimed = claim_post_uploads(post, rendering.potential_attachment_path_ids)
         push_post_change(post, "add", was_published=False)
+        tell_owners(author, claimed)
     return post
 
 
@@ -329,17 +347,25 @@ def update_post(
         post = lock_own_post(author, post_id)
         if post is not None:
             was_published = not post.draft
+            changed_uploads: list[Attachment] = []
             if title is not None:
                 post.title = title
             if content is not None and rendering is not None:
                 post.content = content
                 post.rendered_content = rendering.rendered_content
-                claim_post_uploads(post, rendering.potential_attachment_path_ids)
+                changed_uploads = claim_post_uploads(post, rendering.potential_attachment_path_ids)
             if draft is not None:
                 post.draft = draft
             post.date_updated = timezone_now()
             post.save()
             push_post_change(post, "update", was_published=was_published)
+            if (not post.draft) != was_published:
+                # Published or taken back: whether an upload's owner
+                # sees the post among its uses changed for all it holds.
+                changed_uploads += post.attachments.exclude(
+                    id__in=[attachment.id for attachment in changed_uploads]
+                )
+            tell_owners(author, changed_uploads)
     if post is None:
         raise ResourceNotFoundError(_("No such post."))
 
@@ -349,10 +375,12 @@ def delete_post(author: UserProfile, post_id: int) -> None:
         post = lock_own_post(author, post_id)
         if post is not None:
             was_published = not post.draft
+            released = list(post.attachments.all())
             post.delete()
             # The event names the post that was.
             post.id = post_id
             push_post_change(post, "remove", was_published=was_published)
+            tell_owners(author, released)
     if post is None:
         raise ResourceNotFoundError(_("No such post."))
 

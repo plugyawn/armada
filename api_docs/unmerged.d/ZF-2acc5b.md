@@ -4,3 +4,6 @@
   uploaded file among those its owner may see. A pages post's link keeps
   a file in use as a message's does: the file is not deleted as unused,
   and an edited message's `detached_uploads` leaves it out.
+* [`GET /events`](/api/get-events): An `attachment` event with
+  `"op": "update"` is now also sent to a file's owner when the pages
+  posts that link to it change.

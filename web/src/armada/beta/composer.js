@@ -14,8 +14,7 @@ import {pack} from "./partners.js";
 import {reseed, seedField, syncReply} from "./mentions.js";
 import {fieldEmpty, seedOf} from "./mention_text.js";
 import {drawRunState} from "./band.js";
-import {localPicture, rememberLocal} from "./media.js";
-import {lightboxOpen} from "./lightbox.js";
+import {lightboxOpen, localPicture, rememberLocal} from "./media.js";
 
 let verb = "Send";
 /* Onix answers what I send in a place only where I turned it on there: off until then, kept in this browser for each place,

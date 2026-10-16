@@ -5,6 +5,7 @@
 
 import {$$, clamp, el, esc} from "./util.js";
 import {feed} from "./frame.js";
+import {chunk, loadedChunk} from "./chunks.js";
 
 /* a picture keeps its own shape, clamped: a very tall one (a full-page screenshot) shows its top in a box of 1:3, a very wide
    one its start in a box of 8:1. One picture is at most 320 high (the plan's blocks) and never larger than it is. */
@@ -125,4 +126,23 @@ async function localPicture(file) {
 function rememberLocal(url, pic) { if (!url || !pic) return; local.set(url, {w: pic.w, h: pic.h}); if (pic.preview && !seen.has(url)) seen.set(url, pic.preview); }
 const localSize = (url) => local.get(url) || null;
 
-export {dropNames, liftInline, loadPics, localPicture, localSize, picBox, picHTML, picOf, picsOf, rememberLocal, seen};
+/* ---------- the press: the lightbox (lightbox.js, a chunk of its own) ---------- */
+/* a press on a picture opens it, on the press; a modified press (or the middle button) opens the file itself, as a link does.
+   A video's preview and a picture that failed are links. Before its chunk is in, a press shows nothing new and the
+   lightbox opens when it arrives, unless I have pressed elsewhere or Esc meanwhile; if it cannot arrive, the file opens
+   in a tab as a link would. */
+const opens = (a, ev) => a && a.dataset.full && a.dataset.state !== "failed" && !ev.metaKey && !ev.ctrlKey && !ev.shiftKey && !ev.altKey;
+let wanted = null;
+function openPicture(a) {
+  const L = loadedChunk("lightbox"); if (L) { wanted = null; L.openLightbox(a); return; }
+  wanted = a; chunk("lightbox").then((L2) => { if (wanted !== a) return; wanted = null; if (a.isConnected) L2.openLightbox(a); }, () => { if (wanted !== a) return; wanted = null; window.open(a.href, "_blank", "noopener"); });
+}
+function wireLightbox(root) {
+  root.addEventListener("pointerdown", (ev) => { const a = ev.target.closest && ev.target.closest("a.im"); if (wanted && a !== wanted) wanted = null; if (ev.button !== 0 || !opens(a, ev)) return; a._pd = performance.now(); openPicture(a); }, true);
+  root.addEventListener("click", (ev) => { const a = ev.target.closest && ev.target.closest("a.im"); if (!opens(a, ev)) return; ev.preventDefault(); if (a._pd && performance.now() - a._pd < 1500) { a._pd = 0; return; } openPicture(a); });
+  addEventListener("keydown", (ev) => { if (ev.key === "Escape") wanted = null; }, true);
+}
+/* the lightbox holds the page's keys and focus while it is open (composer.js asks before handing the caret back) */
+const lightboxOpen = () => { const L = loadedChunk("lightbox"); return !!L && L.lightboxOpen(); };
+
+export {dropNames, liftInline, lightboxOpen, loadPics, localPicture, localSize, picBox, picHTML, picOf, picsOf, rememberLocal, seen, wireLightbox};

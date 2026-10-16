@@ -41,7 +41,8 @@ import {wireCaret} from "./caret.js";
 import {onPresence, startPresence} from "./presence.js";
 import {onPost, wirePages} from "./pages.js";
 import {loadLater, onReminders, onScheduled, openSendWhen, wireLater} from "./later.js";
-import {wireLightbox} from "./lightbox.js";
+import {wireLightbox} from "./media.js";
+import {prefetchChunks} from "./chunks.js";
 import {onSubmessage, wireWidgets} from "./widgets.js";
 import {onArtifactEvent, wireArtifacts} from "./artifacts.js";
 
@@ -79,7 +80,7 @@ async function boot() {
   addEventListener("dragover", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("Files")) e.preventDefault(); });
   addEventListener("drop", (e) => { const f = [...(e.dataTransfer && e.dataTransfer.files || [])]; if (!f.length) return; e.preventDefault(); if (state.place && state.place.kind !== "home" && state.place.kind !== "page") f.forEach(upload); });   /* the editor takes its own drops (pages.js) */
   tx.addEventListener("focus", () => { state.threadTx = null; });
-  buildOver(); wireMentions(); wireCaret(); wireLater(); wireLightbox(document.body);   /* a picture opens whole (lightbox.js) */
+  buildOver(); wireMentions(); wireCaret(); wireLater(); wireLightbox(document.body);   /* a picture opens whole (lightbox.js, on first use) */
   wireWidgets(main, msgOf);   /* polls and to-do lists (widgets.js) */
   wireArtifacts(main, msgOf);   /* artifacts, opened in the column (artifacts.js) */
   /* the field */
@@ -184,6 +185,7 @@ async function boot() {
   bootEl.remove();
   if (p) openPlace(p, {replace: true}); else drawNav();
   setTimeout(momentDue, 3000);   /* an evolution ready at load plays after the first idle 3 s */
+  prefetchChunks();   /* the lightbox, an artifact's document and a scene, once the page is idle (chunks.js) */
   poll(); startPresence();
   /* Home needs every worktree's runs and my unread mentions: asked once, after the first place is drawn, then kept by events */
   setTimeout(() => { scanAll(); loadLater(); if (!state.place || state.place.kind !== "home") fetchMentions(); }, 300);   /* Home, opened first, has asked for them already */

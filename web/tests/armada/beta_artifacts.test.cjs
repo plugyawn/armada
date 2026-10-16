@@ -153,7 +153,8 @@ const routing = zrequire("armada/beta/routing.js");
 const feed = zrequire("armada/beta/feed.js");
 const hover = zrequire("armada/beta/hover.js");
 const artifacts = zrequire("armada/beta/artifacts.js");
-const scene = zrequire("armada/beta/scene.js");
+const chunks = zrequire("armada/beta/chunks.js");
+const artifact_view = zrequire("armada/beta/artifact_view.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Shiva";
@@ -246,53 +247,60 @@ const rowOf = (m) => lane.querySelector(`[data-part="art"][data-mid="${m.id}"]`)
 const panel = () => find("#side").querySelector('[role="region"]');
 const verb = (m) =>
     rowOf(m).querySelector("button").firstElementChild.firstElementChild.textContent;
-function pressOn(target) {
-    target.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
-    target.dispatchEvent(new dom.window.MouseEvent("click", {bubbles: true, button: 0, detail: 1}));
-}
 async function settle() {
     for (let i = 0; i < 20; i += 1) {
         await Promise.resolve();
     }
 }
+// A pointer press, and its own click. The document's drawing and a scene's
+// are chunks of their own, which arrive when the promises in flight settle.
+async function pressOn(target) {
+    target.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
+    target.dispatchEvent(new dom.window.MouseEvent("click", {bubbles: true, button: 0, detail: 1}));
+    await settle();
+}
 
-run_test("an artifact is a block after Onix's words, and opens in the column it borrows", () => {
-    const m = answer("Here are the numbers.", [NUMBERS]);
-    const row = rowOf(m);
-    assert.match(row.textContent, /Images: before and after/);
-    assert.match(row.textContent, /6 parts/);
-    assert.equal(verb(m), "Open");
-    // The parts after the words: the row stands last, after the answer.
-    assert.equal(row.previousElementSibling.textContent.trim(), "Here are the numbers.");
+run_test(
+    "an artifact is a block after Onix's words, and opens in the column it borrows",
+    async () => {
+        const m = answer("Here are the numbers.", [NUMBERS]);
+        const row = rowOf(m);
+        assert.match(row.textContent, /Images: before and after/);
+        assert.match(row.textContent, /6 parts/);
+        assert.equal(verb(m), "Open");
+        // The parts after the words: the row stands last, after the answer.
+        assert.equal(row.previousElementSibling.textContent.trim(), "Here are the numbers.");
 
-    pressOn(row.querySelector("button"));
-    assert.ok(panel());
-    assert.equal(find("#side").dataset.borrowed, "artifact");
-    assert.equal(verb(m), "Close");
-    assert.equal(row.querySelector("button").getAttribute("aria-expanded"), "true");
-    const text = panel().textContent;
-    // The figure from the data it is bound to, its change, the meter, the
-    // series' range, the table, the log, the words.
-    assert.match(text, /Layout shift\s*0\.0001\s*−0\.4299/);
-    assert.match(text, /60 of 100 pictures/);
-    assert.match(text, /5–100/);
-    assert.match(text, /Worst frame\s*18 ms/);
-    assert.match(text, /parts\.layout-shift PASS/);
-    assert.match(text, /What is left\s*The scene\./);
-    assert.equal(panel().querySelector('[role="meter"]').getAttribute("aria-valuenow"), "60");
+        await pressOn(row.querySelector("button"));
+        assert.ok(panel());
+        assert.equal(find("#side").dataset.borrowed, "artifact");
+        assert.equal(verb(m), "Close");
+        assert.equal(row.querySelector("button").getAttribute("aria-expanded"), "true");
+        const text = panel().textContent;
+        // The figure from the data it is bound to, its change, the meter, the
+        // series' range, the table, the log, the words.
+        assert.match(text, /Layout shift\s*0\.0001\s*−0\.4299/);
+        assert.match(text, /60 of 100 pictures/);
+        assert.match(text, /5–100/);
+        assert.match(text, /Worst frame\s*18 ms/);
+        assert.match(text, /parts\.layout-shift PASS/);
+        assert.match(text, /What is left\s*The scene\./);
+        assert.equal(panel().querySelector('[role="meter"]').getAttribute("aria-valuenow"), "60");
 
-    // Open again closes it, and the column has its lists back.
-    pressOn(row.querySelector("button"));
-    assert.equal(panel(), null);
-    assert.equal(find("#side").dataset.borrowed, undefined);
-    assert.equal(verb(m), "Open");
-});
+        // Open again closes it, and the column has its lists back.
+        await pressOn(row.querySelector("button"));
+        assert.equal(panel(), null);
+        assert.equal(find("#side").dataset.borrowed, undefined);
+        assert.equal(verb(m), "Open");
+    },
+);
 
-run_test("from the keyboard: Open puts focus in the panel, Esc gives it back to Open", () => {
+run_test("from the keyboard: Open puts focus in the panel, Esc gives it back to Open", async () => {
     const m = answer("Again.", [NUMBERS]);
     const open = rowOf(m).querySelector("button");
     open.focus();
     open.click();
+    await settle();
     assert.ok(panel());
     assert.equal(document.activeElement.getAttribute("aria-label"), "Close");
     dom.press("Escape");
@@ -300,6 +308,7 @@ run_test("from the keyboard: Open puts focus in the panel, Esc gives it back to 
     assert.equal(document.activeElement, open);
     // Close in the panel does the same.
     open.click();
+    await settle();
     dom.click(panel().querySelector('[aria-label="Close"]'));
     assert.equal(panel(), null);
     assert.equal(document.activeElement, open);
@@ -309,7 +318,7 @@ run_test("an artifact that arrives later replaces the one shown, in place", asyn
     const m = answer("A first take.", [
         {version: 1, title: "First", blocks: [{type: "copy", body: "one"}]},
     ]);
-    pressOn(rowOf(m).querySelector("button"));
+    await pressOn(rowOf(m).querySelector("button"));
     assert.match(panel().textContent, /First\s*one/);
     artifacts.onArtifactEvent({
         type: "submessage",
@@ -333,9 +342,9 @@ run_test("an artifact that arrives later replaces the one shown, in place", asyn
 
 run_test("an action asks Onix, here, in my name", async () => {
     const m = answer("Numbers.", [NUMBERS]);
-    pressOn(rowOf(m).querySelector("button"));
+    await pressOn(rowOf(m).querySelector("button"));
     writes.length = 0;
-    pressOn(
+    await pressOn(
         [...panel().querySelectorAll("button")].find(
             (b) => b.textContent === "Run the checks again",
         ),
@@ -434,10 +443,12 @@ const stepAt = () =>
 
 run_test(
     "a scene: a graph in ranks, bound to its data, its steps from the controls and the keys",
-    () => {
+    async () => {
+        // The scene is a chunk of its own, handed the page when it arrives.
+        const scene = await chunks.chunk("scene");
         const m = answer("Here is the path.", [PATH]);
         assert.match(rowOf(m).textContent, /A screenshot's path\s*Diagram, 3 steps/);
-        pressOn(rowOf(m).querySelector("button"));
+        await pressOn(rowOf(m).querySelector("button"));
         // Ranks: what leads to a node stands above it.
         const ranks = scene.ranksOf(
             ["up", "thumb", "msg", "seen"],
@@ -511,5 +522,42 @@ run_test(
         dom.press("Enter", {target: seen});
         assert.equal(seen.getAttribute("aria-pressed"), "false");
         artifacts.closeArtifact(true);
+    },
+);
+
+run_test(
+    "Open before the document's drawing has arrived shows nothing new, then opens it",
+    async () => {
+        const m = answer("Numbers, again.", [NUMBERS]);
+        let deliver = null;
+        const later = () =>
+            new Promise((resolve) => {
+                deliver = resolve;
+            });
+        chunks.setChunkLoader("artifact", later);
+        field.focus();
+        await settle();
+        const before = lane.innerHTML;
+        await pressOn(rowOf(m).querySelector("button"));
+        // On its way: no panel, the column keeps its lists, the row says Open,
+        // nothing in the conversation changed, and focus where it was.
+        assert.equal(panel(), null);
+        assert.equal(find("#side").dataset.borrowed, undefined);
+        assert.equal(verb(m), "Open");
+        assert.equal(lane.innerHTML, before);
+        assert.equal(document.activeElement, field);
+        deliver(artifact_view);
+        await settle();
+        assert.ok(panel());
+        assert.equal(verb(m), "Close");
+        artifacts.closeArtifact(true);
+
+        // Esc before it arrives: it does not open when it does.
+        chunks.setChunkLoader("artifact", later);
+        await pressOn(rowOf(m).querySelector("button"));
+        dom.press("Escape");
+        deliver(artifact_view);
+        await settle();
+        assert.equal(panel(), null);
     },
 );

@@ -4,16 +4,16 @@
    conversation it is the design's block, beside Onix's words: a kind glyph, a title, one caption, one verb, 36 high. Open
    shows the whole document in the column, which it borrows and gives back (Close, Esc, or Open again); below 1408, where
    there is no column, in a raised sheet. The last artifact of the message's own sender is the one shown, and one that
-   arrives later replaces it in place. */
+   arrives later replaces it in place. The document's drawing (artifact_view.js) and a scene's (scene.js) are chunks of
+   their own, loaded on first use (chunks.js). */
 
-import {$, $$, el, esc, press, T} from "./util.js";
+import {$, $$, esc, press, T} from "./util.js";
 import {msgIndex, state} from "./state.js";
 import {side} from "./frame.js";
-import {picHTML, loadPics} from "./media.js";
 import {ready} from "./composer.js";
 import {send} from "./send.js";
 import {updateMessage} from "./agent_turn.js";
-import {sceneHTML, wireScene} from "./scene.js";
+import {chunk, loadedChunk} from "./chunks.js";
 
 /* ---------- the document ---------- */
 const BLOCKS = new Set(["copy", "metric", "meter", "series", "log", "key_value", "media", "scene"]);
@@ -53,65 +53,37 @@ function artifactPart(m) {
   return {t: "art", html: `${ic(GLYPH[doc.blocks[0].type] || "doc")}<span class="at">${esc(titleOf(doc))}</span><span class="k">${esc(captionOf(doc))}</span><button class="lk" data-art-open aria-expanded="${open}"><span class="cell"><span>${open ? "Close" : "Open"}</span><i class="sz">Close</i></span></button>`};
 }
 
-/* ---------- the blocks, drawn ---------- */
-/* a block's state, as the run marks say it: passed, live, needs a person, failed; neutral, selected and muted are no mark */
-const STATE_MARK = {success: ["done", "c-ok"], running: ["live", ""], warning: ["needs", "c-att"], error: ["failed", "c-fail"]};
-const stateMark = (s) => (STATE_MARK[s] ? mk(STATE_MARK[s][0], STATE_MARK[s][1]) : "");
-const isDark = () => { const t = document.documentElement.dataset.theme; return t === "dark" || (t !== "light" && typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches); };
-const themed = (b, field) => (isDark() && typeof b[field + "Dark"] === "string" ? b[field + "Dark"] : text(b[field]));
 /* words an agent wrote: as written, line breaks kept; display maths ($$...$$ or ```math) in the code face until KaTeX is here */
 const MATH = /```math[\t ]*\n([\s\S]*?)```|\$\$([\s\S]*?)\$\$/gu;
 const words = (s) => esc(s).replace(MATH, (all, a, b) => `<span class="am"${a !== undefined ? " data-display" : ""} data-tex="${esc((a ?? b ?? "").trim())}">${esc((a ?? b ?? "").trim())}</span>`);
-function figure(v) { const n = typeof v === "number" ? v : NaN; return Number.isFinite(n) ? n.toLocaleString("en", {maximumFractionDigits: 6}).replace(/^-/, "−") : text(v); }
-const ASPECT = {wide: [16, 9], standard: [4, 3], square: [1, 1], tall: [3, 4]};
-function blockHTML(doc, b, i) {
-  const head = (label, extra = "") => `<div class="ah">${stateMark(b.state)}<span>${esc(label)}</span>${extra}</div>`;
-  if (b.type === "copy") return `${b.eyebrow ? `<div class="ae">${esc(b.eyebrow)}</div>` : ""}${b.heading ? `<h3 class="ahd">${esc(b.heading)}</h3>` : ""}<div class="ab">${words(text(b.body))}</div>`;
-  if (b.type === "metric") { const d = typeof b.delta === "number" ? b.delta : null;
-    return head(text(b.label)) + `<div class="av2"><span class="fig">${esc(figure(bound(doc, b, "value")))}</span>${b.unit ? `<span class="u">${esc(b.unit)}</span>` : ""}${d !== null ? `<span class="dl">${d > 0 ? "+" : ""}${esc(figure(d))}</span>` : ""}</div>`; }
-  if (b.type === "meter") { const total = typeof b.total === "number" && b.total > 0 ? b.total : 100, cur = Number(bound(doc, b, "value")), v = Number.isFinite(cur) ? cur : 0, f = Math.max(0, Math.min(1, v / total));
-    return head(text(b.label), `<span class="e">${esc(figure(v))} of ${esc(figure(total))}${b.unit ? " " + esc(b.unit) : ""}</span>`) + `<div class="amt" role="meter" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${v}" aria-label="${esc(text(b.label))}"><i style="--f:${f}"></i></div>${b.detail ? `<div class="ad">${esc(b.detail)}</div>` : ""}`; }
-  if (b.type === "series") { const raw = bound(doc, b, "values"), vs = (Array.isArray(raw) ? raw : []).map(Number).filter(Number.isFinite).slice(0, 256);
-    const lo = Math.min(...vs, 0), hi = Math.max(...vs, lo + 1e-9), pts = vs.map((v, k) => `${vs.length === 1 ? 50 : (k / (vs.length - 1)) * 100},${(38 - ((v - lo) / (hi - lo)) * 34).toFixed(2)}`).join(" ");
-    const range = vs.length ? `${figure(Math.min(...vs))}–${figure(Math.max(...vs))}${b.unit ? " " + b.unit : ""}` : text(b.unit);   /* the line's lowest and highest, at the label's end */
-    return head(text(b.label), `<span class="e">${esc(range)}</span>`) + `<div class="asr" role="img" aria-label="${esc(`${text(b.label)}: ${vs.length} values, ${range}`)}"><svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg></div>`; }
-  if (b.type === "log") { const raw = bound(doc, b, "lines"), lines = (Array.isArray(raw) ? raw : []).map(text);
-    return head(text(b.label), `<button class="c sq s acp" data-art-copy="${i}" aria-label="Copy the log" data-tip="Copy">${ic("copy")}</button>`) + `<pre class="alog"><code>${esc(lines.join("\n"))}</code></pre>`; }
-  if (b.type === "key_value") return head(text(b.label)) + `<table class="akv"><tbody>${(Array.isArray(b.items) ? b.items : []).filter(isObj).slice(0, 16).map((x) => `<tr><th scope="row">${esc(text(x.key))}</th><td>${esc(text(x.value))}</td></tr>`).join("")}</tbody></table>`;
-  if (b.type === "media") { const src = themed(b, "src"), cap = b.caption ? `<div class="ad">${words(text(b.caption))}</div>` : "", [aw, ah] = ASPECT[b.aspect] || [0, 0];
-    if (!src) return `<div class="ad">${esc(text(b.alt))}</div>`;
-    if (b.kind === "video") { const poster = themed(b, "poster"), auto = b.motion !== "manual" && !(typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches);
-      return `<video class="avd" src="${esc(src)}"${poster ? ` poster="${esc(poster)}"` : ""} controls muted playsinline preload="metadata"${auto ? " autoplay" : ""}${b.motion === "loop" ? " loop" : ""} aria-label="${esc(text(b.alt))}"${aw ? ` style="aspect-ratio:${aw}/${ah}"` : ""}></video>${cap}`; }
-    return `<div class="blk pic">${picHTML([{href: src, src, w: aw * 100, h: ah * 100, name: text(b.alt), full: src}])}</div>${cap}`; }
-  if (b.type === "scene") return sceneHTML(doc, b, i);
-  return "";
-}
-/* the whole document: its blocks, then its actions, each a request to Onix in this place */
-function documentHTML(doc) {
-  return `<div class="ablocks">${doc.blocks.map((b, i) => `<section class="ablk" data-type="${esc(b.type)}"${b.state ? ` data-state="${esc(b.state)}"` : ""}>${blockHTML(doc, b, i)}</section>`).join("")}</div>`
-    + (doc.actions.length ? `<div class="aact">${doc.actions.map((a, i) => `<button class="btn" data-art-act="${i}" data-tip="${esc(a.prompt)}">${esc(a.label)}</button>`).join("")}</div>` : "");
-}
 
 /* ---------- open: the column borrowed, or a sheet ---------- */
 let opened = null;   /* {mid, el, back, doc} */
 const artifactOpen = () => !!opened;
 function messageOf(id) { const c = msgIndex.get(id); return c ? c.byId.get(id) : null; }
+/* Open: whole in the frame of the press once the document's chunk (and a scene's) has arrived, which the page fetches when
+   idle (chunks.js); a press before that shows nothing new and opens it when they arrive, unless I have pressed Open on
+   another, Esc, or left the place meanwhile */
+let wanted = null;
 function openArtifact(m, back, kbd) {
   if (opened && opened.mid === m.id) { closeArtifact(); return; }
+  const doc = artifactOf(m); if (!doc) return; const scene = doc.blocks.some((b) => b.type === "scene");
+  const V = loadedChunk("artifact"), S = scene ? loadedChunk("scene") : null;
+  if (V && (S || !scene)) { show(m, doc, V, S, back, kbd); return; }
+  const ask = (wanted = {mid: m.id});
+  Promise.all([chunk("artifact"), scene ? chunk("scene") : null]).then(([V2, S2]) => { if (wanted !== ask) return; wanted = null; const d = artifactOf(m); if (d) show(m, d, V2, S2, back, kbd); }, () => { if (wanted === ask) wanted = null; });
+}
+function show(m, doc, V, S, back, kbd) {
   if (opened) closeArtifact(true);
-  const doc = artifactOf(m); if (!doc) return;
-  const inColumn = !!side && getComputedStyle(side).display !== "none";
-  const e = el("div", inColumn ? "apanel" : "apanel sheet-chk raised float");
-  e.setAttribute("role", "region"); e.setAttribute("aria-label", titleOf(doc)); e.dataset.mid = m.id;
-  e.innerHTML = `<div class="aph"><b>${esc(titleOf(doc))}</b><button class="c sq" data-art-close aria-label="Close" data-tip="Close" data-key="Esc">${ic("x")}</button></div><div class="abody">${documentHTML(doc)}</div>`;
+  const inColumn = !!side && getComputedStyle(side).display !== "none", e = V.panel(doc, titleOf(doc), inColumn, S); e.dataset.mid = m.id;
   if (inColumn) { side.append(e); side.dataset.borrowed = "artifact"; } else $("main").append(e);
-  host(e); loadPics(e); wireScene(e, doc); typeset(e);
+  V.mount(e, doc, S);
   opened = {mid: m.id, el: e, back: back || null, doc};
   redrawRow(m); M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6);
   if (kbd) $("[data-art-close]", e).focus();   /* from the keyboard, the next key is the panel's */
 }
 function closeArtifact(quiet) {
-  if (!opened) return; const {el: e, mid, back} = opened; opened = null; e.inert = true;
+  wanted = null; if (!opened) return; const {el: e, mid, back} = opened; opened = null; e.inert = true;
   const done = () => { e.remove(); if (side && !side.querySelector(":scope > .apanel")) delete side.dataset.borrowed; };
   if (quiet) done(); else M.leave(e, done);
   const m = messageOf(mid); if (m) redrawRow(m);
@@ -126,22 +98,17 @@ function onArtifactEvent(ev) {
   m.submessages = m.submessages || []; if (m.submessages.some((s) => s.id === ev.submessage_id)) return;
   m.submessages.push({id: ev.submessage_id, sender_id: ev.sender_id, msg_type: ev.msg_type, content: ev.content});
   if (c === state.P) updateMessage(c, m);
-  if (opened && opened.mid === m.id) { const doc = artifactOf(m); if (doc && doc.id !== opened.doc.id) { const body = $(".abody", opened.el); body.innerHTML = documentHTML(doc); $(".aph b", opened.el).textContent = titleOf(doc); opened.doc = doc; host(body); loadPics(body); wireScene(opened.el, doc); typeset(opened.el); } }
+  if (opened && opened.mid === m.id) { const doc = artifactOf(m), was = opened; if (!doc || doc.id === was.doc.id) return;
+    const scene = doc.blocks.some((b) => b.type === "scene");
+    Promise.all([chunk("artifact"), scene ? chunk("scene") : null]).then(([V, S]) => { if (opened !== was) return; V.replace(was.el, doc, titleOf(doc), S); was.doc = doc; }, () => {}); }
 }
-/* display maths: KaTeX is fetched the first time an artifact needs it; until then (or if it cannot be had) the formula
-   stands in the code face, as written */
-let katexP = null;
-function typeset(root) { const ms = $$(".am[data-tex]", root); if (!ms.length) return;
-  katexP = katexP || Promise.all([import(/* webpackChunkName: "katex" */ "katex"), import(/* webpackChunkName: "katex" */ "katex/dist/katex.min.css")]).then(([k]) => k.default || k).catch(() => null);   /* not the old interface's katex.css: a module both bundles import is split out of its first load as a file of its own */
-  katexP.then((k) => { if (!k) return; for (const x of ms) { if (!x.isConnected) continue; try { k.render(x.dataset.tex, x, {displayMode: x.hasAttribute("data-display"), throwOnError: true, trust: false, maxExpand: 1000, maxSize: 10, strict: "ignore"}); x.classList.add("on"); } catch (e) { /* the formula stays as written */ } } }); }
-
 /* the page's presses: Open and Close on the row, Close in the panel, Copy on a log, an action; Esc closes what is open */
 function wireArtifacts(root, msgOf) {
   press(root, "[data-art-open]", (b, e, ptr) => { const m = msgOf(b); if (m) openArtifact(m, b, !ptr); });
   press(document.body, ".apanel [data-art-close]", () => closeArtifact());
   press(document.body, ".apanel [data-art-copy]", (b) => { const pre = b.closest(".ablk").querySelector("pre"); try { navigator.clipboard.writeText(pre.textContent).catch(() => {}); } catch (e) { /* no clipboard */ } M.say(b, "Copied", 1200); });
   press(document.body, ".apanel [data-art-act]", (b) => { if (!opened) return; const a = opened.doc.actions[+b.dataset.artAct]; if (!a) return; send({text: a.prompt, onix: true, at: performance.now()}); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && opened && opened.el.contains(document.activeElement)) { e.preventDefault(); e.stopPropagation(); closeArtifact(); } }, true);
+  document.addEventListener("keydown", (e) => { if (e.key !== "Escape") return; wanted = null; if (opened && opened.el.contains(document.activeElement)) { e.preventDefault(); e.stopPropagation(); closeArtifact(); } }, true);
 }
 
-export {artifactOf, artifactOpen, artifactPart, captionOf, closeArtifact, dataAt, isObj, onArtifactEvent, openArtifact, text, titleOf, wireArtifacts, words};
+export {artifactOf, artifactOpen, artifactPart, bound, captionOf, closeArtifact, dataAt, isObj, onArtifactEvent, openArtifact, text, titleOf, wireArtifacts, words};

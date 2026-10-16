@@ -206,6 +206,7 @@ const composer = zrequire("armada/beta/composer.js");
 const send = zrequire("armada/beta/send.js");
 const media = zrequire("armada/beta/media.js");
 const hover = zrequire("armada/beta/hover.js");
+const chunks = zrequire("armada/beta/chunks.js");
 const lightbox = zrequire("armada/beta/lightbox.js");
 
 beta_state.state.ME = ME;
@@ -286,7 +287,7 @@ async function settle() {
     }
 }
 hover.buildOver();
-lightbox.wireLightbox(document.body);
+media.wireLightbox(document.body);
 feed.drawLane();
 
 run_test(
@@ -510,16 +511,74 @@ run_test("a message that is only a picture can be stood on, and carries its cont
 
 // The lightbox: what it says, and where focus is.
 const viewer = () => document.querySelector('[role="dialog"]');
-const viewing = () =>
-    viewer().querySelector("b").textContent +
-    " " +
-    [...viewer().querySelectorAll("span")].find((x) => /^\d+ of \d+$/.test(x.textContent))
-        .textContent;
+// What the lightbox says: the picture's name, and "n of m" when there are several.
+function viewing() {
+    const count = [...viewer().querySelectorAll("span")].find((x) =>
+        /^\d+ of \d+$/.test(x.textContent),
+    );
+    return viewer().querySelector("b").textContent + (count ? " " + count.textContent : "");
+}
 // The message whose two pictures the lightbox tests open.
 let pair = null;
-function pressPicture(box) {
+// A press on a picture; the lightbox is a chunk of its own, which arrives
+// when the promises in flight have settled.
+async function pressPicture(box) {
     box.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
+    await settle();
 }
+
+run_test("a press before the lightbox has arrived shows nothing new, then opens it", async () => {
+    const m = arrive(IAGO, named("early.png") + preview("early.png", 1440, 900));
+    await settle();
+    const [box] = boxesOf(m.id);
+    comeNear(box);
+    let deliver = null;
+    const later = () =>
+        new Promise((resolve) => {
+            deliver = resolve;
+        });
+    chunks.setChunkLoader("lightbox", later);
+    field.focus();
+    await settle();
+    const before = lane.innerHTML;
+    await pressPicture(box);
+    // Nothing new while the chunk is on its way: no lightbox, no spinner,
+    // nothing in the conversation changed, and focus where it was.
+    assert.equal(viewer(), null);
+    assert.equal(lane.innerHTML, before);
+    assert.equal(document.activeElement, field);
+    deliver(lightbox);
+    await settle();
+    assert.match(viewing(), /^early\.png/);
+    dom.press("Escape");
+    assert.equal(document.activeElement, field);
+
+    // Esc before it arrives: it does not open when it does.
+    chunks.setChunkLoader("lightbox", later);
+    await pressPicture(box);
+    dom.press("Escape");
+    deliver(lightbox);
+    await settle();
+    assert.equal(viewer(), null);
+
+    // A chunk that cannot arrive: the file opens in a tab, as a link would.
+    const tabs = [];
+    dom.window.open = (url) => tabs.push(url);
+    chunks.setChunkLoader("lightbox", async () => {
+        throw new TypeError("Failed to fetch");
+    });
+    await pressPicture(box);
+    assert.equal(viewer(), null);
+    assert.deepEqual(tabs, [new URL(upload_url("early.png"), dom.window.location.href).href]);
+
+    // Once it has arrived (the page fetches it when idle), a press opens it
+    // in its own frame.
+    chunks.setChunkLoader("lightbox", async () => lightbox);
+    await chunks.chunk("lightbox");
+    box.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
+    assert.match(viewing(), /^early\.png/);
+    dom.press("Escape");
+});
 
 run_test(
     "a picture pressed opens whole; the arrows step through the conversation's pictures",
@@ -539,7 +598,7 @@ run_test(
         comeNear(one);
         comeNear(two);
         field.focus();
-        pressPicture(two);
+        await pressPicture(two);
         assert.ok(viewer());
         assert.equal(viewing(), "two.png 2 of 3");
         assert.ok(viewer().contains(document.activeElement));
@@ -577,7 +636,7 @@ run_test(
         await settle();
         // Pressed with the pointer, while I was writing: Esc gives the field back.
         field.focus();
-        pressPicture(boxesOf(pair)[0]);
+        await pressPicture(boxesOf(pair)[0]);
         assert.ok(viewer());
         for (let i = 0; i < 8; i += 1) {
             dom.press("Tab");
@@ -608,6 +667,7 @@ run_test(
         box.dispatchEvent(
             new dom.window.MouseEvent("click", {bubbles: true, cancelable: true, detail: 0}),
         );
+        await settle();
         assert.ok(viewer());
         assert.match(viewing(), /^one\.png \d+ of \d+$/);
         dom.press("Escape");
@@ -615,10 +675,10 @@ run_test(
         assert.equal(document.activeElement, box);
 
         // The close control and a press beside the picture close it too.
-        pressPicture(box);
+        await pressPicture(box);
         dom.click(viewer().querySelector('[aria-label="Close"]'));
         assert.equal(viewer(), null);
-        pressPicture(box);
+        await pressPicture(box);
         viewer().dispatchEvent(
             new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}),
         );
@@ -643,10 +703,10 @@ run_test("a picture that failed and a modified press open no lightbox", async ()
     const [gone] = boxesOf(m.id);
     comeNear(gone);
     gone.querySelector("img").dispatchEvent(new dom.window.Event("error"));
-    pressPicture(gone);
+    await pressPicture(gone);
     assert.equal(viewer(), null);
     // A plain press on a picture that loaded does open it.
-    pressPicture(box);
+    await pressPicture(box);
     assert.ok(viewer());
     dom.press("Escape");
 });

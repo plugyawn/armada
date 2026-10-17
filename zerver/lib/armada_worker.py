@@ -65,6 +65,7 @@ from zerver.lib.armada_agent import (
     ArmadaTypeSafeAddressingIntentClassifier,
     armada_codex_thread_version,
 )
+from zerver.lib.armada_plugin_agents import ArmadaPluginServer, armada_plugin_servers
 from zerver.lib.armada_run_card import record_agent_run_event
 from zerver.lib.armada_skills import reconcile_armada_codex_skills
 from zerver.lib.context_managers import lockfile
@@ -623,7 +624,9 @@ def latest_armada_codex_run_for_topic(
     elif before_message_id > 0:
         runs = runs.filter(trigger_message_id__lt=before_message_id)
     run = runs.order_by("-trigger_message_id", "-id").first()
-    if run is None or run.codex_thread_version != armada_codex_thread_version():
+    if run is None or run.codex_thread_version != armada_codex_thread_version(
+        armada_plugin_servers(user_profile.realm)
+    ):
         # A thread given other tools or instructions would keep them:
         # start a fresh one.
         return None
@@ -2634,6 +2637,7 @@ def build_armada_worker_runtime_from_settings(
     sandbox_override: str | None = None,
     process_isolation_override: ArmadaProcessIsolation | None = None,
     process_isolation_error: str | None = None,
+    plugin_servers: Sequence[ArmadaPluginServer] = (),
 ) -> ArmadaWorkerRuntime:
     # A string, not the setting's literal type: an environment override
     # can name a runtime this build does not know.
@@ -2679,6 +2683,7 @@ def build_armada_worker_runtime_from_settings(
                 ephemeral=settings.ARMADA_WORKER_CODEX_EPHEMERAL,
                 process_isolation=process_isolation_override,
                 browser_dir=settings.ARMADA_WORKER_BROWSER_DIR,
+                plugin_servers=plugin_servers,
             )
         )
     if runtime != "disabled":
@@ -3802,7 +3807,9 @@ class ArmadaDatabaseWorkerRunStore:
                 # The thread is one this code started or resumed, and it
                 # resumes only threads given the current tools and
                 # instructions.
-                run.codex_thread_version = armada_codex_thread_version()
+                run.codex_thread_version = armada_codex_thread_version(
+                    armada_plugin_servers(user_profile.realm)
+                )
                 update_fields.append("codex_thread_version")
             ambient_triggered = metadata.get("ambient_triggered")
             if isinstance(ambient_triggered, bool):

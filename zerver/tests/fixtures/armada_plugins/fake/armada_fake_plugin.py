@@ -38,8 +38,16 @@ if settings.get("exit_at_start"):
     sys.exit(3)
 
 TOOLS = [
-    {"name": "echo", "description": "Says back what it was called with, and for whom."},
-    {"name": "pod_terminate", "description": "Ends a pod."},
+    {
+        "name": "echo",
+        "description": "Says back what it was called with, and for whom.",
+        "inputSchema": {"type": "object"},
+    },
+    {
+        "name": "pod_terminate",
+        "description": "Ends a pod.",
+        "inputSchema": {"type": "object", "properties": {"pod": {"type": "string"}}},
+    },
 ]
 
 
@@ -79,6 +87,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
+        if self.path == "/mcp":
+            # No stream of its own for the client to open, which the
+            # transport answers with 405; Codex asks for one.
+            self.reply(405)
+            return
         healthy = self.path == "/health" and not settings.get("unhealthy")
         self.reply(200 if healthy else 500, b"ok" if healthy else b"no")
 

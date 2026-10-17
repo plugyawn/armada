@@ -65,6 +65,14 @@ from zerver.lib.armada_page_tools import (
     ARMADA_PAGE_TOOL_SPECS,
     answer_armada_page_tool,
 )
+from zerver.lib.armada_plugin_agents import (
+    ArmadaPluginServer,
+    armada_plugin_config_args,
+    armada_plugin_environment,
+    armada_plugin_fingerprint,
+    armada_plugin_instruction_lines,
+    armada_plugin_instructions,
+)
 from zerver.lib.armada_typesafe import (
     armada_typesafe_agent_probability,
     build_armada_typesafe_addressing_request,
@@ -651,19 +659,21 @@ def armada_codex_dynamic_tools() -> list[dict[str, Any]]:
     ]
 
 
-def armada_codex_thread_version() -> str:
+def armada_codex_thread_version(plugin_servers: Sequence[ArmadaPluginServer] = ()) -> str:
     """A fingerprint of what a new Codex thread is given and a resume
     cannot change: the tools it is offered (thread/resume takes none, and
-    a resumed thread keeps its old ones) and the instructions' version. A
-    topic resumes its thread only while this is the version recorded on
-    it, and otherwise starts a fresh one."""
-    encoded = json.dumps(
-        {
-            "tools": armada_codex_dynamic_tools(),
-            "instructions": ARMADA_CODEX_INSTRUCTIONS_VERSION,
-        },
-        sort_keys=True,
-    ).encode()
+    a resumed thread keeps its old ones), the instructions' version, and
+    the team's plugins' lines of them. A topic resumes its thread only
+    while this is the version recorded on it, and otherwise starts a
+    fresh one: so a plugin with tools installed or removed reaches every
+    topic's next thread."""
+    given: dict[str, object] = {
+        "tools": armada_codex_dynamic_tools(),
+        "instructions": ARMADA_CODEX_INSTRUCTIONS_VERSION,
+    }
+    if plugin_servers:
+        given["plugins"] = armada_plugin_instruction_lines(plugin_servers)
+    encoded = json.dumps(given, sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
@@ -671,7 +681,7 @@ def armada_codex_thread_version() -> str:
 # need: each topic's next run then starts a fresh Codex thread, which
 # gets them (and loses the old thread's memory). Small rewordings that
 # can wait for a topic's next fresh thread need no bump.
-ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 5
+ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 6
 
 # Where an alert from armada-ops-check (puppet/armada/files/) sends the
 # agent: the runbook is Armada's, not in the #ops channel's repository.
@@ -701,13 +711,16 @@ ARMADA_CODEX_BROWSER_INSTRUCTIONS: Final = (
 )
 
 
-def build_armada_codex_developer_instructions(*, browser: bool = False) -> str:
+def build_armada_codex_developer_instructions(
+    *, browser: bool = False, plugin_servers: Sequence[ArmadaPluginServer] = ()
+) -> str:
     """The instructions a new Codex thread starts with; browser says
-    whether the agent has its browser (ARMADA_WORKER_BROWSER_DIR)."""
+    whether the agent has its browser (ARMADA_WORKER_BROWSER_DIR), and
+    plugin_servers are the team's plugins that offer it tools."""
     agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a topic in Armada, the team chat you work in.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\nWhen someone asks for a new channel, create it with armada_create_channel, which acts with their rights, and give them its #**name** link.\nAn alert the Ops bot posts in #ops names its section of Armada's operations runbook, which is not in the channel's repository: read it at {ARMADA_OPS_RUNBOOK_URL}.\n"
     browser_lines = ARMADA_CODEX_BROWSER_INSTRUCTIONS if browser else ""
     answer = "Keep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent topic transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
-    return agent + browser_lines + answer
+    return agent + browser_lines + armada_plugin_instructions(plugin_servers) + answer
 
 
 def build_armada_codex_turn_prompt(active_session: ArmadaActiveSessionSummary, task: str) -> str:
@@ -1253,6 +1266,17 @@ def armada_transcript_events_from_codex_json_event(
                 "title": f"Agent {activity_kind}",
             }
         ]
+    plugin = item.get("plugin")
+    if item_type == "mcp_tool_call" and isinstance(plugin, dict):
+        # A tool of one of the team's plugins, named with the plugin.
+        return [
+            {
+                **base_event,
+                "kind": "tool",
+                "title": f"{plugin['name']}: {item.get('tool') or 'tool'}",
+                "metadata": {**armada_codex_item_metadata(item), "plugin": plugin},
+            }
+        ]
     if item_type == "mcp_tool_call" and item.get("server") == ARMADA_BROWSER_MCP_SERVER:
         raw_arguments = item.get("arguments")
         arguments = raw_arguments if isinstance(raw_arguments, dict) else {}
@@ -1448,8 +1472,11 @@ def armada_app_server_usage_event(params: dict[str, Any]) -> ArmadaWorkerTranscr
 
 
 class ArmadaCodexAppServerTranscriptTranslator:
-    def __init__(self) -> None:
+    def __init__(self, *, plugin_servers: Sequence[ArmadaPluginServer] = ()) -> None:
         self.json_translator = ArmadaCodexJsonTranscriptTranslator()
+        # The plugins' MCP servers, by name, so that the trace names the
+        # plugin a tool call went to.
+        self.plugin_servers = {server.server: server for server in plugin_servers}
         self.last_rate_limit_key: tuple[object, ...] | None = None
         self.reported_unknown_methods: set[str] = set()
         self.thread_descriptors: dict[str, dict[str, Any]] = {}
@@ -1874,6 +1901,14 @@ class ArmadaCodexAppServerTranscriptTranslator:
                 for key, part in self.reasoning_summary_parts.items()
                 if key[0] != normalized_item.get("id")
             }
+        plugin = self.plugin_servers.get(str(normalized_item.get("server")))
+        if normalized_item.get("type") == "mcp_tool_call" and plugin is not None:
+            normalized_item["plugin"] = {
+                "id": plugin.server,
+                "install_id": plugin.install_id,
+                "name": plugin.name,
+                "glyph": plugin.glyph,
+            }
         collaboration_events = self.collaboration_thread_events(method, params, normalized_item)
         item_events = self.contextualize_events(
             self.json_translator.events_from_json_event(
@@ -2071,6 +2106,7 @@ class ArmadaCodexAppServerToolRunner:
         ephemeral: bool = False,
         process_isolation: ArmadaProcessIsolation | None = None,
         browser_dir: str | None = None,
+        plugin_servers: Sequence[ArmadaPluginServer] = (),
         popen_command: ArmadaSubprocessPopen = subprocess.Popen,
     ) -> None:
         self.codex_bin = codex_bin
@@ -2088,6 +2124,9 @@ class ArmadaCodexAppServerToolRunner:
         self.ephemeral = ephemeral
         self.process_isolation = process_isolation
         self.browser_dir = browser_dir
+        self.plugin_servers = tuple(plugin_servers)
+        # What the worker compares with the realm's plugins between turns.
+        self.plugin_fingerprint = armada_plugin_fingerprint(self.plugin_servers)
         self.popen_command = popen_command
         self.process: subprocess.Popen[str] | None = None
         self.messages: queue.Queue[dict[str, Any] | None] = queue.Queue()
@@ -2119,7 +2158,9 @@ class ArmadaCodexAppServerToolRunner:
         self.background_request_ids: set[int] = set()
         self.current_user_input_provider: ArmadaUserInputProvider | None = None
         self.pending_artifacts: list[str] = []
-        self.translator = ArmadaCodexAppServerTranscriptTranslator()
+        self.translator = ArmadaCodexAppServerTranscriptTranslator(
+            plugin_servers=self.plugin_servers
+        )
 
     def configure_turn(self, *, model: str, reasoning_effort: str) -> None:
         """Keep one app-server per worktree; model and effort belong to the turn."""
@@ -2152,6 +2193,7 @@ class ArmadaCodexAppServerToolRunner:
         args.extend(["--config", "suppress_unstable_features_warning=true"])
         if self.browser_dir:
             args.extend(self.browser_config_args(self.browser_dir))
+        args.extend(armada_plugin_config_args(self.plugin_servers))
         if self.reasoning_effort:
             args.extend(["--config", f'model_reasoning_effort="{self.reasoning_effort}"'])
         return args
@@ -2241,6 +2283,12 @@ class ArmadaCodexAppServerToolRunner:
             or self.loaded_thread_id is not None
         ):
             self.reset_transport()
+        # The plugins' tokens, which Codex reads from the variables its
+        # flags name, are in the process's environment alone.
+        plugin_environment = armada_plugin_environment(self.plugin_servers)
+        popen_environment = (
+            {"env": {**os.environ, **plugin_environment}} if plugin_environment else {}
+        )
         try:
             process = self.popen_command(
                 self.build_command(),
@@ -2253,6 +2301,7 @@ class ArmadaCodexAppServerToolRunner:
                 # Its own process group, so stopping it reaches every
                 # process it started (armada_stop_app_server_process).
                 start_new_session=True,
+                **popen_environment,
             )
         except FileNotFoundError as error:
             raise ArmadaAgentRuntimeError(
@@ -2511,7 +2560,9 @@ class ArmadaCodexAppServerToolRunner:
             self.side_thread_ids_by_conversation_key.clear()
         self.current_user_input_provider = None
         self.pending_artifacts = []
-        self.translator = ArmadaCodexAppServerTranscriptTranslator()
+        self.translator = ArmadaCodexAppServerTranscriptTranslator(
+            plugin_servers=self.plugin_servers
+        )
         for response_waiter in response_waiters:
             response_waiter.put(None)
         for turn_context in turn_contexts:
@@ -3026,7 +3077,7 @@ class ArmadaCodexAppServerToolRunner:
             params.pop("dynamicTools", None)
         else:
             params["developerInstructions"] = build_armada_codex_developer_instructions(
-                browser=bool(self.browser_dir)
+                browser=bool(self.browser_dir), plugin_servers=self.plugin_servers
             )
         return {key: value for key, value in params.items() if value is not None}
 
@@ -3047,10 +3098,10 @@ class ArmadaCodexAppServerToolRunner:
         return {key: value for key, value in params.items() if value is not None}
 
     def side_fork_params(self, parent_thread_id: str) -> dict[str, Any]:
-        developer_instructions = (
-            f"{build_armada_codex_developer_instructions(browser=bool(self.browser_dir))}\n\n"
-            f"{ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS}"
+        instructions = build_armada_codex_developer_instructions(
+            browser=bool(self.browser_dir), plugin_servers=self.plugin_servers
         )
+        developer_instructions = f"{instructions}\n\n{ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS}"
         params: dict[str, Any] = {
             "threadId": parent_thread_id,
             "approvalPolicy": self.approval_policy,

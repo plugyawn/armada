@@ -25,6 +25,11 @@ from zerver.lib.armada import (
 )
 from zerver.lib.armada_agent import ArmadaProcessIsolation
 from zerver.lib.armada_monitor import armada_apply_monitor_setup_result
+from zerver.lib.armada_plugin_agents import (
+    ArmadaPluginServer,
+    armada_plugin_fingerprint,
+    armada_plugin_servers,
+)
 from zerver.lib.armada_worker import (
     ARMADA_WORKER_HEARTBEAT_INTERVAL_SECONDS,
     ArmadaDatabaseWorkerRunStore,
@@ -253,26 +258,45 @@ def reap_idle_armada_worker_runtimes(*, current_time: float | None = None) -> in
     return len(idle_runtimes)
 
 
+def armada_worker_runtime_plugin_fingerprint(runtime: ArmadaWorkerRuntime) -> str:
+    """The plugins a runtime's app-server was started with; a runtime with
+    no app-server has none."""
+    return getattr(runtime.tool_runner, "plugin_fingerprint", armada_plugin_fingerprint(()))
+
+
 def get_armada_worker_runtime(
     model: str,
     workdir: str,
     reasoning_effort: str,
     process_isolation: ArmadaProcessIsolation | None,
     isolation_error: str | None,
+    plugin_servers: Sequence[ArmadaPluginServer] = (),
 ) -> ArmadaWorkerRuntime:
     """Check out the worktree's runtime for one turn; the caller gives it
-    back with release_armada_worker_runtime (or evicts it)."""
+    back with release_armada_worker_runtime (or evicts it). A warm runtime
+    started with other plugins than the realm's now (another set, or a
+    plugin's generation, token, address or tools turned off) is closed
+    here, between turns, and a new one started with them."""
     sandbox = armada_worker_sandbox_for_workdir(workdir)
     isolation_label = process_isolation.label() if process_isolation is not None else ""
     runtime_key = (workdir, sandbox, isolation_label)
     current_time = time.monotonic()
     if isolation_error is None:
+        stale_runtime = None
         with armada_worker_runtime_lock:
             runtime = armada_worker_runtimes.get(runtime_key)
+            if runtime is not None and armada_worker_runtime_plugin_fingerprint(
+                runtime
+            ) != armada_plugin_fingerprint(plugin_servers):
+                stale_runtime = runtime
+                forget_armada_worker_runtime_locked(runtime)
+                runtime = None
             if runtime is not None:
                 armada_worker_runtimes.move_to_end(runtime_key)
                 armada_worker_runtime_last_used[runtime_key] = current_time
                 armada_worker_runtimes_in_use.add(runtime_key)
+        if stale_runtime is not None:
+            close_armada_worker_runtime(stale_runtime)
         if runtime is not None:
             runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
             return runtime
@@ -283,6 +307,7 @@ def get_armada_worker_runtime(
         sandbox_override=sandbox,
         process_isolation_override=process_isolation,
         process_isolation_error=isolation_error,
+        plugin_servers=plugin_servers,
     )
     runtime.configure_turn(model=model, reasoning_effort=reasoning_effort)
     if isolation_error is None:
@@ -623,6 +648,7 @@ class ArmadaWorker(QueueProcessingWorker):
             reasoning_effort,
             process_isolation,
             isolation_error,
+            armada_plugin_servers(user_profile.realm),
         )
         if side_runtime is None:
             self.active_runtime = runtime

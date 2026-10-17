@@ -30,6 +30,9 @@ ARMADA_WIDGET_NEWS = ("failed", "needs")
 # Set by the plugin host in every plugin's environment, beside everything
 # named ARMADA_*, so a secret may not take one of these names.
 ARMADA_PLUGIN_RESERVED_ENV = frozenset({"HOME", "LANG", "PATH"})
+# The agent's own MCP servers (armada_agent.ARMADA_BROWSER_MCP_SERVER): a
+# plugin's server in Codex is named by its id, so no plugin takes theirs.
+ARMADA_AGENT_MCP_SERVERS = frozenset({"playwright"})
 # A tag as an HTML parser opens one: "<" then a letter, "/", "!" or "?".
 # "loss < 2.3" is text; "<b>" is markup.
 MARKUP = re.compile(r"<[A-Za-z/!?]")
@@ -181,6 +184,10 @@ def canonicalize_plugin_manifest(value: object) -> dict[str, Any]:
         raise ArmadaPluginContractError(error)
     # A command line and a regular expression are not drawn, and may hold "<".
     _refuse_markup(manifest, skip=frozenset({"run", "pattern"}))
+    if manifest["id"] in ARMADA_AGENT_MCP_SERVERS:
+        raise ArmadaPluginContractError(
+            f"$.id: {manifest['id']!r} names one of the agent's own tools; choose another id"
+        )
     if ("run" in manifest) == ("remote" in manifest):
         raise ArmadaPluginContractError(
             "$: a plugin gives run (a program this server runs) or remote"

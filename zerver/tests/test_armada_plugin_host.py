@@ -31,7 +31,8 @@ from zerver.lib.armada_plugin_host import (
     ArmadaPluginHost,
     _alive,
     _git_url,
-    _pump,
+    free_local_port,
+    pump_plugin_output,
 )
 from zerver.lib.armada_plugins import (
     armada_plugin_token,
@@ -470,10 +471,10 @@ class PluginHostTest(ZulipTestCase):
         first.refresh_from_db()
         assert first.port is not None
         taken = first.port
-        free = ArmadaPluginHost._free_port()
+        free = free_local_port()
         # The first port offered is the other install's; the second is free.
         second = self.install(self.manifest(id="second"))
-        with mock.patch.object(ArmadaPluginHost, "_free_port", side_effect=[taken, free]):
+        with mock.patch("zerver.lib.armada_plugin_host.free_local_port", side_effect=[taken, free]):
             self.tick_until(lambda: self.running(second))
         second.refresh_from_db()
         self.assertEqual(second.port, free)
@@ -490,7 +491,7 @@ class PluginHostTest(ZulipTestCase):
         self.assertNotEqual(first.port, taken)
         # With no port to be had, it fails, and is tried again later.
         third = self.install(self.manifest(id="third"))
-        with mock.patch.object(ArmadaPluginHost, "_free_port", return_value=free):
+        with mock.patch("zerver.lib.armada_plugin_host.free_local_port", return_value=free):
             self.tick_until(lambda: PluginInstall.objects.get(id=third.id).failures == 1)
         third.refresh_from_db()
         self.assertEqual(
@@ -618,7 +619,7 @@ class PluginHostTest(ZulipTestCase):
         lines: deque[str] = deque(maxlen=2)
         output = BytesIO(b"one hunter2\ntwo\nthree hunter2 hunter2\n\xff\n")
         with mock.patch("zerver.lib.armada_plugin_host.ARMADA_PLUGIN_LOG_LIMIT_BYTES", 20):
-            _pump(output, lines, log, ["hunter2"])
+            pump_plugin_output(output, lines, log, ["hunter2"])
         self.assertEqual(list(lines), [f"three {REDACTED} {REDACTED}", "\ufffd"])
         # Past its limit, the log starts again.
         self.assertEqual(log.read_text(), "\ufffd\n")

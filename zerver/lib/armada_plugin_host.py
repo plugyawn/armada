@@ -127,11 +127,11 @@ def _origin(install: PluginInstall) -> str:
     return install.source
 
 
-def _tail(output: str, count: int = ARMADA_PLUGIN_LAST_LINES) -> str:
+def last_lines(output: str, count: int = ARMADA_PLUGIN_LAST_LINES) -> str:
     return "\n".join(output.strip().splitlines()[-count:])
 
 
-def _base_environment(plugin_dir: Path, home: Path) -> dict[str, str]:
+def plugin_base_environment(plugin_dir: Path, home: Path) -> dict[str, str]:
     """What every plugin process starts with: a PATH that finds Zulip's
     uv first, its own home, and uv's cache and Pythons shared between
     installs."""
@@ -233,7 +233,7 @@ def prepare_checkout(
         _fetch(kind, origin, sha, path, checkout)
     except subprocess.CalledProcessError as error:
         raise ArmadaPluginPrepareError(
-            f"Could not fetch {origin} at {sha}: {_tail(error.output, 3)}"
+            f"Could not fetch {origin} at {sha}: {last_lines(error.output, 3)}"
         ) from error
     try:
         found = canonicalize_plugin_manifest(
@@ -256,11 +256,11 @@ def prepare_checkout(
                 setup,
                 timeout=ARMADA_PLUGIN_SETUP_TIMEOUT_SECONDS,
                 cwd=root,
-                env=_base_environment(plugin_dir, home),
+                env=plugin_base_environment(plugin_dir, home),
             )
         except (OSError, subprocess.SubprocessError) as error:
             output = getattr(error, "output", None) or str(error)
-            raise ArmadaPluginPrepareError(f"Its setup failed: {_tail(output)}") from error
+            raise ArmadaPluginPrepareError(f"Its setup failed: {last_lines(output)}") from error
     (checkout / READY_MARK).touch()
     return root
 
@@ -273,6 +273,32 @@ def _alive(pid: int) -> bool:
     except OSError:
         return False
     return stat.rsplit(")", 1)[1].split()[0] != "Z"
+
+
+def free_local_port() -> int:
+    """A port on 127.0.0.1 that nothing holds now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def kill_process_group(pid: int, process: "subprocess.Popen[bytes] | None" = None) -> None:
+    """SIGTERM to the process's group (a plugin's command may fork, as
+    uv run does), then SIGKILL to what has not gone in five seconds."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGTERM)
+    deadline = time.monotonic() + ARMADA_PLUGIN_STOP_SECONDS
+    while time.monotonic() < deadline:
+        if process is not None:
+            if process.poll() is not None:
+                break
+        elif not _alive(pid):
+            break
+        time.sleep(0.05)
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(pid, signal.SIGKILL)
+    if process is not None:
+        process.wait()
 
 
 @dataclass
@@ -302,7 +328,9 @@ class Mirroring:
     failures: int = 0
 
 
-def _pump(stream: IO[bytes], lines: deque[str], log_path: Path, hidden: list[str]) -> None:
+def pump_plugin_output(
+    stream: IO[bytes], lines: deque[str], log_path: Path, hidden: list[str]
+) -> None:
     """Keep what a process writes, with what it must not show blanked."""
     with open(log_path, "a", encoding="utf-8") as log:
         for raw in stream:
@@ -391,7 +419,7 @@ class ArmadaPluginHost:
                 pid_file.unlink(missing_ok=True)
                 continue
             if Path(cwd).is_relative_to(self.plugin_dir):
-                self._kill_group(pid)
+                kill_process_group(pid)
             pid_file.unlink(missing_ok=True)
 
     def _mirror(self) -> None:
@@ -536,7 +564,7 @@ class ArmadaPluginHost:
         secrets = armada_plugin_secret_environment(install)
         assert install.port is not None
         environment = {
-            **_base_environment(self.plugin_dir, home),
+            **plugin_base_environment(self.plugin_dir, home),
             **secrets,
             "ARMADA_SITE": install.realm.url,
             "ARMADA_EMAIL": install.bot.email,
@@ -553,7 +581,7 @@ class ArmadaPluginHost:
         if install.port is not None and self._port_free(install.port):
             return
         for _attempt in range(10):
-            port = self._free_port()
+            port = free_local_port()
             # Free on this machine, but another install's, which may be
             # stopped: ports are kept, and unique.
             if PluginInstall.objects.filter(port=port).exclude(id=install.id).exists():
@@ -562,12 +590,6 @@ class ArmadaPluginHost:
             install.port = port
             return
         raise OSError(errno.EADDRINUSE, "no free port for the plugin")
-
-    @staticmethod
-    def _free_port() -> int:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            probe.bind(("127.0.0.1", 0))
-            return probe.getsockname()[1]
 
     @staticmethod
     def _port_free(port: int) -> bool:
@@ -619,7 +641,7 @@ class ArmadaPluginHost:
         (base / "pid").write_text(str(process.pid))
         supervised.process = process
         supervised.reader = threading.Thread(
-            target=_pump,
+            target=pump_plugin_output,
             args=(process.stdout, supervised.lines, base / "plugin.log", hidden),
             daemon=True,
         )
@@ -668,30 +690,11 @@ class ArmadaPluginHost:
         supervised.process = None
         if process is None:
             return
-        self._kill_group(process.pid, process)
+        kill_process_group(process.pid, process)
         if supervised.reader is not None:
             supervised.reader.join(ARMADA_PLUGIN_STOP_SECONDS)
         for pid_file in self.plugin_dir.glob(f"*-{supervised.install_id}/pid"):
             pid_file.unlink(missing_ok=True)
-
-    @staticmethod
-    def _kill_group(pid: int, process: "subprocess.Popen[bytes] | None" = None) -> None:
-        """SIGTERM to the process's group (a plugin's command may fork, as
-        uv run does), then SIGKILL to what has not gone in five seconds."""
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGTERM)
-        deadline = time.monotonic() + ARMADA_PLUGIN_STOP_SECONDS
-        while time.monotonic() < deadline:
-            if process is not None:
-                if process.poll() is not None:
-                    break
-            elif not _alive(pid):
-                break
-            time.sleep(0.05)
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGKILL)
-        if process is not None:
-            process.wait()
 
     def _prune(self, installs: dict[int, PluginInstall]) -> None:
         """Delete the checkouts of installs that are gone, and of commits an

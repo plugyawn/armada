@@ -50,12 +50,12 @@ ARMADA_PLUGIN_TOOL_RESULT_LIMIT = 4000
 ITEM_KEY = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 
-def _declared(install: PluginInstall, key: str) -> dict[str, Any]:
-    for widget in install.manifest["provides"].get("widgets", []):
+def _declared(manifest: dict[str, Any], key: str) -> dict[str, Any]:
+    for widget in manifest["provides"].get("widgets", []):
         if widget["key"] == key:
             return widget
     raise JsonableError(
-        _("{name} declares no widget named {key}.").format(name=install.name, key=key)
+        _("{name} declares no widget named {key}.").format(name=manifest["name"], key=key)
     )
 
 
@@ -67,25 +67,25 @@ def _rows(document: dict[str, Any]) -> Iterator[dict[str, Any]]:
 
 
 def _check_against_manifest(
-    install: PluginInstall, declaration: dict[str, Any], document: dict[str, Any]
+    manifest: dict[str, Any], declaration: dict[str, Any], document: dict[str, Any]
 ) -> None:
     """What only the manifest can say: a row opens one of the plugin's
     widgets that is opened from a row, and its facets are declared."""
-    widgets = {widget["key"]: widget for widget in install.manifest["provides"].get("widgets", [])}
+    widgets = {widget["key"]: widget for widget in manifest["provides"].get("widgets", [])}
     facets = {facet["key"] for facet in declaration.get("options", {}).get("facets", [])}
     for row in _rows(document):
         target = row.get("open", {}).get("widget")
         if target is not None and "open" not in widgets.get(target, {}).get("in", []):
             raise JsonableError(
                 _("A row opens {key}, which {name} does not open from a row.").format(
-                    key=target, name=install.name
+                    key=target, name=manifest["name"]
                 )
             )
         for facet in row.get("facets", {}):
             if facet not in facets:
                 raise JsonableError(
                     _("A row's facet {key} is not one {name} declares.").format(
-                        key=facet, name=install.name
+                        key=facet, name=manifest["name"]
                     )
                 )
 
@@ -104,6 +104,53 @@ def access_pushing_install(bot: UserProfile) -> PluginInstall:
     return install
 
 
+def check_widget_push(
+    manifest: dict[str, Any],
+    *,
+    widget: str,
+    linked: bool,
+    item: str,
+    document: dict[str, Any] | None,
+    data: dict[str, Any] | None,
+    previous: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """A push, checked as POST /api/v1/armada/widgets checks it, against
+    the contract and the plugin's manifest: a document, or data for the
+    document before it. Returns the document it makes. It reads nothing
+    but what it is given, so a trial checks its program's pushes with it
+    too (zerver/lib/armada_plugin_trial.py)."""
+    declaration = _declared(manifest, widget)
+    places = declaration["in"]
+    if item:
+        if "open" not in places or not ITEM_KEY.match(item):
+            raise JsonableError(
+                _("{key} is not opened from a row, so it has no item {item}.").format(
+                    key=widget, item=item
+                )
+            )
+    elif not linked and "nav" not in places:
+        raise JsonableError(
+            _("{key} is not in the nav; it is pushed to a link.").format(key=widget)
+        )
+    elif linked and "column" not in places:
+        raise JsonableError(
+            _("{key} is not in the column, so it is not pushed to a link.").format(key=widget)
+        )
+    if (document is None) == (data is None):
+        raise JsonableError(_("A push gives a widget's document, or data for the one it has."))
+    if document is None:
+        assert data is not None
+        if previous is None:
+            raise JsonableError(_("{key}'s document comes before its data.").format(key=widget))
+        document = {**previous, "data": {**previous.get("data", {}), **data}}
+    try:
+        canonical, _encoded = canonicalize_widget_document(document)
+    except ArmadaPluginContractError as error:
+        raise JsonableError(_("The widget is not valid: {error}").format(error=str(error)))
+    _check_against_manifest(manifest, declaration, canonical)
+    return canonical
+
+
 def push_widget(
     bot: UserProfile,
     *,
@@ -114,8 +161,7 @@ def push_widget(
     data: dict[str, Any] | None,
 ) -> PluginWidgetState:
     install = access_pushing_install(bot)
-    declaration = _declared(install, widget)
-    places = declaration["in"]
+    _declared(install.manifest, widget)
     link = None
     if link_id is not None:
         link = (
@@ -123,36 +169,18 @@ def push_widget(
         )
         if link is None:
             raise ResourceNotFoundError(_("No such link"))
-    if item:
-        if "open" not in places or not ITEM_KEY.match(item):
-            raise JsonableError(
-                _("{key} is not opened from a row, so it has no item {item}.").format(
-                    key=widget, item=item
-                )
-            )
-    elif link is None and "nav" not in places:
-        raise JsonableError(
-            _("{key} is not in the nav; it is pushed to a link.").format(key=widget)
-        )
-    elif link is not None and "column" not in places:
-        raise JsonableError(
-            _("{key} is not in the column, so it is not pushed to a link.").format(key=widget)
-        )
-    if (document is None) == (data is None):
-        raise JsonableError(_("A push gives a widget's document, or data for the one it has."))
     state = PluginWidgetState.objects.filter(
         install=install, widget=widget, link=link, item=item
     ).first()
-    if document is None:
-        assert data is not None
-        if state is None:
-            raise JsonableError(_("{key}'s document comes before its data.").format(key=widget))
-        document = {**state.document, "data": {**state.document.get("data", {}), **data}}
-    try:
-        canonical, _encoded = canonicalize_widget_document(document)
-    except ArmadaPluginContractError as error:
-        raise JsonableError(_("The widget is not valid: {error}").format(error=str(error)))
-    _check_against_manifest(install, declaration, canonical)
+    canonical = check_widget_push(
+        install.manifest,
+        widget=widget,
+        linked=link is not None,
+        item=item,
+        document=document,
+        data=data,
+        previous=None if state is None else state.document,
+    )
 
     now = timezone_now()
     with transaction.atomic(durable=True):

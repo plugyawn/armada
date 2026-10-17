@@ -235,11 +235,14 @@ def armada_plugin_token(install: PluginInstall) -> str:
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
-def armada_plugin_secret_environment(install: PluginInstall) -> dict[str, str]:
+def armada_plugin_secret_environment(
+    install: PluginInstall, manifest: dict[str, Any] | None = None
+) -> dict[str, str]:
     """The install's secrets, decrypted, under the environment names its
-    manifest gives them. Only the plugin host calls this, to start the
-    plugin's own process."""
-    declared = install.manifest.get("secrets", {})
+    manifest gives them, or another version of it (the one on trial).
+    Only the plugin host and a trial call this, to start the plugin's own
+    process."""
+    declared = (manifest or install.manifest).get("secrets", {})
     fernet = _fernet()
     return {
         declared[secret.name]["env"]: fernet.decrypt(secret.ciphertext.encode()).decode()
@@ -913,6 +916,12 @@ def armada_plugin_session(install: PluginInstall, *, timeout: float) -> requests
     through the proxy, like any other service."""
     if "remote" in install.manifest:
         return OutgoingSession(role="armada_plugin", timeout=timeout)
+    return armada_plugin_local_session(timeout=timeout)
+
+
+def armada_plugin_local_session(*, timeout: float) -> requests.Session:
+    """A session for a plugin's process on this server, outside the
+    outgoing proxy."""
     session = OutgoingSession(role="armada_plugin", timeout=timeout, proxies={})
     session.trust_env = False
     return session

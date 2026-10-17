@@ -1048,6 +1048,45 @@ instructions say when it may hand browsing to a Mac-mini agent instead:
 only when the headless browser fails (a site that blocks it, or a task that
 needs a real desktop or a login in a real browser), saying why.
 
+### 6.10 The team's plugins
+
+The plugins the agent makes on request live in one repository channel,
+`plugins` (`zerver/lib/armada_plugin_repository.py`). Make it once, as
+`zulip`:
+
+```bash
+/home/zulip/deployments/current/manage.py armada_plugins init-team-repo -r <subdomain>
+```
+
+This makes the public channel `plugins`, with every member in it, as a
+default channel for those who join later. It also makes the channel's
+repository in the worktree directory (6.4), with a README. Run again, it
+changes nothing.
+
+**Mirroring it to GitHub.** Make an empty private repository on GitHub.
+Give it the `zulip` user's key from 6.5 as a deploy key **with write
+access**, since the server pushes to it, then:
+
+```bash
+/home/zulip/deployments/current/manage.py armada_plugins init-team-repo -r <subdomain> \
+    --mirror git@github.com:OWNER/team-plugins.git
+```
+
+- The plugin host pushes `main`, the topic branches and the tags within
+  half a minute of a change.
+- A push that fails is tried again after a minute, then less often, and at
+  least once an hour. Failures are logged in
+  `/var/log/zulip/armada-plugin-host.log`.
+- An address that holds a password or a token is refused.
+- `--no-mirror` stops the mirroring.
+
+**Previews.** When the agent checks a plugin it is making, it draws the
+widget, at rest and pressed, in light and dark. It uses the agent's
+browser (6.9, `ARMADA_WORKER_BROWSER_DIR`) and the server's own built
+files. Without that browser the check still runs, with no pictures. On a
+development machine, `ARMADA_PLUGIN_PREVIEW_BROWSER` names the Chrome or
+Chromium to use.
+
 ## Fonts
 
 Söhne is licensed, so it is never in git. Put the four `.woff2` files named

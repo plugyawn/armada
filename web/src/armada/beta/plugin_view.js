@@ -7,6 +7,7 @@
      offers, with Add; All plugins;
    - Edit, from the sheet or a row's own menu (with Hide for me): my options as controls, the widget drawn with them,
      and Onix's field, which asks Onix in the plugin's topic of the plugins channel until PL12 gives it its tools;
+   - Make a widget…, from the "+" menu: Onix's field again, its request in the plugins channel's topic for new widgets;
    - the rows of a list a plugin links to a place, in the slots plugins.js keeps for it in the column, and the
      commands Jump to lists for plugins;
    - an item opened from a row, which borrows the column as an artifact does and gives it back on Close (below 1408, where
@@ -208,11 +209,31 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       const row = (x, verb) => `<li>${ic(P.glyphOf(x.p.glyph))}<span class="t">${esc((x.pref && x.pref.label) || x.w.label)}</span><button class="lk" role="menuitem" data-wshow="${esc(x.id)}">${verb}</button></li>`;
       return (hidden.length ? `<div class="pm-h">Hidden by you</div><ul class="pm-l">${hidden.map((x) => row(x, "Show")).join("")}</ul>` : "")
         + (offered.length ? `<div class="pm-h">Offered by your team</div><ul class="pm-l">${offered.map((x) => row(x, "Add")).join("")}</ul>` : "")
-        + `${hidden.length || offered.length ? '<div class="pm-gap"></div>' : ""}<ul class="pm-l"><li><button class="mi" role="menuitem" data-wall>${ic("plugin")}<span class="t">All plugins</span></button></li></ul>`;
+        + `${hidden.length || offered.length ? '<div class="pm-gap"></div>' : ""}<ul class="pm-l"><li><button class="mi" role="menuitem" data-wmake>${ic("plus")}<span class="t">Make a widget…</span></button></li><li><button class="mi" role="menuitem" data-wall>${ic("plugin")}<span class="t">All plugins</span></button></li></ul>`;
     }
     function openMenu(kbd) { const e = float("menu", "plus", "pmenu", menuHTML(), "Widgets", "menu"); host(e); if (kbd) ($("[role=menuitem]", e) || e).focus(); else ready(); }
     /* the menu follows what changes while it is open: a widget shown elsewhere, one the team offers */
     function updateMenu() { const items = $$("[role=menuitem]", sheet.el), at = items.indexOf(document.activeElement); sheet.el.innerHTML = menuHTML(); host(sheet.el); const now_ = $$("[role=menuitem]", sheet.el); if (at >= 0 && now_.length) now_[Math.min(at, now_.length - 1)].focus(); }
+    /* Make a widget… (ROUND2.md, section E; still 12): the menu turns into a sheet from the same row, 400 wide, with one
+       sentence of what will happen, Onix's field, whose verb is Make, and where the widget will show. Until PL12 gives
+       Onix its plugin tools, Make is a request of mine that mentions Onix, in the plugins channel's topic for new widgets
+       (or where I am, as for Ask); Onix builds it in a worktree of its own (decision 2). */
+    const NEW_WIDGETS = "new widgets";
+    function openMake(kbd) {
+      const e = float("make", "plus", "mk-sheet", `<div class="ch">${ic("plus")}<span>Make a widget</span></div>
+        <p class="cap">Onix builds it in plugins, checks it, and shows it to the team. Say what it should show and where the data is.</p>
+        ${askHTML("What it shows, and where the data is", "Make")}
+        <div class="mk-row"><span>Shows in</span>${pickHTML("data-make-in", [["shown", "everyone's nav"], ["offered", "offered in +"]], "shown", "Shows in")}</div>`, "Make a widget");
+      host(e); if (kbd) $("[data-ask]", e).focus(); else ready();
+    }
+    async function make(b) {
+      const f = $("[data-ask]", sheet.el), words = f.value.trim(); if (!words) { f.focus(); return; }
+      const shown = $("[data-make-in]", sheet.el).value === "shown", me = state.meName;
+      const where = await ask(words, NEW_WIDGETS, `${state.agentMention} Make a widget, for ${me}, from the + menu. ${shown ? "It shows in everyone's nav." : "It is offered in +, not shown."} ${words}`, b);
+      if (!where || !sheet || sheet.kind !== "make") return; closeSheet(false);
+      const plus = P.rowEl("plus"); if (plus) M.say(plus, `Asked Onix in ${where.stream} › ${where.topic}`, 2400);
+    }
+
     /* a press anywhere but the sheet and the widgets' rows closes it, and the press goes on */
     const outside = (e) => { if (!sheet || (e.target.closest && e.target.closest(".wsheet, nav .row.wg, .dlg"))) return; closeSheet(true); };
     function closeSheet(quiet, back) {
@@ -364,6 +385,8 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     press(document.body, ".wsheet.ed .eo .switch", (c) => changePref(c));
     document.addEventListener("change", (e) => { if (sheet && sheet.mode === "edit" && e.target.closest && e.target.closest(".wsheet.ed .eo") && e.target.matches("select, input")) changePref(e.target); });
     press(document.body, ".wsheet.ed [data-ask-go]", (b) => askEdit(b));
+    press(document.body, ".pmenu [data-wmake]", (b, e, ptr) => openMake(!ptr));
+    press(document.body, ".wsheet.mk-sheet [data-ask-go]", (b) => make(b));
     /* the verb is the view's one accent once the field has words */
     document.addEventListener("input", (e) => { if (!e.target.matches || !e.target.matches(".wsheet [data-ask]")) return; const go = $("[data-ask-go]", e.target.parentElement); if (go) go.classList.toggle("armed", e.target.value.trim() !== ""); });
     press(document.body, ".wsheet [data-ask-open]", (b) => { closeSheet(true); openPlace(placeFromKey(b.dataset.askOpen)); });
@@ -569,7 +592,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     if (pane()) press(pane(), "[data-install]", (b) => { const en = INDEX.entries.find((x) => x.id === b.dataset.install); if (en) install(en, b); });
 
     return {
-      openSheet, closeSheet, openMenu, openRowMenu, openEdit, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
+      openSheet, closeSheet, openMenu, openRowMenu, openEdit, openMake, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
       /* a new document for a scope: what is open of it changes in place */
       update(scope) { if (sheet && (sheet.scope === scope || sheet.kind === "menu")) updateSheet(); if (item) updateItem(scope); },
       /* an install removed: what is open of it closes */

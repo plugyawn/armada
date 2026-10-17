@@ -78,6 +78,10 @@ nav .row.wg.plus[aria-expanded="true"] { color: var(--ink-1); }
 .wsheet .of-tx::placeholder { color: var(--ink-2); }
 .wsheet .of .disc { flex: none; }
 .wsheet .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); padding-left: var(--s-3); }
+/* Make a widget: one sentence of what happens, the field, where it will show */
+.wsheet.mk-sheet { width: 400px; }
+.mk-sheet > .ch + .cap { padding-left: 0; max-width: 340px; }
+.mk-sheet .mk-row { display: flex; align-items: center; justify-content: space-between; margin-top: var(--s-3); font: var(--t-text); color: var(--ink-2); min-height: var(--h-m); }
 
 /* ---------- the plugin vocabulary's list: rows with a mark, a second line, a sparkline, one figure ---------- */
 :is(.wsheet, .wd) .wl { display: flex; flex-direction: column; }

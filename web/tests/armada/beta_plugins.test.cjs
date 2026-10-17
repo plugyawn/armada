@@ -1134,7 +1134,7 @@ run_test(
         assert.equal(plus().getAttribute("aria-expanded"), "true");
         assert.deepEqual(
             [...sheet().querySelectorAll("[role=menuitem]")].map((b) => b.textContent),
-            ["All plugins"],
+            ["Make a widget…", "All plugins"],
         );
         // A press on the "+" again closes it.
         await pressOn(plus());
@@ -1166,7 +1166,7 @@ run_test(
         );
         const verbs = () =>
             [...sheet().querySelectorAll("[role=menuitem]")].map((b) => b.textContent);
-        assert.deepEqual(verbs(), ["Show", "Add", "All plugins"]);
+        assert.deepEqual(verbs(), ["Show", "Add", "Make a widget…", "All plugins"]);
         assert.equal(document.activeElement.dataset.wshow, "7/gpus");
         dom.press("ArrowUp");
         assert.equal(document.activeElement.textContent, "All plugins");
@@ -1179,7 +1179,7 @@ run_test(
             ["Training", "GPUs"],
         );
         assert.equal(sheet(), menu);
-        assert.deepEqual(verbs(), ["Add", "All plugins"]);
+        assert.deepEqual(verbs(), ["Add", "Make a widget…", "All plugins"]);
         assert.deepEqual(requests.at(-1).body, {shown: "true"});
         // Add puts the offered one in my nav, at the group's top.
         await pressOn(menu.querySelector('[data-wshow="9/queue"]'));
@@ -1187,7 +1187,7 @@ run_test(
             rows().map((r) => r.querySelector(".lab").textContent),
             ["Eval queue", "Training", "GPUs"],
         );
-        assert.deepEqual(verbs(), ["All plugins"]);
+        assert.deepEqual(verbs(), ["Make a widget…", "All plugins"]);
         // Esc closes it, and the "+" has the focus again.
         sheet().querySelector("[role=menuitem]").focus();
         dom.press("Escape");
@@ -1436,3 +1436,66 @@ run_test("a widget row's own menu: Edit, and Hide for me", async () => {
     });
     assert.ok(rowOf("GPUs"));
 });
+
+run_test(
+    "Make a widget…: the menu turns into a sheet with Onix's field, and Make asks Onix for it",
+    async () => {
+        beta_state.state.meName = "Iago";
+        await pressByKeyboard(plus());
+        await pressByKeyboard(sheet().querySelector("[data-wmake]"));
+        const make = sheet();
+        assert.equal(make.getAttribute("aria-label"), "Make a widget");
+        // From the same row, its foot where the menu's was.
+        assert.equal(make.style.getPropertyValue("--below"), "0");
+        assert.equal(plus().getAttribute("aria-expanded"), "true");
+        const field = make.querySelector("[data-ask]");
+        assert.equal(document.activeElement, field);
+        const shows = make.querySelector('[aria-label="Shows in"]');
+        assert.deepEqual(
+            [...shows.options].map((o) => o.textContent),
+            ["everyone's nav", "offered in +"],
+        );
+        // Return with nothing written sends nothing.
+        const sent = requests.length;
+        dom.press("Enter");
+        await settle();
+        assert.equal(requests.length, sent);
+        // A widget arriving while it is open leaves it as it is.
+        plugins.onPluginEvent({type: "armada_plugin", op: "update", plugin: gpus()});
+        assert.equal(sheet(), make);
+
+        field.value = "the eval queue on lab-4090";
+        shows.value = "offered";
+        dom.press("Enter");
+        await settle();
+        assert.deepEqual(requests.at(-1).body, {
+            type: "stream",
+            to: "10",
+            topic: "lr-sweep",
+            content:
+                "@**Onix** Make a widget, for Iago, from the + menu. It is offered in +, not shown. the eval queue on lab-4090",
+        });
+        // The sheet closes, and the "+" says where it was asked.
+        assert.equal(sheet(), null);
+        assert.equal(said.at(-1), "Asked Onix in nextlat-scaling › lr-sweep");
+        // With the plugins channel, in its topic for new widgets.
+        beta_state.streams.set(12, {stream_id: 12, name: "plugins"});
+        await pressOn(plus());
+        await pressOn(sheet().querySelector("[data-wmake]"));
+        sheet().querySelector("[data-ask]").value = "uptime of our three sites";
+        await pressOn(sheet().querySelector("[data-ask-go]"));
+        assert.deepEqual(
+            [requests.at(-1).body.to, requests.at(-1).body.topic],
+            ["12", "new widgets"],
+        );
+        assert.match(requests.at(-1).body.content, /It shows in everyone's nav\. uptime/);
+        // Esc closes it, and the "+" has the focus again.
+        await pressOn(plus());
+        await pressOn(sheet().querySelector("[data-wmake]"));
+        sheet().querySelector("[data-ask]").focus();
+        dom.press("Escape");
+        assert.equal(sheet(), null);
+        assert.equal(document.activeElement, plus());
+        beta_state.streams.delete(12);
+    },
+);

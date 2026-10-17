@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import reduce
 from pathlib import Path
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from django.conf import settings
 from django.db import transaction
@@ -65,6 +65,9 @@ from zerver.models.bots import AgentRun, AgentRunEvent
 from zerver.models.clients import get_client
 from zerver.models.constants import MAX_TOPIC_NAME_LENGTH
 from zerver.models.streams import get_stream
+
+if TYPE_CHECKING:
+    from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore
 
 ARMADA_POST_TOOL: Final = "armada_post"
 ARMADA_READ_TOOL: Final = "armada_read"
@@ -398,42 +401,54 @@ def upload_link(caller: ArmadaToolCaller, file_name: str, data: bytes) -> str:
     return f"[{label}]({url})"
 
 
+def check_as_asker(asker: UserProfile, where: ArmadaWhere, content: str) -> None:
+    """Zulip's own send check, with the asker as the sender: channel
+    access, posting and topic rights, mention rights, the thread's
+    destination. What the agent posts for someone, they could post."""
+    check_message(
+        asker,
+        get_client("Internal"),
+        Addressee.for_stream(where.stream, where.topic),
+        content,
+        realm=asker.realm,
+        thread_root_message=where.root,
+    )
+
+
+def send_as_agent(agent: UserProfile, where: ArmadaWhere, content: str) -> int:
+    """Send as the agent, through the check every message it sends gets."""
+    message_request = check_message(
+        agent,
+        get_client("Internal"),
+        Addressee.for_stream(where.stream, where.topic),
+        content,
+        realm=agent.realm,
+        thread_root_message=where.root,
+    )
+    [sent] = do_send_messages([message_request])
+    return sent.message_id
+
+
 def post_as_agent(
     caller: ArmadaToolCaller, where: ArmadaWhere, content: str, files: list[object]
 ) -> int:
-    """Post as the agent what the asker could post: Zulip's own send check
-    runs with the asker as the sender (channel access, posting and topic
-    rights, mention rights, the thread's destination), and then again for
-    the agent, as for every message it sends."""
+    """Post as the agent what the asker could post (check_as_asker)."""
     if len(files) > ARMADA_POST_FILE_LIMIT:
         raise JsonableError(_("Attach at most {count} files.").format(count=ARMADA_POST_FILE_LIMIT))
     read_files = [read_run_file(caller, path) for path in files]
     if not content.strip() and not read_files:
         raise JsonableError(_("Give content, or files to attach."))
-    client = get_client("Internal")
-    addressee = Addressee.for_stream(where.stream, where.topic)
-    realm = caller.asker.realm
     # The links are not uploaded yet: the person's check sees the text,
     # or the files' names when there is none.
-    check_message(
-        caller.asker,
-        client,
-        addressee,
-        content.strip() or "\n".join(name for name, _data in read_files),
-        realm=realm,
-        thread_root_message=where.root,
+    check_as_asker(
+        caller.asker, where, content.strip() or "\n".join(name for name, _data in read_files)
     )
     links = [upload_link(caller, name, data) for name, data in read_files]
-    message_request = check_message(
+    return send_as_agent(
         caller.run.bot_profile,
-        client,
-        addressee,
+        where,
         "\n".join(part for part in [content.strip(), *links] if part),
-        realm=realm,
-        thread_root_message=where.root,
     )
-    [sent] = do_send_messages([message_request])
-    return sent.message_id
 
 
 def post_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaToolAnswer:
@@ -581,30 +596,25 @@ def run_depth(run: AgentRun) -> int:
     return depth if isinstance(depth, int) else 0
 
 
-def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaToolAnswer:
-    """Start a run as a person's request to the agent starts one: admitted
-    by the same rules (start_blocked_reason), its brief posted with the
-    asker's rights, and queued for the worker with its progress message."""
+def start_armada_run(
+    asker: UserProfile,
+    agent: UserProfile,
+    where: ArmadaWhere,
+    content: str,
+    *,
+    parent: AgentRun | None = None,
+) -> int:
+    """Start a run as a person's request to the agent starts one, acting
+    for asker: admitted by the same rules (start_blocked_reason), its brief
+    posted with asker's rights, and queued for the worker with its progress
+    message. A run that a run starts (parent) counts against that run's
+    depth and number of runs started. Returns the brief's message id."""
     # Lazy import: armada_worker imports the agent runtime, which imports
     # this module.
     from zerver.lib.armada_worker import ArmadaDatabaseWorkerRunStore, ArmadaQueueWorkerDispatcher
 
-    brief = string_argument(arguments, "brief").strip()
-    if not brief:
-        raise JsonableError(_("Give the run a brief."))
-    where = where_for(
-        caller,
-        {"channel": string_argument(arguments, "channel"), "topic": arguments.get("topic")},
-    )
-    # The topic as the message will carry it.
-    where = ArmadaWhere(
-        stream=where.stream,
-        topic=Addressee.for_stream(where.stream, where.topic).topic_name(),
-        root=None,
-    )
     stream_name, topic_name = where.stream.name, where.topic
-    asker = caller.asker
-    bot_handler = EmbeddedBotHandler(caller.run.bot_profile)
+    bot_handler = EmbeddedBotHandler(agent)
     store = ArmadaDatabaseWorkerRunStore()
     reason = store.start_blocked_reason(
         bot_handler, None, stream=stream_name, topic=topic_name, requesting_user_id=asker.id
@@ -613,31 +623,31 @@ def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> Ar
         raise JsonableError(reason)
     # One transaction: a run that does not start leaves no brief behind.
     with transaction.atomic(durable=True):
-        # Locked, so that parallel calls count each other's runs.
-        parent = AgentRun.objects.select_for_update(no_key=True).get(id=caller.run.id)
-        depth = run_depth(parent)
-        if depth >= settings.ARMADA_WORKER_MAX_RUN_DEPTH:
-            raise JsonableError(
-                _(
-                    "This run is at depth {depth}, where runs started by runs stop: do the "
-                    "work here, or ask the person to start a run."
-                ).format(depth=depth)
-            )
-        if (
-            AgentRunEvent.objects.filter(run=parent, event_type=ARMADA_RUN_STARTED_EVENT).count()
-            >= settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
-        ):
-            raise JsonableError(
-                _("This run has started {count} runs, the most one run may start.").format(
-                    count=settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
+        depth = 0
+        if parent is not None:
+            # Locked, so that parallel calls count each other's runs.
+            parent = AgentRun.objects.select_for_update(no_key=True).get(id=parent.id)
+            depth = run_depth(parent)
+            if depth >= settings.ARMADA_WORKER_MAX_RUN_DEPTH:
+                raise JsonableError(
+                    _(
+                        "This run is at depth {depth}, where runs started by runs stop: do the "
+                        "work here, or ask the person to start a run."
+                    ).format(depth=depth)
                 )
-            )
-        origin = _("Started for {person} from {link}.").format(
-            person=f"@_**{asker.full_name}|{asker.id}**",
-            link=f"#**{parent.stream_name}>{parent.topic_name}@{parent.trigger_message_id}**",
-        )
-        content = f"{brief}\n\n{origin}"
-        message_id = post_as_agent(caller, where, content, [])
+            if (
+                AgentRunEvent.objects.filter(
+                    run=parent, event_type=ARMADA_RUN_STARTED_EVENT
+                ).count()
+                >= settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
+            ):
+                raise JsonableError(
+                    _("This run has started {count} runs, the most one run may start.").format(
+                        count=settings.ARMADA_WORKER_MAX_RUNS_STARTED_PER_RUN
+                    )
+                )
+        check_as_asker(asker, where, content.strip())
+        message_id = send_as_agent(agent, where, content.strip())
         # The topic's run limit and the realm's, again, against a race.
         if not store.start(bot_handler, message_id, stream=stream_name, topic=topic_name):
             raise JsonableError(_("The run could not start; try again."))
@@ -646,40 +656,11 @@ def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> Ar
         )
         child.requesting_user = asker
         child.save(update_fields=["requesting_user"])
-        store.record_event(
-            bot_handler,
-            message_id,
-            ARMADA_STARTED_BY_EVENT,
-            summary=_("Started by a run in #{channel} > {topic}.").format(
-                channel=parent.stream_name, topic=parent.topic_name
-            ),
-            payload={
-                "run_id": parent.id,
-                "depth": depth + 1,
-                "stream": parent.stream_name,
-                "topic": parent.topic_name,
-                "message_id": parent.trigger_message_id,
-            },
-        )
-        store.record_event(
-            bot_handler,
-            parent.trigger_message_id,
-            ARMADA_RUN_STARTED_EVENT,
-            summary=_("Started a run in #{channel} > {topic}.").format(
-                channel=stream_name, topic=topic_name
-            ),
-            payload={
-                "run_id": child.id,
-                "stream": stream_name,
-                "topic": topic_name,
-                "message_id": message_id,
-            },
-        )
+        if parent is not None:
+            _record_started_by(store, bot_handler, parent, child, depth, where, message_id)
     # After the commit, as for a person's request: the run's progress
     # message, then the worker.
-    message = MessageDict.wide_dict(
-        access_message(caller.run.bot_profile, message_id, is_modifying_message=False)
-    )
+    message = MessageDict.wide_dict(access_message(agent, message_id, is_modifying_message=False))
     progress_message_id = store.ensure_progress_message(
         bot_handler,
         message_id,
@@ -700,6 +681,76 @@ def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> Ar
         requesting_user_id=asker.id,
         progress_message_id=progress_message_id,
     )
+    return message_id
+
+
+def _record_started_by(
+    store: "ArmadaDatabaseWorkerRunStore",
+    bot_handler: EmbeddedBotHandler,
+    parent: AgentRun,
+    child: AgentRun,
+    depth: int,
+    where: ArmadaWhere,
+    message_id: int,
+) -> None:
+    """The run event log's record of who started whom."""
+    stream_name, topic_name = where.stream.name, where.topic
+    store.record_event(
+        bot_handler,
+        message_id,
+        ARMADA_STARTED_BY_EVENT,
+        summary=_("Started by a run in #{channel} > {topic}.").format(
+            channel=parent.stream_name, topic=parent.topic_name
+        ),
+        payload={
+            "run_id": parent.id,
+            "depth": depth + 1,
+            "stream": parent.stream_name,
+            "topic": parent.topic_name,
+            "message_id": parent.trigger_message_id,
+        },
+    )
+    store.record_event(
+        bot_handler,
+        parent.trigger_message_id,
+        ARMADA_RUN_STARTED_EVENT,
+        summary=_("Started a run in #{channel} > {topic}.").format(
+            channel=stream_name, topic=topic_name
+        ),
+        payload={
+            "run_id": child.id,
+            "stream": stream_name,
+            "topic": topic_name,
+            "message_id": message_id,
+        },
+    )
+
+
+def start_run_tool(caller: ArmadaToolCaller, arguments: dict[str, object]) -> ArmadaToolAnswer:
+    """Start a run in another place, for the person who asked for this
+    one (start_armada_run)."""
+    brief = string_argument(arguments, "brief").strip()
+    if not brief:
+        raise JsonableError(_("Give the run a brief."))
+    where = where_for(
+        caller,
+        {"channel": string_argument(arguments, "channel"), "topic": arguments.get("topic")},
+    )
+    # The topic as the message will carry it.
+    where = ArmadaWhere(
+        stream=where.stream,
+        topic=Addressee.for_stream(where.stream, where.topic).topic_name(),
+        root=None,
+    )
+    asker, parent = caller.asker, caller.run
+    origin = _("Started for {person} from {link}.").format(
+        person=f"@_**{asker.full_name}|{asker.id}**",
+        link=f"#**{parent.stream_name}>{parent.topic_name}@{parent.trigger_message_id}**",
+    )
+    message_id = start_armada_run(
+        asker, parent.bot_profile, where, f"{brief}\n\n{origin}", parent=parent
+    )
+    stream_name, topic_name = where.stream.name, where.topic
     return read_answer(
         {
             "message_id": message_id,

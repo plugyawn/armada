@@ -126,6 +126,8 @@ ARMADA_UNADDRESSED_WORDS_LIMIT: Final = 50
 # interface titles the run from the same message: web/src/armada/beta/
 # runs.js, runTitle).
 ARMADA_BARE_MENTION_WINDOW_SECONDS: Final = 120
+# How often a run waiting on a person says it is still alive.
+ARMADA_QUESTION_HEARTBEAT_SECONDS: Final = 15
 
 # This is visible only during the short message-event/run-event handoff before
 # the client mounts the animated live-progress chrome. Keep it visually
@@ -233,6 +235,11 @@ class ArmadaPendingSteeringEvent(TypedDict):
 class ArmadaLiveRunOperation(TypedDict):
     kind: str
     label: str
+    # A plugin's settings the run waits on (kind "settings"): the install,
+    # the fields asked for, and the values the sheet opens with.
+    install_id: NotRequired[int]
+    fields: NotRequired[list[str]]
+    prefill: NotRequired[dict[str, Any]]
 
 
 class ArmadaLiveStreamState(TypedDict):
@@ -395,6 +402,13 @@ ArmadaWorkerActiveSessionLoader = Callable[[dict[str, Any], Any], ArmadaActiveSe
 # The engine's request_user_input questions, normalized: the provider
 # returns per-question answer lists, or None to decline/timeout.
 ArmadaUserInputProvider = Callable[[list[dict[str, Any]]], dict[str, list[str]] | None]
+
+# What a tool that waits on the run's person gives the run
+# (ArmadaWorkerTurn.wait_on_person): the message that asks them, the run's
+# live operation while it waits, and what says the wait is answered. It
+# returns whether the wait was answered before the run stopped or its time
+# ran out. A run's user-input provider (ArmadaRunAsking) carries it.
+ArmadaPersonWait = Callable[[str, ArmadaLiveRunOperation, Callable[[], bool]], bool]
 
 
 class ArmadaTurnIdleHook(Protocol):
@@ -1340,7 +1354,9 @@ def write_armada_live_run_state(
 
 
 def get_armada_live_run_state(trigger_message_id: int) -> ArmadaLiveRunState | None:
-    return armada_live_run_state_from_cache(cache.get(armada_live_run_cache_key(trigger_message_id)))
+    return armada_live_run_state_from_cache(
+        cache.get(armada_live_run_cache_key(trigger_message_id))
+    )
 
 
 def get_armada_live_run_states(trigger_message_ids: list[int]) -> dict[int, ArmadaLiveRunState]:
@@ -1370,6 +1386,16 @@ def armada_live_run_state_from_cache(state: object) -> ArmadaLiveRunState | None
         label = raw_operation.get("label")
         if isinstance(kind, str) and isinstance(label, str):
             operation = {"kind": kind, "label": label}
+            # What a settings request waits on (armada_plugin_request_settings).
+            install_id = raw_operation.get("install_id")
+            fields = raw_operation.get("fields")
+            prefill = raw_operation.get("prefill")
+            if isinstance(install_id, int):
+                operation["install_id"] = install_id
+            if isinstance(fields, list) and all(isinstance(name, str) for name in fields):
+                operation["fields"] = fields
+            if isinstance(prefill, dict):
+                operation["prefill"] = prefill
     raw_stream = state.get("stream")
     stream: ArmadaLiveStreamState | None = None
     if isinstance(raw_stream, dict):
@@ -3383,6 +3409,23 @@ class ArmadaAnswerStream:
             logger.exception("Streaming the answer in message %s failed.", self.message_id)
 
 
+class ArmadaRunAsking:
+    """How a run asks its person, which it gives Codex's requests as its
+    user-input provider: a question's answers, and, for a tool that waits
+    on the person (armada_plugin_request_settings), wait_on_person."""
+
+    def __init__(self, turn: "ArmadaWorkerTurn") -> None:
+        self.turn = turn
+
+    def __call__(self, questions: list[dict[str, Any]]) -> dict[str, list[str]] | None:
+        return self.turn.request_user_answers(questions)
+
+    def wait_on_person(
+        self, ask: str, operation: ArmadaLiveRunOperation, answered: Callable[[], bool]
+    ) -> bool:
+        return self.turn.wait_on_person(ask, operation, answered)
+
+
 class ArmadaWorkerTurn:
     """A single agent run: transcript streaming, same-turn steering
     segments, and settlement for one request.
@@ -3687,6 +3730,45 @@ class ArmadaWorkerTurn:
             if not connection.in_atomic_block:
                 connection.close()
 
+    def wait_on_person(
+        self, ask: str, operation: ArmadaLiveRunOperation, answered: Callable[[], bool]
+    ) -> bool:
+        """The run's person-wait (ArmadaPersonWait): a tool waits on the
+        person, as a question does. The ask is posted in the conversation,
+        the run shows operation as its live state, and the wait ends when
+        answered() says so, when the run is stopped, or when the question's
+        time runs out. It runs on the thread that answers Codex's tool call."""
+        self.question_open = True
+        try:
+            self.bot_handler.send_reply(self.message, ask)
+            self.live_operation = operation
+            self.update_volatile_run_state("running")
+            deadline = time.monotonic() + ARMADA_QUESTION_TIMEOUT_SECONDS
+            last_heartbeat = time.monotonic()
+            while time.monotonic() < deadline:
+                self.raise_if_cancel_requested()
+                if answered():
+                    return True
+                if time.monotonic() - last_heartbeat >= ARMADA_QUESTION_HEARTBEAT_SECONDS:
+                    self.handler.record_worker_event(
+                        self.bot_handler,
+                        self.message_id,
+                        "question_waiting",
+                        summary="Waiting for a person.",
+                    )
+                    last_heartbeat = time.monotonic()
+                time.sleep(ARMADA_QUESTION_POLL_SECONDS)
+            return answered()
+        except ArmadaRunCancelledError:
+            return False
+        finally:
+            self.question_open = False
+            self.live_operation = None
+            self.update_volatile_run_state("running")
+            # As for a question: this thread's own database connection.
+            if not connection.in_atomic_block:
+                connection.close()
+
     def ask_and_wait_for_answers(
         self, questions: list[dict[str, Any]]
     ) -> dict[str, list[str]] | None:
@@ -3722,7 +3804,7 @@ class ArmadaWorkerTurn:
                     # Consume: an answer must not replay as steering.
                     self.last_steering_event_id = pending[-1]["event_id"]
                     break
-                if time.monotonic() - last_heartbeat >= 15:
+                if time.monotonic() - last_heartbeat >= ARMADA_QUESTION_HEARTBEAT_SECONDS:
                     self.handler.record_worker_event(
                         self.bot_handler,
                         self.message_id,
@@ -3990,7 +4072,7 @@ class ArmadaWorkerTurn:
             # A side conversation asks nobody: a reply naming the agent in its
             # thread starts another side turn, so no answer could reach this
             # one. Codex goes on without an answer when a question is declined.
-            runtime_kwargs["user_input_provider"] = self.request_user_answers
+            runtime_kwargs["user_input_provider"] = ArmadaRunAsking(self)
         idle_hook = armada_turn_idle_hook.set(self)
         try:
             segment_result = run_runtime(**runtime_kwargs)

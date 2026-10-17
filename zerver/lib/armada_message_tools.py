@@ -31,6 +31,7 @@ from zerver.lib.addressee import Addressee
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
     ArmadaEmbeddedBotHandler,
+    ArmadaPersonWait,
     build_armada_ack_message,
     trim_armada_text,
 )
@@ -250,6 +251,9 @@ class ArmadaToolTurn:
     # Where the run's files are, and the OS user that may read them.
     workdir: str | None
     isolation_username: str | None
+    # How a tool waits on the person, as a question does; a side
+    # conversation asks nobody, so it has none.
+    person_wait: ArmadaPersonWait | None = None
 
 
 @dataclass(frozen=True)

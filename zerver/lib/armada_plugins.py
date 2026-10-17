@@ -163,6 +163,37 @@ def access_plugin_install(user: UserProfile, install_id: int) -> PluginInstall:
     return install
 
 
+def access_plugin_by_plugin_id(user: UserProfile, plugin_id: str) -> PluginInstall:
+    """The install of plugin_id in user's realm, as access_plugin_install
+    finds it by its row's id: what the agent names a plugin by."""
+    check_plugin_member(user)
+    install = (
+        PluginInstall.objects.select_related("bot", "realm")
+        .filter(realm=user.realm, plugin_id=plugin_id)
+        .exclude(state=PluginInstall.REMOVED)
+        .first()
+    )
+    if install is None or not _sees(user, install):
+        raise ResourceNotFoundError(_("No such plugin"))
+    return install
+
+
+def plugin_fields_without_values(install: PluginInstall, names: list[str]) -> list[str]:
+    """Which of names, settings or secrets, have no value yet: a setting
+    absent or empty, a secret never stored. Read afresh each time, for a
+    run that waits on them."""
+    install.refresh_from_db(fields=["settings"])
+    secrets = install.manifest.get("secrets", {})
+    stored = set(
+        PluginSecret.objects.filter(install=install, name__in=names).values_list("name", flat=True)
+    )
+    return [
+        name
+        for name in names
+        if (name not in stored if name in secrets else install.settings.get(name) in (None, "", []))
+    ]
+
+
 def _check_not_removed(install: PluginInstall) -> None:
     if install.state == PluginInstall.REMOVED:
         raise JsonableError(

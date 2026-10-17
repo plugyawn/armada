@@ -73,6 +73,11 @@ from zerver.lib.armada_plugin_agents import (
     armada_plugin_instruction_lines,
     armada_plugin_instructions,
 )
+from zerver.lib.armada_plugin_tools import (
+    ARMADA_PLUGIN_TOOL_NAMES,
+    answer_armada_plugin_tool,
+    armada_plugin_tool_specs,
+)
 from zerver.lib.armada_typesafe import (
     armada_typesafe_agent_probability,
     build_armada_typesafe_addressing_request,
@@ -656,6 +661,7 @@ def armada_codex_dynamic_tools() -> list[dict[str, Any]]:
         *ARMADA_PAGE_TOOL_SPECS,
         *armada_message_tool_specs(),
         *ARMADA_LATER_TOOL_SPECS,
+        *armada_plugin_tool_specs(),
     ]
 
 
@@ -681,7 +687,7 @@ def armada_codex_thread_version(plugin_servers: Sequence[ArmadaPluginServer] = (
 # need: each topic's next run then starts a fresh Codex thread, which
 # gets them (and loses the old thread's memory). Small rewordings that
 # can wait for a topic's next fresh thread need no bump.
-ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 6
+ARMADA_CODEX_INSTRUCTIONS_VERSION: Final = 7
 
 # Where an alert from armada-ops-check (puppet/armada/files/) sends the
 # agent: the runbook is Armada's, not in the #ops channel's repository.
@@ -717,7 +723,7 @@ def build_armada_codex_developer_instructions(
     """The instructions a new Codex thread starts with; browser says
     whether the agent has its browser (ARMADA_WORKER_BROWSER_DIR), and
     plugin_servers are the team's plugins that offer it tools."""
-    agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a topic in Armada, the team chat you work in.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\nWhen someone asks for a new channel, create it with armada_create_channel, which acts with their rights, and give them its #**name** link.\nAn alert the Ops bot posts in #ops names its section of Armada's operations runbook, which is not in the channel's repository: read it at {ARMADA_OPS_RUNBOOK_URL}.\n"
+    agent = f"You are {ARMADA_AGENT_NAME}, a Codex-powered pair-programming agent working from a topic in Armada, the team chat you work in.\nUse the repository and tools available in this runtime to make concrete progress.\nTreat the runtime cwd as the isolated topic worktree; the Armada server checkout is not the user's target repo unless the topic context explicitly pins it.\nREADME.md and other workspace files are ordinary project content; inspect or edit them only when the task calls for it, never as hidden Armada state.\nUse Codex-native skills from CODEX_HOME/skills when a relevant SKILL.md applies. When someone asks for a widget or a plugin, or a change to one, follow the armada-plugin skill.\nBefore your first tool call on any task of more than two steps, make a checklist with your plan tool, and keep it current: mark each step in progress as you start it and completed as you finish it. The checklist renders live for the people in the topic.\nWhen a question blocks the work (a decision, or a choice between options), ask it with your request_user_input tool, not in text: it is posted in the topic, its options become buttons, and the reply comes back to you as the answer.\nTo tell a person something, mention them as @**Full Name**, with their full name exactly as the transcript shows it; that notifies them.\nSeveral people can talk to you; each message is signed with its author's name. Follow the latest instruction. If two people's instructions conflict, say so in one line, mention both, and continue with the latest until one of them answers.\nEveryone in the organization has a personal page of posts. Read pages with armada_page_read when they help. Draft a post with armada_page_draft only when the person asks for one: it lands as a draft on their own page, which only they see until they publish it, and you say in your reply that you drafted it.\nWhen someone asks for a new channel, create it with armada_create_channel, which acts with their rights, and give them its #**name** link.\nAn alert the Ops bot posts in #ops names its section of Armada's operations runbook, which is not in the channel's repository: read it at {ARMADA_OPS_RUNBOOK_URL}.\n"
     browser_lines = ARMADA_CODEX_BROWSER_INSTRUCTIONS if browser else ""
     answer = "Keep changes focused on the user's request and verify them before finishing.\nFor casual, conversational, choice-only, or answer-only requests, respond directly.\nDo not run repository/session checks just to make a casual reply sound grounded.\nUse tools only when the request needs workspace facts, code changes, external lookup, or verification.\nResolve references like 'above', 'that', 'what did I ask', and 'who is here' from the recent topic transcript below.\nDo not claim you cannot see recent topic history when the transcript below contains the answer.\nFinal response requirements:\n- Keep the response concise and suitable for posting back into the topic.\n- Report evidence in ordinary prose; Armada never parses your wording into hidden state.\n- Use registered native tools for structured UI artifacts when they materially help."
     return agent + browser_lines + armada_plugin_instructions(plugin_servers) + answer
@@ -2784,22 +2790,26 @@ class ArmadaCodexAppServerToolRunner:
                 params.get("arguments"),
             )
         else:
-            answer = answer_armada_message_tool(
-                ArmadaToolTurn(
-                    requesting_user_id=requesting_user_id,
-                    trigger_message_id=(
-                        turn_context.trigger_message_id if turn_context is not None else None
-                    ),
-                    workdir=self.workdir,
-                    isolation_username=(
-                        self.process_isolation.username
-                        if self.process_isolation is not None
-                        else None
-                    ),
+            turn = ArmadaToolTurn(
+                requesting_user_id=requesting_user_id,
+                trigger_message_id=(
+                    turn_context.trigger_message_id if turn_context is not None else None
                 ),
-                tool_name,
-                params.get("arguments"),
+                workdir=self.workdir,
+                isolation_username=(
+                    self.process_isolation.username if self.process_isolation is not None else None
+                ),
+                # A run's provider (ArmadaRunAsking) also waits on its person.
+                person_wait=getattr(
+                    turn_context.user_input_provider if turn_context is not None else None,
+                    "wait_on_person",
+                    None,
+                ),
             )
+            if tool_name in ARMADA_PLUGIN_TOOL_NAMES:
+                answer = answer_armada_plugin_tool(turn, tool_name, params.get("arguments"))
+            else:
+                answer = answer_armada_message_tool(turn, tool_name, params.get("arguments"))
         return (
             {
                 "success": answer["success"],
@@ -2894,7 +2904,10 @@ class ArmadaCodexAppServerToolRunner:
         if (
             method == "item/tool/call"
             and params.get("tool")
-            in ARMADA_PAGE_TOOL_NAMES | ARMADA_MESSAGE_TOOL_NAMES | ARMADA_LATER_TOOL_NAMES
+            in ARMADA_PAGE_TOOL_NAMES
+            | ARMADA_MESSAGE_TOOL_NAMES
+            | ARMADA_LATER_TOOL_NAMES
+            | ARMADA_PLUGIN_TOOL_NAMES
             and params.get("namespace") in {None, ""}
         ):
             return self.answer_armada_tool_call(params, turn_context=turn_context)

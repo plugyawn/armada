@@ -245,7 +245,8 @@ class LaterToolCallsTest(ZulipTestCase):
 
     def test_a_new_thread_is_offered_the_later_tools(self) -> None:
         names = [tool["name"] for tool in self.make_runner().thread_params()["dynamicTools"]]
-        self.assertEqual(names[-2:], ["armada_later", "armada_send_when"])
+        self.assertIn("armada_later", names)
+        self.assertIn("armada_send_when", names)
 
     def test_a_call_is_answered_for_the_turns_person_and_run(self) -> None:
         hamlet = self.example_user("hamlet")

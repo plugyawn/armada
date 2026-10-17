@@ -7,14 +7,14 @@ import {api} from "./connection.js";
 import {band} from "./frame.js";
 import {note, onixHere, onixNow, ready, setVerb, switchHolds} from "./composer.js";
 import {show} from "./feed.js";
-import {askedAt, drawAsks, liveRun, runMark, waitingRun} from "./runs.js";
+import {askedAt, drawAsks, liveRun, runMark, runTitle, waitingRun} from "./runs.js";
 import {editing} from "./hover.js";
 
 /* ---------- the band, the verb, Stop ---------- */
 let stopping = 0;
 /* the band's far end says what the run is doing: its own overview line, else its current activity when that is a thing
    it is doing (a command, a file) and not the runtime's bookkeeping or the request repeated */
-function actOf(c, r) { if (r.overview) return r.overview; const a = (r.current_activity || "").trim(), trig = c.byId.get(r.trigger_message_id), asked = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**Onix\**\s*/i, "").trim() : "";
+function actOf(c, r) { if (r.overview) return r.overview; const a = (r.current_activity || "").trim(), asked = c.byId.has(r.trigger_message_id) ? runTitle(c, r) : "";
   if (!a || /^(Codex\b.*|Completed\.?|Working\.?|Rate limit.*|Queued.*)$/i.test(a) || (asked && asked.startsWith(a.replace(/…$|\.\.\.$/, "").slice(0, 40)))) return ""; return a; }
 function drawRunState(cut) {
   const r = liveRun(state.P), ask = waitingRun(state.P), wt = state.place.kind === "topic" && state.place.repo, raised = !!r && (!!ask || now() / 1000 - r.date_created > 0.4 || (r.plan && r.plan.length) || r.tool_count > 0), b = band;

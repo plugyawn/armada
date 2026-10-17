@@ -410,3 +410,39 @@ run_test("a question asked before the place's runs are read is live at once", ()
     // the server's first reminder that it waits, 15 s later.
     assert.equal(runs.waitingRun(c).id, 11);
 });
+
+run_test("a run asked with a mention and no words is named by the words just before it", () => {
+    const c = topic("titles");
+    c.runsLoaded = true;
+    const t0 = Math.floor(Date.now() / 1000) - 3600;
+    const mention = '<p><span class="user-mention" data-user-id="9">@Onix</span>';
+    const say = (id, sender_id, seconds, content) =>
+        routing.addMsg(c, {id, sender_id, timestamp: t0 + seconds, content, reactions: []});
+    say(300, ME, 0, "<p>New channel?</p>");
+    say(301, ME, 5, `${mention}</p>`);
+    say(302, IAGO, 10, "<p>hi</p>");
+    // Mine from long before is not what this mention asks.
+    say(303, ME, 400, `${mention}</p>`);
+    say(304, ME, 410, `${mention} check the disk</p>`);
+    // Right after a mention with words: nothing new was said.
+    say(305, ME, 420, `${mention}</p>`);
+    c.runs = [305, 304, 303, 301].map((trigger_message_id, i) => ({
+        id: 40 - i,
+        status: "done",
+        trigger_message_id,
+        date_created: t0 + 500,
+        plan: null,
+    }));
+    column.drawSide();
+    assert.deepEqual(
+        [...find("#sec-runs").querySelectorAll("li > span:first-of-type")].map(
+            (t) => t.textContent,
+        ),
+        [
+            "Look at the latest messages",
+            "check the disk",
+            "Look at the latest messages",
+            "New channel?",
+        ],
+    );
+});

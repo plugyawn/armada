@@ -77,6 +77,16 @@ function drawAsks() { if (!state.P || !lane) return; const r = waitingRun(state.
 function askOption(n) { const all = $$(".blk.ask", lane), o = waitingRun(state.P) && all.length ? $$(".opt", all[all.length - 1])[n - 1] : null; return o && o.getAttribute("aria-disabled") !== "true" ? o : null; }
 function answerWith(o, at) { if (!o || o.getAttribute("aria-disabled") === "true" || !waitingRun(state.P)) return false; o.classList.add("sel"); send({text: o.dataset.answer, at, onix: true}); return true; }
 const liveRun = (c) => c.runs.find((r) => r.status === "queued" || r.status === "running");
+/* what a run was asked, as Runs names it and the band leaves out of its activity: its request's words without the mention. A
+   mention with no words of its own asks what its sender wrote just before it in the topic, within two minutes and not itself
+   to Onix, as the server asks the run (zerver/lib/armada.py, ARMADA_BARE_MENTION_WINDOW_SECONDS); with none, a plain line,
+   never nothing */
+const BARE_MENTION_WINDOW = 120;
+const askedIn = (m) => (m.raw || (m.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**Onix\**\s*/i, "").trim();
+function runTitle(c, r) { const trig = c.byId.get(r.trigger_message_id); if (!trig) return r.summary || "Run " + r.id;
+  const words = askedIn(trig); if (words) return words;
+  const before = c.msgs.filter((m) => typeof m.id === "number" && m.id < trig.id && m.sender_id === trig.sender_id && !m.thread_root_message_id && trig.timestamp - m.timestamp <= BARE_MENTION_WINDOW).pop();
+  return (before && !namesOnix(before) && askedIn(before)) || "Look at the latest messages"; }
 /* where a mention of Onix starts a run, by the server's own rules (zerver/lib/armada.py, handle_message; armada_worker.py,
    start_blocked_reason): any channel's topic and never a direct message, with the agent set up, a person allowed to start
    its runs (the page's data, may-start-runs) and a topic its people have not paused. A channel with no repository is no
@@ -88,4 +98,4 @@ const runOfMsg = (c, id) => c.runs.find((r) => r.result_message_id === id);
 const hasWorktree = (c) => !!(c.ctx && c.ctx.workspace_uuid && c.ctx.git && c.ctx.git.available);
 
 export {agentCanRun, agentHere, answered, answerWith, askedAt, askOption, askState, drawAsks, hasWorktree, inferAsk, LIVE_MARKS, liveRun, MARK_RANK, namesOnix,
-  runMark, runOfMsg, runsSeen, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};
+  runMark, runOfMsg, runsSeen, runTitle, RUNS_KEPT, scanLive, seeRun, settleAsk, sweepAsks, waitingRun};

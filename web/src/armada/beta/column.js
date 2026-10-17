@@ -6,7 +6,7 @@ import {age, dayKey, hhmm, now, shortDay} from "./time.js";
 import {dkey, placeFromKey, topicLabel} from "./routing.js";
 import {outline, side} from "./frame.js";
 import {faceOf, isOnix, nameOf, presOf} from "./faces.js";
-import {agentHere, runMark, runsSeen} from "./runs.js";
+import {agentHere, runMark, runsSeen, runTitle} from "./runs.js";
 import {planRun, stepMark} from "./checklist.js";
 import {homeScanned} from "./home.js";
 import {pack} from "./partners.js";
@@ -33,7 +33,7 @@ function drawSide() {
     if (p.repo) { const g = c.ctx && c.ctx.git && c.ctx.git.available ? c.ctx.git : null, files = g ? g.changed_files || [] : [];
     c.changeRows = Math.min(4, Math.max(1, files.length, c.changeRows || 0));   /* the rows Changes has held while the place is open, up to four */
     h += `<section class="sec slots" id="sec-changes" style="--slots:${c.changeRows}"><div class="sh"><span>Changes</span><span class="e"><button class="lk" data-goto="Changes">Review</button></span></div><ul class="ls">` + (files.length ? files.map((f) => `<li>${ic("file")}<span class="t"><code>${esc(mid(f.path, 26))}</code></span><span class="e"><span class="kd">${esc(f.kind)}</span></span></li>`).join("") : `<li>${ic(g ? "check" : "file")}<span class="t">${g ? "No uncommitted changes" : c.ctx ? "No worktree yet" : "Loading"}</span><span class="e"></span></li>`) + "</ul></section>"; }
-    h += '<section class="sec grow" id="sec-runs"><div class="sh"><span>Runs</span></div><ul class="ls">' + c.runs.slice(0, 30).map((r) => { const live = r.status === "queued" || r.status === "running", m = live ? "live" : r.status === "done" ? "done" : r.status === "failed" ? "failed" : r.status === "cancelled" ? "cancelled" : "left", trig = c.byId.get(r.trigger_message_id), title = trig ? (trig.raw || (trig.content || "").replace(/<[^>]+>/g, "")).replace(/^\s*@?\**Onix\**\s*/i, "").trim() : (r.summary || "Run " + r.id);
+    h += '<section class="sec grow" id="sec-runs"><div class="sh"><span>Runs</span></div><ul class="ls">' + c.runs.slice(0, 30).map((r) => { const live = r.status === "queued" || r.status === "running", m = live ? "live" : r.status === "done" ? "done" : r.status === "failed" ? "failed" : r.status === "cancelled" ? "cancelled" : "left", title = runTitle(c, r);
       return `<li class="${live ? "on" : ""}">${mk(live ? runMark(r) : m)}<span class="t">${esc(title.slice(0, 80))}</span><span class="e"><span class="d">${live ? esc(age(r.date_created)) : esc(dayKey(r.date_created) === dayKey(now() / 1000) ? hhmm(r.date_created) : shortDay(r.date_created))}</span></span></li>`; }).join("") + (c.runs.length ? "" : `<li>${ic("trace")}<span class="t">${c.runsLoaded ? "No runs yet" : "Loading"}</span><span class="e"></span></li>`)
       + "</ul></section>"; }
   const ids = p.kind === "dm" ? [state.ME, ...p.ids] : [...new Set(c.msgs.filter((m) => !isOnix(m.sender_id)).map((m) => m.sender_id))].slice(-8);

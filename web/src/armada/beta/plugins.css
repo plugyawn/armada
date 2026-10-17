@@ -7,13 +7,27 @@
    Its one trailing thing changes inside a cell as wide as the widget's sizer ("88 free"): the figure stands on the cell's
    trailing edge and never widens it, so a figure that changes, or a mark in its place, moves nothing. */
 nav > .wgs { display: flex; flex-direction: column; flex: none; padding-top: var(--gap-group); }
-nav > .wgs:empty { display: none; }
 nav .row.wg > .wf { flex: none; position: relative; height: var(--h-m); display: block; font: var(--t-caption); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 nav .row.wg > .wf > .sz { visibility: hidden; display: block; line-height: var(--h-m); white-space: nowrap; font-style: normal; }
 nav .row.wg > .wf > .wv { position: absolute; right: 0; top: 0; max-width: 100%; height: var(--h-m); line-height: var(--h-m); overflow: hidden; white-space: nowrap; }
 nav .row.wg > .wf > .mk { position: absolute; right: 0; top: 7px; }
 nav .row.wg[aria-expanded="true"] { background-color: var(--fill-3); color: var(--ink-1); }
 nav .row.wg[aria-expanded="true"] > .ic { color: var(--ink-1); }
+/* the group's last row, the "+": a glyph and the word Widgets, in the second ink whatever the nav's rows above it say */
+nav .row.wg.plus, nav .row.wg.plus > .ic { color: var(--ink-2); }
+nav .row.wg.plus[aria-expanded="true"] { color: var(--ink-1); }
+
+/* ---------- the "+" menu: raised, radius 10, 280 wide, rows 28; a group's name in Label, a verb on its row's edge ---------- */
+.wsheet.pmenu { width: 280px; border-radius: var(--r-block); padding: var(--s-1); }
+.pmenu .pm-h { font: var(--t-label); color: var(--ink-2); height: var(--h-m); display: flex; align-items: flex-end; padding: 0 var(--s-2) var(--s-1); }
+.pmenu .pm-l > li { min-height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-2); border-radius: var(--r-ctl); color: var(--ink-1); font: var(--t-text); }
+.pmenu .pm-l > li:has(> .mi) { padding: 0; }
+.pmenu .pm-l > li > .ic, .pmenu .mi > .ic { color: var(--ink-2); flex: none; }
+.pmenu .pm-l > li > .t, .pmenu .mi > .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.pmenu .pm-l > li > .lk { margin-right: calc(-1 * var(--s-2)); height: var(--h-s); }
+.pmenu .mi { gap: var(--s-2); font: var(--t-text); color: var(--ink-1); }
+.pmenu .pm-gap { height: var(--s-1); margin: var(--s-1) var(--s-2); box-shadow: inset 0 -1px 0 var(--line); }
+.pmenu .pm-gap + .pm-l { margin-top: var(--s-1); }
 
 /* ---------- a widget opened: a raised sheet beside the nav, its foot level with its row's foot ---------- */
 /* its row stands --below rows above the account row, which stands on the nav's foot: the sheet's foot is level with the

@@ -3,6 +3,8 @@
    - the sheet: a widget opened from its nav row, raised beside the nav, 344 wide, its foot level with its row's foot,
      every block of its document (a list's rows 44 high with their second line, a sparkline and a figure); Esc closes it
      and gives the row back its focus;
+   - the "+" menu, from the group's last row, its foot level with that row's: what I hid, with Show; what the team
+     offers, with Add; All plugins;
    - the rows of a list a plugin links to a place, in the slots plugins.js keeps for it in the column, and the
      commands Jump to lists for plugins;
    - an item opened from a row, which borrows the column as an artifact does and gives it back on Close (below 1408, where
@@ -80,8 +82,18 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       addEventListener("keydown", key, true); press(d, "[data-no]", () => close(false)); press(d, "[data-yes]", () => close(true)); $("[data-no]", d).focus(); }); }
 
     /* ---------- the sheet ---------- */
-    let sheet = null;   /* {id, el, install_id, key, scope} */
-    const navEntry = (id) => P.navWidgets().find((x) => x.id === id) || null;
+    let sheet = null;   /* what floats beside the nav, from its row: {kind: "widget" | "menu", id, el}; a widget's also {install_id, key, scope} */
+    /* a widget as I see it, whether or not it is in my nav now */
+    const navEntry = (id) => { const x = P.teamWidgets().find((y) => y.id === id); return x ? P.seen(x, null) : null; };
+    /* a raised surface beside the nav, its foot level with its row's foot (CSS, from the rows below it), settling as a
+       surface that holds words does; a press elsewhere closes it, and Esc gives its row the focus back */
+    function float(kind, id, cls, html, label, role = "dialog") {
+      closeSheet(true); const rows = $$("nav .row.wg"), below = rows.length - 1 - rows.findIndex((r) => r.dataset.w === id);
+      const e = el("div", `wsheet raised ${cls}`.trim(), html); e.setAttribute("role", role); e.setAttribute("aria-label", label); e.tabIndex = -1; e.dataset.w = id; e.style.setProperty("--below", String(Math.max(0, below)));
+      document.body.append(e); sheet = {kind, id, el: e}; P.setOpenWidget(id);
+      M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6); addEventListener("pointerdown", outside, true);
+      return e;
+    }
     function sheetBodyHTML(x) {
       const s = x.s, doc = s && s.document;
       if (x.p.state === "failed") return `<p class="wnote">${mk("failed")} ${esc(x.p.name)} stopped. Its page has its last lines and Retry.</p>`;
@@ -89,16 +101,27 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       return staleNote(s, x.w) + blocksHTML(doc) + actionsHTML(doc);
     }
     function openSheet(id, kbd) {
-      const x = navEntry(id); if (!x) return; closeSheet(true);
-      const rows = $$("nav .row.wg"), below = rows.length - 1 - rows.findIndex((r) => r.dataset.w === id);
-      const e = el("div", "wsheet raised", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`);
-      e.setAttribute("role", "dialog"); e.setAttribute("aria-label", x.label); e.tabIndex = -1; e.dataset.w = id; e.style.setProperty("--below", String(Math.max(0, below)));
-      document.body.append(e); sheet = {id, el: e, install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")}; P.setOpenWidget(id);
+      const x = navEntry(id); if (!x) return;
+      const e = float("widget", id, "", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`, x.label);
+      Object.assign(sheet, {install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")});
       if (x.s && x.s.document) mountBlocks(e, x.s.document); else host(e);
-      M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6);
-      addEventListener("pointerdown", outside, true);
       if (kbd) ($("[data-wopen], .wb button, .wb [tabindex]", e) || e).focus(); else ready();
     }
+
+    /* ---------- the "+" menu (ROUND2.md, section E) ---------- */
+    /* what I hid, each with Show; what the team offers and I have not added, each with Add; then All plugins */
+    function menuHTML() {
+      const all = P.teamWidgets().filter((x) => (x.w.in || []).includes("nav")), hidden = [], offered = [];
+      for (const x of all) { const d = (x.p.widget_defaults || {})[x.w.key], team = d ? d.nav : x.w.team_default || "shown", mine = x.pref && typeof x.pref.shown === "boolean" ? x.pref.shown : null;
+        if (mine === false) hidden.push(x); else if (mine === null && team === "offered") offered.push(x); }
+      const row = (x, verb) => `<li>${ic(P.glyphOf(x.p.glyph))}<span class="t">${esc((x.pref && x.pref.label) || x.w.label)}</span><button class="lk" role="menuitem" data-wshow="${esc(x.id)}">${verb}</button></li>`;
+      return (hidden.length ? `<div class="pm-h">Hidden by you</div><ul class="pm-l">${hidden.map((x) => row(x, "Show")).join("")}</ul>` : "")
+        + (offered.length ? `<div class="pm-h">Offered by your team</div><ul class="pm-l">${offered.map((x) => row(x, "Add")).join("")}</ul>` : "")
+        + `${hidden.length || offered.length ? '<div class="pm-gap"></div>' : ""}<ul class="pm-l"><li><button class="mi" role="menuitem" data-wall>${ic("plugin")}<span class="t">All plugins</span></button></li></ul>`;
+    }
+    function openMenu(kbd) { const e = float("menu", "plus", "pmenu", menuHTML(), "Widgets", "menu"); host(e); if (kbd) ($("[role=menuitem]", e) || e).focus(); else ready(); }
+    /* the menu follows what changes while it is open: a widget shown elsewhere, one the team offers */
+    function updateMenu() { const items = $$("[role=menuitem]", sheet.el), at = items.indexOf(document.activeElement); sheet.el.innerHTML = menuHTML(); host(sheet.el); const now_ = $$("[role=menuitem]", sheet.el); if (at >= 0 && now_.length) now_[Math.min(at, now_.length - 1)].focus(); }
     /* a press anywhere but the sheet and the widgets' rows closes it, and the press goes on */
     const outside = (e) => { if (!sheet || (e.target.closest && e.target.closest(".wsheet, nav .row.wg, .dlg"))) return; closeSheet(true); };
     function closeSheet(quiet, back) {
@@ -109,6 +132,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* a new document for the widget open in a sheet: its rows change in place when they are the same rows; else its body is
        drawn again. The sheet's foot stays level with its row's foot. */
     function updateSheet() {
+      if (sheet.kind === "menu") { updateMenu(); return; }
       const x = navEntry(sheet.id); if (!x) { closeSheet(); return; } const body = $(".wb", sheet.el), doc = x.s && x.s.document;
       if (doc && patchDoc(body, doc)) { const note = $(":scope > .wnote", body), want = staleNote(x.s, x.w); if ((note ? note.outerHTML : "") !== want) { if (note) note.remove(); if (want) body.insertAdjacentHTML("afterbegin", want); } return; }
       body.innerHTML = sheetBodyHTML(x); if (doc) mountBlocks(body, doc);
@@ -241,6 +265,12 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* a sheet's Open goes to the plugin's page */
     press(document.body, ".wsheet [data-wopen]", () => { const id = sheet && sheet.install_id; closeSheet(true); if (id) openPlace(placeFromKey(`plugin:${id}`)); });
     press(document.body, ".wd [data-wclose]", () => closeItem(false));
+    /* the menu's verbs: Show and Add put the widget in my nav, from where I am; All plugins opens Plugins */
+    press(document.body, ".pmenu [data-wshow]", (b) => { const [install_id, key] = b.dataset.wshow.split("/"); P.setPreference(+install_id, key, {shown: true}, b); });
+    press(document.body, ".pmenu [data-wall]", () => { closeSheet(true); openPlace(placeFromKey("plugins")); });
+    /* in a menu, Up and Down move between its verbs */
+    document.addEventListener("keydown", (e) => { if (!sheet || sheet.kind !== "menu" || !sheet.el.contains(document.activeElement)) return; const items = $$("[role=menuitem]", sheet.el), i = items.indexOf(document.activeElement), d = {ArrowDown: 1, ArrowUp: -1}[e.key];
+      if (!d || i < 0) return; e.preventDefault(); items[(i + d + items.length) % items.length].focus(); });
     press(document.body, ":is(.wsheet, .wd) [data-wact]", (b) => { const {target, doc} = actionTarget(rootOf(b)); const a = doc && (doc.actions || [])[+b.dataset.wact]; if (target && a) runAction(target, a, {index: JSON.stringify(+b.dataset.wact)}, b); });
     press(document.body, ":is(.wsheet, .wd) .wl > li:is([data-open], [data-act])", (li, e, ptr) => {
       const {target, doc} = actionTarget(rootOf(li)); if (!target || !doc) return; const row = doc.blocks.flatMap((b) => (b.type === "list" ? P.rowsOf(doc, b) : [])).find((r) => r.key === li.dataset.row); if (!row) return;
@@ -433,9 +463,9 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     if (pane()) press(pane(), "[data-install]", (b) => { const en = INDEX.entries.find((x) => x.id === b.dataset.install); if (en) install(en, b); });
 
     return {
-      openSheet, closeSheet, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
+      openSheet, closeSheet, openMenu, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
       /* a new document for a scope: what is open of it changes in place */
-      update(scope) { if (sheet && sheet.scope === scope) updateSheet(); if (item) updateItem(scope); },
+      update(scope) { if (sheet && (sheet.scope === scope || sheet.kind === "menu")) updateSheet(); if (item) updateItem(scope); },
       /* an install removed: what is open of it closes */
       forget(id) { if (sheet && sheet.install_id === id) closeSheet(true); if (item && item.target.install_id === id) closeItem(true); full.delete(id); },
       /* leaving the place: the column it borrowed is given back, and the sheet closes */

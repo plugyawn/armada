@@ -4,12 +4,12 @@
    installs come as armada_plugin events, and my own view of each widget (in my nav or not, its place in the group, my
    label, its figure at rest, the rows I keep, my alerts) as armada_widget_preference events, drawn through
    widget_view.js. All three are in /register's snapshot (zerver/lib/armada_plugin_events.py). What is drawn at load is
-   here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as the widget's
-   sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), a plugin's words on the
-   plane, and the place for its commands in Jump to. The list's rows and those commands are the chunk's, fetched when
-   the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav, an item that
-   borrows the column, and the Plugins place with each plugin's page. An update patches what is drawn in place: a figure
-   rolls in its cell, a mark changes into another, and nothing else moves. */
+   here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as the widget's sizer;
+   the "+" its last row), the slots of the list a linked widget adds to its place's column (from the snapshot), a
+   plugin's words on the plane, and the place for its commands in Jump to. The list's rows and those commands are the
+   chunk's, fetched when the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside
+   the nav, an item that borrows the column, and the Plugins place with each plugin's page. An update patches what is
+   drawn in place: a figure rolls in its cell, a mark changes into another, and nothing else moves. */
 
 import {$, $$, esc, press} from "./util.js";
 import {pluginBots, state, streams} from "./state.js";
@@ -105,11 +105,14 @@ const restLabel = (label, rest) => `${label}${rest.kind === "figure" ? `: ${rest
 let groupEl = null, groupSig = "";
 function rowHTML(x, at) { const rest = restOf(x.p, x.w, x.s, at, x.alert);
   return `<button class="row wg" data-w="${esc(x.id)}" aria-haspopup="dialog" aria-expanded="${openWidget === x.id}" aria-label="${esc(restLabel(x.label, rest))}"${rest.tip ? ` data-tip="${esc(rest.tip)}"` : ""}>${ic(glyphOf(x.p.glyph))}<span class="lab">${esc(x.label)}</span><span class="wf"><i class="sz">${esc(sizerOf(x))}</i>${restCell(rest)}</span></button>`; }
+/* the group's last row, always there (ROUND2.md, section E): the "+" and the word Widgets in the second ink, with no count,
+   which would read as unread; its menu holds what I hid, what the team offers, and making one */
+const plusRowHTML = () => `<button class="row wg plus" data-w="plus" aria-haspopup="menu" aria-expanded="${openWidget === "plus"}">${ic("plus")}<span class="lab">Widgets</span></button>`;
 /* the group, drawn whole when its rows change (an install, a widget shown or hidden, a new sizer); else each row's trailing
    thing changes where it stands */
 function drawWidgets() {
   if (!groupEl) return; const list = navWidgets(), at = now() / 1000, sig = list.map((x) => `${x.id}|${x.label}|${x.p.glyph}|${sizerOf(x)}`).join(";");
-  if (sig !== groupSig) { groupSig = sig; groupEl.innerHTML = list.map((x) => rowHTML(x, at)).join(""); host(groupEl); snapCells(); return; }
+  if (sig !== groupSig) { groupSig = sig; groupEl.innerHTML = list.map((x) => rowHTML(x, at)).join("") + plusRowHTML(); host(groupEl); snapCells(); return; }
   for (const x of list) patchRow(x, at);
 }
 const rowEl = (id) => $$(".row.wg", groupEl).find((r) => r.dataset.w === id) || null;
@@ -194,6 +197,7 @@ function onPluginEvent(ev) {
   const id = ev.op === "remove" ? ev.install_id : ev.plugin && ev.plugin.id; if (!id) return;
   if (ev.op === "remove") { dropInstall(id); const v = view(); if (v) v.forget(id); } else keepInstall(ev.plugin);
   drawWidgets(); watchStale(); if (state.place && state.place.kind === "topic") drawSide(); refreshPlace();
+  const v = view(); if (v) v.update("");   /* the "+" menu, if it is open: a widget the team now offers, or one that went */
 }
 function onWidgetEvent(ev) {
   const scope = scopeOf(ev.install_id, ev.widget, ev.link_id, ev.item);
@@ -249,7 +253,8 @@ function showWidget(id, kbd) { if (openWidget === id) { const v = view(); if (v)
 function wirePlugins() {
   groupEl = document.createElement("div"); groupEl.className = "wgs"; groupEl.setAttribute("role", "group"); groupEl.setAttribute("aria-label", "Widgets"); nav.insertBefore(groupEl, $(":scope > .row.me", nav));
   groupSig = ""; drawWidgets(); watchStale();
-  press(groupEl, ".row.wg", (r, e, ptr) => showWidget(r.dataset.w, !ptr));
+  press(groupEl, ".row.wg:not(.plus)", (r, e, ptr) => showWidget(r.dataset.w, !ptr));
+  press(groupEl, ".row.wg.plus", (r, e, ptr) => { if (openWidget === "plus") { const v = view(); if (v) v.closeSheet(); return; } withView((v) => v.openMenu(!ptr)); });
   /* the rows are nav rows: Up and Down move between them, Home and End go to the ends; Return and Space press one */
   groupEl.addEventListener("keydown", (e) => { const rows = $$(".row.wg", groupEl), i = rows.indexOf(document.activeElement); if (i < 0) return;
     const to = {ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: rows.length - 1}[e.key]; if (to === undefined || e.metaKey || e.ctrlKey || e.altKey) return;

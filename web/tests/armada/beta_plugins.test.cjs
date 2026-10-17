@@ -275,7 +275,8 @@ register();
 plugins.wirePlugins();
 column.drawSide();
 
-const rows = () => [...document.querySelectorAll("nav .row.wg")];
+const rows = () => [...document.querySelectorAll("nav .row.wg:not(.plus)")];
+const plus = () => find("nav .row.wg.plus");
 const rowOf = (label) => rows().find((r) => r.querySelector(".lab").textContent === label);
 const trail = (label) => rowOf(label).querySelector(".wf > :not(.sz)");
 const sheet = () => find(".wsheet");
@@ -472,8 +473,8 @@ run_test(
         assert.equal(s.getAttribute("role"), "dialog");
         assert.equal(row.getAttribute("aria-expanded"), "true");
         // Its foot stands level with its row's: one row (Training) above GPUs,
-        // none below it.
-        assert.equal(s.style.getPropertyValue("--below"), "0");
+        // and the "+" below it.
+        assert.equal(s.style.getPropertyValue("--below"), "1");
         assert.equal(document.activeElement.textContent, "Open");
         // Machines and Jobs, each row with its second line and figure; a
         // machine's load is a sparkline.
@@ -505,7 +506,7 @@ run_test(
         dom.press("ArrowUp");
         assert.equal(document.activeElement, rowOf("Training"));
         dom.press("End");
-        assert.equal(document.activeElement, row);
+        assert.equal(document.activeElement, plus());
         dom.press("Home");
         assert.equal(document.activeElement, rowOf("Training"));
         dom.press("ArrowDown");
@@ -519,7 +520,7 @@ run_test(
         assert.ok(sheet());
         await pressOn(rowOf("Training"));
         assert.equal(sheet().getAttribute("aria-label"), "Training");
-        assert.equal(sheet().style.getPropertyValue("--below"), "1");
+        assert.equal(sheet().style.getPropertyValue("--below"), "2");
         lane.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
         assert.equal(sheet(), null);
         // Jump to has one command a widget.
@@ -1117,5 +1118,96 @@ run_test(
             widget: "gpus",
         });
         assert.deepEqual(labels(), ["Training", "GPUs"]);
+    },
+);
+
+run_test(
+    'the "+": always the group\'s last row; its menu holds what I hid and what the team offers',
+    async () => {
+        assert.equal(find("nav .wgs").lastElementChild, plus());
+        assert.equal(plus().textContent, "Widgets");
+        assert.equal(plus().getAttribute("aria-haspopup"), "menu");
+        // With nothing hidden or offered, the menu is All plugins.
+        await pressOn(plus());
+        assert.equal(sheet().getAttribute("role"), "menu");
+        assert.equal(sheet().style.getPropertyValue("--below"), "0");
+        assert.equal(plus().getAttribute("aria-expanded"), "true");
+        assert.deepEqual(
+            [...sheet().querySelectorAll("[role=menuitem]")].map((b) => b.textContent),
+            ["All plugins"],
+        );
+        // A press on the "+" again closes it.
+        await pressOn(plus());
+        assert.equal(sheet(), null);
+
+        // I hid GPUs; the team offers Eval queue.
+        plugins.setPreference(7, "gpus", {shown: false});
+        plugins.onPluginEvent({
+            type: "armada_plugin",
+            op: "add",
+            plugin: {
+                ...gpus(),
+                id: 9,
+                plugin: "eval-queue",
+                name: "Eval queue",
+                glyph: "table",
+                bot_user_id: 42,
+                widgets: [{key: "queue", label: "Eval queue", in: ["nav"], cadence: 30}],
+                widget_defaults: {queue: {nav: "offered", column: true}},
+            },
+        });
+        await settle();
+        // From the keyboard: the first verb has focus, Up and Down go round.
+        await pressByKeyboard(plus());
+        const menu = sheet();
+        assert.deepEqual(
+            [...menu.querySelectorAll(".pm-h")].map((h) => h.textContent),
+            ["Hidden by you", "Offered by your team"],
+        );
+        const verbs = () =>
+            [...sheet().querySelectorAll("[role=menuitem]")].map((b) => b.textContent);
+        assert.deepEqual(verbs(), ["Show", "Add", "All plugins"]);
+        assert.equal(document.activeElement.dataset.wshow, "7/gpus");
+        dom.press("ArrowUp");
+        assert.equal(document.activeElement.textContent, "All plugins");
+        dom.press("ArrowDown");
+        assert.equal(document.activeElement.dataset.wshow, "7/gpus");
+        // Show puts it back in my nav, at once; the menu follows, in place.
+        await pressOn(menu.querySelector('[data-wshow="7/gpus"]'));
+        assert.deepEqual(
+            rows().map((r) => r.querySelector(".lab").textContent),
+            ["Training", "GPUs"],
+        );
+        assert.equal(sheet(), menu);
+        assert.deepEqual(verbs(), ["Add", "All plugins"]);
+        assert.deepEqual(requests.at(-1).body, {shown: "true"});
+        // Add puts the offered one in my nav, at the group's top.
+        await pressOn(menu.querySelector('[data-wshow="9/queue"]'));
+        assert.deepEqual(
+            rows().map((r) => r.querySelector(".lab").textContent),
+            ["Eval queue", "Training", "GPUs"],
+        );
+        assert.deepEqual(verbs(), ["All plugins"]);
+        // Esc closes it, and the "+" has the focus again.
+        sheet().querySelector("[role=menuitem]").focus();
+        dom.press("Escape");
+        assert.equal(sheet(), null);
+        assert.equal(document.activeElement, plus());
+        plugins.onPluginEvent({type: "armada_plugin", op: "remove", install_id: 9});
+        for (const [install, widget] of [
+            [7, "gpus"],
+            [9, "queue"],
+        ]) {
+            plugins.onPreferenceEvent({
+                type: "armada_widget_preference",
+                op: "remove",
+                install_id: install,
+                widget,
+            });
+        }
+        assert.deepEqual(
+            rows().map((r) => r.querySelector(".lab").textContent),
+            ["Training", "GPUs"],
+        );
     },
 );

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import socket
 import stat
 import subprocess
@@ -10,6 +11,7 @@ from tempfile import TemporaryDirectory
 from typing import Any
 from unittest import mock
 
+import responses
 from django.test import override_settings
 from typing_extensions import override
 
@@ -513,3 +515,234 @@ class PluginAgentTest(PluginTestCase):
             r"^\$\.id: 'playwright' names one of the agent's own tools; choose another id$",
         ):
             canonicalize_plugin_manifest(self.manifest("fake") | {"id": "playwright"})
+
+
+class PluginMCPRouteTest(PluginTestCase):
+    """/api/v1/armada/plugins/<id>/mcp (zerver/lib/armada_plugin_mcp.py):
+    an agent off the server, with an Armada API key, reaches a running
+    plugin's MCP endpoint through Armada, which presents the plugin's
+    token, names the caller, keeps the tools turned off out, and answers
+    only JSON."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        # The tests may not reach the internet; the fake plugin, on this
+        # machine, they do reach.
+        self.network = responses.RequestsMock(assert_all_requests_are_fired=False)
+        self.network.add_passthru(re.compile(r"^http://127\.0\.0\.1:[0-9]+/"))
+        self.network.start()
+        self.addCleanup(self.network.stop)
+        self.fake = self.install("fake")
+        update_plugin(self.example_user("hamlet"), self.fake, disabled_tools=["pod_terminate"])
+        PluginInstall.objects.filter(id=self.fake.id).update(state=PluginInstall.RUNNING)
+        self.fake.refresh_from_db()
+
+    def mcp(
+        self,
+        user: UserProfile | None,
+        message: object,
+        *,
+        install: PluginInstall | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> Any:
+        install = install or self.fake
+        headers = dict(headers or {})
+        if user is not None:
+            headers["Authorization"] = self.encode_user(user)
+        return self.client_post(
+            f"/api/v1/armada/plugins/{install.id}/mcp",
+            message if isinstance(message, str) else json.dumps(message),
+            content_type="application/json",
+            intentionally_undocumented=True,
+            headers=headers,
+            subdomain=user.realm.subdomain if user is not None else "zulip",
+        )
+
+    def request(self, method: str, **params: object) -> dict[str, Any]:
+        return {"jsonrpc": "2.0", "id": 7, "method": method, "params": params}
+
+    def test_an_agent_off_the_server_uses_the_teams_plugin(self) -> None:
+        self.serve_fake_plugin(self.fake)
+        hamlet = self.example_user("hamlet")
+        result = self.mcp(hamlet, self.request("initialize", protocolVersion="2025-06-18"))
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result["Content-Type"], "application/json")
+        self.assertEqual(result["Mcp-Session-Id"], "fake-session")
+        self.assertEqual(result.json()["result"]["serverInfo"]["name"], "fake")
+        result = self.mcp(
+            hamlet,
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            headers={"Mcp-Session-Id": "fake-session"},
+        )
+        self.assertEqual((result.status_code, result.content), (202, b""))
+
+        listed = self.mcp(hamlet, self.request("tools/list")).json()
+        self.assertEqual([tool["name"] for tool in listed["result"]["tools"]], ["echo"])
+        called = self.mcp(
+            hamlet,
+            self.request("tools/call", name="echo", arguments={"gpu": "H100"}, _meta={"k": 1}),
+        ).json()
+        self.assertEqual(
+            json.loads(called["result"]["content"][0]["text"]),
+            {
+                "arguments": {"gpu": "H100"},
+                "_meta": {
+                    "k": 1,
+                    "armada/user": {
+                        "id": hamlet.id,
+                        "email": hamlet.email,
+                        "full_name": hamlet.full_name,
+                    },
+                },
+            },
+        )
+        refused = self.mcp(hamlet, self.request("tools/call", name="pod_terminate")).json()
+        self.assertEqual(
+            refused,
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "error": {"code": -32602, "message": "pod_terminate is turned off for this team."},
+            },
+        )
+        # A person's own bot, such as a mini, may too.
+        mini = self.create_test_bot("mini", hamlet)
+        self.assertEqual(self.mcp(mini, self.request("tools/list")).status_code, 200)
+
+        # The call is in Recent; the refused one never reached the plugin.
+        self.login_user(hamlet)
+        lines = self.assert_json_success(
+            self.client_get(f"/json/armada/plugins/{self.fake.id}/recent")
+        )["recent"]
+        self.assertEqual(
+            [(line["type"], line["acting_user_id"], line["detail"]) for line in lines[:1]],
+            [("tool_called", hamlet.id, {"tool": "echo", "via": "mcp", "is_error": False})],
+        )
+        self.assertEqual([line["type"] for line in lines].count("tool_called"), 1)
+
+        deleted = self.client_delete(
+            f"/api/v1/armada/plugins/{self.fake.id}/mcp",
+            HTTP_AUTHORIZATION=self.encode_user(hamlet),
+            HTTP_MCP_SESSION_ID="fake-session",
+            intentionally_undocumented=True,
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(
+            self.client_get(
+                f"/api/v1/armada/plugins/{self.fake.id}/mcp",
+                HTTP_AUTHORIZATION=self.encode_user(hamlet),
+                intentionally_undocumented=True,
+            ).status_code,
+            405,
+        )
+
+    def test_a_plugin_answering_with_events_is_answered_as_json(self) -> None:
+        self.serve_fake_plugin(self.fake, sse=True)
+        result = self.mcp(self.example_user("hamlet"), self.request("tools/list"))
+        self.assertEqual(result["Content-Type"], "application/json")
+        self.assertEqual([tool["name"] for tool in result.json()["result"]["tools"]], ["echo"])
+        errored = self.mcp(
+            self.example_user("hamlet"), self.request("tools/call", name="no_such_tool")
+        ).json()
+        self.assertEqual(errored["error"]["message"], "unknown tool")
+
+    def test_who_reaches_a_plugins_tools(self) -> None:
+        self.serve_fake_plugin(self.fake)
+        tools_list = self.request("tools/list")
+        self.assertEqual(self.mcp(None, tools_list).status_code, 401)
+        self.assert_json_error(
+            self.mcp(self.lear_user("cordelia"), tools_list), "No such plugin", status_code=404
+        )
+        self.assert_json_error(
+            self.mcp(self.example_user("polonius"), tools_list),
+            "Guests cannot use the team's plugins' tools.",
+        )
+        self.assert_json_error(
+            self.mcp(self.fake.bot, tools_list), "A plugin's bot cannot use the plugins' tools."
+        )
+        hamlet = self.example_user("hamlet")
+        for state, error in (
+            (PluginInstall.REMOVED, "No such plugin"),
+            (PluginInstall.DRAFT, "No such plugin"),
+            (PluginInstall.FAILED, "Fake is not running."),
+        ):
+            PluginInstall.objects.filter(id=self.fake.id).update(state=state)
+            self.assert_json_error(
+                self.mcp(hamlet, tools_list),
+                error,
+                status_code=404 if error == "No such plugin" else 400,
+            )
+        PluginInstall.objects.filter(id=self.fake.id).update(
+            state=PluginInstall.RUNNING, disabled=True
+        )
+        self.assert_json_error(self.mcp(hamlet, tools_list), "Fake is not running.")
+        quiet = self.install(manifest=self.manifest("fake") | {"id": "quiet", "provides": {}})
+        self.assert_json_error(self.mcp(hamlet, tools_list, install=quiet), "Fake has no tools.")
+
+    def test_what_a_plugin_or_a_caller_gets_wrong(self) -> None:
+        hamlet = self.example_user("hamlet")
+        # A port nothing listens on, where the answers below are made up.
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        PluginInstall.objects.filter(id=self.fake.id).update(port=port)
+        self.fake.refresh_from_db()
+        endpoint = f"http://127.0.0.1:{port}/mcp"
+        for body, error in (
+            ("not json", "An MCP message is one JSON object."),
+            ("[1, 2]", "An MCP message is one JSON object."),
+            (json.dumps(self.request("tools/call")), "A tool call names its tool."),
+        ):
+            self.assert_json_error(self.mcp(hamlet, body), error)
+        self.assert_json_error(
+            self.mcp(hamlet, self.request("tools/list")),
+            "Fake could not be reached: ConnectionError.",
+        )
+        for status, code in ((401, 400), (500, 400), (404, 404)):
+            self.network.upsert(responses.POST, endpoint, status=status)
+            self.assert_json_error(
+                self.mcp(hamlet, self.request("tools/list")),
+                f"Fake answered with HTTP {status}.",
+                status_code=code,
+            )
+        self.network.upsert(responses.POST, endpoint, body="<html>", content_type="text/html")
+        self.assert_json_error(
+            self.mcp(hamlet, self.request("tools/list")),
+            "Fake answered with something other than JSON.",
+        )
+        self.network.upsert(
+            responses.POST,
+            endpoint,
+            body='event: message\ndata: {"jsonrpc": "2.0", "method": "notifications/progress"}\n\n',
+            content_type="text/event-stream",
+        )
+        self.assert_json_error(self.mcp(hamlet, self.request("tools/list")), "Fake did not answer.")
+        # What goes to the plugin: its own token, never the caller's key,
+        # and the transport's headers.
+        self.network.upsert(
+            responses.POST,
+            endpoint,
+            json={"jsonrpc": "2.0", "id": 7, "result": {"tools": []}},
+            headers={"Mcp-Session-Id": "s-2"},
+        )
+        result = self.mcp(
+            hamlet,
+            self.request("tools/list"),
+            headers={"Mcp-Session-Id": "s-1", "MCP-Protocol-Version": "2025-06-18"},
+        )
+        self.assertEqual(result["Mcp-Session-Id"], "s-2")
+        sent = self.network.calls[-1].request.headers
+        self.assertEqual(
+            (sent["Authorization"], sent["Mcp-Session-Id"], sent["MCP-Protocol-Version"]),
+            (f"Bearer {armada_plugin_token(self.fake)}", "s-1", "2025-06-18"),
+        )
+        self.network.add(responses.DELETE, endpoint, status=500)
+        self.assert_json_error(
+            self.client_delete(
+                f"/api/v1/armada/plugins/{self.fake.id}/mcp",
+                HTTP_AUTHORIZATION=self.encode_user(hamlet),
+                intentionally_undocumented=True,
+            ),
+            "Fake answered with HTTP 500.",
+        )

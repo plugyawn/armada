@@ -61,12 +61,14 @@ from zerver.views.armada_pages import (
 from zerver.views.armada_plugins import (
     delete_armada_plugin,
     delete_armada_plugin_link,
+    delete_armada_plugin_mcp,
     get_armada_plugin_recent,
     get_armada_plugins,
     patch_armada_plugin,
     post_armada_plugin,
     post_armada_plugin_action,
     post_armada_plugin_link,
+    post_armada_plugin_mcp,
     post_armada_plugin_restore,
     post_armada_plugin_retry,
     post_armada_widget,
@@ -485,6 +487,13 @@ v1_api_and_json_patterns = [
         "armada/plugins/<int:install_id>/links/<int:link_id>", DELETE=delete_armada_plugin_link
     ),
     rest_path("armada/plugins/<int:install_id>/actions", POST=post_armada_plugin_action),
+    # The plugins' MCP endpoints for agents off this server; they speak
+    # JSON-RPC, which the MCP specification documents.
+    rest_path(
+        "armada/plugins/<int:install_id>/mcp",
+        POST=(post_armada_plugin_mcp, {"intentionally_undocumented"}),
+        DELETE=(delete_armada_plugin_mcp, {"intentionally_undocumented"}),
+    ),
     rest_path("armada/widgets", POST=post_armada_widget),
     # INTERIM BETA: partners (zerver/lib/partner.py).
     rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),

@@ -3,10 +3,19 @@ zerver/lib/armada_widgets.py. Every route a person uses reaches an install
 through access_plugin_install, which looks only in the person's realm; a
 plugin's bot pushes only to its own install."""
 
+import orjson
 from django.http import HttpRequest, HttpResponse
+from django.utils.translation import gettext as _
 from django.views.decorators.debug import sensitive_post_parameters
 from pydantic import Json
 
+from zerver.lib.armada_plugin_mcp import (
+    ARMADA_PLUGIN_MCP_SESSION_HEADER,
+    ARMADA_PLUGIN_MCP_VERSION_HEADER,
+    access_plugin_tools,
+    end_mcp_session,
+    forward_mcp_message,
+)
 from zerver.lib.armada_plugins import (
     access_plugin_install,
     add_plugin_link,
@@ -21,6 +30,7 @@ from zerver.lib.armada_plugins import (
     update_plugin,
 )
 from zerver.lib.armada_widgets import push_widget, run_widget_action
+from zerver.lib.exceptions import JsonableError
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import PathOnly, typed_endpoint, typed_endpoint_without_parameters
 from zerver.models import UserProfile
@@ -198,3 +208,42 @@ def post_armada_plugin_action(
         confirmed=confirmed,
     )
     return json_success(request, data=result)
+
+
+def _mcp_headers(request: HttpRequest) -> dict[str, str]:
+    return {
+        name: value
+        for name in (ARMADA_PLUGIN_MCP_SESSION_HEADER, ARMADA_PLUGIN_MCP_VERSION_HEADER)
+        if (value := request.headers.get(name))
+    }
+
+
+@typed_endpoint
+def post_armada_plugin_mcp(
+    request: HttpRequest, user_profile: UserProfile, *, install_id: PathOnly[int]
+) -> HttpResponse:
+    """One message of MCP's Streamable HTTP transport, for an agent off
+    this server (zerver/lib/armada_plugin_mcp.py). It speaks JSON-RPC,
+    not this API's JSON, so it is not in the API's documentation."""
+    install = access_plugin_tools(user_profile, install_id)
+    try:
+        message = orjson.loads(request.body)
+    except orjson.JSONDecodeError as error:
+        raise JsonableError(_("An MCP message is one JSON object.")) from error
+    reply = forward_mcp_message(user_profile, install, message, headers=_mcp_headers(request))
+    response = HttpResponse(
+        b"" if reply.message is None else orjson.dumps(reply.message),
+        status=reply.status,
+        content_type="application/json",
+    )
+    if reply.session_id:
+        response[ARMADA_PLUGIN_MCP_SESSION_HEADER] = reply.session_id
+    return response
+
+
+@typed_endpoint
+def delete_armada_plugin_mcp(
+    request: HttpRequest, user_profile: UserProfile, *, install_id: PathOnly[int]
+) -> HttpResponse:
+    install = access_plugin_tools(user_profile, install_id)
+    return HttpResponse(status=end_mcp_session(install, headers=_mcp_headers(request)))

@@ -29,7 +29,7 @@ class ArmadaMCPError(Exception):
     pass
 
 
-def _replies(response: requests.Response) -> list[Any]:
+def armada_mcp_messages(response: requests.Response) -> list[Any]:
     """The JSON-RPC messages in an answer: a body of JSON, or each event's
     data in a stream of server-sent events."""
     if response.headers.get("Content-Type", "").startswith("text/event-stream"):
@@ -89,7 +89,7 @@ class ArmadaMCPClient:
             return None
         self.session_id = response.headers.get("Mcp-Session-Id", self.session_id)
         try:
-            replies = _replies(response)
+            replies = armada_mcp_messages(response)
         except ValueError as error:
             raise ArmadaMCPError(f"answered {method} with something other than JSON") from error
         for reply in replies:

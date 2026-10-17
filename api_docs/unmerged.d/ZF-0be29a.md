@@ -31,6 +31,12 @@
 * [`POST /armada/plugins/{install_id}/actions`](/api/run-armada-plugin-action):
   New endpoint to run a widget's action that calls one of the plugin's
   tools, for the user who pressed it.
+* `POST /armada/plugins/{install_id}/mcp`, `DELETE /armada/plugins/{install_id}/mcp`:
+  New endpoint with which an agent off the server, with an API key,
+  uses a plugin's tools: the plugin's Model Context Protocol endpoint
+  (Streamable HTTP transport), which speaks JSON-RPC as that protocol's
+  specification documents. The tools the organization turned off are
+  neither listed nor callable.
 * [`POST /register`](/api/register-queue), [`GET /events`](/api/get-events):
   New `armada_plugins` and `armada_widgets` in the register response, and
   new `armada_plugin` and `armada_widget` events, for the organization's

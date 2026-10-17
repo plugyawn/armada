@@ -184,7 +184,10 @@ class PageToolCallsTest(ZulipTestCase):
                 "armada_create_channel",
                 "armada_later",
                 "armada_send_when",
+                "armada_plugin_check",
                 "armada_plugin_request_settings",
+                "armada_plugin_install",
+                "armada_plugin_update",
             ],
         )
 

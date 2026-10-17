@@ -49,11 +49,17 @@ the widget keys, then write the real source of the data and the tools. Run
 `uv lock`, then `uv run pytest` until the tests pass. Commit, including
 `uv.lock`; the manifest's setup is `uv sync --frozen`.
 
-**Check it.** `armada_plugin_check` validates the manifest and every document
-against the contract and starts the plugin in a trial. In the trial its pushes
-are captured and reach no one, and it is stopped after 60 seconds. The check
-renders the widget with Armada's own kit, light and dark, and returns
-`{ok, problems: [{where, what}], widgets, tools, previews}`.
+**Check it.** `armada_plugin_check(path)`, with `path` as `plugins/<id>`,
+validates the manifest and every document against the contract and starts the
+plugin in a trial. In the trial its pushes are captured and reach no one, and
+it is stopped after 60 seconds; the trial sets `ARMADA_TRIAL=1` in its
+environment. The check renders the widget with Armada's own kit, light and
+dark, and returns
+`{ok, problems: [{where, what}], waiting_for, widgets, tools, previews, notes}`.
+The first check keeps the plugin's id as a draft for the person you act for,
+and their settings are kept there until it is installed. `waiting_for` lists
+the settings and secrets to ask for. `notes` are not the plugin's fault, such
+as no browser to draw with.
 
 - Look at each preview with `view_image`. Fix what looks wrong as well as
   what the check reports, then check again.
@@ -71,10 +77,19 @@ never a value.
   needed, and stop. Don't install a plugin that is half set up.
 
 **Install it.** Use `armada_plugin_install(id, commit)` for a new plugin, or
-`armada_plugin_update(id, commit)` with a higher `version` for a new one. You
-install for the person who asked; Armada starts the plugin and records it.
-An update tells you what the new version asks for that the old one didn't
-(hosts, secrets, tools), and which widgets it drops. Say so in your reply.
+`armada_plugin_update(id, commit)` with a higher `version` for a new one.
+
+- `commit` is the full sha, from `git rev-parse HEAD`. It is released to
+  the team's repository: `main` moves fast-forward, and the version is
+  tagged.
+- If `main` has moved, the answer says how to rebase. Do that, check again,
+  and install the new commit.
+- Install refuses until the settings are set.
+- You install for the person who asked; Armada starts the plugin and records
+  it.
+- An update tells you what the new version asks for that the old one didn't
+  (hosts, secrets, events), and which widgets it drops. Say so in your reply.
+  If the update now waits for a setting, ask for it.
 
 **Post it.** Use `armada_post` with the previews as files, in the thread where
 it was asked: "Eval queue is in everyone's nav…".

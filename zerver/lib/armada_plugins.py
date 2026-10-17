@@ -178,6 +178,11 @@ def access_plugin_by_plugin_id(user: UserProfile, plugin_id: str) -> PluginInsta
     return install
 
 
+def plugin_waiting_for(install: PluginInstall) -> list[str]:
+    """The required settings and secrets install still lacks."""
+    return _waiting_for(install, _check_settings(install.manifest, install.settings)[1])
+
+
 def plugin_fields_without_values(install: PluginInstall, names: list[str]) -> list[str]:
     """Which of names, settings or secrets, have no value yet: a setting
     absent or empty, a secret never stored. Read afresh each time, for a

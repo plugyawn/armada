@@ -4,7 +4,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from zerver.lib.armada_agent import armada_codex_dynamic_tools
 from zerver.lib.armada_plugin_contract import ARMADA_PLUGIN_MANIFEST_SCHEMA, ARMADA_WIDGET_SCHEMA
+from zerver.lib.armada_plugin_tools import ARMADA_PLUGIN_TOOL_NAMES
 from zerver.lib.armada_plugin_validation import (
     canonicalize_plugin_manifest,
     canonicalize_widget_document,
@@ -71,3 +73,10 @@ class PluginSkillTest(ZulipTestCase):
             for example in ("wandb/armada-plugin.json", "gpus/armada-plugin.json"):
                 canonicalize_plugin_manifest(read_json(reference / "examples" / example))
             self.assertTrue((provisioned / "template" / "plugin.py").is_file())
+
+    def test_the_skill_teaches_the_tools_a_new_thread_is_offered(self) -> None:
+        skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+        offered = {spec["name"] for spec in armada_codex_dynamic_tools()}
+        self.assertLessEqual(ARMADA_PLUGIN_TOOL_NAMES, offered)
+        for tool in sorted(ARMADA_PLUGIN_TOOL_NAMES):
+            self.assertIn(f"`{tool}", skill)

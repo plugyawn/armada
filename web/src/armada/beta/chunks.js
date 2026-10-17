@@ -13,6 +13,7 @@ import {dayLabel, hhmm} from "./time.js";
 import {nameOf} from "./faces.js";
 import {ready} from "./composer.js";
 import {loadPics, picHTML} from "./media.js";
+import {katexSheet} from "./parts.js";
 import {bound, dataAt, isObj, text, words} from "./artifacts.js";
 
 const LOAD = {
@@ -21,7 +22,7 @@ const LOAD = {
   scene: () => import(/* webpackChunkName: "beta-scene" */ "./scene.js"),
 };
 /* read when a chunk arrives, never while the modules load (they import each other in cycles) */
-const page = () => ({$, $$, clamp, el, esc, T, state, dayLabel, hhmm, nameOf, ready, loadPics, picHTML, bound, dataAt, isObj, text, words});
+const page = () => ({$, $$, clamp, el, esc, T, state, dayLabel, hhmm, nameOf, ready, katexSheet, loadPics, picHTML, bound, dataAt, isObj, text, words});
 const asked = new Map(), loaded = new Map();
 /* the chunk, once it has run: a press reads it here and acts in its own frame */
 const loadedChunk = (name) => loaded.get(name) || null;

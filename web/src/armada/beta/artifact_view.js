@@ -3,7 +3,7 @@
    way, when the document has one. */
 
 /* What it uses of the page is handed in when it arrives (chunks.js): a chunk imports nothing the first load holds. */
-export default function artifactViewChunk({$, $$, el, esc, loadPics, picHTML, bound, isObj, text, words}) {
+export default function artifactViewChunk({$, $$, el, esc, katexSheet, loadPics, picHTML, bound, isObj, text, words}) {
 
   /* ---------- the blocks, drawn ---------- */
   /* a block's state, as the run marks say it: passed, live, needs a person, failed; neutral, selected and muted are no mark */
@@ -45,7 +45,7 @@ export default function artifactViewChunk({$, $$, el, esc, loadPics, picHTML, bo
      stands in the code face, as written */
   let katexP = null;
   function typeset(root) { const ms = $$(".am[data-tex]", root); if (!ms.length) return;
-    katexP = katexP || Promise.all([import(/* webpackChunkName: "katex" */ "katex"), import(/* webpackChunkName: "katex" */ "katex/dist/katex.min.css")]).then(([k]) => k.default || k).catch(() => null);   /* not the old interface's katex.css: a module both bundles import is split out of its first load as a file of its own */
+    katexP = katexP || Promise.all([import(/* webpackChunkName: "katex" */ "katex"), katexSheet()]).then(([k]) => k.default || k).catch(() => null);
     katexP.then((k) => { if (!k) return; for (const x of ms) { if (!x.isConnected) continue; try { k.render(x.dataset.tex, x, {displayMode: x.hasAttribute("data-display"), throwOnError: true, trust: false, maxExpand: 1000, maxSize: 10, strict: "ignore"}); x.classList.add("on"); } catch (e) { /* the formula stays as written */ } } }); }
 
   /* the panel: its heading line (the title in Strong, Close at its end), then the document, which scrolls in its own bounds */

@@ -374,3 +374,7 @@ a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent
 .pend .tl.pc .sn.bad { color: var(--failure); }
 
 }   /* @layer zulip.armada-beta */
+
+/* ---------- maths (parts.js) ---------- */
+/* a formula the server set waits for KaTeX's sheet: without it the browser draws it twice, from its MathML and as flat text */
+:root:not([data-katex]) .katex { visibility: hidden; }

@@ -35,7 +35,13 @@ import {cardEl, messageLinks, moreEl, takeCards} from "./previews.js";
 const PYG = {}; "k kn kd kc kr kt kp ow".split(" ").forEach((c) => (PYG[c] = "sx-k")); "s s1 s2 sa sb sc sd se sh si sx sr ss dl".split(" ").forEach((c) => (PYG[c] = "sx-s")); "m mi mf mh mo mb il".split(" ").forEach((c) => (PYG[c] = "sx-n")); "c c1 cm ch cp cs cpf".split(" ").forEach((c) => (PYG[c] = "sx-c"));
 const tpl = document.createElement("template");
 const BLOCK = (n) => n.matches("div.codehilite, pre, table, div.message_inline_image, div.spoiler-block, div.message_embed, div.inline-preview-twitter, div.youtube-video, div.message_inline_video, .katex-display") || (n.tagName === "P" && n.children.length === 1 && n.firstElementChild.matches(".katex-display") && !n.textContent.replace(n.firstElementChild.textContent, "").trim());
+/* maths the server set with KaTeX: its sheet is fetched the first time a message or a page has some, and kept (an artifact
+   typesets with it too, artifact_view.js). Until it is in, a formula is hidden (beta.css): the browser would draw it twice,
+   from its MathML and as flat text. */
+let katexSheetP = null;
+const katexSheet = () => (katexSheetP = katexSheetP || import(/* webpackChunkName: "katex-sheet" */ "katex/dist/katex.min.css").then(() => { document.documentElement.dataset.katex = ""; }, (e) => { katexSheetP = null; throw e; }));
 function clean(root) {
+  if (root.querySelector(".katex")) katexSheet().catch(() => {});   /* asked for again by the next one */
   $$("script, style, iframe, object, .message_length_controller, .message_expander, .message_condenser", root).forEach((x) => x.remove());
   $$("span.emoji", root).forEach((s) => { const m = /emoji-([0-9a-f-]+)/.exec(s.className); if (!m) return; let ch = ""; try { ch = String.fromCodePoint(...m[1].split("-").map((h) => parseInt(h, 16))); } catch (e) { return; } const e = el("span", "em"); e.textContent = ch; e.title = s.getAttribute("title") || ""; s.replaceWith(e); });
   $$(".user-mention, .user-group-mention, .topic-mention", root).forEach((s) => { const id = +s.dataset.userId, silent = s.classList.contains("silent"), all = s.classList.contains("topic-mention") || s.dataset.userId === "*";
@@ -151,4 +157,4 @@ function streamHTML(src) {
   return echoHTML(src);
 }
 
-export {blockPart, clean, echoHTML, loadPics, partEl, partsOf, plainOf, QUESTION, streamHTML, tpl};
+export {blockPart, clean, echoHTML, katexSheet, loadPics, partEl, partsOf, plainOf, QUESTION, streamHTML, tpl};

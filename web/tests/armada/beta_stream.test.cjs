@@ -128,6 +128,8 @@ const read_layout = () => {
 for (const name of ["scrollHeight", "clientHeight", "offsetHeight", "scrollTop"]) {
     Object.defineProperty(pane, name, {configurable: true, get: read_layout, set() {}});
 }
+// KaTeX's sheet, which the page fetches the first time it shows a formula.
+mock_esm("katex/dist/katex.min.css");
 mock_esm("../../src/armada/beta/frame.js", {
     main: find("main"),
     feed: pane,
@@ -547,4 +549,30 @@ run_test("the band says what the model is thinking about until its plan moves on
     assert.equal(run_says({plan: reading, current_activity: "Plan"}), title);
     // The next step makes it stale, as the server's card says after a reload.
     assert.equal(run_says({plan: changing, current_activity: "git diff"}), "git diff");
+});
+
+run_test("a formula the server set waits for KaTeX's sheet, fetched then", async () => {
+    const root = document.documentElement;
+    // Nothing so far had maths: the sheet was never fetched.
+    assert.equal(root.dataset.katex, undefined);
+    events.onMessage({
+        message: message(
+            191,
+            ME,
+            '<p>The update:</p><p><span class="katex-display"><span class="katex">' +
+                '<span class="katex-mathml"><math display="block"><semantics><mrow><mover>' +
+                '<mi>h</mi><mo>^</mo></mover></mrow><annotation encoding="application/x-tex">' +
+                "\\hat{h}</annotation></semantics></math></span>" +
+                '<span class="katex-html" aria-hidden="true">h^</span></span></span></p>',
+        ),
+        flags: ["read"],
+    });
+    frame();
+    const row = lane.querySelector('[data-mid="191"]').closest("section");
+    assert.ok(row.querySelector(".katex-display .katex"));
+    for (let i = 0; i < 10; i += 1) {
+        await Promise.resolve();
+    }
+    // The sheet is in: formulas show (beta.css hides them until then).
+    assert.equal(root.dataset.katex, "");
 });

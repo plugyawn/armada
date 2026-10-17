@@ -228,7 +228,12 @@ mock_esm("../../src/armada/beta/frame.js", {
 mock_esm("../../src/armada/beta/header.js", {drawHeader: noop});
 mock_esm("../../src/armada/beta/column.js", {drawSide: noop});
 mock_esm("../../src/armada/beta/band.js", {drawRunState: noop, stop: noop, tick: noop});
-mock_esm("../../src/armada/beta/lab.js", {buildLab: noop, drawLab: noop, lab: null});
+mock_esm("../../src/armada/beta/lab.js", {
+    buildLab: noop,
+    drawLab: noop,
+    lab: null,
+    showTrouble: noop,
+});
 
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");

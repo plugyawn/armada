@@ -43,14 +43,14 @@ pre.blk { overflow-x: auto; scrollbar-width: none; font: var(--t-code); white-sp
 .ch-list .fh .k { font: var(--t-caption); color: var(--ink-2); margin-left: var(--s-2); }
 .sec .ls .kd { font: var(--t-caption); color: var(--ink-2); }
 
-/* the standing label: this is the beta. It opens the beta's panel. */
+/* the workspace menu, opened from the workspace's name (lab.js); beside the name, a word only while the connection is in
+   trouble */
 #lab .pn a { color: var(--accent-text); }
-/* the label sits beside the workspace's name, out of the way of the field and the column at every width */
 #lab { left: 92px; top: 16px; right: auto; bottom: auto; align-items: flex-start; }
-#lab .pn { position: absolute; top: 32px; left: 0; }
+#lab .pn { position: fixed; top: 52px; left: 8px; }
 #lab #lab-t { height: 24px; padding: 0 10px; border-radius: 12px; background: var(--raised); box-shadow: 0 0 0 1px var(--edge), var(--shadow-raised); color: var(--ink-1); font: var(--t-caption); display: inline-flex; align-items: center; gap: 6px; }
-#lab #lab-t::before { content: ""; width: 6px; height: 6px; border-radius: 3px; background: var(--attention); }
-#lab.down #lab-t::before { background: var(--failure); }
+#lab #lab-t[hidden] { display: none; }
+#lab #lab-t::before { content: ""; width: 6px; height: 6px; border-radius: 3px; background: var(--failure); }
 #lab .pn { width: 380px; max-height: calc(100vh - 80px); overflow-y: auto; scrollbar-width: none; }
 #lab .pn h4 { flex-basis: 100%; font: var(--t-label); color: var(--ink-2); margin-top: 6px; }
 #lab .pn p, #lab .pn ul { flex-basis: 100%; color: var(--ink-1); }

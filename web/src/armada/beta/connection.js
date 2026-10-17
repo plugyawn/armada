@@ -18,6 +18,7 @@ import {forgetReceipts} from "./receipts.js";
 import {applyLater} from "./later.js";
 import {applyChannels} from "./channels.js";
 import {applyPlugins} from "./plugins.js";
+import {showTrouble} from "./lab.js";
 
 /* the tabs of this browser tell each other whose session they hold, and when it ends (resilience.md 2.5) */
 const tabs = typeof BroadcastChannel === "function" ? new BroadcastChannel("armada") : null;
@@ -93,10 +94,10 @@ function resync() { resetStreams();
 /* the queue, for as long as the session stands */
 function poll() { return link.run(); }
 
-/* the standing label says so only after 5 s of trouble (a graceful restart takes 2 to 3); signed out and signed in as
+/* beside the workspace's name, a word says so only after 5 s of trouble (a graceful restart takes 2 to 3); signed out and signed in as
    someone else are a sheet over the page, which keeps the page, the field and what it holds */
 function drawStatus(s) {
-  const l = $("#lab"); if (l) { const down = s === "reconnecting" || s === "offline"; l.classList.toggle("down", down); $("#lab-t").textContent = s === "reconnecting" ? "Beta · reconnecting" : s === "offline" ? "Beta · offline" : "Beta"; }
+  showTrouble(s);
   if (s === "signed_out") { tell({type: "signed_out"}); sheet('<p>You are signed out. <a href="/login/" target="_blank">Sign in again</a></p>'); }
   else if (s === "other_user") { const who = people.get(link.otherUserId); sheet(`<p>Signed in as ${esc(who ? who.name : "someone else")} in another tab. <a href="/">Switch to that account</a></p>`); }
   else unsheet();

@@ -15,6 +15,7 @@ import {reseed, seedField, syncReply} from "./mentions.js";
 import {fieldEmpty, seedOf} from "./mention_text.js";
 import {drawRunState} from "./band.js";
 import {lightboxOpen, localPicture, rememberLocal} from "./media.js";
+import {loadedChunk} from "./chunks.js";
 
 let verb = "Send";
 /* Onix answers what I send in a place only where I turned it on there: off until then, kept in this browser for each place,
@@ -36,7 +37,8 @@ function setVerb(v, cut) { const cur = $(":scope > span:not(.gone)", ph), same =
   if (!same) { const up = ["Send", "Steer", "Answer", "Save", "Choose"].indexOf(v) > ["Send", "Steer", "Answer", "Save", "Choose"].indexOf(verb) ? 1 : -1; verb = v; if (cut) { $$(":scope > :not(.sz)", goc).forEach((x) => x.remove()); goc.insertAdjacentHTML("afterbegin", `<span>${v}</span>`); } else M.swap(goc, `<span>${v}</span>`, {dir: up, seq: true}); go.setAttribute("aria-label", v); go.dataset.tip = v; }
   const text = phText();   /* read after the verb has changed: read before, the field kept saying "Steer Onix" after a run ended */
   if (!cur || cur.textContent !== text) { if (cut || same) ph.innerHTML = `<span>${esc(text)}</span>`; else M.swap(ph, `<span>${esc(text)}</span>`, {quiet: true, seq: true}); } }
-function drawComposer() { const wt = state.place.kind === "topic" && state.place.repo, on = onixHere(), ctx = state.P.ctx; toBtn.hidden = !wt; modeBtn.hidden = !wt; modeBtn.classList.remove("off");
+function drawComposer() { const wt = state.place.kind === "topic" && state.place.repo, on = onixHere(), ctx = state.P.ctx, v = loadedChunk("channels"); if (v) v.fieldMoved();   /* the field's mentions, read against the place now under it (mention_notice.js) */
+  toBtn.hidden = !wt; modeBtn.hidden = !wt; modeBtn.classList.remove("off");
   toBtn.classList.toggle("off", !on); toBtn.setAttribute("aria-pressed", on); toBtn.dataset.tip = on ? "Onix answers what you send here. Press to talk to people only" : "What you send here goes to people. Press to have Onix answer";
   if (wt && ctx) { const label = modeLabel(ctx); const sl = $(".slot", modeBtn); if (sl && sl._v !== label) { sl._v = label; sl.innerHTML = `<span>${esc(label)}</span><i class="sz">${esc(label)}</i>`; } }
   modeBtn.dataset.tip = "Model, speed and effort for this worktree"; modeBtn.dataset.key = "⌘/"; syncReply(); seedField(); setVerb(verb, true); placeJump(); }

@@ -53,6 +53,7 @@ set_global("localStorage", dom.window.localStorage);
 set_global("addEventListener", (...args) => dom.window.addEventListener(...args));
 set_global("removeEventListener", (...args) => dom.window.removeEventListener(...args));
 set_global("getSelection", () => dom.window.getSelection());
+set_global("requestAnimationFrame", (f) => setTimeout(f, 16));
 set_global(
     "ResizeObserver",
     class {

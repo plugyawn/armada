@@ -1,5 +1,6 @@
-/* INTERIM BETA (README.md): New, from the nav's "+", and the channels to join (channels.js); a channel's or a topic's card
-   beside the nav (channel_view.js). Tokens only, as beta.css.
+/* INTERIM BETA (README.md): New, from the nav's "+", and the channels to join (channel_new.js); a channel's or a topic's
+   card beside the nav (channel_view.js); the notice under a mention of someone not in the channel (mention_notice.js).
+   Tokens only, as beta.css.
    A raised surface under the "+" (the nav's top row is 52; the "+" ends at 42), its left edge on the nav's 8 px inset and
    as wide as another person's card (264), so it covers the nav and none of the conversation. Its text edge is 16 in, and
    what has a fill is outdented to stand 8 in: the fields, the selected choice and Create. */
@@ -65,5 +66,20 @@
 .ncard .ls > li > .lk > i { visibility: hidden; font-style: normal; }
 .ncard .ls > li:is([data-state="adding"], [data-state="added"]) > .lk { color: var(--ink-2); }
 .ncard .ls + .cap:empty { display: none; }
+
+/* the notice under a mention: one line in the 20 under the main field, which nothing else uses, its words on the text edge
+   where the field's words start, in the caption's size, the sentence in the first ink. Whatever the band holds (a run's
+   line, a question, Jump to latest) and whatever the conversation's foot, it covers nothing. One line: the sentence gives
+   way first, Add them and the × never. */
+.cz > .mnote { position: absolute; top: 100%; left: calc(48px + var(--pad-x)); right: 0; height: var(--s-5); display: flex; align-items: center; gap: var(--s-1); font: var(--t-caption); }
+.mnote > .say { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-1); margin-right: var(--s-1); }
+.mnote > .say[data-bad] { color: var(--failure); }
+.mnote > .lk { flex: none; display: inline-grid; height: var(--s-5); padding: 0 var(--s-1); font: var(--t-caption); }
+.mnote > .lk > * { grid-area: 1 / 1; }
+.mnote > .lk > i { visibility: hidden; font-style: normal; }
+.mnote > .c { flex: none; width: var(--s-5); height: var(--s-5); }
+/* the line is 20 high, the rebuild's hit areas 24: each control takes 2 more above and below, unseen */
+.mnote > .lk, .mnote > .c { position: relative; }
+.mnote > .lk::after, .mnote > .c::after { content: ""; position: absolute; inset: -2px 0; }
 
 }

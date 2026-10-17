@@ -10,8 +10,9 @@
 // keyboard a row's focus brings it up, Tab goes into it and on to the next
 // row, and Esc gives the row its focus back. A channel's count opens its
 // members and, for someone the server lets add people, Add people: the
-// active people not in it, each added with one press. Deleted with
-// web/src/armada/beta/.
+// active people not in it, each added with one press. A mention, in a
+// channel, of someone not in it is said above the field, with Add them for
+// whom the server lets add people. Deleted with web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -201,6 +202,17 @@ function serve() {
         ["GET", /^\/json\/armada\/runs$/, () => success({armada_runs: []})],
         ["POST", /^\/json\/messages\/flags$/, () => success()],
         ["POST", /^\/json\/users\/me\/subscriptions$/, () => add_answer()],
+        [
+            "GET",
+            /^\/json\/user_groups$/,
+            () =>
+                success({
+                    user_groups: [
+                        {id: 70, name: "infra"},
+                        {id: 71, name: "oncall"},
+                    ],
+                }),
+        ],
     ];
 }
 let add_answer = () => success({subscribed: {}, already_subscribed: {}});
@@ -877,4 +889,224 @@ run_test("the members follow people joining and leaving while they are open", ()
         stream_ids: [OPS],
         user_ids: [CORDELIA],
     });
+});
+
+// The notice at the field: in #ops > deploys, where Mihir and Cordelia are
+// not.
+const notice = () => find(".mnote:not([inert])");
+const notice_words = () =>
+    notice()?.querySelector("[role=status] > span, .say")?.textContent ?? null;
+const note_add = () =>
+    [...(notice()?.querySelectorAll("button") ?? [])].find((b) => b.textContent.startsWith("Add"));
+// The field's words changed as typing changes them: the page hears it (a
+// MutationObserver, after the change) and looks at the words a frame later.
+async function write_wire(html, f = field) {
+    f.innerHTML = html;
+    await settle();
+    clock.tick(20);
+}
+const MIHIR_PILL =
+    '<span class="pill" contenteditable="false" data-wire="@**Mihir Kumar|15**" data-uid="15">@Mihir Kumar</span> can you look?';
+function to_deploys() {
+    routing.openPlace(routing.placeFromKey(routing.tkey(OPS, "deploys")));
+}
+
+run_test(
+    "a mention of someone not in the channel is said above the field, with Add them",
+    async () => {
+        serve();
+        sounds.length = 0;
+        beta_state.state.realm.admin = true;
+        // Opening a place in a channel asks for its members, so that a
+        // mention is said as it is written.
+        beta_state.members.delete(OPS);
+        to_deploys();
+        await settle();
+        assert.equal(asked(`/json/streams/${OPS}/members`), 1);
+        field.focus();
+        await write_wire(MIHIR_PILL);
+        assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+        assert.equal(notice().getAttribute("role"), "status");
+        // Nothing more was asked to say it.
+        assert.equal(asked(`/json/streams/${OPS}/members`), 1);
+        assert.deepEqual(adds(), []);
+
+        press(note_add());
+        assert.equal(note_add().textContent.startsWith("Adding"), true);
+        assert.deepEqual(adds(), [
+            {subscriptions: JSON.stringify([{name: "ops"}]), principals: JSON.stringify([MIHIR])},
+        ]);
+        await settle();
+        clock.tick(20);
+        assert.equal(notice_words(), "Mihir is in #ops now.");
+        assert.equal(note_add(), undefined);
+        assert.deepEqual(sounds.splice(0), ["tick"]);
+        clock.tick(2400);
+        assert.equal(notice(), null);
+        // The caret never left the field, and the words are as I wrote them.
+        assert.equal(document.activeElement, field);
+        assert.match(field.textContent, /can you look\?/);
+        channels.onSubscription({
+            type: "subscription",
+            op: "peer_remove",
+            stream_ids: [OPS],
+            user_ids: [MIHIR],
+        });
+        await write_wire("");
+    },
+);
+
+run_test(
+    "no notice for a bot, me, a member, a silent mention, a wildcard, code or a direct message",
+    async () => {
+        serve();
+        to_deploys();
+        await settle();
+        for (const words of [
+            "@**Onix** deploy it",
+            "@**Iago** note to self",
+            "@**Othello** you are on call",
+            "@_**Mihir Kumar|15** said so",
+            "@**all** heads up",
+            "write it as `see @**Mihir Kumar**` in code",
+        ]) {
+            await write_wire(words);
+            assert.equal(notice(), null, words);
+        }
+        // Written by hand, a mention counts as one picked.
+        await write_wire("@**Mihir Kumar** can you look?");
+        assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+        // Two people.
+        await write_wire("@**Mihir Kumar** and @**Cordelia**, look");
+        assert.equal(notice_words(), "Mihir and Cordelia aren't in #ops, so they won't see this.");
+        // A direct message has no channel: the place under the field changes.
+        routing.openPlace(routing.placeFromKey(routing.dkey([CORDELIA])));
+        await settle();
+        clock.tick(20);
+        assert.equal(notice(), null);
+        // Back in #ops, the same words say so again; in a channel Mihir is
+        // in, they do not.
+        to_deploys();
+        await settle();
+        clock.tick(20);
+        assert.ok(notice());
+        await write_wire("@**Mihir Kumar** can you look?");
+        routing.openPlace(routing.placeFromKey(routing.tkey(NLS, "lr-sweep")));
+        await settle();
+        clock.tick(20);
+        assert.equal(notice(), null);
+        await write_wire("");
+    },
+);
+
+run_test("the notice goes with the mention; × dismisses it until the field is empty", async () => {
+    serve();
+    to_deploys();
+    await settle();
+    await write_wire(MIHIR_PILL);
+    assert.ok(notice());
+    await write_wire("can you look?");
+    assert.equal(notice(), null);
+    await write_wire(MIHIR_PILL);
+    assert.ok(notice());
+    press(notice().querySelector('[aria-label="Dismiss"]'));
+    clock.tick(20);
+    assert.equal(notice(), null);
+    await write_wire(MIHIR_PILL + " please");
+    assert.equal(notice(), null);
+    // Another person is said, though.
+    await write_wire(MIHIR_PILL + " and @**Cordelia**");
+    assert.equal(notice_words(), "Cordelia isn't in #ops, so they won't see this.");
+    // A sent message empties the field: the next one starts afresh.
+    await write_wire("");
+    await write_wire(MIHIR_PILL);
+    assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+    await write_wire("");
+    assert.equal(notice(), null);
+});
+
+run_test("Add them only for whom the server lets add; a refusal is said in words", async () => {
+    serve();
+    sounds.length = 0;
+    to_deploys();
+    await settle();
+    beta_state.state.realm.admin = false;
+    await write_wire(MIHIR_PILL);
+    assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+    assert.equal(note_add(), undefined);
+    await write_wire("");
+
+    beta_state.state.realm.admin = true;
+    add_answer = () => ({
+        result: "error",
+        msg: "Insufficient permission",
+        code: "BAD_REQUEST",
+        status: 400,
+    });
+    await write_wire(MIHIR_PILL);
+    press(note_add());
+    await settle();
+    assert.equal(notice_words(), "You can't add people to #ops.");
+    assert.equal(note_add().textContent.startsWith("Add them"), true);
+    assert.deepEqual(sounds.splice(0), ["nope"]);
+    add_answer = () => success({subscribed: {}, already_subscribed: {}});
+    await write_wire("");
+});
+
+run_test("a group none of whose members is in the channel is said, with no verb", async () => {
+    serve();
+    to_deploys();
+    await settle();
+    beta_state.groups.set(70, {members: new Set([MIHIR]), subgroups: new Set()});
+    beta_state.groups.set(71, {members: new Set([OTHELLO]), subgroups: new Set()});
+    await write_wire("@*infra* the deploy failed");
+    // The groups' names are asked for once, the first time one is named.
+    await settle();
+    clock.tick(20);
+    assert.equal(notice_words(), "No one in infra is in #ops, so no one there will see this.");
+    assert.equal(note_add(), undefined);
+    await write_wire("@*oncall* the deploy failed");
+    assert.equal(notice(), null);
+    assert.equal(requests.filter((r) => r.url === "/json/user_groups").length, 1);
+    await write_wire("");
+});
+
+run_test("a thread's field says so too, in the one place under the main field", async () => {
+    serve();
+    to_deploys();
+    await settle();
+    const thread = document.createElement("div");
+    thread.className = "thr-in";
+    thread.innerHTML =
+        '<div class="cz flat"><div class="sh"><div class="tx" tabindex="0"></div></div></div>';
+    find("#col").append(thread);
+    const reply = thread.querySelector(".tx");
+    // Its first word is heard as typing (an input event); after that it is
+    // watched as the main field is.
+    reply.innerHTML = MIHIR_PILL;
+    reply.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+    await settle();
+    clock.tick(20);
+    assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+    assert.equal(document.querySelectorAll(".mnote:not([inert])").length, 1);
+    // It stands with the main field, at the window's foot, not over the
+    // conversation where the thread is.
+    assert.ok(find(".dock").contains(notice()));
+    assert.ok(!thread.contains(notice()));
+    // The main field changing with no mention leaves it: it is about the
+    // thread's field.
+    await write_wire("and the logs");
+    assert.equal(notice_words(), "Mihir isn't in #ops, so they won't see this.");
+    // Sent, the thread's field empties, and the notice goes.
+    await write_wire("", reply);
+    assert.equal(notice(), null);
+    // A thread closed with a mention in its field takes the notice with it.
+    await write_wire(MIHIR_PILL, reply);
+    assert.ok(notice());
+    thread.remove();
+    composer.drawComposer();
+    await settle();
+    clock.tick(20);
+    assert.equal(notice(), null);
+    await write_wire("");
 });

@@ -9,7 +9,7 @@ import {cutRows, drawLane, dropRows, ends, isQuestion, pin, releaseRows, showLan
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
-import {closeInfo, forgetReceipts, loadReceipts, RECEIPTS} from "./receipts.js";
+import {closeInfo, forgetReceipts, loadReceipts} from "./receipts.js";
 import {drawFooters} from "./agent_turn.js";
 import {drawTyping} from "./events.js";
 import {drawRunState} from "./band.js";
@@ -103,7 +103,7 @@ async function openPlace(p, o = {}) {
   ready();
   const c = state.P, fresh = !c.loaded;
   const jobs = [fresh ? fetchMsgs(c) : null, fetchRuns(c), c.ctx ? null : fetchCtx(c)];
-  if (RECEIPTS && p.kind === "topic") loadMembers(p.stream_id);
+  if (p.kind === "topic") loadMembers(p.stream_id);   /* the ticks count them, and a mention of someone not in it is said at the field */
   await jobs[0]; if (state.place !== p) return;
   if (fresh) { if (c.msgs.some(isQuestion)) { await jobs[1]; if (state.place !== p) return; }   /* a question is drawn in its run's turn (feed.js): the runs first */
     drawLane(); loadReceipts(); }

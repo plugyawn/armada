@@ -9,7 +9,7 @@
    costs more than the chunks save. */
 
 import {$, $$, clamp, el, esc, press, T} from "./util.js";
-import {marks, members, people, places, repoStreams, state, streams, topicsOf, worktrees} from "./state.js";
+import {groups, marks, members, people, places, repoStreams, state, streams, topicsOf, worktrees} from "./state.js";
 import {age, dayLabel, hhmm} from "./time.js";
 import {api} from "./connection.js";
 import {faceOf, isOnix, nameOf, presOf} from "./faces.js";
@@ -23,8 +23,9 @@ import {isRepository, loadMembers, membersChanged, openWhenIn} from "./channels.
 import {holds} from "./hover.js";
 import {runsSeen} from "./runs.js";
 import {repoPath} from "./header.js";
-import {nav, navScroll} from "./frame.js";
-import {startThread} from "./mentions.js";
+import {nav, navScroll, tx} from "./frame.js";
+import {refLook, startThread} from "./mentions.js";
+import {outsideCode, wireOf} from "./mention_text.js";
 
 const LOAD = {
   lightbox: () => import(/* webpackChunkName: "beta-lightbox" */ "./lightbox.js"),
@@ -36,7 +37,8 @@ const LOAD = {
 /* read when a chunk arrives, never while the modules load (they import each other in cycles) */
 const page = () => ({$, $$, clamp, el, esc, press, T, state, dayLabel, hhmm, age, nameOf, ready, katexSheet, loadPics, picHTML, bound, dataAt, isObj, text, words,
   api, streams, repoStreams, members, marks, places, topicsOf, worktrees, runsSeen, people, faceOf, presOf, isOnix, openPlace, placeFromKey, tkey, topicLabel,
-  loadTopics, loadMembers, membersChanged, holds, repoPath, nav, navScroll, startThread, openWhenIn, isRepository});
+  loadTopics, loadMembers, membersChanged, holds, repoPath, nav, navScroll, startThread, openWhenIn, isRepository, groups, tx, wireOf, outsideCode,
+  personByName: refLook.personByName});
 const asked = new Map(), loaded = new Map();
 /* the chunk, once it has run: a press reads it here and acts in its own frame */
 const loadedChunk = (name) => loaded.get(name) || null;

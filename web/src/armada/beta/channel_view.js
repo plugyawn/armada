@@ -9,10 +9,12 @@
    a press outside or focus going elsewhere.
    It imports nothing the first load holds: the page is handed to its default export, which wires the nav when the chunk
    arrives (prefetched once the page is idle; before that a row has no card). Who may add people, and whom Add offers, is
-   channel_rules.js, which arrives with it, as New from the nav's "+" does (channel_new.js). */
+   channel_rules.js, which arrives with it, as New from the nav's "+" (channel_new.js) and the notice under a mention of
+   someone not in the channel (mention_notice.js) do. */
 
 import {addable, addRefusal, mayAddPeople, memberOrder} from "./channel_rules.js";
 import newChannelView from "./channel_new.js";
+import mentionNotice from "./mention_notice.js";
 
 export default function channelViewChunk(P) {
   const {$, $$, el, esc, T, streams, repoStreams, members, marks, places, topicsOf, worktrees, runsSeen, people, age,
@@ -205,7 +207,9 @@ export default function channelViewChunk(P) {
   addEventListener("pointerdown", (e) => { if (card && !card.el.contains(e.target) && !navScroll.contains(e.target)) hide({stay: true}); }, true);
 
   /* what the first load tells this chunk: a channel's members changed (channels.js) */
-  function membersChanged() { if (!card || card.kind !== "channel") return; if (card.view) { drawSheet(); return; } const b = $("[data-card-members]", card.el); if (b) { b.innerHTML = membersHTML(card.sid); host(b); } }
+  function membersChanged() { notice.recheck(); if (!card || card.kind !== "channel") return; if (card.view) { drawSheet(); return; } const b = $("[data-card-members]", card.el); if (b) { b.innerHTML = membersHTML(card.sid); host(b); } }
   const {toggleNew, joined} = newChannelView(P);   /* New, from the nav's "+" (channel_new.js) */
-  return {membersChanged, toggleNew, joined, get card() { return card && {key: card.key, el: card.el}; }};
+  const notice = mentionNotice(P, addPeople);   /* a mention of someone not in the channel, at the field (mention_notice.js) */
+  /* what the first load tells this chunk: a channel's members changed (channels.js), a new place under the field (composer.js) */
+  return {membersChanged, fieldMoved: notice.recheck, toggleNew, joined, get card() { return card && {key: card.key, el: card.el}; }};
 }

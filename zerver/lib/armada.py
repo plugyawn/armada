@@ -117,6 +117,11 @@ ARMADA_BARE_MENTION_STEER: Final = (
 )
 # How far back a mention with no words looks for its sender's words.
 ARMADA_UNADDRESSED_WORDS_LIMIT: Final = 50
+# A mention with no words that starts a run asks what its sender wrote
+# just before it in the topic, if they wrote it this recently (the new
+# interface titles the run from the same message: web/src/armada/beta/
+# runs.js, runTitle).
+ARMADA_BARE_MENTION_WINDOW_SECONDS: Final = 120
 
 # This is visible only during the short message-event/run-event handoff before
 # the client mounts the animated live-progress chrome. Keep it visually
@@ -1526,6 +1531,15 @@ def armada_worker_task_for_message(
 ) -> str:
     del active_session
     return clean_armada_task_text(content)
+
+
+def build_armada_bare_mention_task(words: str, *, message_id: int) -> str:
+    """The request of a mention with no words that starts a run: the
+    words its sender wrote just before it (message_id)."""
+    return (
+        f"{words}\n\n(They wrote this in #{message_id}, then mentioned you with no "
+        "words of their own: this is their request.)"
+    )
 
 
 def armada_worker_should_start(
@@ -3896,6 +3910,23 @@ class ArmadaWorkerTurn:
         if poll_controls and event_kind in {"assistant", "command", "file_change", "plan", "tool"}:
             self.maybe_apply_same_turn_steering()
 
+    def bare_mention_task(self) -> tuple[str, str]:
+        """What a run started by a mention with no words is asked: the
+        words its sender wrote just before it in the topic, as their
+        request, or else to read the topic's latest messages; and the
+        run's activity until it does something, which is those words
+        alone (none for the fallback), as for any request."""
+        words_before_mention = getattr(self.handler.worker_run_store, "words_before_mention", None)
+        found = (
+            words_before_mention(self.bot_handler, self.message_id)
+            if callable(words_before_mention)
+            else None
+        )
+        if found is None:
+            return ARMADA_BARE_MENTION_STEER, ""
+        words, message_id = found
+        return build_armada_bare_mention_task(words, message_id=message_id), words
+
     def run_runtime_segment(self, segment_task: str, *, segment_index: int) -> dict[str, Any]:
         self.raise_if_cancel_requested()
         segment_event_start = len(self.transcript_events)
@@ -4014,6 +4045,9 @@ class ArmadaWorkerTurn:
                     )
                 )
             self.task = armada_worker_task_for_message(self.content, self.active_session)
+            activity = self.task
+            if not self.task and self.session_kind == "shared":
+                self.task, activity = self.bare_mention_task()
             runtime_label = self.handler.worker_runtime.runtime_value()
             if not callable(getattr(self.handler.worker_run_store, "claim_for_run", None)):
                 self.handler.worker_run_store.record(
@@ -4032,7 +4066,7 @@ class ArmadaWorkerTurn:
                 source_topic=self.source_topic,
                 source_message_id=self.source_message_id,
                 summary=ARMADA_AGENT_WORKING_SUMMARY,
-                current_activity=self.task,
+                current_activity=activity,
                 runtime_label=runtime_label,
             )
             self.handler.record_worker_event(

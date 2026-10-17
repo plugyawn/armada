@@ -30,6 +30,7 @@ from scripts.lib.armada_worker_slots import (
 )
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
+    ARMADA_BARE_MENTION_WINDOW_SECONDS,
     ARMADA_DEFAULT_RESPONSE_POLICY,
     ARMADA_QUESTION_LEAD,
     ARMADA_REASONING_EFFORTS,
@@ -3995,6 +3996,34 @@ class ArmadaDatabaseWorkerRunStore:
                 break
             words.append(content.strip())
         return [word for word in reversed(words) if word]
+
+    def words_before_mention(self, bot_handler: Any, message_id: int) -> tuple[str, int] | None:
+        """What a mention with no words (message_id) that starts a run
+        asks: its sender's latest message before it in the topic's main
+        line, written at most ARMADA_BARE_MENTION_WINDOW_SECONDS before
+        it and not itself to the agent; its words and its id. None when
+        there is no such message."""
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        mention = Message.objects.filter(id=message_id, realm_id=user_profile.realm_id).first()
+        if mention is None:
+            return None
+        before = (
+            messages_for_topic(user_profile.realm_id, mention.recipient_id, mention.topic_name())
+            .filter(
+                id__lt=message_id,
+                sender_id=mention.sender_id,
+                thread_root__isnull=True,
+                date_sent__gte=mention.date_sent
+                - timedelta(seconds=ARMADA_BARE_MENTION_WINDOW_SECONDS),
+            )
+            .order_by("-id")
+            .values_list("id", "content")
+            .first()
+        )
+        if before is None or is_armada_request_message(before[1]) or not before[1].strip():
+            return None
+        return before[1].strip(), before[0]
 
     def steering_events_after(
         self,

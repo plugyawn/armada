@@ -25,6 +25,7 @@ from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
     ARMADA_AGENT_RUNTIME_PACKAGES,
     ARMADA_BARE_MENTION_STEER,
+    ARMADA_BARE_MENTION_WINDOW_SECONDS,
     ARMADA_CODEX_MCP_TOOLS,
     ARMADA_CONFIG_ENDPOINT,
     ARMADA_DEFAULT_STREAM,
@@ -42,13 +43,17 @@ from zerver.lib.armada import (
     ARMADA_SESSION_ENDPOINT,
     ARMADA_TOPIC_CONTEXT_ENDPOINT,
     ARMADA_WORKING_MESSAGE,
+    ArmadaActiveSessionSummary,
     ArmadaEmbeddedBotHandler,
     ArmadaLiveRunState,
     ArmadaTokenUsage,
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRuntime,
+    ArmadaWorkerToolResult,
+    ArmadaWorkerTranscriptCallback,
     ArmadaWorkerTurn,
     build_armada_active_session_summary_from_messages,
+    build_armada_bare_mention_task,
     build_armada_question_message,
     get_armada_session_payload,
     write_armada_live_run_state,
@@ -59,6 +64,7 @@ from zerver.lib.armada_agent import (
     ArmadaProcessIsolation,
     armada_addressing_context_messages,
     armada_codex_thread_version,
+    build_armada_codex_turn_prompt,
 )
 from zerver.lib.armada_agent_threads import serialize_armada_agent_threads
 from zerver.lib.armada_background_read import ArmadaBackgroundRead
@@ -7727,3 +7733,141 @@ class ArmadaMentionDuringRunTest(ZulipTestCase):
                 "Onix already has the maximum number of active runs in this realm.",
             ],
         )
+
+
+class ArmadaBareMentionRunTest(ZulipTestCase):
+    """A mention of the agent with no words, when no run is live, starts a
+    run that asks what its sender wrote just before it in the topic: on
+    runix.chat, "New channel?" and then "@Onix" alone. The new interface
+    titles the run from the same message."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        self.hamlet = self.example_user("hamlet")
+        self.agent = self.create_test_bot(
+            "onix",
+            self.hamlet,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        self.subscribe(self.example_user("cordelia"), "Denmark")
+        self.store = ArmadaDatabaseWorkerRunStore()
+        self.bot_handler = SimpleNamespace(user_profile=self.agent)
+
+    def say(self, sender: UserProfile, content: str, *, topic: str = "greetings") -> int:
+        # The embedded bot worker is not woken: these tests hand the agent
+        # its messages themselves.
+        with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
+            return self.send_stream_message(sender, "Denmark", content, topic_name=topic)
+
+    def words_before(self, mention: int) -> tuple[str, int] | None:
+        return self.store.words_before_mention(self.bot_handler, mention)
+
+    def test_the_request_is_what_its_sender_wrote_just_before(self) -> None:
+        asked = self.say(self.hamlet, "New channel?")
+        # Someone else's words, or a side thread, are not the request.
+        self.say(self.example_user("cordelia"), "hi all")
+        aside = self.say(self.hamlet, "an aside")
+        Message.objects.filter(id=aside).update(thread_root_id=asked)
+        self.say(self.hamlet, "in another topic", topic="elsewhere")
+        mention = self.say(self.hamlet, "@**Onix**")
+        self.assertEqual(self.words_before(mention), ("New channel?", asked))
+
+        # Words that went to the agent already are not asked again.
+        self.say(self.hamlet, "@**Onix** make it private")
+        self.assertIsNone(self.words_before(self.say(self.hamlet, "@**Onix**")))
+
+        # Words from long before are not the request either.
+        old = self.say(self.hamlet, "Back up the files?")
+        mention = self.say(self.hamlet, "@**Onix**")
+        Message.objects.filter(id=old).update(
+            date_sent=Message.objects.get(id=mention).date_sent
+            - timedelta(seconds=ARMADA_BARE_MENTION_WINDOW_SECONDS + 1)
+        )
+        self.assertIsNone(self.words_before(mention))
+        # Nor does a mention deleted before the agent read it have any.
+        self.assertIsNone(self.words_before(mention + 1000))
+
+    def run_turn(self, mention: int) -> tuple[str, str, str]:
+        """The task a run on mention gets, the prompt Codex is sent, and the
+        run's activity as it starts."""
+        seen: list[tuple[str, str]] = []
+        activities: list[str] = []
+
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary,
+            task: str,
+            *,
+            event_callback: ArmadaWorkerTranscriptCallback | None = None,
+            **kwargs: object,
+        ) -> list[ArmadaWorkerToolResult]:
+            seen.append((task, build_armada_codex_turn_prompt(active_session, task)))
+            return []
+
+        store = self.store
+
+        class RunStore:
+            def start(self, bot_handler: object, message_id: int, **kwargs: object) -> bool:
+                return True
+
+            def record(
+                self, bot_handler: object, message_id: int, status: str, **kwargs: object
+            ) -> None:
+                pass
+
+            def words_before_mention(
+                self, bot_handler: object, message_id: int
+            ) -> tuple[str, int] | None:
+                return store.words_before_mention(bot_handler, message_id)
+
+            def update_metadata(
+                self, bot_handler: object, message_id: int, **metadata: object
+            ) -> None:
+                if "current_activity" in metadata:
+                    activities.append(str(metadata["current_activity"]))
+
+        class BotHandler:
+            user_profile = self.agent
+
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                return {"id": 0}
+
+        message = {
+            "id": mention,
+            "type": "stream",
+            "display_recipient": "Denmark",
+            "topic": "greetings",
+            "sender_id": self.hamlet.id,
+            "content": "",
+        }
+        ArmadaEmbeddedBotHandler(
+            worker_run_store=RunStore(), worker_runtime=ArmadaWorkerRuntime(tool_runner)
+        ).run_worker_turn(
+            message,
+            BotHandler(),
+            content="",
+            active_session=None,
+            message_id=mention,
+            stream="Denmark",
+            topic="greetings",
+            post_started_progress=False,
+            requesting_user_id=self.hamlet.id,
+        )
+        [(task, prompt)] = seen
+        return task, prompt, activities[0]
+
+    def test_the_run_is_asked_the_words_before_the_mention(self) -> None:
+        asked = self.say(self.hamlet, "New channel?")
+        task, prompt, activity = self.run_turn(self.say(self.hamlet, "@**Onix**"))
+        self.assertEqual(task, build_armada_bare_mention_task("New channel?", message_id=asked))
+        self.assertTrue(prompt.startswith(f"Task: New channel?\n\n(They wrote this in #{asked},"))
+        # The run's activity is the request's words, as for any request.
+        self.assertEqual(activity, "New channel?")
+
+        # With nothing before it, the agent is asked to read the topic.
+        task, prompt, activity = self.run_turn(self.say(self.hamlet, "@**Onix**", topic="quiet"))
+        self.assertEqual(task, ARMADA_BARE_MENTION_STEER)
+        self.assertTrue(prompt.startswith(f"Task: {ARMADA_BARE_MENTION_STEER}"))
+        self.assertEqual(activity, "")

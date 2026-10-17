@@ -1781,3 +1781,43 @@ run_test(
         await settle();
     },
 );
+
+run_test(
+    "a widget joining the group leaves the cells of the rows already in it as they were",
+    async () => {
+        // The trailing cells are whole pixels wide once measured (snapCells; there is no layout here, so it is set by hand).
+        const cell = (label) => rowOf(label).querySelector(".wf");
+        cell("GPUs").style.width = "65px";
+        cell("Training").style.width = "71px";
+        plugins.onPluginEvent({
+            type: "armada_plugin",
+            op: "add",
+            plugin: {
+                ...gpus(),
+                id: 10,
+                plugin: "uptime",
+                name: "Uptime",
+                glyph: "globe",
+                bot_user_id: 43,
+                widgets: [{key: "up", label: "Uptime", in: ["nav"], cadence: 60}],
+                widget_defaults: {up: {nav: "shown", column: true}},
+            },
+        });
+        // The group is drawn again; each row that was there has its cell's width from before.
+        assert.equal(cell("GPUs").style.width, "65px");
+        assert.equal(cell("Training").style.width, "71px");
+        assert.equal(cell("Uptime").style.width, "");
+        // A cell whose sizer changed is measured again.
+        const doc = copy(GPUS_DOC);
+        doc.rest.sizer = "888 free";
+        plugins.onWidgetEvent({type: "armada_widget", op: "update", ...widget(7, "gpus", doc)});
+        assert.equal(cell("GPUs").style.width, "");
+        plugins.onWidgetEvent({
+            type: "armada_widget",
+            op: "update",
+            ...widget(7, "gpus", copy(GPUS_DOC)),
+        });
+        plugins.onPluginEvent({type: "armada_plugin", op: "remove", install_id: 10});
+        await settle();
+    },
+);

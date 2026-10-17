@@ -119,7 +119,13 @@ const plusRowHTML = () => `<button class="row wg plus" data-w="plus" aria-haspop
    thing changes where it stands */
 function drawWidgets() {
   if (!groupEl) return; const list = navWidgets(), at = now() / 1000, sig = list.map((x) => `${x.id}|${x.label}|${x.p.glyph}|${sizerOf(x)}`).join(";");
-  if (sig !== groupSig) { groupSig = sig; groupEl.innerHTML = list.map((x) => rowHTML(x, at)).join("") + plusRowHTML(); host(groupEl); snapCells(); return; }
+  if (sig !== groupSig) {
+    /* a row that was there keeps its cell's whole-pixel width through the redraw, so that a widget joining the group
+       changes nothing in the rows that were already in it, not even for the frame before snapCells measures */
+    const kept = new Map($$(".row.wg", groupEl).map((r) => [r.dataset.w, $(".wf", r)]).filter(([, c]) => c && c.style.width).map(([id, c]) => [id, [c.style.width, $(".sz", c).textContent]]));
+    groupSig = sig; groupEl.innerHTML = list.map((x) => rowHTML(x, at)).join("") + plusRowHTML(); host(groupEl);
+    for (const r of $$(".row.wg", groupEl)) { const k = kept.get(r.dataset.w), c = $(".wf", r); if (k && c && $(".sz", c).textContent === k[1]) c.style.width = k[0]; }
+    snapCells(); return; }
   for (const x of list) patchRow(x, at);
 }
 const rowEl = (id) => $$(".row.wg", groupEl).find((r) => r.dataset.w === id) || null;

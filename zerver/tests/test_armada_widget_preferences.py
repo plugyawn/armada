@@ -9,7 +9,16 @@ from unittest import mock
 import time_machine
 from typing_extensions import override
 
+from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE
+from zerver.lib.armada_agent import (
+    ArmadaAppServerNotification,
+    ArmadaAppServerTurnContext,
+    ArmadaCodexAppServerToolRunner,
+    armada_codex_dynamic_tools,
+    armada_codex_thread_version,
+)
 from zerver.lib.armada_plugin_events import fetch_armada_plugin_state
+from zerver.lib.armada_plugin_tools import armada_plugin_tool_specs
 from zerver.lib.armada_plugins import (
     install_plugin,
     remove_plugin,
@@ -22,7 +31,7 @@ from zerver.lib.event_schema import (
     check_armada_widget_preference_update_event,
 )
 from zerver.lib.test_classes import ZulipTestCase
-from zerver.models import PluginInstall, PluginWidgetPreference, UserProfile
+from zerver.models import AgentRun, PluginInstall, PluginWidgetPreference, UserProfile
 from zerver.tests.test_events import BaseAction
 
 SHA = "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5"
@@ -385,3 +394,167 @@ class WidgetPreferenceEventsAppliedTest(PreferenceTestMixin, BaseAction):
         with self.verify_action(event_types=["armada_widget_preference"]) as events:
             self.api_delete(self.user_profile, url)
         check_armada_widget_preference_remove_event("events[0]", events[0])
+
+
+class WidgetPreferenceToolTest(PreferenceTestMixin, ZulipTestCase):
+    """armada_widget_preference (zerver/lib/armada_plugin_tools.py), called
+    as Codex calls it: it changes the view of the person the run acts for,
+    on their own row alone, and the run's trace shows what it changed."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        self.hamlet = self.example_user("hamlet")
+        self.cordelia = self.example_user("cordelia")
+        self.gpus = self.install(self.hamlet)
+        # The run the tool is called from: started by Hamlet's message.
+        agent = self.create_test_bot(
+            "agent",
+            self.example_user("iago"),
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        message_id = self.send_stream_message(self.hamlet, "Denmark", "only the H100s, for me")
+        AgentRun.objects.create(
+            realm=self.hamlet.realm,
+            bot_profile=agent,
+            requesting_user=self.hamlet,
+            trigger_message_id=message_id,
+            stream_name="Denmark",
+            topic_name="test",
+            status=AgentRun.RUNNING,
+        )
+        self.trigger_message_id = message_id
+
+    def call(self, arguments: object) -> tuple[dict[str, Any], dict[str, Any], list[Any]]:
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="/bin/false",
+            workdir=None,
+            model="gpt-6-astra",
+            sandbox="workspace-write",
+            approval_policy="never",
+            timeout_seconds=5,
+            output_limit=1000,
+        )
+        turn = ArmadaAppServerTurnContext(
+            thread_id="thread-1",
+            event_callback=None,
+            user_input_provider=None,
+            is_main=True,
+            requesting_user_id=self.hamlet.id,
+            trigger_message_id=self.trigger_message_id,
+        )
+        sent: list[dict[str, Any]] = []
+        caught: list[Any] = []
+        with (
+            mock.patch.object(runner, "send_message", side_effect=sent.append),
+            mock.patch("zerver.tornado.event_queue.process_notification", caught.append),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            runner.handle_server_request(
+                {
+                    "id": 7,
+                    "method": "item/tool/call",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "callId": "call-1",
+                        "tool": "armada_widget_preference",
+                        "namespace": None,
+                        "arguments": json.dumps(arguments),
+                    },
+                },
+                turn_context=turn,
+            )
+        [reply] = sent
+        notification = turn.messages.get_nowait()
+        assert isinstance(notification, ArmadaAppServerNotification)
+        [event] = notification.events
+        return reply["result"], dict(event), caught
+
+    def test_a_new_thread_is_offered_the_tool_and_its_version_follows(self) -> None:
+        self.assertIn(
+            "armada_widget_preference", [spec["name"] for spec in armada_codex_dynamic_tools()]
+        )
+        # The thread version is a fingerprint of the tools a new thread is
+        # given: without this one, it is another, so topics start afresh.
+        with mock.patch(
+            "zerver.lib.armada_agent.armada_plugin_tool_specs",
+            lambda: [
+                spec
+                for spec in armada_plugin_tool_specs()
+                if spec["name"] != "armada_widget_preference"
+            ],
+        ):
+            without = armada_codex_thread_version()
+        self.assertNotEqual(without, armada_codex_thread_version())
+
+    def test_the_asker_s_own_view_changes_and_no_one_else_s(self) -> None:
+        result, event, caught = self.call(
+            {
+                "id": "gpus",
+                "widget": "gpus",
+                "filters": {"gpu": "H100"},
+                "rest_figure": "jobs",
+                "shown": None,
+            }
+        )
+        self.assertTrue(result["success"])
+        mine = {
+            "install_id": self.gpus.id,
+            "widget": "gpus",
+            "shown": None,
+            "position": None,
+            "label": "",
+            "rest_figure": "jobs",
+            "filters": {"gpu": "H100"},
+            "alerts": {},
+            "in_column": None,
+            "seen_at": None,
+        }
+        self.assertEqual(json.loads(result["contentItems"][0]["text"]), mine)
+        # The trace's row says what changed, and for whom.
+        self.assertEqual(
+            (event["status"], event["title"]),
+            ("done", "Changed GPUs for King Hamlet alone: filters, rest_figure, shown."),
+        )
+        # The event went to Hamlet's clients alone; Cordelia's view is the team's.
+        [preference_event] = [
+            sent for sent in caught if sent["event"]["type"] == "armada_widget_preference"
+        ]
+        self.assertEqual(
+            (preference_event["event"]["preference"], list(preference_event["users"])),
+            (mine, [self.hamlet.id]),
+        )
+        self.assertFalse(PluginWidgetPreference.objects.filter(user=self.cordelia).exists())
+
+    def test_only_the_asker_s_view_and_only_what_is_declared(self) -> None:
+        for arguments, refusal in (
+            (
+                {"id": "gpus", "widget": "gpus", "user_id": self.cordelia.id, "shown": False},
+                "user_id is not part of a person's view of a widget.",
+            ),
+            (
+                {"id": "gpus", "widget": "gpus", "filters": {"zone": "a"}},
+                "GPUs has no facet named zone.",
+            ),
+            (
+                {"id": "gpus", "widget": "gpus", "position": True},
+                "position is a whole number or null.",
+            ),
+            ({"id": "gpus", "widget": "gpus", "label": 7}, "label is a string."),
+            ({"id": "gpus", "widget": "gpus", "shown": "yes"}, "shown is true, false or null."),
+            ({"id": "gpus", "widget": "gpus"}, "Nothing to change."),
+            ({"id": "gpus", "widget": 7, "shown": False}, "widget must be a string."),
+            ({"id": "wandb", "widget": "runs", "shown": False}, "No such plugin"),
+            (
+                {"id": "gpus", "widget": "machines", "shown": False},
+                "GPUs has no widget named machines in a nav or a column.",
+            ),
+        ):
+            with self.subTest(arguments=arguments):
+                result, event, _caught = self.call(arguments)
+                self.assertFalse(result["success"])
+                self.assertEqual(event["title"], refusal)
+        self.assertFalse(PluginWidgetPreference.objects.exists())

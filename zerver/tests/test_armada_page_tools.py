@@ -188,6 +188,7 @@ class PageToolCallsTest(ZulipTestCase):
                 "armada_plugin_request_settings",
                 "armada_plugin_install",
                 "armada_plugin_update",
+                "armada_widget_preference",
             ],
         )
 

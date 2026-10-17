@@ -14,6 +14,11 @@ Each acts for the person whose message started the run.
   and installs it for that person; armada_plugin_update moves an install to
   a new commit (zerver/lib/armada_plugin_repository.py). Both record who
   asked, in which run, and where it was asked: PLUGIN_MADE, PLUGIN_UPDATED.
+- armada_widget_preference changes how one of a plugin's widgets is drawn
+  for that person alone (ROUND2 section D, the "Mine" tier), on their own
+  row and no one else's, through zerver/lib/armada_widget_preferences.py:
+  access_widget, check_widget_preference and update_widget_preference, as
+  the person's own PATCH does.
 
 Codex calls them as dynamic tools, as it calls the message tools
 (zerver/lib/armada_message_tools.py).
@@ -50,6 +55,18 @@ ARMADA_PLUGIN_CHECK_TOOL: Final = "armada_plugin_check"
 ARMADA_PLUGIN_REQUEST_SETTINGS_TOOL: Final = "armada_plugin_request_settings"
 ARMADA_PLUGIN_INSTALL_TOOL: Final = "armada_plugin_install"
 ARMADA_PLUGIN_UPDATE_TOOL: Final = "armada_plugin_update"
+ARMADA_WIDGET_PREFERENCE_TOOL: Final = "armada_widget_preference"
+# What armada_widget_preference can change of a person's view, the JSON
+# each takes (null puts it back to the team's), and how to say so.
+ARMADA_WIDGET_PREFERENCE_ARGUMENTS: Final[dict[str, tuple[tuple[type, ...], str]]] = {
+    "shown": ((bool, type(None)), "true, false or null"),
+    "position": ((int, type(None)), "a whole number or null"),
+    "label": ((str,), "a string"),
+    "rest_figure": ((str,), "a string"),
+    "filters": ((dict,), "an object"),
+    "alerts": ((dict,), "an object"),
+    "in_column": ((bool, type(None)), "true, false or null"),
+}
 # A plugin declares at most 16 settings and 8 secrets.
 ARMADA_PLUGIN_REQUEST_FIELD_LIMIT: Final = 24
 
@@ -151,6 +168,42 @@ def armada_plugin_tool_specs() -> list[dict[str, Any]]:
                 "type": "object",
                 "properties": COMMIT_PROPERTIES,
                 "required": ["id", "commit"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "type": "function",
+            "name": ARMADA_WIDGET_PREFERENCE_TOOL,
+            "description": (
+                "Change how one of a plugin's widgets is drawn for the person you act for, and "
+                "for them alone: whether it is in their nav (shown) and where (position, the "
+                "smallest first), their label for it, the figure at rest (rest_figure, one of "
+                "the widget's declared figures), the rows it keeps (filters: a declared facet's "
+                "key and the value its rows must have), the thresholds that mark their nav "
+                "(alerts: a declared alert's key and its number), and whether its list stands "
+                "in their column (in_column). Only what the widget's manifest declares under "
+                "options can be chosen. A field you leave out stays as it is; null puts shown, "
+                "position or in_column back to the team's, and an empty label, figure, filters "
+                "or alerts does the same. Returns their view of it. Begin your reply "
+                '"For you:".'
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "The plugin's id."},
+                    "widget": {
+                        "type": "string",
+                        "description": "The widget's key in the plugin's manifest.",
+                    },
+                    "shown": {"type": ["boolean", "null"]},
+                    "position": {"type": ["integer", "null"], "minimum": 0},
+                    "label": {"type": "string"},
+                    "rest_figure": {"type": "string"},
+                    "filters": {"type": "object"},
+                    "alerts": {"type": "object"},
+                    "in_column": {"type": ["boolean", "null"]},
+                },
+                "required": ["id", "widget"],
                 "additionalProperties": False,
             },
         },
@@ -379,6 +432,46 @@ def request_settings_tool(
     )
 
 
+def widget_preference_tool(
+    caller: ArmadaToolCaller, arguments: dict[str, object]
+) -> ArmadaToolAnswer:
+    # Lazy imports, as above.
+    from zerver.lib.armada_plugin_events import preference_view
+    from zerver.lib.armada_plugins import access_plugin_by_plugin_id
+    from zerver.lib.armada_widget_preferences import (
+        access_widget,
+        check_widget_preference,
+        update_widget_preference,
+    )
+
+    person = caller.asker
+    install = access_plugin_by_plugin_id(person, string_argument(arguments, "id"))
+    install, declaration = access_widget(person, install.id, string_argument(arguments, "widget"))
+    changes: dict[str, object] = {}
+    for name, value in arguments.items():
+        if name in ("id", "widget"):
+            continue
+        if name not in ARMADA_WIDGET_PREFERENCE_ARGUMENTS:
+            raise JsonableError(
+                _("{name} is not part of a person's view of a widget.").format(name=name)
+            )
+        types, kind = ARMADA_WIDGET_PREFERENCE_ARGUMENTS[name]
+        if not isinstance(value, types) or (isinstance(value, bool) and bool not in types):
+            raise JsonableError(_("{name} is {kind}.").format(name=name, kind=kind))
+        changes[name] = value
+    if not changes:
+        raise JsonableError(_("Nothing to change."))
+    preference = update_widget_preference(
+        person, install, declaration["key"], check_widget_preference(declaration, changes)
+    )
+    return read_answer(
+        preference_view(preference),
+        _("Changed {widget} for {person} alone: {fields}.").format(
+            widget=declaration["label"], person=person.full_name, fields=", ".join(changes)
+        ),
+    )
+
+
 ARMADA_PLUGIN_TOOLS: Final[
     dict[str, Callable[[ArmadaToolCaller, dict[str, object]], ArmadaToolAnswer]]
 ] = {
@@ -386,6 +479,7 @@ ARMADA_PLUGIN_TOOLS: Final[
     ARMADA_PLUGIN_REQUEST_SETTINGS_TOOL: request_settings_tool,
     ARMADA_PLUGIN_INSTALL_TOOL: install_tool,
     ARMADA_PLUGIN_UPDATE_TOOL: update_tool,
+    ARMADA_WIDGET_PREFERENCE_TOOL: widget_preference_tool,
 }
 ARMADA_PLUGIN_TOOL_NAMES: Final = frozenset(ARMADA_PLUGIN_TOOLS)
 

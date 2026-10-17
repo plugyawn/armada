@@ -17,10 +17,10 @@ Only what the widget's manifest declares can be chosen: a figure from its
 options' figures, a facet from its facets, an alert from its alerts, within
 the alert's bounds. Personal changes are never in an install's Recent.
 
-The agent's tool for setting the asker's preference (armada_widget_preference,
-ROUND2.md section D) is PL12's: it passes the asker's own row through
-access_widget, check_widget_preference and update_widget_preference, which
-are the whole of what this route does.
+The agent's tool, armada_widget_preference (zerver/lib/armada_plugin_tools.py,
+ROUND2.md section D), passes the asker's own row through access_widget,
+check_widget_preference and update_widget_preference, which are the whole
+of what this route does.
 """
 
 from typing import Any

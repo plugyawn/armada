@@ -11,14 +11,13 @@
 
 const assert = require("node:assert/strict");
 
-const {mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
+const {set_global, zrequire} = require("../lib/namespace.cjs");
 const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
 
 real_dom.make_real_dom(`<section id="turn"></section>`);
 set_global("M", {T: {}, reduced: () => true});
 set_global("smk", (state) => `<span class="mk sm" data-s="${state}"></span>`);
-mock_esm("../../src/armada/beta/frame.js", {side: null});
 
 const checklist = zrequire("armada/beta/checklist.js");
 

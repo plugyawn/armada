@@ -6,7 +6,7 @@ import {age, dayKey, hhmm, now, shortDay} from "./time.js";
 import {dkey, placeFromKey, topicLabel} from "./routing.js";
 import {outline, side} from "./frame.js";
 import {faceOf, isOnix, nameOf, presOf} from "./faces.js";
-import {agentHere, runMark, runsSeen, runTitle} from "./runs.js";
+import {agentHere, liveRun, runMark, runsSeen, runTitle} from "./runs.js";
 import {planRun, stepMark} from "./checklist.js";
 import {homeScanned} from "./home.js";
 import {pack} from "./partners.js";
@@ -28,6 +28,9 @@ function drawSide() {
       /* the checklist reserves the rows it has held in this run, up to seven: a plan that grows pushes the lists below once */
       c.chkRows = c.chkRows || {}; const rows = Math.min(7, Math.max(c.chkRows[run.id] || 0, run.plan.length + (live && run.overview ? 1 : 0))); c.chkRows[run.id] = rows;
       h += `<ol class="chk" id="steps" style="--rows:${rows}">` + run.plan.map((s) => { const mkn = stepMark(s, run), cls = mkn === "live" ? "now" : mkn; return `<li class="step ${cls}">${mk(mkn, mkn === "live" ? "live" : "")}<span class="t">${inlineMd(s.step)}</span><span class="e"></span></li>` + (mkn === "live" && live && run.overview ? `<li class="ev act"><i></i><span class="t cell"><span>${esc(run.overview)}</span></span><span class="e"></span></li>` : ""); }).join("") + "</ol>"; }
+    /* a run that has not planned yet is starting: the dashed ring, the design's mark for a run queued or just started, until
+       its first step or its end */
+    else if (liveRun(c)) h += `<ol class="chk" id="steps" style="--rows:1"><li class="step queued">${mk("queued")}<span class="t">Starting</span><span class="e"></span></li></ol>`;
     else h += `<div class="note">${c.runsLoaded ? (c.runs.length ? "The runs here had no plan. A run that plans its work shows its steps here." : "No run here yet.") : "Loading"}</div>`;
     /* Changes, where there are git facts to show: a channel with a repository (a channel gains one with its first run) */
     if (p.repo) { const g = c.ctx && c.ctx.git && c.ctx.git.available ? c.ctx.git : null, files = g ? g.changed_files || [] : [];

@@ -141,6 +141,7 @@ const column = zrequire("armada/beta/column.js");
 const events = zrequire("armada/beta/events.js");
 const feed = zrequire("armada/beta/feed.js");
 const runs = zrequire("armada/beta/runs.js");
+const checklist = zrequire("armada/beta/checklist.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -326,12 +327,7 @@ run_test("a channel's first run makes it a repository in the open page", async (
     });
     assert.deepEqual(
         column_lists().map((list) => list[0]),
-        [
-            "The runs here had no plan. A run that plans its work shows its steps here.",
-            "Changes",
-            "Runs",
-            "People",
-        ],
+        ["Starting", "Changes", "Runs", "People"],
     );
     // The topic's git facts are read, and any place in #ops opened from
     // now on is a repository's.
@@ -445,4 +441,26 @@ run_test("a run asked with a mention and no words is named by the words just bef
             "New channel?",
         ],
     );
+});
+
+run_test("a run that has not planned yet is starting, not a run with no plan", () => {
+    const c = topic("starting");
+    c.runsLoaded = true;
+    const run = {id: 50, status: "queued", trigger_message_id: 500, date_created: 0, plan: null};
+    c.runs = [run];
+    // Queued, then running: starting, under the dashed ring, until its
+    // first step.
+    assert.deepEqual(column_lists()[0], ["Starting"]);
+    assert.equal(checklist.progOf(c).cap, "Starting");
+    run.status = "running";
+    assert.deepEqual(column_lists()[0], ["Starting"]);
+    run.plan = [{step: "Read the runbook", status: "in_progress"}];
+    assert.deepEqual(column_lists()[0], ["Read the runbook"]);
+    // A run that ended with no plan is one, and says so.
+    run.plan = null;
+    run.status = "done";
+    assert.deepEqual(column_lists()[0], [
+        "The runs here had no plan. A run that plans its work shows its steps here.",
+    ]);
+    assert.equal(checklist.progOf(c).cap, undefined);
 });

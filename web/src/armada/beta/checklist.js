@@ -6,7 +6,7 @@ import {hhmm} from "./time.js";
 import {side} from "./frame.js";
 import {liveRun} from "./runs.js";
 
-function progOf(c) { const run = planRun(c); if (!run) return {title: "Checklist"}; const steps = run.plan, live = run.status === "queued" || run.status === "running";
+function progOf(c) { const run = planRun(c); if (!run) return liveRun(c) ? {title: "Checklist", cap: "Starting"} : {title: "Checklist"}; const steps = run.plan, live = run.status === "queued" || run.status === "running";
   const marksOf = steps.map((s) => stepMark(s, run)), done = marksOf.filter((x) => x === "done").length;
   return {marks: marksOf, cap: live || done < steps.length ? `${done} of ${steps.length}` : `Finished ${hhmm(run.date_finished || run.date_updated || run.date_created)}`}; }
 const planRun = (c) => { const l = liveRun(c); if (l && l.plan && l.plan.length) return l; return c.runs.find((r) => r.plan && r.plan.length) || null; };

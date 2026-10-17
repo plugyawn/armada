@@ -7478,7 +7478,7 @@ paths:
                               "type": "private",
                               "to": [4],
                               "topic": "",
-                              "content": "What if we made it possible to sync drafts in Zulip?",
+                              "content": "What if we made it possible to sync drafts in Armada?",
                               "timestamp": 1595479019,
                             },
                             {
@@ -7486,7 +7486,7 @@ paths:
                               "type": "private",
                               "to": [4, 10],
                               "topic": "",
-                              "content": "What if we made it possible to sync drafts in Zulip?",
+                              "content": "What if we made it possible to sync drafts in Armada?",
                               "timestamp": 1595479019,
                             },
                           ],
@@ -17694,7 +17694,7 @@ paths:
                     **Changes**: New in Zulip 11.0 (feature level 416).
                   type: string
                   nullable: true
-                  example: "Welcome to Zulip! We're excited to have you on board."
+                  example: "Welcome to Armada! We're excited to have you on board."
               required:
                 - invitee_emails
                 - stream_ids
@@ -17903,7 +17903,7 @@ paths:
                     **Changes**: New in Zulip 11.0 (feature level 416).
                   type: string
                   nullable: true
-                  example: "Welcome to Zulip! We're excited to have you on board."
+                  example: "Welcome to Armada! We're excited to have you on board."
             encoding:
               invite_expires_in_minutes:
                 contentType: application/json
@@ -18130,7 +18130,7 @@ paths:
                     Maximum length is 8000 Unicode code points.
                   type: string
                   maxLength: 8000
-                  example: "Welcome to Zulip! We're excited to have you on board."
+                  example: "Welcome to Armada! We're excited to have you on board."
               required:
                 - welcome_message_custom_text
       responses:
@@ -23202,7 +23202,7 @@ paths:
                         "realm_url": "http://localhost:9991",
                         "realm_name": "Zulip Dev",
                         "realm_icon": "https://secure.gravatar.com/avatar/62429d594b6ffc712f54aee976a18b44?d=identicon",
-                        "realm_description": "<p>The Zulip development environment default organization.  It's great for testing!</p>",
+                        "realm_description": "<p>The development environment's default organization.  It's great for testing!</p>",
                         "realm_web_public_access_enabled": false,
                         "result": "success",
                         "external_authentication_methods":
@@ -27253,7 +27253,7 @@ paths:
                               See [Markdown message formatting](/api/message-formatting) for details on the HTML format.
                 example:
                   {
-                    "data": "@**Outgoing webhook test** Zulip is the world\u2019s most productive group chat!",
+                    "data": "@**Outgoing webhook test** Armada is the world\u2019s most productive group chat!",
                     "trigger": "mention",
                     "token": "xvOzfurIutdRRVLzpXrIIHXJvNfaJLJ0",
                     "message":
@@ -27267,10 +27267,10 @@ paths:
                         "topic_links": [],
                         "sender_full_name": "Iago",
                         "avatar_url": "https://secure.gravatar.com/avatar/1f4f1575bf002ae562fea8fc4b861b09?d=identicon&version=1",
-                        "rendered_content": "<p><span class=\"user-mention\" data-user-id=\"25\">@Outgoing webhook test</span> Zulip is the world\u2019s most productive group chat!</p>",
+                        "rendered_content": "<p><span class=\"user-mention\" data-user-id=\"25\">@Outgoing webhook test</span> Armada is the world\u2019s most productive group chat!</p>",
                         "sender_id": 5,
                         "stream_id": 5,
-                        "content": "@**Outgoing webhook test** Zulip is the world\u2019s most productive group chat!",
+                        "content": "@**Outgoing webhook test** Armada is the world\u2019s most productive group chat!",
                         "display_recipient": "Verona",
                         "type": "stream",
                         "id": 112,

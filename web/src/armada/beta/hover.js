@@ -172,5 +172,5 @@ function confirmDelete(m) { if (dialogOpen || !canDelete(m)) return; dialogOpen 
   const key = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); (document.activeElement === $("[data-no]", d) ? close : yes)(); } else if (e.key === "Tab") { e.preventDefault(); const b = $$("button", d), i = b.indexOf(document.activeElement); b[(i + 1) % b.length].focus(); } };
   addEventListener("keydown", key, true); press(d, "[data-no]", close); press(d, "[data-yes]", yes); $("[data-no]", d).focus(); }   /* it stands on Cancel: Return alone never deletes */
 
-export {wordsChanged, buildOver, canDelete, canEdit, caretAtEnd, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, menu, msgOf,
-  openEdit, over, overAt, overHide, saveEdit, startEdit};
+export {wordsChanged, buildOver, canDelete, canEdit, caretAtEnd, closeMenu, confirmDelete, dialogOpen, editLast, editing, endEdit, holds, menu,
+  msgOf, openEdit, over, overAt, overHide, saveEdit, startEdit};

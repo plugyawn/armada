@@ -8,7 +8,9 @@
 // waits as a tooltip does, travels at once between rows while it is up, and
 // lets the pointer cross to it; a press on the row takes it away. From the
 // keyboard a row's focus brings it up, Tab goes into it and on to the next
-// row, and Esc gives the row its focus back. Deleted with
+// row, and Esc gives the row its focus back. A channel's count opens its
+// members and, for someone the server lets add people, Add people: the
+// active people not in it, each added with one press. Deleted with
 // web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
@@ -198,8 +200,10 @@ function serve() {
         ],
         ["GET", /^\/json\/armada\/runs$/, () => success({armada_runs: []})],
         ["POST", /^\/json\/messages\/flags$/, () => success()],
+        ["POST", /^\/json\/users\/me\/subscriptions$/, () => add_answer()],
     ];
 }
+let add_answer = () => success({subscribed: {}, already_subscribed: {}});
 
 const find = (selector) => document.querySelector(selector);
 const field = find(".tx");
@@ -247,6 +251,8 @@ const channels = zrequire("armada/beta/channels.js");
 const chunks = zrequire("armada/beta/chunks.js");
 const send = zrequire("armada/beta/send.js");
 const mentions = zrequire("armada/beta/mentions.js");
+const events = zrequire("armada/beta/events.js");
+const composer = zrequire("armada/beta/composer.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Iago";
@@ -373,6 +379,7 @@ run_test("resting on a channel's row brings its card up after the tooltip's dela
     });
     assert.equal(fact("Members"), "7 members");
     away();
+    beta_state.people.delete(99);
     assert.equal(card(), null);
 });
 
@@ -511,6 +518,8 @@ run_test("from the keyboard: a row's focus brings its card, Tab goes into it and
     assert.equal(document.activeElement, row(`c:${NLS}`));
     dom.press("Tab");
     assert.equal(document.activeElement, plus);
+    dom.press("Tab");
+    assert.equal(document.activeElement, card().querySelector("[data-card-members]"));
     // Past its last control: the next row of the nav.
     dom.press("Tab");
     assert.equal(document.activeElement, row(routing.tkey(NLS, "lr-sweep")));
@@ -622,4 +631,250 @@ run_test("a new thread's field waits for me when I have gone on writing", async 
     assert.ok(find('.thr-in[data-mid="5002"]'));
     assert.equal(document.activeElement, field);
     assert.equal(field.textContent, "Also");
+});
+
+// The members and Add people, on #ops (private): Iago (me), King Hamlet
+// and Othello are in it; Cordelia and Mihir are not.
+const sheet_rows = () =>
+    [...card().querySelectorAll("li")].map((li) =>
+        [...li.querySelectorAll(".t, .e, button > span")].map((x) => x.textContent).join(" · "),
+    );
+const adds = () =>
+    requests
+        .filter((r) => r.method === "POST" && r.url === "/json/users/me/subscriptions")
+        .map((r) => r.body);
+function open_members(sid = OPS) {
+    rest_on(row(`c:${sid}`));
+    clock.tick(500);
+    press(card().querySelector("[data-card-members]"));
+}
+const add_people = () => card().querySelector("[data-add-people]");
+const leave_all = () => {
+    if (card()) {
+        dom.press("Escape", {target: card()});
+    }
+    if (card()) {
+        dom.press("Escape", {target: card()});
+    }
+    away();
+};
+
+run_test("a channel's count opens its members; Add only for whom the server lets add", async () => {
+    serve();
+    beta_state.state.realm.admin = false;
+    beta_state.state.realm.addSubscribers = null;
+    beta_state.state.presences = {[OTHELLO]: {active_timestamp: at(10)}};
+    open_members();
+    // A dialog now: focus is in it, so the pointer leaving keeps it, and
+    // the page handing the field its caret after a press (host.js, on
+    // mouseup) leaves it there.
+    assert.ok(card().contains(document.activeElement));
+    composer.ready();
+    assert.ok(card().contains(document.activeElement));
+    away();
+    assert.deepEqual(sheet_rows(), ["Othello · Here now", "Iago (you) · ", "King Hamlet · "]);
+    assert.equal(card().querySelector(".cap").textContent, "3 members");
+    assert.equal(add_people(), null);
+    leave_all();
+
+    // The realm's group comes to hold me (an administrator changed it).
+    beta_state.groups.set(40, {members: new Set([ME]), subgroups: new Set()});
+    events.onRealm({type: "realm", op: "update_dict", data: {can_add_subscribers_group: 40}});
+    open_members();
+    assert.ok(add_people());
+    leave_all();
+    events.onRealm({type: "realm", op: "update_dict", data: {can_add_subscribers_group: 41}});
+
+    // The channel's own group, as its administrator changes it.
+    events.onStream({
+        type: "stream",
+        op: "update",
+        stream_id: OPS,
+        property: "can_add_subscribers_group",
+        value: {direct_members: [ME], direct_subgroups: []},
+    });
+    open_members();
+    assert.ok(add_people());
+    leave_all();
+    events.onStream({
+        type: "stream",
+        op: "update",
+        stream_id: OPS,
+        property: "can_add_subscribers_group",
+        value: {direct_members: [], direct_subgroups: []},
+    });
+
+    // Made an administrator; then a guest, who never may.
+    events.onRealmUser({type: "realm_user", op: "update", person: {user_id: ME, role: 200}});
+    open_members();
+    assert.ok(add_people());
+    leave_all();
+    events.onRealmUser({type: "realm_user", op: "update", person: {user_id: ME, role: 600}});
+    open_members();
+    assert.equal(add_people(), null);
+    leave_all();
+    events.onRealmUser({type: "realm_user", op: "update", person: {user_id: ME, role: 400}});
+    await settle();
+});
+
+run_test("Add people lists who is not in it, by name; one press adds them, in place", async () => {
+    serve();
+    sounds.length = 0;
+    beta_state.state.realm.admin = true;
+    let release;
+    add_answer = () =>
+        new Promise((resolve) => {
+            release = () => resolve(success({subscribed: {}, already_subscribed: {}}));
+        });
+    open_members();
+    press(add_people());
+    const search = card().querySelector('input[aria-label="Find someone to add to ops"]');
+    assert.equal(document.activeElement, search);
+    assert.deepEqual(sheet_rows(), ["Cordelia · Add", "Mihir Kumar · Add"]);
+    dom.type(search, "mi");
+    assert.deepEqual(sheet_rows(), ["Mihir Kumar · Add"]);
+
+    press(card().querySelector('[aria-label="Add Mihir Kumar to ops"]'));
+    assert.deepEqual(sheet_rows(), ["Mihir Kumar · Adding"]);
+    assert.deepEqual(adds(), [
+        {subscriptions: JSON.stringify([{name: "ops"}]), principals: JSON.stringify([MIHIR])},
+    ]);
+    // A second press while the server works sends nothing more.
+    press(card().querySelector("[data-add]"));
+    assert.equal(adds().length, 1);
+    release();
+    await settle();
+    assert.deepEqual(sheet_rows(), ["Mihir Kumar · Added"]);
+    assert.deepEqual(sounds.splice(0), ["tick"]);
+    // Counted at once; the server's event for it changes nothing more.
+    assert.ok(beta_state.members.get(OPS).has(MIHIR));
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_add",
+        stream_ids: [OPS],
+        user_ids: [MIHIR],
+    });
+    assert.deepEqual(sheet_rows(), ["Mihir Kumar · Added"]);
+
+    // Done: the members, Mihir among them.
+    press(card().querySelector("[data-members-back]"));
+    assert.equal(card().querySelector(".cap").textContent, "4 members");
+    assert.ok(sheet_rows().includes("Mihir Kumar · "));
+    leave_all();
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_remove",
+        stream_ids: [OPS],
+        user_ids: [MIHIR],
+    });
+});
+
+run_test("a refused add is said in plain words, and the row's Add comes back", async () => {
+    serve();
+    add_answer = () => ({
+        result: "error",
+        msg: "Insufficient permission",
+        code: "BAD_REQUEST",
+        status: 400,
+    });
+    open_members();
+    press(add_people());
+    press(card().querySelector('[aria-label="Add Cordelia to ops"]'));
+    await settle();
+    assert.deepEqual(sheet_rows(), ["Cordelia · Add", "Mihir Kumar · Add"]);
+    assert.equal(card().querySelector(".cap").textContent, "You can't add people to #ops.");
+    assert.deepEqual(sounds.splice(0), ["nope"]);
+    assert.ok(!beta_state.members.get(OPS).has(CORDELIA));
+    // Typing again puts the refusal away.
+    dom.type(card().querySelector("input"), "c");
+    assert.equal(card().querySelector(".cap").textContent, "");
+    leave_all();
+    add_answer = () => success({subscribed: {}, already_subscribed: {}});
+});
+
+run_test(
+    "the keyboard: Return on the count, Add people, the arrows, Return adds, Esc goes back",
+    async () => {
+        serve();
+        row(`c:${OPS}`).focus();
+        clock.tick(500);
+        dom.press("Tab");
+        assert.equal(document.activeElement.getAttribute("aria-label"), "New topic in ops");
+        dom.press("Tab");
+        const count = card().querySelector("[data-card-members]");
+        assert.equal(document.activeElement, count);
+        count.click();
+        assert.equal(document.activeElement, add_people());
+        add_people().click();
+        const search = card().querySelector("input");
+        assert.equal(document.activeElement, search);
+        // Return with no name typed adds no one.
+        dom.press("Enter");
+        assert.deepEqual(adds(), []);
+        dom.press("ArrowDown");
+        assert.equal(document.activeElement.getAttribute("aria-label"), "Add Cordelia to ops");
+        dom.press("ArrowDown");
+        assert.equal(document.activeElement.getAttribute("aria-label"), "Add Mihir Kumar to ops");
+        // Tab goes round the dialog: Done, the search, the row I stand on.
+        dom.press("Tab");
+        assert.equal(document.activeElement.textContent, "Done");
+        dom.press("Tab");
+        assert.equal(document.activeElement, search);
+        dom.press("ArrowDown");
+        dom.press("ArrowDown");
+        dom.press("ArrowUp");
+        dom.press("ArrowUp");
+        assert.equal(document.activeElement, search);
+        // Return in the search adds the first one found.
+        dom.type(search, "mih");
+        dom.press("Enter");
+        await settle();
+        assert.deepEqual(adds(), [
+            {subscriptions: JSON.stringify([{name: "ops"}]), principals: JSON.stringify([MIHIR])},
+        ]);
+        assert.deepEqual(sheet_rows(), ["Mihir Kumar · Added"]);
+        // Esc: back to the members, then the card closes and the row has focus.
+        dom.press("Escape");
+        assert.equal(document.activeElement, add_people());
+        dom.press("Escape");
+        assert.equal(card(), null);
+        assert.equal(document.activeElement, row(`c:${OPS}`));
+        field.focus();
+        away();
+        channels.onSubscription({
+            type: "subscription",
+            op: "peer_remove",
+            stream_ids: [OPS],
+            user_ids: [MIHIR],
+        });
+    },
+);
+
+run_test("the members follow people joining and leaving while they are open", () => {
+    serve();
+    open_members();
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_remove",
+        stream_ids: [OPS],
+        user_ids: [HAMLET],
+    });
+    assert.equal(card().querySelector(".cap").textContent, "2 members");
+    assert.ok(!sheet_rows().some((r) => r.startsWith("King Hamlet")));
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_add",
+        stream_ids: [OPS],
+        user_ids: [HAMLET, CORDELIA],
+    });
+    assert.equal(card().querySelector(".cap").textContent, "4 members");
+    // Focus stays in the dialog through it.
+    assert.ok(card().contains(document.activeElement));
+    leave_all();
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_remove",
+        stream_ids: [OPS],
+        user_ids: [CORDELIA],
+    });
 });

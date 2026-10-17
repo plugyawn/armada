@@ -51,5 +51,19 @@
 .ncard .facts dd > .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ncard .facts dd > .mk { flex: none; }
 .ncard .facts .avs { margin-right: 2px; }
+.ncard .facts dd > .lk { display: inline-flex; align-items: center; gap: var(--s-1); height: 20px; margin: 0 calc(-1 * var(--s-1)); padding: 0 var(--s-1); font: var(--t-caption); }
+/* the members, and Add: the head's verb at its end; a list of rows 28 high, seven and a half at most (a row cut in half says
+   there are more), scrolling inside itself; Add's verb in a cell as wide as "Adding", so its changes move nothing */
+.ncard .ih > .lk { flex: none; margin-right: calc(-1 * var(--s-2)); }
+.ncard .cap[data-bad] { color: var(--failure); }
+.ncard .ls { max-height: calc(7.5 * var(--h-m)); margin: var(--s-1) calc(-1 * var(--s-2)) 0; padding: 0 var(--s-2); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.ncard .ls > li > .t { color: var(--ink-1); }
+.ncard .ls > li > .e { font: var(--t-caption); color: var(--ink-2); }
+.ncard .ls > li.none { display: flex; color: var(--ink-2); }
+.ncard .ls > li > .lk { display: inline-grid; justify-items: end; }
+.ncard .ls > li > .lk > * { grid-area: 1 / 1; }
+.ncard .ls > li > .lk > i { visibility: hidden; font-style: normal; }
+.ncard .ls > li:is([data-state="adding"], [data-state="added"]) > .lk { color: var(--ink-2); }
+.ncard .ls + .cap:empty { display: none; }
 
 }

@@ -71,7 +71,7 @@ function applyRegister(r) {
   people.clear(); for (const u of [...(r.realm_users || []), ...(r.cross_realm_bots || [])]) people.set(u.user_id, {id: u.user_id, name: u.full_name, email: u.email, bot: u.is_bot, active: u.is_active !== false, owner: u.bot_owner_id ?? null});
   state.muted = new Set((r.muted_users || []).map((u) => u.id));
   /* the groups the realm's rules for deleting name ("realm_user_groups"; the rules came with the page) */
-  state.realm.guest = !!r.is_guest;
+  state.realm.guest = !!r.is_guest; state.realm.admin = !!r.is_admin;
   groups.clear(); for (const g of r.realm_user_groups || []) groups.set(g.id, {members: new Set(g.members), subgroups: new Set(g.direct_subgroup_ids)});
   streams.clear(); members.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);   /* a channel's members are asked for again: events may have been missed */
   repoStreams.clear(); (r.repository_stream_ids || []).forEach((i) => streams.has(i) && repoStreams.add(i));

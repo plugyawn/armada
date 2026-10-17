@@ -19,7 +19,8 @@ import {katexSheet} from "./parts.js";
 import {bound, dataAt, isObj, text, words} from "./artifacts.js";
 import {openPlace, placeFromKey, tkey, topicLabel} from "./routing.js";
 import {loadTopics} from "./nav.js";
-import {loadMembers} from "./channels.js";
+import {loadMembers, membersChanged} from "./channels.js";
+import {holds} from "./hover.js";
 import {runsSeen} from "./runs.js";
 import {repoPath} from "./header.js";
 import {nav, navScroll} from "./frame.js";
@@ -35,7 +36,7 @@ const LOAD = {
 /* read when a chunk arrives, never while the modules load (they import each other in cycles) */
 const page = () => ({$, $$, clamp, el, esc, press, T, state, dayLabel, hhmm, age, nameOf, ready, katexSheet, loadPics, picHTML, bound, dataAt, isObj, text, words,
   api, streams, repoStreams, members, marks, places, topicsOf, worktrees, runsSeen, people, faceOf, presOf, isOnix, openPlace, placeFromKey, tkey, topicLabel,
-  loadTopics, loadMembers, repoPath, nav, navScroll, startThread});
+  loadTopics, loadMembers, membersChanged, holds, repoPath, nav, navScroll, startThread});
 const asked = new Map(), loaded = new Map();
 /* the chunk, once it has run: a press reads it here and acts in its own frame */
 const loadedChunk = (name) => loaded.get(name) || null;

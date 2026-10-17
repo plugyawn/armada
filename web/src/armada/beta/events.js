@@ -114,7 +114,8 @@ function onRealm(ev) { if (ev.op === "update" && ev.property === "message_conten
   if ("allow_message_editing" in d) state.realm.allowEdit = d.allow_message_editing;
   if ("message_content_edit_limit_seconds" in d) state.realm.editLimit = d.message_content_edit_limit_seconds;
   if ("can_delete_any_message_group" in d) state.realm.deleteAny = d.can_delete_any_message_group;
-  if ("can_delete_own_message_group" in d) state.realm.deleteOwn = d.can_delete_own_message_group; }
+  if ("can_delete_own_message_group" in d) state.realm.deleteOwn = d.can_delete_own_message_group;
+  if ("can_add_subscribers_group" in d) state.realm.addSubscribers = d.can_add_subscribers_group; }   /* who may add people to channels (channel_rules.js) */
 /* who is in which group, as the server changes it (canDelete reads it). A deactivated group comes as "remove": the page
    registers without deactivated groups. */
 function onUserGroup(ev) { const g = groups.get(ev.group_id);
@@ -125,12 +126,14 @@ function onUserGroup(ev) { const g = groups.get(ev.group_id);
   else if (ev.op === "remove_members") for (const i of ev.user_ids) g.members.delete(i);
   else if (ev.op === "add_subgroups") for (const i of ev.direct_subgroup_ids) g.subgroups.add(i);
   else if (ev.op === "remove_subgroups") for (const i of ev.direct_subgroup_ids) g.subgroups.delete(i); }
-/* a channel's own rules for deleting, changed by whoever administers it (canDelete reads them from the subscription) */
-function onStream(ev) { const s = ev.op === "update" && streams.get(ev.stream_id);
-  if (s && (ev.property === "can_delete_any_message_group" || ev.property === "can_delete_own_message_group")) s[ev.property] = ev.value; }
-/* my role (a guest's rights are fewer) and a bot's owner (who may delete its messages), changed (canDelete reads them) */
+/* a channel changed by whoever administers it: its subscription keeps what the server says, so its rules for deleting
+   (canDelete), for adding people (channel_rules.js), its name and its description read current */
+function onStream(ev) { const s = ev.op === "update" && streams.get(ev.stream_id); if (!s) return;
+  s[ev.property] = ev.value; if (ev.property === "description") s.rendered_description = ev.rendered_description; }
+/* my role (a guest's rights are fewer, an administrator's more) and a bot's owner (who may delete its messages), changed
+   (canDelete and channel_rules.js read them) */
 function onRealmUser(ev) { const p = ev.op === "update" && ev.person; if (!p) return;
-  if ("role" in p && p.user_id === state.ME) state.realm.guest = p.role === 600;
+  if ("role" in p && p.user_id === state.ME) { state.realm.guest = p.role === 600; state.realm.admin = p.role <= 200; }
   if ("bot_owner_id" in p && people.has(p.user_id)) people.get(p.user_id).owner = p.bot_owner_id; }
 function onWorkspaceChanged(ev) { if (state.P && state.P.ctx && state.P.ctx.workspace_uuid === ev.workspace_id) refreshCtx(state.P); }
 function drawTyping() { const ids = [...state.P.typers.keys()], ty = band.ty, on = ids.length > 0, sig = ids.join(","); if (ty._sig === sig) return; ty._sig = sig;

@@ -139,4 +139,4 @@ function step(b, d) { const all = $$("[data-join]", box), n = all[Math.max(0, Ma
   for (const x of all) x.tabIndex = x === n ? 0 : -1; M.focusKbd(n);
   if (r.offsetTop < ls.scrollTop) ls.scrollTop = r.offsetTop; else if (r.offsetTop + r.offsetHeight > ls.scrollTop + ls.clientHeight) ls.scrollTop = r.offsetTop + r.offsetHeight - ls.clientHeight; }
 
-export {applyChannels, loadMembers, onSubscription, wireChannels};
+export {applyChannels, loadMembers, membersChanged, onSubscription, wireChannels};

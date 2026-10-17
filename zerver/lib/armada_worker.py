@@ -4367,9 +4367,22 @@ class ArmadaQueueWorkerDispatcher:
         )
 
 
+def load_armada_routing_session_from_zulip(
+    message: dict[str, Any],
+    bot_handler: Any,
+) -> ArmadaActiveSessionSummary:
+    """The topic as the addressing worker needs it, to route a message and
+    to start a run. Unlike a run's, it makes no channel a repository and no
+    topic a worktree: with a router on, every message in every topic comes
+    here, most of them for people, and the run provisions its own."""
+    return load_armada_active_session_from_zulip(message, bot_handler, provision_workspace=False)
+
+
 def load_armada_active_session_from_zulip(
     message: dict[str, Any],
     bot_handler: Any,
+    *,
+    provision_workspace: bool = True,
 ) -> ArmadaActiveSessionSummary:
     user_profile = bot_handler.user_profile
     assert isinstance(user_profile, UserProfile)
@@ -4492,10 +4505,14 @@ def load_armada_active_session_from_zulip(
         current_stream=armada_session["stream"],
         current_topic=armada_session["topic"],
     )
-    workspace_context = build_armada_workspace_context(
-        user_profile,
-        stream=armada_session["stream"],
-        topic=armada_session["topic"],
+    workspace_context = (
+        build_armada_workspace_context(
+            user_profile,
+            stream=armada_session["stream"],
+            topic=armada_session["topic"],
+        )
+        if provision_workspace
+        else None
     )
     active_session = build_armada_active_session_summary_from_messages(
         armada_session=armada_session,

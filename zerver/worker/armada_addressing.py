@@ -9,7 +9,7 @@ from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     ArmadaQueueWorkerDispatcher,
     build_armada_addressing_intent_classifier_from_settings,
-    load_armada_active_session_from_zulip,
+    load_armada_routing_session_from_zulip,
 )
 from zerver.lib.bot_lib import EmbeddedBotHandler
 from zerver.models.users import get_user_profile_by_id
@@ -27,7 +27,7 @@ class ArmadaAddressingWorker(QueueProcessingWorker):
     def setup(self) -> None:
         super().setup()
         self.armada_handler = ArmadaEmbeddedBotHandler(
-            active_session_loader=load_armada_active_session_from_zulip,
+            active_session_loader=load_armada_routing_session_from_zulip,
             worker_run_store=ArmadaDatabaseWorkerRunStore(),
             worker_dispatcher=ArmadaQueueWorkerDispatcher(),
             addressing_intent_classifier=build_armada_addressing_intent_classifier_from_settings(),

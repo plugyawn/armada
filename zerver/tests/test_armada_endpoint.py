@@ -22,6 +22,7 @@ from typing_extensions import override
 from zerver.actions.armada import send_armada_run_event, send_armada_workspace_changed_event
 from zerver.lib.armada import (
     ARMADA_ACTIVE_SESSION_ENDPOINT,
+    ARMADA_AGENT_NAME,
     ARMADA_AGENT_RUNTIME_PACKAGES,
     ARMADA_BARE_MENTION_STEER,
     ARMADA_CODEX_MCP_TOOLS,
@@ -56,6 +57,7 @@ from zerver.lib.armada_agent import (
     ARMADA_CODEX_INSTRUCTIONS_VERSION,
     ArmadaCodexAppServerToolRunner,
     ArmadaProcessIsolation,
+    armada_addressing_context_messages,
     armada_codex_thread_version,
 )
 from zerver.lib.armada_agent_threads import serialize_armada_agent_threads
@@ -112,6 +114,7 @@ from zerver.lib.armada_worker import (
     ensure_armada_workspace_node,
     latest_armada_codex_run_for_topic,
     load_armada_active_session_from_zulip,
+    load_armada_routing_session_from_zulip,
     load_armada_referenced_threads,
     maintain_armada_worker_run_liveness,
     maybe_refactor_armada_stream_workspaces_on_rename,
@@ -5619,6 +5622,67 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
         self.assertEqual(active_session["latest_request_message_id"], request_message_id)
         self.assertEqual(active_session["latest_message_id"], result_message_id)
         self.assertEqual(active_session["latest_codex_thread_id"], "thread-ambient")
+
+    def test_routing_a_message_makes_no_repository_or_worktree(self) -> None:
+        # As in #ops on runix.chat: the agent last spoke hours ago, the ops
+        # bot posted alerts since, and the channel was never a repository.
+        owner = self.example_user("hamlet")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name=ARMADA_AGENT_NAME,
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        ops_bot = self.create_test_bot("ops", owner, full_name="Ops")
+        stream = self.make_stream("ops")
+        for user in (owner, armada_bot, ops_bot):
+            self.subscribe(user, stream.name)
+        self.send_stream_message(
+            armada_bot, stream.name, "The backlog is draining.", topic_name="queues"
+        )
+        for alert in [
+            "**Warn**: armada_worker (104 waiting).",
+            "**Recovered** (warn before): every queue has a consumer and no backlog.",
+        ]:
+            self.send_stream_message(ops_bot, stream.name, alert, topic_name="queues")
+        content = "what changed since this morning?"
+        message_id = self.send_stream_message(owner, stream.name, content, topic_name="queues")
+        message = {
+            "id": message_id,
+            "type": "stream",
+            "display_recipient": stream.name,
+            "topic": "queues",
+            "content": content,
+        }
+
+        session = load_armada_routing_session_from_zulip(
+            message, SimpleNamespace(user_profile=armada_bot)
+        )
+
+        self.assertFalse(Repository.objects.filter(stream=stream).exists())
+        self.assertFalse(Workspace.objects.filter(stream_name=stream.name).exists())
+        self.assertEqual(
+            [
+                (routed["sender"], routed["sender_is_bot"], routed["content"])
+                for routed in armada_addressing_context_messages(session, message_id=message_id)
+            ],
+            [
+                (ARMADA_AGENT_NAME, True, "The backlog is draining."),
+                ("Ops", True, "**Warn**: armada_worker (104 waiting)."),
+                (
+                    "Ops",
+                    True,
+                    "**Recovered** (warn before): every queue has a consumer and no backlog.",
+                ),
+            ],
+        )
+
+        # A run's own load still makes its worktree.
+        load_armada_active_session_from_zulip(message, SimpleNamespace(user_profile=armada_bot))
+        self.assertTrue(
+            Workspace.objects.filter(stream_name=stream.name, topic_name="queues").exists()
+        )
 
     def test_worker_loader_uses_prior_run_as_thread_ingestion_cursor(self) -> None:
         owner = self.example_user("hamlet")

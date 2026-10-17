@@ -139,6 +139,7 @@ from zerver.lib.armada_worker import (
     armada_worker_home_slot,
     armada_worker_queue_name,
     armada_worker_queue_names,
+    load_armada_routing_session_from_zulip,
 )
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.queue import QueueEventDiscardError, SimpleQueueClient
@@ -5068,6 +5069,15 @@ class ArmadaSessionDefaultsTest(TestCase):
         cast(Mock, worker.armada_handler.handle_message).assert_called_once_with(
             message,
             bot_handler_class.return_value,
+        )
+
+    def test_addressing_worker_loads_topics_without_provisioning_them(self) -> None:
+        worker = object.__new__(ArmadaAddressingWorker)
+        with patch("zerver.worker.base.QueueProcessingWorker.setup"):
+            worker.setup()
+
+        self.assertIs(
+            worker.armada_handler.active_session_loader, load_armada_routing_session_from_zulip
         )
 
     def test_embedded_bot_handler_routes_untagged_router_message_as_steering(self) -> None:

@@ -195,6 +195,173 @@ old_code_name_rule: "Rule" = {
     ],
 }
 
+# Zulip appears nowhere in the interface (.claude/rules/naming.md): the
+# product is Armada, and a sentence that only needed a name drops it. What
+# stays names what really is Zulip's: a release whose feature levels Armada
+# inherits ("New in Zulip 10.0"), Zulip Cloud and its plans, and the
+# upstream project and its community.
+zulip_name = (
+    r"\bZulip\b(?![ -](?:Cloud|Server \d|\d|feature level|version|merge base|release"
+    r"|services|core team|development community"
+    r"|server (?:source code|changelog|and web app repository)))"
+)
+zulip_name_description = "Zulip appears nowhere in the interface: say Armada, or drop the name (.claude/rules/naming.md)."
+# Pages, emails and documents people read. Not here: Zulip's own site and
+# billing (corporate, S-10), the integration docs (S-03), the Slack
+# importer (S-05), development pages, and the help center (S-02), which
+# is no longer served.
+zulip_name_page_rule: "Rule" = {
+    "pattern": zulip_name,
+    "include_only": {
+        "templates/",
+        "web/html/",
+        "web/templates/",
+        "api_docs/",
+        "zerver/openapi/zulip.yaml",
+    },
+    "exclude": {
+        "docs/",
+        "templates/analytics/",
+        "templates/corporate/",
+        "templates/zilencer/",
+        "templates/zerver/development/",
+        "templates/zerver/integrations/",
+        "templates/zerver/footer.html",
+        "templates/zerver/marketing_nav.html",
+        "templates/zerver/slack_import.html",
+        "templates/zerver/emails/custom_email_base.pre.html",
+        "templates/zerver/emails/custom_email_base.pre.manage_preferences_block.txt",
+        "templates/zerver/emails/remote_billing_",
+        "templates/zerver/emails/remote_realm_billing_",
+        "templates/zerver/emails/sponsorship_",
+        "web/html/5xx-cloud.html",
+        "web/templates/try_zulip_modal.hbs",
+    },
+    "exclude_line": {
+        ("templates/zerver/documentation_main.html", "{# Zulip user and API documentation. #}"),
+        (
+            "web/templates/about_zulip.hbs",
+            'Armada is a fork of <a target="_blank" rel="noopener noreferrer" href="https://zulip.com">Zulip</a>.',
+        ),
+        (
+            "web/templates/about_zulip.hbs",
+            'Zulip is <a target="_blank" rel="noopener noreferrer" href="https://github.com/zulip/zulip#readme">open-source software</a>,',
+        ),
+        (
+            "web/templates/components/input_wrapper.hbs",
+            "This is used to wrap any input element that needs to be styled as a Zulip input.",
+        ),
+        (
+            "web/templates/settings/bot_list_admin.hbs",
+            "<span>{{t 'Download config of all active outgoing webhook bots in Zulip Botserver format.' }}</span>",
+        ),
+        ("api_docs/changelog.md", "on why this API changelog is important, and the [Zulip server"),
+        (
+            "api_docs/changelog.md",
+            "them with redacted content. This change was also backported to the Zulip",
+        ),
+        (
+            "api_docs/client-libraries.md",
+            "* [Perl](https://github.com/Stantheman/WebService-Zulip)",
+        ),
+        (
+            "api_docs/http-headers.md",
+            "[#integrations][integrations-channel] in the [Zulip development",
+        ),
+        (
+            "api_docs/rest.md",
+            "Armada's server is a fork of Zulip, which is open source, so you can",
+        ),
+        (
+            "api_docs/message-formatting.md",
+            "Note that Unicode emoji in messages that were originally sent on Zulip",
+        ),
+        (
+            "zerver/openapi/zulip.yaml",
+            "# This file contains the API definitions for the Zulip REST API.",
+        ),
+        ("zerver/openapi/zulip.yaml", "title: Zulip REST API"),
+        ("zerver/openapi/zulip.yaml", "(that specific large value works around a bug in Zulip"),
+        (
+            "zerver/openapi/zulip.yaml",
+            "of Zulip behaved as though this parameter was always `false`; clients",
+        ),
+        (
+            "zerver/openapi/zulip.yaml",
+            "`zulip_version` if the server is not running a fork of the Zulip server.",
+        ),
+        (
+            "zerver/openapi/zulip.yaml",
+            "was called `escape_navigates_to_default_view`, which was new in Zulip",
+        ),
+        (
+            "zerver/openapi/zulip.yaml",
+            '"msg": "Network error while connecting to Zulip push notification service.",',
+        ),
+        (
+            "zerver/openapi/zulip.yaml",
+            '"msg": "Internal server error on Zulip push notification service, retry later.",',
+        ),
+    },
+    # Names that are data, not prose: Zulip's mobile app id, the development
+    # organization, and a topic of Zulip's own announcements in examples.
+    "exclude_pattern": r"org\.zulip\.Zulip|Zulip Dev\b|Zulip(?:\.20| )updates",
+    "description": zulip_name_description,
+    "good_lines": [
+        "**Changes**: New in Zulip 10.0 (feature level 300).",
+        "<title>{{ _('Log in') }} | Armada</title>",
+        "Zulip Cloud Standard",
+    ],
+    "bad_lines": [
+        "<h1>{{ _('Welcome to Zulip') }}</h1>",
+        "{{t 'About Zulip' }}",
+        "Your Zulip account has been deactivated.",
+    ],
+}
+
+# Strings of the old interface that are translated, and so shown.
+zulip_name_string_rule: "Rule" = {
+    "pattern": rf"""defaultMessage:\s*(?:"[^"]*{zulip_name}|'[^']*{zulip_name}|`[^`]*{zulip_name})""",
+    "include_only": {"web/src/"},
+    "exclude": {
+        "web/src/billing/",
+        "web/src/portico/legacy_landing_page.ts",
+        "web/src/portico/showroom.ts",
+    },
+    # Shown only on Zulip's own servers: its newsletter.
+    "exclude_line": {
+        (
+            "web/src/settings_config.ts",
+            'defaultMessage: "Send me Zulip\'s low-traffic newsletter (a few emails a year)",',
+        ),
+    },
+    "description": zulip_name_description,
+    "good_lines": ['$t({defaultMessage: "Armada server {display_version}"})'],
+    "bad_lines": ['$t({defaultMessage: "Unable to connect to Zulip."})'],
+}
+
+# The server's translated strings, which reach people as pages, errors and
+# messages. Not here: the push notification bouncer (S-07), whose errors
+# name Zulip's own service.
+zulip_name_server_rule: "Rule" = {
+    "pattern": rf"""\b(?:_|gettext_lazy|gettext|pgettext|ngettext)\(\s*f?(?:"[^"]*{zulip_name}|'[^']*{zulip_name})""",
+    "include_only": {"zerver/", "confirmation/"},
+    "exclude": {
+        "zerver/lib/exceptions.py",
+        "zerver/lib/push_notifications.py",
+        "zerver/migrations/",
+        "zerver/tests/",
+        "zerver/webhooks/",
+    },
+    # A choice's label in a model, which a migration would have to follow.
+    "exclude_line": {
+        ("zerver/models/messages.py", '(ZULIP_EXTRA_EMOJI, gettext_lazy("Zulip extra emoji")),'),
+    },
+    "description": zulip_name_description,
+    "good_lines": ['raise JsonableError(_("Armada needs a valid email address."))'],
+    "bad_lines": ['raise JsonableError(_("Zulip needs a valid email address."))'],
+}
+
 # The six stones a person's face and bubble are drawn in
 # (docs/armada/design-language.md, "Faces").
 ARMADA_STONES = "moss|larimar|lapis|amethyst|rose|flint"
@@ -634,6 +801,7 @@ python_rules = RuleList(
             },
         },
         old_code_name_rule,
+        zulip_name_server_rule,
         *whitespace_rules,
         *shebang_rules,
     ],
@@ -1212,8 +1380,16 @@ old_code_name_rules = RuleList(
     rules=[old_code_name_rule],
 )
 
+# Zulip's name, in what people see: pages, emails, documents and the old
+# interface's strings; zulip_name_server_rule holds the server's.
+zulip_name_rules = RuleList(
+    langs=["hbs", "html", "js", "md", "ts", "txt", "yaml"],
+    rules=[zulip_name_page_rule, zulip_name_string_rule],
+)
+
 non_py_rules = [
     old_code_name_rules,
+    zulip_name_rules,
     handlebars_rules,
     jinja2_rules,
     css_rules,

@@ -9,7 +9,7 @@ class armada::settings {
     'worker_agent_runtime'      => zulipconf('armada', 'worker_agent_runtime', 'codex-app-server'),
     'codex_bin'                 => zulipconf('armada', 'codex_bin', '/opt/codex/bin/codex'),
     'worktree_root'             => zulipconf('armada', 'worktree_root', '/srv/armada/worktrees'),
-    'worker_sandbox'            => zulipconf('armada', 'worker_sandbox', 'workspace-write'),
+    'worker_sandbox'            => zulipconf('armada', 'worker_sandbox', 'danger-full-access'),
     'trusted_users_only'        => zulipconf('armada', 'trusted_users_only', 'False'),
     'max_active_runs_per_realm' => zulipconf('armada', 'max_active_runs_per_realm', '4'),
     'worker_model'              => zulipconf('armada', 'worker_model', 'gpt-6-astra'),

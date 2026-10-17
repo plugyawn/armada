@@ -2510,7 +2510,7 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                         bool(browser_dir),
                     )
 
-    def test_topic_worker_sandbox_downgrades_full_access_to_workspace_write(self) -> None:
+    def test_topic_worker_sandbox_honours_full_access(self) -> None:
         owner = self.example_user("hamlet")
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2542,10 +2542,10 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                         stream=ARMADA_DEFAULT_STREAM,
                         topic="isolated topic",
                     ),
-                    "workspace-write",
+                    "danger-full-access",
                 )
                 assert runtime.tool_runner is not None
-                self.assertEqual(vars(runtime.tool_runner)["sandbox"], "workspace-write")
+                self.assertEqual(vars(runtime.tool_runner)["sandbox"], "danger-full-access")
 
     def test_os_user_topic_worker_uses_full_access_codex_sandbox(self) -> None:
         owner = self.example_user("hamlet")

@@ -75,10 +75,12 @@ costs.
 ### What an agent can do
 
 With the default isolation, `ARMADA_TOPIC_ISOLATION_BACKEND = "codex-sandbox"`,
-every agent runs as the `zulip` user inside Codex's sandbox. With
-`ARMADA_WORKER_SANDBOX = "workspace-write"` the sandbox stops writes outside the
-topic's worktree and stops network access. **It does not stop reads.** An
-agent can read anything `zulip` can:
+every agent runs as the `zulip` user. With `ARMADA_WORKER_SANDBOX =
+"danger-full-access"`, the default (the team gives runs as much power as
+possible, BRIEF statement 35), Codex puts no sandbox around it: it has the
+network and can read and write anything `zulip` can. `"workspace-write"`
+instead stops writes outside the topic's worktree and stops network access,
+but **it does not stop reads** either. Either way an agent can read:
 
 - `/etc/zulip/zulip-secrets.conf`: the Django secret key, the database,
   RabbitMQ, Redis and memcached passwords. The secret key is enough to forge
@@ -139,9 +141,10 @@ the VM can reach on the tailnet.
    device reach every other. _Cost:_ a second Tailscale account, or a
    policy file to keep; open specific ports later if the server must reach
    a tailnet service.
-6. **`workspace-write`, never `danger-full-access`.** The agent has no network
-   and writes only in its worktree. (`danger-full-access` is downgraded to
-   `workspace-write` anyway unless the isolation is `os-user`.) _Cost:_ an
+6. **Full access, by the team's choice.** Runs have the network and can
+   install packages, fetch, push and change anything `zulip` can. To be
+   stricter, set `[armada] worker_sandbox = workspace-write`: the agent then
+   has no network and writes only in its worktree. _Cost of stricter:_ an
    agent cannot install packages or fetch anything; work that needs the
    network is done by a person.
 7. **Codex memories off.** `ARMADA_WORKER_CODEX_MEMORIES = False`, which the
@@ -566,7 +569,7 @@ ARMADA_WORKER_AGENT_RUNTIME = "codex-app-server"
 ARMADA_WORKER_CODEX_BIN = "/opt/codex/bin/codex"
 ARMADA_TOPIC_WORKDIR_ROOT = "/srv/armada/worktrees"
 ARMADA_WORKER_WORKDIR = "/srv/armada/worktrees/_scratch"
-ARMADA_WORKER_SANDBOX = "workspace-write"
+ARMADA_WORKER_SANDBOX = "danger-full-access"   # see Security, item 6
 ARMADA_WORKER_TRUSTED_USERS_ONLY = True     # already set in a new install; see Security
 ARMADA_WORKER_CODEX_MEMORIES = False        # already set in a new install; see Security
 ARMADA_WORKER_TRUSTED_USER_IDS = []         # fill in after step 5
@@ -578,10 +581,10 @@ ARMADA_WORKER_REASONING_EFFORT = "medium"
 ARMADA_WORKER_BROWSER_DIR = "/opt/armada-browser"   # the agent's browser, 6.9
 ```
 
-`workspace-write` lets an agent change files only inside its topic's
-worktree, with no network; the approval policy stays at its default,
-`on-request`. Without an addressing router, mention the agent
-(`@**Onix**`) or say its name to it ("Onix, can you ...") to start a run;
+`danger-full-access` gives an agent the network and the whole machine as
+`zulip`; the approval policy stays at its default, `on-request`. Without
+an addressing router, mention the agent (`@**Onix**`) or say its name to
+it ("Onix, can you ...") to start a run;
 [The addressing router](#the-addressing-router) says how to let it take
 up other messages too.
 
@@ -840,10 +843,11 @@ does not include it (see [Back up](#back-up)).
 
 When an administrator or a trusted person creates a channel with a
 repository URL, the server (as `zulip`) fetches it into the bare clone.
-Agents work in the clone's worktrees; with `workspace-write`, Codex gives
-them no network, so they cannot fetch or push themselves, and the server
-does not push either. Getting work out of a worktree is, for now, a person
-pushing from the server or reading the Changes view.
+Agents work in the clone's worktrees; with full access they can fetch
+and push themselves, with whatever Git credentials `zulip` has. With
+`workspace-write` they cannot, the server does not push either, and
+getting work out of a worktree is a person pushing from the server or
+reading the Changes view.
 
 - Public repositories over HTTPS need nothing.
 - Private repositories: give the `zulip` user a key and add it to the

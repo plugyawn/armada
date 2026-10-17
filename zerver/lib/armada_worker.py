@@ -977,8 +977,8 @@ def armada_worker_sandbox_for_workdir(workdir: str | None) -> str:
         return "read-only"
     if armada_topic_os_user_isolation_enabled():
         return "danger-full-access"
-    if configured_sandbox == "danger-full-access":
-        return "workspace-write"
+    # Full access is honoured as configured: runs get as much power as the
+    # team gives them (BRIEF statement 35), network and all.
     return configured_sandbox
 
 

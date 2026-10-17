@@ -11,6 +11,7 @@ from django.db.models.signals import post_migrate, pre_migrate
 from typing_extensions import override
 
 from zerver.checks import (
+    check_armada_addressing_router_settings,
     check_auth_settings,
     check_external_host_setting,
     check_renamed_armada_settings,
@@ -45,6 +46,7 @@ class ZerverConfig(AppConfig):
         register(check_auth_settings)
         register(check_uploads_settings)
         register(check_renamed_armada_settings)
+        register(check_armada_addressing_router_settings)
 
         if settings.SENTRY_DSN:  # nocoverage
             from zproject.config import get_config

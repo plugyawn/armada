@@ -886,11 +886,20 @@ ARMADA_WORKER_MAX_RUN_DEPTH = 2
 # prevents a handful of huge repositories from consuming unbounded memory.
 ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
 ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
-ARMADA_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "gemini-interactions"] = "disabled"
+ARMADA_ADDRESSING_ROUTER_RUNTIME: Literal["disabled", "gemini-interactions", "typesafe"] = (
+    "disabled"
+)
 ARMADA_GEMINI_INTERACTIONS_API_KEY = ""
 ARMADA_GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"
 ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL: str | None = "minimal"
+# The "typesafe" router asks TypeSafe's Jev, with the key in the secret
+# armada_typesafe_api_key, and the agent acts when Jev gives it at least
+# the threshold's probability.  0.9 is from the labelled chats of
+# tools/armada/typesafe_addressing_eval, measured on jev-1.13.0.
+ARMADA_ADDRESSING_ROUTER_TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
+ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL = "jev-latest"
+ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD = 0.9
 ARMADA_PRESENTATION_GEMINI_MODEL = "gemini-3.1-flash-lite"
 ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL: str | None = "minimal"
 

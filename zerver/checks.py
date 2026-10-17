@@ -1,11 +1,14 @@
 import os
 import re
 from collections.abc import Iterable, Sequence
-from typing import Any
+from inspect import get_annotations
+from typing import Any, get_args
 
 from django.apps.config import AppConfig
 from django.conf import settings
 from django.core import checks
+
+from zproject import default_settings
 
 
 def check_required_settings(
@@ -199,6 +202,51 @@ def check_renamed_armada_settings(
                     id="armada.E001",
                 )
             )
+    return errors
+
+
+def check_armada_addressing_router_settings(
+    app_configs: Sequence[AppConfig] | None,
+    databases: Sequence[str] | None,
+    **kwargs: Any,
+) -> Iterable[checks.CheckMessage]:
+    runtime = settings.ARMADA_ADDRESSING_ROUTER_RUNTIME
+    runtimes = get_args(get_annotations(default_settings)["ARMADA_ADDRESSING_ROUTER_RUNTIME"])
+    if runtime not in runtimes:
+        # Unchecked, a misspelt router queues every untagged message for
+        # a router that does not exist, and none is ever routed.
+        return [
+            checks.Error(
+                f"ARMADA_ADDRESSING_ROUTER_RUNTIME is {runtime!r}, which is not a router",
+                hint="Use one of " + ", ".join(repr(name) for name in runtimes),
+                obj="settings.ARMADA_ADDRESSING_ROUTER_RUNTIME",
+                id="armada.E002",
+            )
+        ]
+    if runtime != "typesafe":
+        return []
+    errors: list[checks.CheckMessage] = []
+    threshold = settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD
+    if not 0.5 <= threshold <= 1:
+        errors.append(
+            checks.Error(
+                f"ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD is {threshold!r}",
+                hint="It is the agent's probability, from 0.5 to 1, at which the agent acts "
+                "on a message that does not mention it",
+                obj="settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD",
+                id="armada.E003",
+            )
+        )
+    if not settings.ARMADA_TYPESAFE_API_KEY:
+        errors.append(
+            checks.Warning(
+                "The TypeSafe addressing router has no API key, so the agent will answer "
+                "only messages that mention it",
+                hint="Set armada_typesafe_api_key in /etc/zulip/zulip-secrets.conf",
+                obj="settings.ARMADA_TYPESAFE_API_KEY",
+                id="armada.W001",
+            )
+        )
     return errors
 
 

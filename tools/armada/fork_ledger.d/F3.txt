@@ -6,7 +6,7 @@ kept tools/update-prod-static  # one call: tools/setup/build_armada_fonts
 kept zerver/lib/templates.py  # font_preloads, armada_palette
 kept zerver/tests/test_templates.py  # tests of font_preloads and armada_palette
 kept zproject/jinja2/__init__.py  # font_preloads, armada_palette
-kept zproject/default_settings.py  # ARMADA_PALETTE
+kept zproject/default_settings.py  # ARMADA_PALETTE; the TypeSafe addressing router's settings
 kept web/src/bundles/common.ts  # the tokens, palettes and faces; three font packages out
 bridged:I4 web/styles/app_variables.css  # the old font variables hold the two new stacks
 bridged:D1 web/styles/message_row.css  # a comment that named the pixel face

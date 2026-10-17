@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Final, Literal, cast
 from urllib.parse import urlsplit
 
+import requests
+
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
     ArmadaActiveSessionSummary,
@@ -31,6 +33,9 @@ from zerver.lib.armada import (
     ArmadaWorkerToolResult,
     ArmadaWorkerTranscriptCallback,
     ArmadaWorkerTranscriptEvent,
+    armada_message_id,
+    armada_message_stream,
+    armada_message_topic,
     armada_normalize_token_usage,
     armada_turn_idle_hook,
     format_armada_referenced_threads,
@@ -58,6 +63,11 @@ from zerver.lib.armada_page_tools import (
     ARMADA_PAGE_TOOL_SPECS,
     answer_armada_page_tool,
 )
+from zerver.lib.armada_typesafe import (
+    armada_typesafe_agent_probability,
+    build_armada_typesafe_addressing_request,
+)
+from zerver.lib.outgoing_http import OutgoingSession
 
 logger = logging.getLogger(__name__)
 
@@ -500,6 +510,91 @@ class ArmadaGeminiInteractionsAddressingIntentClassifier:
             thinking_level=self.thinking_level,
         )
         return parse_armada_addressing_json_output(output)
+
+
+class ArmadaTypeSafeAddressingIntentClassifier:
+    """Asks TypeSafe's Jev whether an untagged message is for the agent
+    (zerver/lib/armada_typesafe.py says what it is asked), and has the
+    agent act only when Jev gives it at least `threshold`.  A failure of
+    any kind raises, so that the handler logs it and starts nothing."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None,
+        model: str,
+        url: str,
+        threshold: float,
+        timeout_seconds: float,
+    ) -> None:
+        self.api_key = (api_key or "").strip()
+        self.model = model
+        self.url = url
+        self.threshold = threshold
+        self.session = OutgoingSession(role="armada_typesafe", timeout=timeout_seconds)
+
+    def __call__(
+        self,
+        *,
+        content: str,
+        active_session: ArmadaActiveSessionSummary | None,
+        active_run: bool,
+        message: dict[str, Any],
+        bot_handler: Any,
+    ) -> ArmadaAmbientDecision:
+        if not self.api_key:
+            raise ArmadaAgentRuntimeError(
+                "TypeSafe has no API key: set armada_typesafe_api_key in zulip-secrets.conf."
+            )
+        message_id = armada_message_id(message)
+        request = build_armada_typesafe_addressing_request(
+            agent_name=ARMADA_AGENT_NAME,
+            model=self.model,
+            channel=armada_message_stream(message),
+            topic=armada_message_topic(message),
+            agent_run_in_progress=active_run,
+            recent_messages=armada_addressing_context_messages(
+                active_session, message_id=message_id or None
+            ),
+            new_message_sender=str(message.get("sender_full_name") or ""),
+            new_message=trim_armada_agent_text(
+                content, limit=ARMADA_ADDRESSING_NEW_MESSAGE_CHARACTERS
+            ),
+        )
+        try:
+            response = self.session.post(
+                self.url, json=request, headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+        except requests.RequestException as error:
+            raise ArmadaAgentRuntimeError(f"TypeSafe did not answer: {error}") from error
+        if response.status_code != 200:
+            raise ArmadaAgentRuntimeError(
+                f"TypeSafe answered HTTP {response.status_code}: "
+                f"{trim_armada_agent_text(response.text, limit=500)}"
+            )
+        try:
+            answer = response.json()
+            agent_probability = armada_typesafe_agent_probability(answer)
+        except ValueError as error:
+            raise ArmadaAgentRuntimeError(f"TypeSafe's answer is not usable: {error}") from error
+        logger.info(
+            "TypeSafe addressing: message_id=%s p_agent=%.2f threshold=%.2f model=%s",
+            message_id,
+            agent_probability,
+            self.threshold,
+            answer.get("model"),
+        )
+        if agent_probability >= self.threshold:
+            return {
+                "addressee": "agent",
+                "action": "steer" if active_run else "run",
+                "presentation": "compact",
+            }
+        return {
+            "addressee": "uncertain" if agent_probability >= 0.5 else "other",
+            "action": "ignore",
+            "presentation": "compact",
+        }
 
 
 def armada_codex_dynamic_tools() -> list[dict[str, Any]]:

@@ -963,13 +963,20 @@ ARMADA_WORKER_CODEX_MEMORIES = False
 # ARMADA_WORKSPACE_INDEX_LOCAL_MAX_ENTRIES = 32
 # ARMADA_WORKSPACE_INDEX_LOCAL_MAX_PATHS = 250_000
 
-## Optional: let a Gemini model decide whether a message without an
-## @-mention is addressed to the agent, and write live run summaries.
-## Off unless set to "gemini-interactions". The key is read from this
-## setting or the GEMINI_API_KEY environment variable; this file is
-## readable by every local user (mode 644), so prefer leaving the
-## router off.
+## Optional: let a model decide whether a message without an @-mention
+## is addressed to the agent. Off unless set to a router:
+##  - "typesafe": TypeSafe's Jev. The key is the secret
+##    armada_typesafe_api_key in /etc/zulip/zulip-secrets.conf. The agent
+##    acts when Jev gives it at least the threshold's probability; see
+##    docs/armada/deploy.md before changing it.
+##  - "gemini-interactions": a Gemini model, which also writes live run
+##    summaries. The key is read from ARMADA_GEMINI_INTERACTIONS_API_KEY
+##    or the GEMINI_API_KEY environment variable; this file is readable by
+##    every local user (mode 644).
 # ARMADA_ADDRESSING_ROUTER_RUNTIME = "disabled"
+# ARMADA_ADDRESSING_ROUTER_TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone"
+# ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL = "jev-latest"
+# ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD = 0.9
 # ARMADA_GEMINI_INTERACTIONS_API_KEY = ""
 # ARMADA_GEMINI_INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions"
 # ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL = "gemini-3.1-flash-lite"

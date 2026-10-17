@@ -6,11 +6,13 @@ from typing import Any
 from unittest import mock
 
 from django.conf import settings
+from django.core import checks
 from django.core.management import call_command
 from django.core.management.base import SystemCheckError
 from django.test import override_settings
 from typing_extensions import override
 
+from zerver.checks import check_armada_addressing_router_settings
 from zerver.lib.test_classes import ZulipTestCase
 
 
@@ -231,6 +233,59 @@ class TestChecks(ZulipTestCase):
 
         # The new names, and the server's other settings, pass.
         self.assert_check_with_error(None, ARMADA_WORKER_TRUSTED_USERS_ONLY=True)
+
+    def test_checks_armada_addressing_router_settings(self) -> None:
+        self.assert_check_with_error(
+            "settings.ARMADA_ADDRESSING_ROUTER_RUNTIME: (armada.E002) "
+            "ARMADA_ADDRESSING_ROUTER_RUNTIME is 'jev', which is not a router\n"
+            "\tHINT: Use one of 'disabled', 'gemini-interactions', 'typesafe'",
+            ARMADA_ADDRESSING_ROUTER_RUNTIME="jev",
+        )
+        for threshold in (0.49, 1.01, 90):
+            self.assert_check_with_error(
+                "settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD: (armada.E003) "
+                f"ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD is {threshold!r}\n"
+                "\tHINT: It is the agent's probability, from 0.5 to 1, at which the agent "
+                "acts on a message that does not mention it",
+                ARMADA_ADDRESSING_ROUTER_RUNTIME="typesafe",
+                ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD=threshold,
+                ARMADA_TYPESAFE_API_KEY="key",
+            )
+
+        for runtime in ("disabled", "gemini-interactions", "typesafe"):
+            self.assert_check_with_error(
+                None, ARMADA_ADDRESSING_ROUTER_RUNTIME=runtime, ARMADA_TYPESAFE_API_KEY="key"
+            )
+        for threshold in (0.5, 1):
+            self.assert_check_with_error(
+                None,
+                ARMADA_ADDRESSING_ROUTER_RUNTIME="typesafe",
+                ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD=threshold,
+                ARMADA_TYPESAFE_API_KEY="key",
+            )
+
+        # Without its key the router fails closed: only a warning, since
+        # messages that mention the agent still reach it.
+        for api_key in (None, ""):
+            with override_settings(
+                ARMADA_ADDRESSING_ROUTER_RUNTIME="typesafe", ARMADA_TYPESAFE_API_KEY=api_key
+            ):
+                self.assertEqual(
+                    check_armada_addressing_router_settings(None, None),
+                    [
+                        checks.Warning(
+                            "The TypeSafe addressing router has no API key, so the agent "
+                            "will answer only messages that mention it",
+                            hint="Set armada_typesafe_api_key in /etc/zulip/zulip-secrets.conf",
+                            obj="settings.ARMADA_TYPESAFE_API_KEY",
+                            id="armada.W001",
+                        )
+                    ],
+                )
+        with override_settings(
+            ARMADA_ADDRESSING_ROUTER_RUNTIME="gemini-interactions", ARMADA_TYPESAFE_API_KEY=None
+        ):
+            self.assertEqual(check_armada_addressing_router_settings(None, None), [])
 
     def test_checks_uploads_s3_missing_buckets(self) -> None:
         self.assert_check_with_error(

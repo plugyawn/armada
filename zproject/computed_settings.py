@@ -1354,6 +1354,10 @@ def _armada_env_int(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
+def _armada_env_float(name: str, default: float) -> float:
+    return float(os.getenv(name, str(default)))
+
+
 def _armada_env_string_list(name: str, default: list[str]) -> list[str]:
     raw_value = os.getenv(name)
     if raw_value is None:
@@ -1397,6 +1401,10 @@ def _armada_parse_bool(name: str) -> bool:
 
 def _armada_parse_int(name: str) -> int:
     return _armada_env_int(name, _armada_configured_default(name))
+
+
+def _armada_parse_float(name: str) -> float:
+    return _armada_env_float(name, _armada_configured_default(name))
 
 
 def _armada_parse_string_list(name: str) -> list[str]:
@@ -1450,6 +1458,9 @@ _ARMADA_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "ARMADA_GEMINI_INTERACTIONS_URL": _armada_parse_string,
     "ARMADA_ADDRESSING_ROUTER_GEMINI_MODEL": _armada_parse_string,
     "ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL": _armada_parse_optional_string,
+    "ARMADA_ADDRESSING_ROUTER_TYPESAFE_URL": _armada_parse_string,
+    "ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL": _armada_parse_string,
+    "ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD": _armada_parse_float,
     "ARMADA_PRESENTATION_GEMINI_MODEL": _armada_parse_string,
     "ARMADA_PRESENTATION_GEMINI_THINKING_LEVEL": _armada_parse_optional_string,
 }
@@ -1460,3 +1471,7 @@ for _armada_setting_name, _armada_parser in _ARMADA_ENV_OVERRIDES.items():
 
 del _armada_parser
 del _armada_setting_name
+
+# The TypeSafe addressing router's key is a secret: it is read from
+# zulip-secrets.conf only, never from settings.py or the environment.
+ARMADA_TYPESAFE_API_KEY = get_secret("armada_typesafe_api_key")

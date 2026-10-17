@@ -537,7 +537,7 @@ group `zulip-workers` (`puppet/zulip/templates/supervisor/zulip.conf.template.er
 | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `zulip-workers:zulip_events_armada_worker_slot0`, `…_slot1`, …                                   | Agent runs: one program per agent slot, two unless `[armada] worker_slots` says otherwise ([Agent slots](#agent-slots)). Each runs one run at a time, so that many runs go at once. |
 | `zulip-workers:zulip_events_armada_monitor_worker`                                               | Monitors (standing checks in a topic), on their own consumer.                                                                                                                       |
-| `zulip-workers:zulip_events_armada_addressing`, `zulip-workers:zulip_events_armada_presentation` | The optional Gemini router and live summaries; idle when those are off.                                                                                                             |
+| `zulip-workers:zulip_events_armada_addressing`, `zulip-workers:zulip_events_armada_presentation` | The optional addressing router and live summaries; idle when those are off.                                                                                                         |
 | `zulip-workers:zulip_events_embedded_bots`                                                       | Delivers messages to the agent's bot account.                                                                                                                                       |
 
 These separate programs exist only on a machine with more than 3.8 GB of
@@ -580,9 +580,9 @@ ARMADA_WORKER_BROWSER_DIR = "/opt/armada-browser"   # the agent's browser, 6.9
 
 `workspace-write` lets an agent change files only inside its topic's
 worktree, with no network; the approval policy stays at its default,
-`on-request`. Leave `ARMADA_ADDRESSING_ROUTER_RUNTIME` off unless you want a
-Gemini model to guess which unmentioned messages are meant for the agent;
-without it, mention the agent (`@**Onix**`) to start a run.
+`on-request`. Without an addressing router, mention the agent
+(`@**Onix**`) to start a run; [The addressing router](#the-addressing-router)
+says how to let it take up messages that do not mention it.
 
 The user ids exist only after step 5. Come back then and print them, as
 `zulip`:
@@ -635,6 +635,72 @@ one write a day for each session in use, never one per request, and never
 from Tornado's long polls. Leave `SESSION_COOKIE_AGE` and
 `SESSION_EXPIRE_AT_BROWSER_CLOSE` unset in `/etc/zulip/settings.py`;
 setting either changes this. Tested by `zerver.tests.test_armada_sessions`.
+
+### The addressing router
+
+_Tested with mocked requests and live against TypeSafe from a Mac; not yet
+run on a server._ Off by default: Onix then answers only messages that
+mention it. With a router, a message in a topic that does not mention Onix
+is shown to a model, which judges whether it is meant for Onix (a
+follow-up to what it just said, a correction, a request in a topic where
+it works) or for the people there; only the first starts a run, or steers
+the one going. This is for topics whose response policy is ambient, the
+default.
+
+Use TypeSafe's Jev (`"typesafe"`). For each such message the server asks
+Jev one question, with the topic's last six messages, the new message and
+its sender, and a short description of Onix: about 680 input tokens, or
+3 US cents per thousand messages at Jev's price, and about a third of a
+second. Onix acts when Jev gives "meant for Onix" a probability of at
+least `ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD`, 0.9 by default.
+`tools/armada/typesafe_addressing_eval` measures the router on 65
+labelled chats; at 0.9 it started no run for people talking to each
+other and missed one request to Onix (17 October, `jev-1.13.0`). Run it
+again before changing the threshold, or when `jev-latest` moves to a new
+version (the server logs the version that answered).
+
+To turn it on:
+
+1. Put the key in `/etc/zulip/zulip-secrets.conf`, under `[secrets]`, as
+   `armada_typesafe_api_key`, keeping it off the command line and out of
+   `settings.py`. From a file `typesafe.token` on your machine:
+
+   ```bash
+   ssh root@HOST 'cat >> /etc/zulip/zulip-secrets.conf' \
+       <<< "armada_typesafe_api_key = $(cat typesafe.token)"
+   ```
+
+   or with an editor on the server.
+
+2. In `/etc/zulip/settings.py`, above Armada's block:
+
+   ```python
+   ARMADA_ADDRESSING_ROUTER_RUNTIME = "typesafe"
+   ```
+
+3. Check and restart, as `zulip`:
+
+   ```bash
+   /home/zulip/deployments/current/manage.py check
+   /home/zulip/deployments/current/scripts/restart-server
+   ```
+
+   The check fails on a router it does not know (`armada.E002`) or a
+   threshold outside 0.5 to 1 (`armada.E003`), and warns when the key is
+   missing (`armada.W001`).
+
+Each message it routes logs a line in
+`/var/log/zulip/events_armada_addressing.log`, "TypeSafe addressing:
+message_id=… p_agent=0.97 threshold=0.90 model=jev-1.13.0". If TypeSafe
+fails (no answer in 3 seconds, an HTTP error, an answer without a
+probability), the message starts nothing, the log has "Addressing router
+failed." with the reason, and the topic gets a note, at most every five
+minutes, to mention Onix instead. The request goes out through
+Smokescreen, the server's outgoing proxy.
+
+`"gemini-interactions"` is the older router, a Gemini model given a prompt
+and asked for JSON; its key is `ARMADA_GEMINI_INTERACTIONS_API_KEY` in
+`settings.py` or `GEMINI_API_KEY` in the environment.
 
 ## 5. Create the organization and the accounts
 
@@ -1047,6 +1113,11 @@ the `npm install` line of 6.2 and a new version number.
   that age; remove the line to get the year, [Staying signed
   in](#staying-signed-in)). A session that is still valid at the upgrade
   is renewed for a year on its first request after it.
+- **17 October 2026: TypeSafe can route messages that do not mention
+  Onix.** Nothing to do; it stays off until you turn it on
+  ([The addressing router](#the-addressing-router)). The system check now
+  refuses an `ARMADA_ADDRESSING_ROUTER_RUNTIME` that names no router,
+  which before turned routing off without a word.
 - **17 October 2026: the number of agent slots is a setting.** Nothing to
   do: without `[armada] worker_slots`, a server keeps two slots, with the
   same program, queue and log names. To run more at once, set it after the

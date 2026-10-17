@@ -63,8 +63,8 @@ kept web/tests/typing_events.test.cjs  # follows the renamed modules, classes an
 kept zerver/actions/message_edit.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/actions/message_send.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/actions/streams.py  # follows the renamed modules: their paths, armada_* names and wire names
-kept zerver/apps.py  # registers the check that refuses the agent's settings under their old names
-kept zerver/checks.py  # the check that refuses the agent's settings under their old names
+kept zerver/apps.py  # registers the check that refuses the agent's settings under their old names, and the addressing router's check
+kept zerver/checks.py  # the check that refuses the agent's settings under their old names; the addressing router's check
 kept zerver/lib/bot_config.py  # the agent's embedded bot service is named armada
 kept zerver/lib/bot_lib.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/lib/event_schema.py  # the agent's events are agent_run and workspace_changed
@@ -78,7 +78,7 @@ kept zerver/models/__init__.py  # exports the agent's models by their plain noun
 kept zerver/models/bots.py  # the agent's six models take plain nouns; 0810_rename_agent_models moves the tables
 kept zerver/models/messages.py  # comments name the product and the agent's workspace
 kept zerver/openapi/zulip.yaml  # documents the message field is_agent_message (API changelog ZF-092e84)
-kept zerver/tests/test_checks.py  # tests the check that refuses the agent's settings under their old names
+kept zerver/tests/test_checks.py  # tests the check that refuses the agent's settings under their old names, and the addressing router's check
 kept zerver/tests/test_event_system.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/tests/test_events.py  # follows the renamed modules: their paths, armada_* names and wire names
 kept zerver/tests/test_home.py  # the register keys are agent_user_ids and repository_stream_ids

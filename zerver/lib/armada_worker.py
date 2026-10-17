@@ -61,6 +61,7 @@ from zerver.lib.armada_agent import (
     ArmadaDisabledAgentRunner,
     ArmadaGeminiInteractionsAddressingIntentClassifier,
     ArmadaProcessIsolation,
+    ArmadaTypeSafeAddressingIntentClassifier,
     armada_codex_thread_version,
 )
 from zerver.lib.armada_run_card import record_agent_run_event
@@ -2707,6 +2708,14 @@ def build_armada_addressing_intent_classifier_from_settings() -> (
             output_limit=1000,
             url=settings.ARMADA_GEMINI_INTERACTIONS_URL,
             thinking_level=settings.ARMADA_ADDRESSING_ROUTER_GEMINI_THINKING_LEVEL,
+        )
+    if runtime == "typesafe":
+        return ArmadaTypeSafeAddressingIntentClassifier(
+            api_key=settings.ARMADA_TYPESAFE_API_KEY,
+            model=settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL,
+            url=settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_URL,
+            threshold=settings.ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD,
+            timeout_seconds=3,
         )
     return None
 

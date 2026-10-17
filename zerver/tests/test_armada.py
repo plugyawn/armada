@@ -268,6 +268,9 @@ class ArmadaComputedSettingsEnvTest(TestCase):
             "ARMADA_WORKER_TIMEOUT_SECONDS": "42",
             "ARMADA_WORKER_TRUSTED_USERS_ONLY": "yes",
             "ARMADA_WORKER_TRUSTED_USER_IDS": "1, 2 3",
+            "ARMADA_ADDRESSING_ROUTER_RUNTIME": "typesafe",
+            "ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL": "jev-1.13.0",
+            "ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD": "0.95",
         }
 
         with patch.dict("os.environ", env, clear=False):
@@ -287,6 +290,11 @@ class ArmadaComputedSettingsEnvTest(TestCase):
         self.assertEqual(values["ARMADA_WORKER_TIMEOUT_SECONDS"], 42)
         self.assertTrue(values["ARMADA_WORKER_TRUSTED_USERS_ONLY"])
         self.assertEqual(values["ARMADA_WORKER_TRUSTED_USER_IDS"], [1, 2, 3])
+        self.assertEqual(values["ARMADA_ADDRESSING_ROUTER_RUNTIME"], "typesafe")
+        self.assertEqual(values["ARMADA_ADDRESSING_ROUTER_TYPESAFE_MODEL"], "jev-1.13.0")
+        self.assertEqual(values["ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD"], 0.95)
+        # The TypeSafe key is a secret, read from zulip-secrets.conf only.
+        self.assertNotIn("ARMADA_TYPESAFE_API_KEY", values)
 
     def test_armada_env_override_table_uses_gemini_key_aliases(self) -> None:
         with patch.dict("os.environ", {"GOOGLE_GENAI_API_KEY": "gemini-key"}, clear=True):

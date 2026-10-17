@@ -3,8 +3,8 @@
 # devDependencies to dependencies, because the production build needs it.
 kept puppet/zulip/manifests/app_frontend_base.pp  # armada_* queues, armada_monitor_worker among them; [armada] worker_slots
 kept puppet/zulip/templates/supervisor/zulip.conf.template.erb  # armada_worker runs as one process per slot, numbered from 0 ([armada] worker_slots)
-kept zproject/prod_settings_template.py  # the Armada section: EMBEDDED_BOTS_ENABLED and every ARMADA_* setting; where the agent slots are set
+kept zproject/prod_settings_template.py  # the Armada section: EMBEDDED_BOTS_ENABLED and every ARMADA_* setting; where the agent slots are set; the TypeSafe addressing router
 kept zerver/views/streams.py  # a channel's repository URL only from a trusted user (ARMADA_WORKER_TRUSTED_USERS_ONLY)
-kept zproject/computed_settings.py  # ARMADA_WORKER_MODEL_CHOICES honoured from settings.py; ARMADA_WORKER_TRUSTED_USERS_ONLY; ARMADA_WORKER_CODEX_MEMORIES; ARMADA_WORKER_SLOTS from zulip.conf
+kept zproject/computed_settings.py  # ARMADA_WORKER_MODEL_CHOICES honoured from settings.py; ARMADA_WORKER_TRUSTED_USERS_ONLY; ARMADA_WORKER_CODEX_MEMORIES; ARMADA_WORKER_SLOTS from zulip.conf; ARMADA_TYPESAFE_API_KEY from zulip-secrets.conf and the TypeSafe router's overrides
 kept zproject/dev_settings.py  # ARMADA_WORKER_TRUSTED_USERS_ONLY off and ARMADA_WORKER_CODEX_MEMORIES on in development and tests
 kept docs/production/ai-integrations.md  # hosted servers pointed at docs/armada/deploy.md instead of os-user isolation; the agent is Onix and the product Armada (R1)

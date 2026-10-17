@@ -28,7 +28,9 @@ What a process writes (its last lines, kept on the install, and its log
 beside its checkout) has its secrets, its bot's key and its token blanked.
 The host also purges removed installs after a week, and their checkouts,
 and on each pass sends the widget documents that waited out their two
-seconds and marks the widgets that went quiet as stale.
+seconds and marks the widgets that went quiet as stale. It keeps each
+organization's plugins repository mirrored, when it has a mirror
+(zerver/lib/armada_plugin_repository.py).
 """
 
 import contextlib
@@ -57,6 +59,12 @@ from django.conf import settings
 from django.db import close_old_connections
 from django.utils.timezone import now as timezone_now
 
+from zerver.lib.armada_plugin_repository import (
+    ArmadaPluginMirrorError,
+    push_team_plugin_mirror,
+    team_plugin_mirror_is_behind,
+    team_plugin_repositories,
+)
 from zerver.lib.armada_plugin_validation import (
     ARMADA_PLUGIN_MANIFEST_FILE,
     ArmadaPluginContractError,
@@ -90,6 +98,10 @@ ARMADA_PLUGIN_LAST_LINES = 20
 ARMADA_PLUGIN_LOG_LIMIT_BYTES = 1_000_000
 ARMADA_PLUGIN_PURGE_SECONDS = 3600.0
 ARMADA_PLUGIN_TICK_SECONDS = 0.5
+# How often a plugins repository is compared with what its mirror took,
+# and the longest a failed push waits before it is tried again.
+ARMADA_PLUGIN_MIRROR_CHECK_SECONDS = 30.0
+ARMADA_PLUGIN_MIRROR_BACKOFF_LIMIT_SECONDS = 3600.0
 READY_MARK = ".armada-ready"
 REDACTED = "[secret]"
 
@@ -281,6 +293,15 @@ class Supervised:
     lines: deque[str] = field(default_factory=lambda: deque(maxlen=ARMADA_PLUGIN_LAST_LINES))
 
 
+@dataclass
+class Mirroring:
+    """An organization's plugins repository as the host mirrors it."""
+
+    pushing: "Future[None] | None" = None
+    next_check: float = 0.0
+    failures: int = 0
+
+
 def _pump(stream: IO[bytes], lines: deque[str], log_path: Path, hidden: list[str]) -> None:
     """Keep what a process writes, with what it must not show blanked."""
     with open(log_path, "a", encoding="utf-8") as log:
@@ -309,6 +330,7 @@ class ArmadaPluginHost:
         # Fetching and setting up take a while, so they run beside the pass.
         self.executor = executor or ThreadPoolExecutor(max_workers=2)
         self.supervised: dict[int, Supervised] = {}
+        self.mirrors: dict[int, Mirroring] = {}
         self.next_purge = 0.0
 
     # ------------------------------------------------------------ the loop
@@ -351,6 +373,7 @@ class ArmadaPluginHost:
             self.next_purge = now + ARMADA_PLUGIN_PURGE_SECONDS
             purge_removed_plugins(timezone_now())
             self._prune({install.id: install for install in installs.values()})
+        self._mirror()
 
     def stop_all(self) -> None:
         for install_id in list(self.supervised):
@@ -370,6 +393,44 @@ class ArmadaPluginHost:
             if Path(cwd).is_relative_to(self.plugin_dir):
                 self._kill_group(pid)
             pid_file.unlink(missing_ok=True)
+
+    def _mirror(self) -> None:
+        """Push each plugins repository to its mirror when it has changed,
+        beside the pass. A push that failed is tried again after a minute,
+        then ever less often, and at least once an hour."""
+        now = self.clock()
+        for repository in team_plugin_repositories():
+            mirroring = self.mirrors.setdefault(repository.id, Mirroring())
+            if mirroring.pushing is not None:
+                if not mirroring.pushing.done():
+                    continue
+                try:
+                    mirroring.pushing.result()
+                    mirroring.failures = 0
+                except ArmadaPluginMirrorError as error:
+                    mirroring.failures += 1
+                    delay = ARMADA_PLUGIN_MIRROR_CHECK_SECONDS * 2 ** min(mirroring.failures, 7)
+                    mirroring.next_check = now + min(
+                        delay, ARMADA_PLUGIN_MIRROR_BACKOFF_LIMIT_SECONDS
+                    )
+                    logger.warning(
+                        "Could not push the plugins repository %s to its mirror: %s",
+                        repository.repo_cache_path,
+                        error,
+                    )
+                mirroring.pushing = None
+            if now < mirroring.next_check:
+                continue
+            mirroring.next_check = now + ARMADA_PLUGIN_MIRROR_CHECK_SECONDS
+            try:
+                behind = team_plugin_mirror_is_behind(repository)
+            except ArmadaPluginMirrorError as error:
+                logger.warning("%s", error)
+                continue
+            if behind:
+                mirroring.pushing = self.executor.submit(
+                    push_team_plugin_mirror, repository.repo_cache_path
+                )
 
     # ------------------------------------------------------------ one install
 

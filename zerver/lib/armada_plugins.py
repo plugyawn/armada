@@ -194,7 +194,7 @@ def plugin_fields_without_values(install: PluginInstall, names: list[str]) -> li
     ]
 
 
-def _check_not_removed(install: PluginInstall) -> None:
+def check_not_removed(install: PluginInstall) -> None:
     if install.state == PluginInstall.REMOVED:
         raise JsonableError(
             _("{name} is removed; undo the removal first.").format(name=install.name)
@@ -296,7 +296,7 @@ def check_plugin_source(
     raise JsonableError(_("A local plugin is installed from one of this server's repositories."))
 
 
-def _check_manifest(manifest: object) -> dict[str, Any]:
+def check_plugin_manifest(manifest: object) -> dict[str, Any]:
     try:
         return canonicalize_plugin_manifest(manifest)
     except ArmadaPluginContractError as error:
@@ -532,6 +532,20 @@ def _source_fields(source: PluginSource) -> dict[str, Any]:
     }
 
 
+def check_installable(user: UserProfile, plugin_id: str) -> PluginInstall | None:
+    """The install that holds the plugin's id, when installing it would
+    take its place: the person's own draft, or a removal not yet purged.
+    Refuses someone else's draft and an install."""
+    existing = PluginInstall.objects.filter(realm=user.realm, plugin_id=plugin_id).first()
+    if existing is None or existing.state == PluginInstall.REMOVED:
+        return existing
+    if existing.state != PluginInstall.DRAFT:
+        raise JsonableError(_("{name} is already installed.").format(name=existing.name))
+    if not _sees(user, existing):
+        raise JsonableError(_("{name} is being made, and holds its id.").format(name=existing.name))
+    return existing
+
+
 def install_plugin(
     user: UserProfile,
     *,
@@ -554,7 +568,7 @@ def install_plugin(
     the install in place when its maker installs it, keeping its bot,
     settings and secrets."""
     check_plugin_member(user)
-    manifest = _check_manifest(manifest)
+    manifest = check_plugin_manifest(manifest)
     pinned = check_plugin_source(
         user,
         manifest,
@@ -570,12 +584,8 @@ def install_plugin(
         # Refused before anything is made, on a server that cannot keep them.
         _plugin_keys()
     realm = user.realm
-    existing = PluginInstall.objects.filter(realm=realm, plugin_id=manifest["id"]).first()
+    existing = check_installable(user, manifest["id"])
     if existing is not None and existing.state == PluginInstall.DRAFT:
-        if not _sees(user, existing):
-            raise JsonableError(
-                _("{name} is being made, and holds its id.").format(name=existing.name)
-            )
         return _install_draft(
             user,
             existing,
@@ -587,8 +597,6 @@ def install_plugin(
             draft,
             origin,
         )
-    if existing is not None and existing.state != PluginInstall.REMOVED:
-        raise JsonableError(_("{name} is already installed.").format(name=existing.name))
     values, missing_settings = _check_settings(manifest, plugin_settings or {})
     defaults = _widget_defaults(realm, manifest, widget_defaults, current={}, exclude_id=None)
     email = _plugin_bot_email(realm, manifest["id"])
@@ -751,7 +759,7 @@ def update_plugin(
 ) -> None:
     """Settings are saved whole. A change the process must see restarts
     it, and lifts a failure, since the person may have fixed its cause."""
-    _check_not_removed(install)
+    check_not_removed(install)
     changes: dict[str, Any] = {}
     restart = False
     missing_settings = _check_settings(install.manifest, install.settings)[1]
@@ -809,7 +817,7 @@ def remove_plugin(user: UserProfile, install: PluginInstall) -> None:
     column, by event, its bot is deactivated (its messages stay), and the
     host stops its process. Its settings, secrets and links are kept a week,
     for Undo. A draft, which no one else saw, is simply discarded."""
-    _check_not_removed(install)
+    check_not_removed(install)
     if install.state == PluginInstall.DRAFT:
         with transaction.atomic(durable=True):
             send_armada_plugin_event(install, "remove")
@@ -942,10 +950,10 @@ def update_plugin_version(
     or back to an earlier one, which is how a code change is undone (so no
     list of versions is kept). Settings, secrets and widgets the new
     manifest no longer declares go; returns the manifest's diff."""
-    _check_not_removed(install)
+    check_not_removed(install)
     if install.source_kind == PluginInstall.REMOTE:
         raise JsonableError(_("A remote plugin is updated where it runs."))
-    new = _check_manifest(manifest)
+    new = check_plugin_manifest(manifest)
     if new["id"] != install.plugin_id:
         raise JsonableError(
             _("The manifest at that commit is another plugin's: {id}.").format(id=new["id"])
@@ -1037,7 +1045,7 @@ def add_plugin_link(
     """Join a value the plugin understands to a channel, or to one of its
     topics. The install's bot joins the channel, so that its events show it
     what a member there sees."""
-    _check_not_removed(install)
+    check_not_removed(install)
     declared = install.manifest["provides"].get("links", {}).get(kind)
     if declared is None:
         raise JsonableError(
@@ -1099,7 +1107,7 @@ def add_plugin_link(
 def remove_plugin_link(user: UserProfile, install: PluginInstall, link_id: int) -> None:
     """Unlink; the install's bot leaves the channel when nothing of the
     install is linked there any more."""
-    _check_not_removed(install)
+    check_not_removed(install)
     link = PluginLink.objects.select_related("stream").filter(id=link_id, install=install).first()
     if link is None:
         raise ResourceNotFoundError(_("No such link"))

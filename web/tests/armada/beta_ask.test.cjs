@@ -69,9 +69,21 @@ run_test("the caption says what answers the question while the run waits", () =>
     );
     assert.deepEqual(offered(), [true, true]);
 
-    // Answered, or out of time: the question is spent, and says so.
+    // Answered, or out of time: the question is spent. Its caption says
+    // nothing, and keeps its line, so the options under the pointer stay.
     run.waiting = false;
     runs.drawAsks();
-    assert.equal(caption(), "The run no longer waits for an answer here.");
+    assert.equal(caption(), "");
+    assert.ok(lane.querySelector("p.askcap"));
+    assert.deepEqual(offered(), [false, false]);
+});
+
+run_test("a question drawn after its run stopped waiting has no caption", () => {
+    beta_state.state.P = {runs: [{status: "done", waiting: false}], msgs: []};
+    draw_question();
+
+    runs.drawAsks();
+    assert.equal(lane.querySelector("p.askcap"), null);
+    assert.ok(lane.lastElementChild.matches(".blk.ask"));
     assert.deepEqual(offered(), [false, false]);
 });

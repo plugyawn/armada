@@ -1,4 +1,5 @@
-/* INTERIM BETA (README.md): New, from the nav's "+", and the channels to join (channels.js). Tokens only, as beta.css.
+/* INTERIM BETA (README.md): New, from the nav's "+", and the channels to join (channels.js); a channel's or a topic's card
+   beside the nav (channel_view.js). Tokens only, as beta.css.
    A raised surface under the "+" (the nav's top row is 52; the "+" ends at 42), its left edge on the nav's 8 px inset and
    as wide as another person's card (264), so it covers the nav and none of the conversation. Its text edge is 16 in, and
    what has a fill is outdented to stand 8 in: the fields, the selected choice and Create. */
@@ -7,11 +8,11 @@
 .chn { position: fixed; z-index: 20; left: var(--s-2); top: 48px; width: 264px; border-radius: var(--r-pop); padding: var(--s-2) var(--s-4); font: var(--t-text); }
 .chn .chn-h { font: var(--t-strong); height: var(--h-m); display: flex; align-items: center; }
 /* a field is a well of the first fill at rest; holding the caret it is raised, with the focused field's edge */
-.chn .chn-in { display: block; width: calc(100% + 2 * var(--s-2)); height: var(--h-k); margin: var(--s-1) calc(-1 * var(--s-2)) 0; padding: 0 var(--s-2); border: 0; border-radius: var(--r-ctl); outline: none;
+.chn .chn-in, .ncard .chn-in { display: block; width: calc(100% + 2 * var(--s-2)); height: var(--h-k); margin: var(--s-1) calc(-1 * var(--s-2)) 0; padding: 0 var(--s-2); border: 0; border-radius: var(--r-ctl); outline: none;
   background: var(--fill-1); color: var(--ink-1); font: var(--t-text); caret-color: var(--accent-text); transition: background-color var(--fade-out) linear, box-shadow var(--fade-out) linear; }
 .chn .chn-in + .chn-in { margin-top: var(--s-2); }
-.chn .chn-in::placeholder { color: var(--ink-2); opacity: 1; }
-.chn .chn-in:focus { background: var(--raised); box-shadow: 0 0 0 1px var(--edge-2); transition-duration: var(--fade-in); }
+.chn .chn-in::placeholder, .ncard .chn-in::placeholder { color: var(--ink-2); opacity: 1; }
+.chn .chn-in:focus, .ncard .chn-in:focus { background: var(--raised); box-shadow: 0 0 0 1px var(--edge-2); transition-duration: var(--fade-in); }
 /* public or private, and Create: one row, the choice's first letter on the text edge, Create's fill ending with the fields' */
 .chn .chn-act { display: flex; align-items: center; justify-content: space-between; margin-top: var(--s-3); }
 .chn .chn-act .seg { margin-left: calc(-1 * var(--s-2)); }
@@ -32,5 +33,23 @@
 .chn .chn-row > .lk > * { grid-area: 1 / 1; }
 .chn .chn-row > .lk > i { visibility: hidden; font-style: normal; }
 .chn .chn-row[data-state="joining"] > .lk { color: var(--ink-2); }
+
+/* a channel's or a topic's card: raised beside the nav (its left edge 8 past the nav's), its head level with its row's
+   (28 high, as a row is), as wide as a person's card. What it is for in the second ink; then facts in two columns, a
+   name and a value, each value a cell 20 high that a fact arriving later fills without moving anything */
+.ncard { position: fixed; z-index: 20; width: 264px; border-radius: var(--r-pop); padding: var(--s-1) var(--s-3) var(--s-3); font: var(--t-text); outline: none; }
+.ncard .ih { display: flex; align-items: center; gap: var(--s-2); height: var(--h-m); font: var(--t-strong); }
+.ncard .ih > .ic { flex: none; color: var(--ink-2); }
+.ncard .ih > b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ncard .ih > .c { margin-right: calc(-1 * var(--s-2)); }
+.ncard .say { margin-top: var(--s-1); color: var(--ink-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.ncard .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-2); }
+.ncard .chn-in { margin-top: var(--s-2); }
+.ncard .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--s-3); row-gap: var(--s-1); margin: var(--s-2) 0 0; font: var(--t-caption); }
+.ncard .facts dt { color: var(--ink-2); height: 20px; display: flex; align-items: center; }
+.ncard .facts dd { margin: 0; height: 20px; display: flex; align-items: center; gap: var(--s-1); min-width: 0; white-space: nowrap; }
+.ncard .facts dd > .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ncard .facts dd > .mk { flex: none; }
+.ncard .facts .avs { margin-right: 2px; }
 
 }

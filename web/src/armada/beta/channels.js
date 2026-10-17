@@ -12,6 +12,7 @@ import {nav} from "./frame.js";
 import {ready} from "./composer.js";
 import {drawNav, loadTopics} from "./nav.js";
 import {drawReceipts} from "./receipts.js";
+import {loadedChunk} from "./chunks.js";
 
 /* ---------- the channels I am in, as the server says they change ---------- */
 const repositories = new Set();   /* the channels bound to a repository that I can see, in them or not (register) */
@@ -37,8 +38,8 @@ function loadMembers(sid) { if (members.has(sid)) return Promise.resolve(members
   p.heard = []; members.set(sid, p); return p; }   /* the peer events heard while it is asked for */
 const peer = (s, ev) => { for (const id of ev.user_ids) if (ev.op === "peer_add") s.add(id); else s.delete(id); };
 function onPeers(ev) { for (const sid of ev.stream_ids) { const s = members.get(sid); if (s instanceof Set) peer(s, ev); else if (s) s.heard.push(ev); } membersChanged(); }
-/* what counts a channel's members draws again: the ticks and Info */
-function membersChanged() { drawReceipts(); }
+/* what counts a channel's members draws again: the ticks and Info, and a channel's card (channel_view.js) */
+function membersChanged() { drawReceipts(); const v = loadedChunk("channels"); if (v) v.membersChanged(); }
 
 /* a channel's first place, once I am in it */
 function openWhenIn(sid) { opening = sid; if (streams.has(sid)) openFirst(sid); }

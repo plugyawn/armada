@@ -39,4 +39,4 @@ function drawHeader() { const cfg = headCfg(), wt = cfg.kind !== "plain"; R.clas
   const sp = $("#side > .hdg"); if (sp) { sp.innerHTML = progHTML(cfg.checklist, "prog-side"); host(sp); }
   $$("[aria-label='More']", state.hd).forEach((b) => (b.dataset.tip = "More is not in the beta yet")); if (state.place.kind !== "partner") $$("a.repo, button.fact.branch, button.fact.commit", state.hd).forEach((b) => (b.dataset.tip = "Not in the beta yet")); $$("#side > .hdg button.prog").forEach((b) => (b.dataset.tip = "The checklist is below")); const pg = $("#prog", state.hd); if (pg) pg.dataset.tip = "The checklist is in the column at 1408 px and wider"; }
 
-export {drawHeader};
+export {drawHeader, repoPath};

@@ -29,10 +29,8 @@
                 <div class="input-group">
                     <p>
                         {{#tr}}
-                            Add your email to <z-link-invite-users-help>invite other users</z-link-invite-users-help>
-                            or <z-link-convert-demo-organization-help>convert to a permanent organization</z-link-convert-demo-organization-help>.
-                            {{#*inline "z-link-invite-users-help"}}<a href="/help/invite-new-users" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
-                            {{#*inline "z-link-convert-demo-organization-help"}}<a href="/help/demo-organizations#convert-a-demo-organization-to-a-permanent-organization" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
+                            Add your email to invite other users
+                            or convert to a permanent organization.
                         {{/tr}}
                     </p>
                     {{> ../components/action_button
@@ -72,7 +70,6 @@
                 <div class="input-group">
                     <label for="user-self-role-select" class="settings-field-label">
                         {{t 'Role' }}
-                        {{> ../help_link_widget link="/help/user-roles" }}
                     </label>
                     <select name="user-self-role-select"
                       class="prop-element settings_select bootstrap-focus-style"

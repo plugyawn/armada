@@ -716,7 +716,6 @@ function show_stream_email_address_modal(address: string, sub: StreamSubscriptio
         id: "copy_email_address_modal",
         modal_submit_button_text: $t({defaultMessage: "Generate email address"}),
         modal_exit_button_text: $t({defaultMessage: "Close"}),
-        help_link: "/help/message-a-channel-by-email#configuration-options",
         post_render: generate_email_modal_post_render,
         on_click: generate_email_address,
         close_on_submit: false,
@@ -958,7 +957,6 @@ export function initialize(): void {
                 {"z-link": () => stream_name_with_privacy_symbol_html},
             ),
             id: "archive-stream-modal",
-            help_link: "/help/archive-a-channel",
             modal_content_html,
             on_click: do_archive_stream,
         });

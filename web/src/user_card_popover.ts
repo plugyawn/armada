@@ -65,7 +65,6 @@ export function confirm_mute_user(user_id: number): void {
 
     confirm_dialog.launch({
         modal_title_html: $t_html({defaultMessage: "Mute user"}),
-        help_link: "/help/mute-a-user",
         modal_content_html,
         is_compact: true,
         on_click,

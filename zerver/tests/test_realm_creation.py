@@ -109,7 +109,7 @@ class DemoCreationTest(ZulipTestCase):
             sender__email="notification-bot@zulip.com",
         ).latest("id")
         self.assertTrue(
-            demo_deletion_reminder.content.startswith("As a reminder, this [demo organization]")
+            demo_deletion_reminder.content.startswith("As a reminder, this demo organization")
         )
         self.assertIn("will be automatically deleted on <time", demo_deletion_reminder.content)
 

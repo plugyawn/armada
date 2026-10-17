@@ -253,6 +253,13 @@ None of these changes what a person feels at the keyboard; they shrink the insta
 | S-14 | Welcome Bot messages and server-side onboarding steps                                                                                                                             | CUT                       | they point at Zulip's help                                                                       | `zerver/lib/onboarding*.py`                                                                         |
 | S-15 | Endpoints and models of features cut on the client (scheduled messages, reminders, snippets, read receipts, reports, summaries, playgrounds, profile fields, alert words, status) | HIDE                      | left in place and unreachable; each needs migrations to remove and nothing is gained by hurrying | a follow-up, feature by feature                                                                     |
 
+S-02 is half done: since 17 October 2026 the help centre is no longer served.
+nginx and the development server answer `/help` and every path under it with
+a temporary redirect to `/`; the development server's help page and its
+`dev-help` entry (K-96) are deleted, and the old interface no longer links to
+the help centre. D3 still deletes the package, `starlight_help/`, which stays
+in the workspace until then so that the lockfile does not change.
+
 ## Never cut: what Armada's own semantics rely on
 
 A change that touches one of these is a bug, whatever line it claims to implement.

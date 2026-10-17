@@ -545,7 +545,6 @@ export function initialize(): void {
             form_id: "add-poll-form",
             id: "add-poll-modal",
             post_render: widget_modal.poll_options_setup,
-            help_link: "https://zulip.com/help/create-a-poll",
         });
     });
 
@@ -607,7 +606,6 @@ export function initialize(): void {
                 validate_input,
                 id: "add-todo-modal",
                 post_render: widget_modal.todo_list_tasks_setup,
-                help_link: "https://zulip.com/help/collaborative-to-do-lists",
             });
         },
     );

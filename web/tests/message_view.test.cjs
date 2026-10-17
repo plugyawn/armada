@@ -356,7 +356,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         empty_narrow_html(
             "",
             undefined,
-            'translated: This is not a <a target="_blank" rel="noopener noreferrer" href="/help/public-access-option">publicly accessible</a> conversation.',
+            "translated: This is not a publicly accessible conversation.",
         ),
     );
 
@@ -370,7 +370,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         empty_narrow_html(
             "",
             undefined,
-            'translated: This is not a <a target="_blank" rel="noopener noreferrer" href="/help/public-access-option">publicly accessible</a> conversation.',
+            "translated: This is not a publicly accessible conversation.",
         ),
     );
 
@@ -401,7 +401,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         empty_narrow_html(
             "translated: You have no starred messages.",
             undefined,
-            'translated: Starring messages is a good way to keep track of important messages, such as tasks you need to go back to, or useful references. To star a message, hover over a message and click the <i class="zulip-icon zulip-icon-star" aria-hidden="true"></i>. <a target="_blank" rel="noopener noreferrer" href="/help/star-a-message">Learn more</a>',
+            'translated: Starring messages is a good way to keep track of important messages, such as tasks you need to go back to, or useful references. To star a message, hover over a message and click the <i class="zulip-icon zulip-icon-star" aria-hidden="true"></i>.',
         ),
     );
 
@@ -412,7 +412,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         empty_narrow_html(
             "translated: This view will show messages where you are mentioned.",
             undefined,
-            'translated: To call attention to a message, you can mention a user, a group, topic participants, or all subscribers to a channel. Type @ in the compose box, and choose who you\'d like to mention from the list of suggestions. <a target="_blank" rel="noopener noreferrer" href="/help/mention-a-user-or-group">Learn more</a>',
+            "translated: To call attention to a message, you can mention a user, a group, topic participants, or all subscribers to a channel. Type @ in the compose box, and choose who you'd like to mention from the list of suggestions.",
         ),
     );
 
@@ -441,8 +441,8 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     assert.equal(
         $(".empty_feed_notice_main").html(),
         empty_narrow_html(
+            "translated: No topics in your history are marked as resolved.",
             undefined,
-            `translated: No topics in <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your history</a> are marked as resolved.`,
             undefined,
             undefined,
             true,
@@ -467,10 +467,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     narrow_banner.show_empty_narrow_message(current_filter);
     assert.equal(
         $(".empty_feed_notice_main").html(),
-        empty_narrow_html(
-            undefined,
-            `translated: No search results from <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your message history</a>.`,
-        ),
+        empty_narrow_html("translated: No search results from your message history."),
     );
     // organization has disabled sending direct messages
     override(realm, "realm_direct_message_permission_group", nobody.id);
@@ -494,11 +491,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     narrow_banner.show_empty_narrow_message(current_filter);
     assert.equal(
         $(".empty_feed_notice_main").html(),
-        empty_narrow_html(
-            "translated: Direct messages are disabled in this organization.",
-            undefined,
-            'translated: <a target="_blank" rel="noopener noreferrer" href="/help/restrict-direct-messages">Learn more.</a>',
-        ),
+        empty_narrow_html("translated: Direct messages are disabled in this organization."),
     );
 
     // direct messages with a bot are possible even though
@@ -521,11 +514,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     narrow_banner.show_empty_narrow_message(current_filter);
     assert.equal(
         $(".empty_feed_notice_main").html(),
-        empty_narrow_html(
-            "translated: Direct messages are disabled in this organization.",
-            undefined,
-            'translated: <a target="_blank" rel="noopener noreferrer" href="/help/restrict-direct-messages">Learn more.</a>',
-        ),
+        empty_narrow_html("translated: Direct messages are disabled in this organization."),
     );
 
     // sending direct messages enabled
@@ -608,11 +597,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     narrow_banner.show_empty_narrow_message(current_filter);
     assert.equal(
         $(".empty_feed_notice_main").html(),
-        empty_narrow_html(
-            "translated: Direct messages are disabled in this organization.",
-            undefined,
-            'translated: <a target="_blank" rel="noopener noreferrer" href="/help/restrict-direct-messages">Learn more.</a>',
-        ),
+        empty_narrow_html("translated: Direct messages are disabled in this organization."),
     );
 
     // direct messages with a bot are possible even though
@@ -679,7 +664,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         $(".empty_feed_notice_main").html(),
         empty_narrow_html(
             "translated: No messages in your message history mention Alice Smith yet.",
-            'translated: No messages in <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your message history</a> mention Alice Smith yet.',
+            undefined,
             undefined,
             undefined,
             true,
@@ -730,7 +715,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
         empty_narrow_html(
             "translated: You have muted all the topics in this channel.",
             undefined,
-            'translated: To view a muted topic, click <b>show all topics</b> in the left sidebar, and select one from the list. <a target="_blank" rel="noopener noreferrer" href="/help/mute-a-topic">Learn more</a>',
+            "translated: To view a muted topic, click <b>show all topics</b> in the left sidebar, and select one from the list.",
         ),
     );
     // There are no muted topics in the channel.
@@ -759,8 +744,8 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     assert.equal(
         $(".empty_feed_notice_main").html(),
         empty_narrow_html(
+            "translated: No search results from your message history.",
             undefined,
-            `translated: No search results from <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your message history</a>.`,
             undefined,
             undefined,
             true,
@@ -773,11 +758,7 @@ run_test("show_empty_narrow_message", ({mock_template, override, override_rewire
     narrow_banner.show_empty_narrow_message(current_filter);
     assert.equal(
         $(".empty_feed_notice_main").html(),
-        empty_narrow_html(
-            "translated: None of your messages have emoji reactions yet.",
-            undefined,
-            'translated: Learn more about emoji reactions <a target="_blank" rel="noopener noreferrer" href="/help/emoji-reactions">here</a>.',
-        ),
+        empty_narrow_html("translated: None of your messages have emoji reactions yet."),
     );
 
     // The channel is private, and the user cannot subscribe (e.g., they
@@ -819,8 +800,8 @@ run_test("show_empty_narrow_message_with_search", ({mock_template, override}) =>
     assert.equal(
         $(".empty_feed_notice_main").html(),
         empty_narrow_html(
+            "translated: No search results from your message history.",
             undefined,
-            `translated: No search results from <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your message history</a>.`,
             undefined,
             undefined,
             true,
@@ -851,8 +832,8 @@ run_test("show_search_stopwords", ({mock_template, override}) => {
     assert.equal(
         $(".empty_feed_notice_main").html(),
         empty_narrow_html(
+            "translated: No search results from your message history.",
             undefined,
-            `translated: No search results from <a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">your message history</a>.`,
             undefined,
             expected_search_data,
             true,

@@ -14,11 +14,6 @@
         "./src/reload_state.ts",
         "./src/channel.ts"
     ],
-    "dev-help": [
-        "./src/bundles/legacy_portico_bundle.ts",
-        "./styles/portico/dev_help.css",
-        "./styles/portico/markdown.css"
-    ],
     "showroom": ["./src/bundles/showroom.ts"],
     "armada-showroom": ["./src/bundles/armada_showroom.ts"]
 }

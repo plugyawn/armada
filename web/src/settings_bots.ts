@@ -540,7 +540,6 @@ export function add_a_new_bot(): void {
 
     dialog_widget.launch({
         form_id: "create_bot_form",
-        help_link: "/help/add-a-bot-or-integration",
         modal_content_html,
         modal_title_html: $t_html({defaultMessage: "Add a new bot"}),
         modal_submit_button_text: $t({defaultMessage: "Add"}),

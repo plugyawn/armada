@@ -26,7 +26,6 @@ type MessageViewHeaderContext = {
     title?: string | undefined;
     title_html?: string | undefined;
     description?: string;
-    link?: string;
     is_spectator?: boolean;
     sub_count?: string | number;
     formatted_sub_count?: string;
@@ -49,7 +48,6 @@ function get_message_view_header_context(filter: Filter | undefined): MessageVie
             title: $t({defaultMessage: "Recent conversations"}),
             description: $t({defaultMessage: "Overview of ongoing conversations."}),
             zulip_icon: "recent",
-            link: "/help/recent-conversations",
         };
     }
 
@@ -60,7 +58,6 @@ function get_message_view_header_context(filter: Filter | undefined): MessageVie
                 defaultMessage: "Overview of your conversations with unread messages.",
             }),
             zulip_icon: "inbox",
-            link: "/help/inbox",
         };
     }
 
@@ -90,18 +87,15 @@ function get_message_view_header_context(filter: Filter | undefined): MessageVie
             title: $t({defaultMessage: "Combined feed"}),
             description,
             zulip_icon: "all-messages",
-            link: "/help/combined-feed",
         };
     }
 
     const title = filter.get_title();
     const description = filter.get_description()?.description;
-    const link = filter.get_description()?.link;
     assert(title !== undefined);
     const context = filter.add_icon_data({
         title,
         description,
-        link,
         is_spectator: page_params.is_spectator,
     });
 

@@ -88,14 +88,10 @@ export function fetch_read_receipts(message_id: number): void {
                     $t_html(
                         {
                             defaultMessage:
-                                "{num_of_people, plural, one {This message has been <z-link>read</z-link> by {num_of_people} person:} other {This message has been <z-link>read</z-link> by {num_of_people} people:}}",
+                                "{num_of_people, plural, one {This message has been read by {num_of_people} person:} other {This message has been read by {num_of_people} people:}}",
                         },
                         {
                             num_of_people: users.length,
-                            "z-link": (content_html) =>
-                                `<a href="/help/read-receipts" target="_blank" rel="noopener noreferrer">${content_html.join(
-                                    "",
-                                )}</a>`,
                         },
                     ),
                 );

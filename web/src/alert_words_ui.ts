@@ -118,7 +118,6 @@ export function show_add_alert_word_modal(): void {
         modal_title_html: $t_html({defaultMessage: "Add a new alert word"}),
         modal_content_html,
         modal_submit_button_text: $t({defaultMessage: "Add"}),
-        help_link: "/help/dm-mention-alert-notifications#alert-words",
         form_id: "add-alert-word-form",
         id: "add-alert-word",
         loading_spinner: true,

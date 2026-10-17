@@ -58,11 +58,9 @@ def schedule_demo_organization_deletion_reminder(user: UserProfile) -> None:
     client = get_client("Internal")
 
     message_content = _("""
-As a reminder, this [demo organization]({demo_help}) will be automatically deleted on {deletion_time}, unless it's [converted into a permanent organization]({convert_demo}).
+As a reminder, this demo organization will be automatically deleted on {deletion_time}, unless it's converted into a permanent organization.
 """).format(
-        demo_help="/help/demo-organizations",
         deletion_time=get_scheduled_deletion_global_time(realm),
-        convert_demo="/help/demo-organizations#convert-a-demo-organization-to-a-permanent-organization",
     )
 
     check_schedule_message(

@@ -6,7 +6,6 @@
 
     <div class="input-group">
         <label for="{{prefix}}web_home_view" class="settings-field-label">{{t "Home view" }}
-            {{> ../help_link_widget link="/help/configure-home-view" }}
             {{#if for_realm_settings}}
                 {{> ../components/icon_button icon="reset" intent="neutral" custom_classes="reset-user-setting-to-default" data-tippy-content=(t "Reset users to default") aria-label=(t "Reset users to default") }}
             {{/if}}
@@ -32,7 +31,6 @@
 
     <div class="input-group">
         <label for="{{prefix}}web_mark_read_on_scroll_policy" class="settings-field-label">{{t "Automatically mark messages as read" }}
-            {{> ../help_link_widget link="/help/marking-messages-as-read" }}
             {{#if for_realm_settings}}
                 {{> ../components/icon_button icon="reset" intent="neutral" custom_classes="reset-user-setting-to-default" data-tippy-content=(t "Reset users to default") aria-label=(t "Reset users to default") }}
             {{/if}}

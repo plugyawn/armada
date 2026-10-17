@@ -31,7 +31,6 @@ hash:  Settings
 hash:  Organization settings
 link:  Usage statistics
 ---
-link:  Help center
 info:  Keyboard shortcuts
 info:  Message formatting
 info:  Search filters
@@ -40,7 +39,6 @@ hash:  About Zulip
 link:  Desktop & mobile apps
 link:  Integrations
 link:  API documentation
-link:  Sponsor Zulip
 link:  Plans and pricing
 ---
 hash:   Invite users

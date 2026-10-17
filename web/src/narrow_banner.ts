@@ -19,33 +19,15 @@ import * as util from "./util.ts";
 
 const SPECTATOR_STREAM_NARROW_BANNER = {
     title: "",
-    html: $t_html(
-        {
-            defaultMessage: "This is not a <z-link>publicly accessible</z-link> conversation.",
-        },
-        {
-            "z-link": (content_html) =>
-                `<a target="_blank" rel="noopener noreferrer" href="/help/public-access-option">${content_html.join(
-                    "",
-                )}</a>`,
-        },
-    ),
+    html: $t_html({defaultMessage: "This is not a publicly accessible conversation."}),
 };
 
 const MENTIONS_VIEW_EMPTY_BANNER = {
     title: $t({defaultMessage: "This view will show messages where you are mentioned."}),
-    html: $t_html(
-        {
-            defaultMessage:
-                "To call attention to a message, you can mention a user, a group, topic participants, or all subscribers to a channel. Type @ in the compose box, and choose who you'd like to mention from the list of suggestions. <z-link>Learn more</z-link>",
-        },
-        {
-            "z-link": (content_html) =>
-                `<a target="_blank" rel="noopener noreferrer" href="/help/mention-a-user-or-group">${content_html.join(
-                    "",
-                )}</a>`,
-        },
-    ),
+    html: $t_html({
+        defaultMessage:
+            "To call attention to a message, you can mention a user, a group, topic participants, or all subscribers to a channel. Type @ in the compose box, and choose who you'd like to mention from the list of suggestions.",
+    }),
 };
 
 const STARRED_MESSAGES_VIEW_EMPTY_BANNER = {
@@ -53,14 +35,10 @@ const STARRED_MESSAGES_VIEW_EMPTY_BANNER = {
     html: $t_html(
         {
             defaultMessage:
-                "Starring messages is a good way to keep track of important messages, such as tasks you need to go back to, or useful references. To star a message, hover over a message and click the <star-icon></star-icon>. <z-link>Learn more</z-link>",
+                "Starring messages is a good way to keep track of important messages, such as tasks you need to go back to, or useful references. To star a message, hover over a message and click the <star-icon></star-icon>.",
         },
         {
             "star-icon": () => `<i class="zulip-icon zulip-icon-star" aria-hidden="true"></i>`,
-            "z-link": (content_html) =>
-                `<a target="_blank" rel="noopener noreferrer" href="/help/star-a-message">${content_html.join(
-                    "",
-                )}</a>`,
         },
     ),
 };
@@ -69,30 +47,16 @@ const MUTED_TOPICS_IN_CHANNEL_EMPTY_BANNER = {
     title: $t({
         defaultMessage: "You have muted all the topics in this channel.",
     }),
-    html: $t_html(
-        {
-            defaultMessage:
-                "To view a muted topic, click <b>show all topics</b> in the left sidebar, and select one from the list. <z-link>Learn more</z-link>",
-        },
-        {
-            "z-link": (content_html) =>
-                `<a target="_blank" rel="noopener noreferrer" href="/help/mute-a-topic">${content_html.join("")}</a>`,
-        },
-    ),
+    html: $t_html({
+        defaultMessage:
+            "To view a muted topic, click <b>show all topics</b> in the left sidebar, and select one from the list.",
+    }),
 };
 
 const NO_SEARCH_RESULTS_TITLE = $t({defaultMessage: "No search results."});
-const NO_SEARCH_RESULTS_TITLE_HTML = $t_html(
-    {
-        defaultMessage: "No search results from <z-link>your message history</z-link>.",
-    },
-    {
-        "z-link": (content_html) =>
-            `<a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">${content_html.join(
-                "",
-            )}</a>`,
-    },
-);
+const NO_SEARCH_RESULTS_IN_HISTORY_TITLE = $t({
+    defaultMessage: "No search results from your message history.",
+});
 
 function should_show_search_shared_history_action(
     current_filter: Filter,
@@ -102,14 +66,10 @@ function should_show_search_shared_history_action(
 }
 
 // When we're offering the search shared history in banner, the title
-// links to the relevant help center page; otherwise it's plain text.
-function get_no_search_results_title(
-    show_search_shared_history: boolean,
-): {title: string} | {title_html: string} {
+// says that only the user's message history was searched.
+function get_no_search_results_title(show_search_shared_history: boolean): {title: string} {
     if (show_search_shared_history) {
-        return {
-            title_html: NO_SEARCH_RESULTS_TITLE_HTML,
-        };
+        return {title: NO_SEARCH_RESULTS_IN_HISTORY_TITLE};
     }
 
     return {title: NO_SEARCH_RESULTS_TITLE};
@@ -164,18 +124,7 @@ function dm_permission_error_banner(user_ids_string: string): NarrowBannerData |
     if (direct_message_error_string === "") {
         return undefined;
     }
-    return {
-        title: direct_message_error_string,
-        html: $t_html(
-            {
-                defaultMessage: "<z-link>Learn more.</z-link>",
-            },
-            {
-                "z-link": (content_html) =>
-                    `<a target="_blank" rel="noopener noreferrer" href="/help/restrict-direct-messages">${content_html.join("")}</a>`,
-            },
-        ),
-    };
+    return {title: direct_message_error_string};
 }
 
 export function pick_empty_narrow_banner(
@@ -309,17 +258,6 @@ export function pick_empty_narrow_banner(
         ) {
             return {
                 title: $t({defaultMessage: "None of your messages have emoji reactions yet."}),
-                html: $t_html(
-                    {
-                        defaultMessage: "Learn more about emoji reactions <z-link>here</z-link>.",
-                    },
-                    {
-                        "z-link": (content_html) =>
-                            `<a target="_blank" rel="noopener noreferrer" href="/help/emoji-reactions">${content_html.join(
-                                "",
-                            )}</a>`,
-                    },
-                ),
             };
         }
 
@@ -362,18 +300,9 @@ export function pick_empty_narrow_banner(
                     };
                 case "resolved":
                     return {
-                        title_html: $t_html(
-                            {
-                                defaultMessage:
-                                    "No topics in <z-link>your history</z-link> are marked as resolved.",
-                            },
-                            {
-                                "z-link": (content_html) =>
-                                    `<a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">${content_html.join(
-                                        "",
-                                    )}</a>`,
-                            },
-                        ),
+                        title: $t({
+                            defaultMessage: "No topics in your history are marked as resolved.",
+                        }),
                         show_action: show_search_shared_history,
                     };
                 case "followed":
@@ -389,7 +318,7 @@ export function pick_empty_narrow_banner(
                     };
                 case "alerted":
                     return {
-                        title_html: NO_SEARCH_RESULTS_TITLE_HTML,
+                        title: NO_SEARCH_RESULTS_IN_HISTORY_TITLE,
                         show_action: show_search_shared_history,
                     };
             }
@@ -610,16 +539,9 @@ export function pick_empty_narrow_banner(
             // mentions:me is redirected to is:mentioned in Filter.parse(),
             // so mentioned_user will never be the current user here.
             return {
-                title_html: $t_html(
-                    {
-                        defaultMessage:
-                            "No messages in <z-link>your message history</z-link> mention {person} yet.",
-                    },
-                    {
-                        "z-link": (content_html) =>
-                            `<a href="/help/search-for-messages#search-shared-history" target="_blank" rel="noopener noreferrer">${content_html.join("")}</a>`,
-                        person: mentioned_user.full_name,
-                    },
+                title: $t(
+                    {defaultMessage: "No messages in your message history mention {person} yet."},
+                    {person: mentioned_user.full_name},
                 ),
                 show_action: show_search_shared_history,
             };
@@ -627,7 +549,7 @@ export function pick_empty_narrow_banner(
 
         case "has": {
             return {
-                title_html: NO_SEARCH_RESULTS_TITLE_HTML,
+                title: NO_SEARCH_RESULTS_IN_HISTORY_TITLE,
                 show_action: show_search_shared_history,
             };
         }

@@ -1252,12 +1252,11 @@ def send_change_stream_permission_notification(
 
     with override_language(stream.realm.default_language):
         notification_string = _(
-            "{user} changed the [access permissions]({help_link}) "
+            "{user} changed the access permissions "
             "for this channel from **{old_policy}** to **{new_policy}**."
         )
         notification_string = notification_string.format(
             user=user_mention,
-            help_link="/help/channel-permissions",
             old_policy=old_policy_name,
             new_policy=new_policy_name,
         )
@@ -1475,14 +1474,13 @@ def send_stream_posting_permission_update_notification(
 
     with override_language(stream.realm.default_language):
         notification_string = _(
-            "{user} changed the [posting permissions]({help_link}) "
+            "{user} changed the posting permissions "
             "for this channel:\n\n"
             "* **Old**: {old_setting_description}\n"
             "* **New**: {new_setting_description}\n"
         )
         notification_string = notification_string.format(
             user=user_mention,
-            help_link="/help/channel-posting-policy",
             old_setting_description=old_setting_description,
             new_setting_description=new_setting_description,
         )
@@ -1671,14 +1669,13 @@ def send_change_stream_message_retention_days_notification(
                 "Messages in this channel will now be automatically deleted {number_of_days} days after they are sent."
             ).format(number_of_days=new_value)
         notification_string = _(
-            "{user} has changed the [message retention period]({help_link}) for this channel:\n"
+            "{user} has changed the message retention period for this channel:\n"
             "* **Old retention period**: {old_retention_period}\n"
             "* **New retention period**: {new_retention_period}\n\n"
             "{summary_line}"
         )
         notification_string = notification_string.format(
             user=user_mention,
-            help_link="/help/message-retention-policy",
             old_retention_period=old_retention_period,
             new_retention_period=new_retention_period,
             summary_line=summary_line,

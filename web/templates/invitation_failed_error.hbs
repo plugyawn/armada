@@ -1,9 +1,7 @@
 <p id="invitation_error_message">{{ error_message }}</p>
 {{#if daily_limit_reached}}
     {{#tr}}
-        Please <z-link-support>contact support</z-link-support> for an exception or <z-link-invite-help>add users with a reusable invite link</z-link-invite-help>.
-        {{#*inline "z-link-support"}}<a href="https://zulip.com/help/contact-support">{{> @partial-block}}</a>{{/inline}}
-        {{#*inline "z-link-invite-help"}}<a href="https://zulip.com/help/invite-new-users#create-a-reusable-invitation-link">{{> @partial-block}}</a>{{/inline}}
+        Please contact support for an exception or add users with a reusable invite link.
     {{/tr}}
 {{/if}}
 <ul>
@@ -26,15 +24,13 @@
 {{#if license_limit_reached}}
     {{#if has_billing_access}}
         {{#tr}}
-            To invite users, please <z-link-billing>increase the number of licenses</z-link-billing> or <z-link-help-page>deactivate inactive users</z-link-help-page>.
+            To invite users, please <z-link-billing>increase the number of licenses</z-link-billing> or deactivate inactive users.
             {{#*inline "z-link-billing"}}<a href="/billing/">{{> @partial-block}}</a>{{/inline}}
-            {{#*inline "z-link-help-page"}}<a href="/help/deactivate-or-reactivate-a-user" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
         {{/tr}}
     {{else}}
         {{#tr}}
-            Please ask a user with billing permission to <z-link-billing>increase the number of licenses</z-link-billing> or <z-link-help-page>deactivate inactive users</z-link-help-page>, and try again.
+            Please ask a user with billing permission to <z-link-billing>increase the number of licenses</z-link-billing> or deactivate inactive users, and try again.
             {{#*inline "z-link-billing"}}<a href="/billing/">{{> @partial-block}}</a>{{/inline}}
-            {{#*inline "z-link-help-page"}}<a href="/help/deactivate-or-reactivate-a-user" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
         {{/tr}}
     {{/if}}
 {{/if}}

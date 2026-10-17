@@ -253,13 +253,7 @@ const UNSUPPORTED_BROWSER_BANNER: AlertBanner = {
         defaultMessage:
             "Because you're using an unsupported or very old browser, Armada may not work as expected.",
     }),
-    buttons: [
-        {
-            variant: "text",
-            label: $t({defaultMessage: "Learn more"}),
-            custom_classes: "unsupported-browser-learn-more",
-        },
-    ],
+    buttons: [],
     close_button: true,
     custom_classes: "navbar-alert-banner",
 };
@@ -369,22 +363,13 @@ const bankruptcy_banner = (): AlertBanner => {
 
 const demo_organization_deadline_banner = (): AlertBanner => {
     const days_remaining = demo_organizations_ui.get_demo_organization_deadline_days_remaining();
-    let buttons: ActionButton[] = [
-        {
-            variant: "text",
-            label: $t({defaultMessage: "Learn more"}),
-            custom_classes: "demo-organizations-help",
-        },
-    ];
+    const buttons: ActionButton[] = [];
     if (current_user.is_owner) {
-        buttons = [
-            ...buttons,
-            {
-                variant: "subtle",
-                label: $t({defaultMessage: "Convert"}),
-                custom_classes: "convert-demo-organization",
-            },
-        ];
+        buttons.push({
+            variant: "subtle",
+            label: $t({defaultMessage: "Convert"}),
+            custom_classes: "convert-demo-organization",
+        });
     }
     return {
         process: "demo-organization-deadline",
@@ -450,11 +435,6 @@ const majority_messages_muted_banner = (percent_muted_messages: number): AlertBa
             },
         ),
         buttons: [
-            {
-                variant: "subtle",
-                label: $t({defaultMessage: "Learn more"}),
-                custom_classes: "managing-muted-channels",
-            },
             {
                 variant: "text",
                 label: $t({defaultMessage: "Dismiss for 3 months"}),
@@ -618,10 +598,6 @@ export function initialize(): void {
 
     // NOTE: The `window.open()` click handlers are required over here since the
     // the buttons component framework doesn't support link buttons as of now.
-    $("#navbar_alerts_wrapper").on("click", ".demo-organizations-help", () => {
-        window.open("https://zulip.com/help/demo-organizations", "_blank", "noopener,noreferrer");
-    });
-
     $("#navbar_alerts_wrapper").on("click", ".configure-outgoing-mail-instructions", () => {
         window.open(
             "https://zulip.readthedocs.io/en/latest/production/email.html",
@@ -645,18 +621,6 @@ export function initialize(): void {
     $("#navbar_alerts_wrapper").on("click", ".server-upgrade-learn-more", () => {
         window.open(
             "https://zulip.readthedocs.io/en/latest/overview/release-lifecycle.html#upgrade-nag",
-            "_blank",
-            "noopener,noreferrer",
-        );
-    });
-
-    $("#navbar_alerts_wrapper").on("click", ".unsupported-browser-learn-more", () => {
-        window.open("/help/supported-browsers", "_blank", "noopener,noreferrer");
-    });
-
-    $("#navbar_alerts_wrapper").on("click", ".managing-muted-channels", () => {
-        window.open(
-            "/help/mute-a-channel#managing-muted-channels",
             "_blank",
             "noopener,noreferrer",
         );

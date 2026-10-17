@@ -6,7 +6,7 @@ from django.conf.urls.static import static
 from django.contrib.staticfiles.views import serve as staticfiles_serve
 from django.http.request import HttpRequest
 from django.http.response import FileResponse, HttpResponse
-from django.urls import path
+from django.urls import path, re_path
 from django.views.generic import RedirectView, TemplateView
 from django.views.static import serve
 
@@ -19,7 +19,6 @@ from zerver.views.development.dev_login import (
     dev_direct_login,
 )
 from zerver.views.development.email_log import clear_emails, email_page, generate_all_emails
-from zerver.views.development.help import help_dev_mode_view
 from zerver.views.development.integrations import (
     check_send_webhook_fixture_message,
     dev_panel,
@@ -118,11 +117,9 @@ urls = [
     path("devtools/banners/", showroom_component_banners),
     path("devtools/inputs/", showroom_component_inputs),
     path("devtools/armada/", showroom_armada),
-    # Development server for the help center in not run by default, we
-    # show this page with zulip.com and view source links instead.
-    path("help", help_dev_mode_view),
-    path("help/", help_dev_mode_view),
-    path("help/<path:subpath>", help_dev_mode_view),
+    # What nginx answers /help and every path under it with in production
+    # (zulip-include-frontend/app): the help center is no longer served.
+    re_path(r"^help(?:/.*)?$", RedirectView.as_view(url="/", permanent=False)),
 ]
 
 v1_api_mobile_patterns = [

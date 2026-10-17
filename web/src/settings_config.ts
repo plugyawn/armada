@@ -1191,7 +1191,6 @@ export type AllNotifications = {
     general_settings: {
         label: string;
         notification_settings: NotificationSettingCheckbox[];
-        help_link?: string;
     }[];
     settings: {
         desktop_notification_settings: string[];
@@ -1228,7 +1227,6 @@ export const all_notifications = (settings_object: Settings): AllNotifications =
                 followed_topic_notification_settings,
                 settings_object,
             ),
-            help_link: "/help/follow-a-topic",
         },
     ],
     settings: {

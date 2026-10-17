@@ -15,18 +15,14 @@
             {{#if is_guest}}
                 {{#tr}}
                     End of results from
-                    <z-link>your message history</z-link>. Include messages in your public channels
+                    your message history. Include messages in your public channels
                     sent when you weren't subscribed?
-                    {{#*inline "z-link"}}<a href="/help/search-for-messages#search-shared-history"
-                    target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
                 {{/tr}}
             {{else}}
                 {{#tr}}
                     End of results from
-                    <z-link>your message history</z-link>. Include messages in public channels
+                    your message history. Include messages in public channels
                     sent when you weren't subscribed?
-                    {{#*inline "z-link"}}<a href="/help/search-for-messages#search-shared-history"
-                    target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
                 {{/tr}}
             {{/if}}
         </p>
@@ -42,9 +38,7 @@
         <p>
             {{#tr}}
             End of messages in your
-            <z-link>combined feed</z-link>.
-            {{#*inline "z-link"}}<a href="/help/combined-feed"
-            target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
+            combined feed.
             {{/tr}}
         </p>
         <button

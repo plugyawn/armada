@@ -1,14 +1,9 @@
 <div id="data-exports" class="settings-section" data-name="data-exports-admin">
     <h3>{{t "Export organization" }}
-        {{> ../help_link_widget link="/help/export-your-organization" }}
     </h3>
     <p>
         {{t 'Your organization’s data will be exported in a format designed for imports into an Armada server.' }}
         {{t 'You will be able to export all public data, and (optionally) private data from users who have given their permission.' }}
-        {{#tr}}
-            <z-link>Learn more</z-link> about other data export options.
-            {{#*inline "z-link"}}<a href="/help/export-your-organization" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
-        {{/tr}}
     </p>
     <p>
         {{t 'Depending on the size of your organization, an export can take anywhere from seconds to an hour.' }}

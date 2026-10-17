@@ -14,7 +14,7 @@
         {{else}}
         <div class="org-info org-plan hidden-for-spectators">
             {{#if is_demo_organization }}
-            <a href="/help/demo-organizations" target="_blank" rel="noopener noreferrer" class="navigate-link-on-enter popover-menu-link">{{t "Demo organization" }}</a>
+            {{t "Demo organization" }}
             {{else if is_plan_limited }}
             <a href="/plans/" target="_blank" rel="noopener noreferrer" class="navigate-link-on-enter popover-menu-link">Zulip Cloud Free</a>
             {{else if is_plan_standard}}
@@ -158,14 +158,6 @@
             <a role="menuitem" href="/billing/" target="_blank" rel="noopener noreferrer" class="navigate-link-on-enter popover-menu-link">
                 <i class="popover-menu-icon zulip-icon zulip-icon-credit-card" aria-hidden="true"></i>
                 <span class="popover-menu-label">{{t 'Billing' }}</span>
-            </a>
-        </li>
-        {{/if}}
-        {{#if promote_sponsoring_zulip}}
-        <li role="none" class="link-item popover-menu-list-item">
-            <a role="menuitem" href="https://zulip.com/help/support-zulip-project" target="_blank" rel="noopener noreferrer" class="navigate-link-on-enter popover-menu-link">
-                <i class="popover-menu-icon zulip-icon zulip-icon-heart" aria-hidden="true"></i>
-                <span class="popover-menu-label">{{t 'Support Zulip' }}</span>
             </a>
         </li>
         {{/if}}

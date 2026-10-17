@@ -235,3 +235,85 @@ kept zerver/tests/test_rocketchat_importer.py  # an import gets five fewer onboa
 kept zerver/tests/test_slack_importer.py  # an import gets five fewer onboarding messages: the "Zulip" channel's are cut
 kept zerver/tests/test_reminders.py  # Verona's id in the test data: the dev data's "Zulip" channel is now made after it
 kept zerver/forms.py  # the organization-not-found and licence errors name no product
+kept web/src/demo_organizations_ui.ts  # the old interface, no help center (S-02): the demo banner's Learn more and the conversion dialog's link go
+kept web/src/dialog_widget.ts  # the old interface, no help center (S-02): the heading's help link option goes, no caller is left
+kept web/src/filter.ts  # the old interface, no help center (S-02): a view's description no longer carries a help link
+kept web/src/gear_menu.ts  # the old interface, no help center (S-02): the comment's list of items follows the menus
+kept web/src/message_delete.ts  # the old interface, no help center (S-02): the dialog's help link goes
+kept web/src/read_receipts.ts  # the old interface, no help center (S-02): "read" is no longer a link
+kept web/src/settings_banner.ts  # the old interface, no help center (S-02): banners lose the external Learn more link they alone had
+kept web/src/settings_components.ts  # the old interface, no help center (S-02): a group setting's label has no help link left to skip
+kept web/src/settings_linkifiers.ts  # the old interface, no help center (S-02): the dialogs' help links go
+kept web/src/settings_org.ts  # the old interface, no help center (S-02): the deactivation dialog's help link goes
+kept web/src/settings_profile_fields.ts  # the old interface, no help center (S-02): the dialog's help link goes
+kept web/src/settings_streams.ts  # the old interface, no help center (S-02): the dialog's help link goes
+kept web/src/stream_edit.ts  # the old interface, no help center (S-02): the dialogs' help links go
+kept web/src/stream_settings_ui.ts  # the old interface, no help center (S-02): the channels banner's Learn more goes
+kept web/src/topic_popover.ts  # the old interface, no help center (S-02): the dialog's help link goes
+kept web/src/user_card_popover.ts  # the old interface, no help center (S-02): the dialog's help link goes
+kept web/src/user_deactivation_ui.ts  # the old interface, no help center (S-02): the dialogs' help links go
+kept web/src/user_group_edit.ts  # the old interface, no help center (S-02): the groups banner's Learn more goes
+kept web/styles/message_view_header.css  # the old interface, no help center (S-02): the rules for the description's help icon go with it
+deleted web/styles/portico/dev_help.css  # the development server's help center page is gone (S-02)
+kept web/templates/compose_banner/cannot_send_direct_message_error.hbs  # the old interface, no help center (S-02): Learn more goes
+kept web/templates/confirm_dialog/confirm_disable_all_notifications.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/confirm_dialog/intro_resolve_topic.hbs  # the old interface, no help center (S-02): Learn more goes
+kept web/templates/demo_organization_add_email_modal.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/dialog_widget.hbs  # the old interface, no help center (S-02): the heading's help link goes
+kept web/templates/dropdown_widget_with_label.hbs  # the old interface, no help center (S-02): no caller passes a help link any more
+kept web/templates/export_modal_warning_notes.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/guest_visible_users_message.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/invitation_failed_error.hbs  # the old interface, no help center (S-02): the words stay, the help links go
+kept web/templates/invite_user_modal.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/keyboard_shortcuts.hbs  # the old interface, no help center (S-02): the link to the documentation goes
+kept web/templates/login_to_access.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/markdown_help.hbs  # the old interface, no help center (S-02): the link to the documentation goes
+kept web/templates/message_feed_errors.hbs  # the old interface, no help center (S-02): the words stay, the links go
+kept web/templates/message_view_header.hbs  # the old interface, no help center (S-02): the description's help link goes
+kept web/templates/popovers/navbar/navbar_gear_menu_popover.hbs  # the old interface, no help center (S-02): Support Zulip goes; the demo label stays, unlinked
+kept web/templates/popovers/navbar/navbar_help_menu_popover.hbs  # the old interface, no help center (S-02): Help center and Contact support go
+kept web/templates/search_operators.hbs  # the old interface, no help center (S-02): the link to the documentation goes
+kept web/templates/settings/admin_human_form.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/settings/deactivated_users_admin.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/settings/edit_bot_form.hbs  # the old interface, no help center (S-02): the help links go; the API one stays
+kept web/templates/settings/group_setting_value_pill_input.hbs  # the old interface, no help center (S-02): no caller passes a help link any more
+kept web/templates/settings/organization_permissions_admin.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/settings/organization_profile_admin.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/settings/organization_settings_admin.hbs  # the old interface, no help center (S-02): the help links go; the GIF setup guide stays when no provider is set
+kept web/templates/settings/organization_user_settings_defaults.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/settings/preferences_emoji.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/settings/preferences_general.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/settings/preferences_information.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/settings/preferences_left_sidebar.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/settings/preferences_navigation.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/settings/privacy_settings.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/settings/settings_checkbox.hbs  # the old interface, no help center (S-02): no caller passes a help link any more
+kept web/templates/settings/settings_numeric_input.hbs  # the old interface, no help center (S-02): no caller passes a help link any more
+kept web/templates/start_export_modal.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/announce_stream_checkbox.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/change_stream_info_modal.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/channel_folder.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/stream_settings/channel_permissions.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/stream_settings/channel_type.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/new_stream_configuration.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/new_stream_users.hbs  # the old interface, no help center (S-02): the words stay, the links go
+kept web/templates/stream_settings/stream_creation_form.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/templates/stream_settings/stream_members.hbs  # the old interface, no help center (S-02): the words stay, the links go
+kept web/templates/stream_settings/stream_settings.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/stream_settings/stream_settings_checkbox.hbs  # the old interface, no help center (S-02): the help links go
+kept web/templates/stream_settings/topics_already_exist_error.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/unread_banner/mark_as_read_only_in_conversation_view.hbs  # the old interface, no help center (S-02): the words stay, the link goes
+kept web/templates/user_group_settings/new_user_group_users.hbs  # the old interface, no help center (S-02): the words stay, the links go
+kept web/templates/user_group_settings/user_group_members.hbs  # the old interface, no help center (S-02): the words stay, the links go
+kept web/templates/user_group_settings/user_group_settings.hbs  # the old interface, no help center (S-02): the help link goes
+kept web/tests/filter.test.cjs  # a view's description no longer carries a help link
+kept web/tests/settings_config.test.cjs  # the followed topics row no longer carries a help link
+kept puppet/zulip/templates/nginx.conf.template.erb  # the help center is not served (S-02): the map that found its directory goes
+kept tools/lib/test_server.py  # the help center is not served (S-02): no option to serve its static build
+kept tools/test-help-documentation  # the help center is not served (S-02): its crawl and option go
+kept tools/documentation_crawler/documentation_crawler/spiders/check_help_documentation.py  # the help center is not served (S-02): its spider goes
+deleted zerver/views/development/help.py  # the development server's help center page; /help redirects to / (S-02)
+deleted templates/zerver/development/dev_help.html  # the development server's help center page (S-02)
+deleted templates/zerver/development/help_center_instructions_macro.html  # how to run the help center, which is not served (S-02)
+kept templates/zerver/development/dev_tools.html  # the help center is not served (S-02): its section on /devtools/ goes
+kept zerver/lib/demo_organizations.py  # the demo organization's reminder links to no help page

@@ -18,7 +18,6 @@
         </div>
         <div class="input-group">
             <label for="user-role-select" class="modal-field-label">{{t 'User role' }}
-                {{> ../help_link_widget link="/help/user-roles" }}
             </label>
             <select name="user-role-select" class="bootstrap-focus-style modal_select" id="user-role-select" data-setting-widget-type="number">
                 {{> dropdown_options_widget option_values=(object_values user_role_values)}}

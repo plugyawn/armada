@@ -1,15 +1,9 @@
 {{#unless (eq unusable_user_count 0)}}
     <p>
         {{#tr}}
-            You don't have permission to <z-help-link>access</z-help-link> the
+            You don't have permission to access the
             email {unusable_user_count, plural, one {address} other {addresses}}
             of {unusable_user_count, plural, one {# user} other {# users}}.
-            {{#*inline "z-help-link"}}
-                <a target="_blank" rel="noopener noreferrer"
-                  href="#/help/configure-email-visibility">
-                    {{> @partial-block}}
-                </a>
-            {{/inline}}
         {{/tr}}
 
         {{#tr}}

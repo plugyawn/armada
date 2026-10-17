@@ -121,7 +121,6 @@ export function delete_message(msg_id: number): void {
             defaultMessage: "Deleting a message permanently removes it for everyone.",
         }),
         is_compact: true,
-        help_link: "/help/delete-a-message#delete-a-message-completely",
         on_click: do_delete_message,
         loading_spinner: true,
     });

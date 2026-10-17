@@ -16,7 +16,6 @@
                 <label class="settings-field-label {{#unless can_change_name_description}}cursor-text{{/unless}}"
                   for="{{#if can_change_name_description}}open_stream_info_modal{{/if}}">
                     {{t "Description" }}
-                    {{> ../help_link_widget link="/help/change-the-channel-description" }}
                 </label>
                 <div class="channel-description-field">
                     <div class="stream-description">
@@ -56,7 +55,6 @@
                 <div class="input-group stream-email-box">
                     <label for="copy_stream_email_button" class="settings-field-label">
                         {{t "Email address" }}
-                        {{> ../help_link_widget link="/help/message-a-channel-by-email" }}
                     </label>
                     {{> ../components/action_button
                       label=(t "Generate email address")

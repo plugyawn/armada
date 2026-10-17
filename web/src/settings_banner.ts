@@ -54,17 +54,10 @@ export function set_up_upgrade_banners(): void {
     banners.open(upgrade_banner, $upgrade_banner_containers);
 }
 
-export function set_up_banner($container: JQuery, banner: Banner, url?: string): void {
+export function set_up_banner($container: JQuery, banner: Banner): void {
     if ($container.length === 0) {
         return;
     }
 
     banners.open(banner, $container);
-
-    if (url !== undefined) {
-        $container.on("click", ".banner-external-link", (e) => {
-            e.preventDefault();
-            window.open(url, "_blank", "noopener,noreferrer");
-        });
-    }
 }

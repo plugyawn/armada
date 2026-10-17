@@ -24,13 +24,11 @@
                     {{> group_setting_value_pill_input
                       setting_name="realm_can_manage_billing_group"
                       label=group_setting_labels.can_manage_billing_group
-                      help_link="https://zulip.com//help/self-hosted-billing"
                       }}
                 {{else}}
                     {{> group_setting_value_pill_input
                       setting_name="realm_can_manage_billing_group"
                       label=group_setting_labels.can_manage_billing_group
-                      help_link="/help/zulip-cloud-billing"
                       }}
                 {{/if}}
             </div>
@@ -44,14 +42,12 @@
                 {{> ../dropdown_widget_with_label
                   widget_name="realm_default_language"
                   label=admin_settings_label.realm_default_language
-                  value_type="string"
-                  help_link="/help/configure-organization-language"}}
+                  value_type="string"}}
 
                 {{> ../dropdown_widget_with_label
                   widget_name="realm_moderation_request_channel_id"
                   label=admin_settings_label.realm_moderation_request_channel
                   value_type="number"
-                  help_link="/help/enable-moderation-requests"
                   }}
 
                 {{> ../dropdown_widget_with_label
@@ -76,8 +72,7 @@
                   setting_name="realm_send_channel_events_messages"
                   prefix="id_"
                   is_checked=realm_send_channel_events_messages
-                  label=admin_settings_label.realm_send_channel_events_messages
-                  help_link="/help/configure-automated-notices#notices-about-channels"}}
+                  label=admin_settings_label.realm_send_channel_events_messages}}
 
                 {{#if settings_send_digest_emails }}
                 {{> settings_checkbox
@@ -114,7 +109,6 @@
                 <div class="input-group">
                     <label class="settings-field-label">
                         {{admin_settings_label.realm_default_avatar_source}}
-                        {{> ../help_link_widget link="/help/configure-default-profile-pictures" }}
                     </label>
                     <div class="default_avatar_source_values settings-highlight-box prop-element" id="id_realm_default_avatar_source" data-setting-widget-type="radio-group" data-setting-choice-type="string">
                         {{#each (object_values default_avatar_source_values)}}
@@ -177,8 +171,7 @@
                   setting_name="realm_require_e2ee_push_notifications"
                   prefix="id_"
                   is_checked=realm_require_e2ee_push_notifications
-                  label=admin_settings_label.realm_require_e2ee_push_notifications
-                  help_link="/help/mobile-notifications"}}
+                  label=admin_settings_label.realm_require_e2ee_push_notifications}}
 
                 {{> settings_checkbox
                   setting_name="realm_message_content_allowed_in_email_notifications"
@@ -197,7 +190,6 @@
                 <div class="input-group">
                     <label for="id_realm_video_chat_provider" class="settings-field-label">
                         {{t 'Call provider' }}
-                        {{> ../help_link_widget link="/help/configure-call-provider" }}
                     </label>
                     <select name="realm_video_chat_provider" class ="setting-widget prop-element settings_select bootstrap-focus-style" id="id_realm_video_chat_provider" data-setting-widget-type="number">
                         {{#each (object_values realm_available_video_chat_providers)}}
@@ -209,7 +201,6 @@
                         <div>
                             <label for="id_realm_jitsi_server_url" class="settings-field-label">
                                 {{t "Jitsi server URL" }}
-                                {{> ../help_link_widget link="/help/configure-call-provider#use-a-self-hosted-instance-of-jitsi-meet" }}
                             </label>
                             <select name="realm_jitsi_server_url" id="id_realm_jitsi_server_url" class="setting-widget prop-element settings_select bootstrap-focus-style" data-setting-widget-type="jitsi-server-url-setting">
                                 {{#if server_jitsi_server_url}}
@@ -235,7 +226,9 @@
                 <div class="input-group">
                     <label for="id_realm_gif_rating_policy" class="settings-field-label">
                         {{t 'GIF picker' }}
-                        {{> ../help_link_widget link=gif_help_link }}
+                        {{#if gif_api_key_empty}}
+                        {{> ../help_link_widget link="https://zulip.readthedocs.io/en/latest/production/gif-picker-integrations.html" }}
+                        {{/if}}
                     </label>
                     <select name="realm_gif_rating_policy" class ="setting-widget prop-element settings_select bootstrap-focus-style" id="id_realm_gif_rating_policy" data-setting-widget-type="number" {{#if gif_api_key_empty}}disabled{{/if}}>
                         {{#each (object_values gif_rating_policy_options)}}
@@ -283,8 +276,7 @@
                   setting_name="realm_inline_image_preview"
                   prefix="id_"
                   is_checked=realm_inline_image_preview
-                  label=admin_settings_label.realm_inline_image_preview
-                  help_link="/help/image-video-and-website-previews"}}
+                  label=admin_settings_label.realm_inline_image_preview}}
                 {{/if}}
 
                 {{#if server_inline_url_embed_preview}}
@@ -292,8 +284,7 @@
                   setting_name="realm_inline_url_embed_preview"
                   prefix="id_"
                   is_checked=realm_inline_url_embed_preview
-                  label=admin_settings_label.realm_inline_url_embed_preview
-                  help_link="/help/image-video-and-website-previews"}}
+                  label=admin_settings_label.realm_inline_url_embed_preview}}
                 {{/if}}
             </div>
         </div>
@@ -301,7 +292,6 @@
         <div id="org-message-retention" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Message retention period" }}
-                    {{> ../help_link_widget link="/help/message-retention-policy" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="message-retention" show_save_discard_buttons=true }}
             </div>

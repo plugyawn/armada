@@ -148,11 +148,6 @@ export function build_page(): void {
 
     const gif_api_key_empty =
         realm.giphy_api_key === "" && realm.tenor_api_key === "" && realm.klipy_api_key === "";
-    let gif_help_link = "/help/animated-gifs";
-    if (gif_api_key_empty) {
-        gif_help_link =
-            "https://zulip.readthedocs.io/en/latest/production/gif-picker-integrations.html";
-    }
 
     const options = {
         custom_profile_field_types: realm.custom_profile_field_types,
@@ -302,7 +297,6 @@ export function build_page(): void {
             settings_users.deactivated_user_list_dropdown_widget_name,
         imported_user_list_dropdown_widget_name:
             settings_users.imported_user_list_dropdown_widget_name,
-        gif_help_link,
         ...get_realm_level_notification_settings(),
         all_bots_list_dropdown_widget_name: settings_bots.org_all_bots_list_dropdown_widget_name,
         your_bots_list_dropdown_widget_name: settings_bots.org_your_bots_list_dropdown_widget_name,

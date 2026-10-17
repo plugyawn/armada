@@ -73,7 +73,6 @@ export type DialogWidgetConfig = {
     modal_exit_button_text?: string;
     close_on_submit?: boolean;
     focus_submit_on_open?: boolean;
-    help_link?: string;
     id?: string;
     single_footer_button?: boolean;
     form_id?: string;
@@ -185,7 +184,6 @@ export function launch(conf: DialogWidgetConfig): string {
     // * modal_exit_button_text: Exit button text.
     // * close_on_submit: Whether to close modal on clicking submit.
     // * focus_submit_on_open: Whether to focus submit button on open.
-    // * help_link: A help link in the heading area.
     // * id: Custom id to the container element to modify styles.
     // * single_footer_button: If true, don't include the "Cancel" button.
     // * form_id: Id of the form element in the modal if it exists.
@@ -219,7 +217,6 @@ export function launch(conf: DialogWidgetConfig): string {
         modal_subtitle_html: conf.modal_subtitle_html,
         is_compact: conf.is_compact,
         has_tab_switcher: conf.has_tab_switcher,
-        link: conf.help_link,
         modal_submit_button_text,
         modal_exit_button_text,
         modal_content_html: conf.modal_content_html,

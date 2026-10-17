@@ -131,7 +131,6 @@ run_test("all_notifications", ({override}) => {
         },
         {
             label: "translated: Followed topics",
-            help_link: "/help/follow-a-topic",
             notification_settings: [
                 {
                     is_checked: false,

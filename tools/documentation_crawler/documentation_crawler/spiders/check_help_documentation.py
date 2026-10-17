@@ -3,17 +3,6 @@ from typing_extensions import override
 from .common.spiders import BaseDocumentationSpider
 
 
-class HelpDocumentationSpider(BaseDocumentationSpider):
-    name = "help_documentation_crawler"
-    start_urls = ["http://localhost:9981/help"]
-    deny_domains: list[str] = []
-    deny = ["/policies/privacy"]
-
-    @override
-    def _is_external_url(self, url: str) -> bool:
-        return not f"{url}/".startswith("http://localhost:9981/help/") or self._has_extension(url)
-
-
 class APIDocumentationSpider(BaseDocumentationSpider):
     name = "api_documentation_crawler"
     start_urls = ["http://localhost:9981/api"]

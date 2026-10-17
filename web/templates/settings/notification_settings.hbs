@@ -17,7 +17,6 @@
                         <span {{#if (not realm_push_notifications_enabled) }}class="control-label-disabled tippy-zulip-tooltip" data-tooltip-template-id="mobile-push-notification-tooltip-template"{{/if}}>
                             {{t "Mobile"}}
                         </span>
-                        {{> ../help_link_widget link="/help/mobile-notifications#enabling-push-notifications-for-self-hosted-servers" }}
                     </th>
                     <th rowspan="2" width="14%">{{t "Email"}}</th>
                     <th rowspan="2" width="14%">@all
@@ -34,9 +33,6 @@
                     <tr>
                         <td>
                             {{ this.label }}
-                            {{#if this.help_link}}
-                                {{> ../help_link_widget link=this.help_link }}
-                            {{/if}}
                         </td>
                         {{#each this.notification_settings}}
                             {{> notification_settings_checkboxes
@@ -77,22 +73,18 @@
 
         <div class="subsection-header">
             <h3>{{t "Topic notifications" }}
-                {{> ../help_link_widget link="/help/topic-notifications" }}
             </h3>
             {{> settings_save_discard_widget section_name="topic-notifications-settings" show_save_discard_buttons=for_realm_settings }}
         </div>
         <p>
             {{#tr}}
-                You will automatically follow topics that you have configured to both <z-follow>follow</z-follow> and <z-unmute>unmute</z-unmute>.
-                {{#*inline "z-follow"}}<a href="/help/follow-a-topic" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
-                {{#*inline "z-unmute"}}<a href="/help/mute-a-topic" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
+                You will automatically follow topics that you have configured to both follow and unmute.
             {{/tr}}
         </p>
 
         <div class="input-group">
             <label for="{{prefix}}automatically_follow_topics_policy" class="settings-field-label">
                 {{ settings_label.automatically_follow_topics_policy }}
-                {{> ../help_link_widget link="/help/follow-a-topic" }}
                 {{#if for_realm_settings}}
                     {{> ../components/icon_button icon="reset" intent="neutral" custom_classes="reset-user-setting-to-default" data-tippy-content=(t "Reset users to default") aria-label=(t "Reset users to default") }}
                 {{/if}}
@@ -113,7 +105,6 @@
         <div class="input-group">
             <label for="{{prefix}}automatically_unmute_topics_in_muted_streams_policy" class="settings-field-label">
                 {{ settings_label.automatically_unmute_topics_in_muted_streams_policy }}
-                {{> ../help_link_widget link="/help/mute-a-topic" }}
                 {{#if for_realm_settings}}
                     {{> ../components/icon_button icon="reset" intent="neutral" custom_classes="reset-user-setting-to-default" data-tippy-content=(t "Reset users to default") aria-label=(t "Reset users to default") }}
                 {{/if}}
@@ -141,7 +132,6 @@
 
         <div class="subsection-header">
             <h3>{{t "Desktop message notifications" }}
-                {{> ../help_link_widget link="/help/desktop-notifications" }}
             </h3>
             {{> settings_save_discard_widget section_name="desktop-message-settings" show_save_discard_buttons=for_realm_settings }}
         </div>
@@ -208,7 +198,6 @@
 
         <div class="subsection-header">
             <h3>{{t "Mobile message notifications" }}
-                {{> ../help_link_widget link="/help/mobile-notifications" }}
             </h3>
             {{> settings_save_discard_widget section_name="mobile-message-settings" show_save_discard_buttons=for_realm_settings }}
         </div>
@@ -232,7 +221,6 @@
 
         <div class="subsection-header">
             <h3>{{t "Email message notifications" }}
-                {{> ../help_link_widget link="/help/email-notifications" }}
             </h3>
             {{> settings_save_discard_widget section_name="email-message-settings" show_save_discard_buttons=for_realm_settings }}
         </div>

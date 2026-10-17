@@ -1108,6 +1108,11 @@ the `npm install` line of 6.2 and a new version number.
 
 ### Upgrade notes
 
+- **17 October 2026: the help center is no longer served.** Nothing to do:
+  puppet applies the nginx change at the upgrade. `/help` and every page
+  under it answer a temporary redirect to `/`, so a bookmark or an old link
+  to Zulip's help lands on Armada's home page (or the login page). The
+  help center documents Zulip; it is cut (S-02 in `docs/armada/cuts.md`).
 - **17 October 2026: sessions last until people log out.** Nothing to do,
   unless `/etc/zulip/settings.py` sets `SESSION_COOKIE_AGE` (it then keeps
   that age; remove the line to get the year, [Staying signed

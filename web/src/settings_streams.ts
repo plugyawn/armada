@@ -212,7 +212,6 @@ function show_add_default_streams_modal(): void {
         modal_title_html: $t_html({defaultMessage: "Add default channels"}),
         modal_content_html,
         modal_submit_button_text: $t({defaultMessage: "Add"}),
-        help_link: "/help/set-default-channels-for-new-users",
         id: "add-default-stream-modal",
         loading_spinner: true,
         on_click: add_default_streams,

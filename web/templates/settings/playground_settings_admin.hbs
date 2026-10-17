@@ -4,10 +4,9 @@
             {{#tr}}
                 Code playgrounds are interactive in-browser development environments,
                 that are designed to make
-                it convenient to edit and debug code. <z-link-code-blocks>Code blocks</z-link-code-blocks>
+                it convenient to edit and debug code. Code blocks
                 that are tagged with a programming language will have a button visible on
                 hover that allows users to open the code block on the code playground site.
-                {{#*inline "z-link-code-blocks"}}<a href="/help/code-blocks" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
             {{/tr}}
         </p>
         <p>
@@ -25,13 +24,6 @@
                 {{t "URL template" }}: <span class="rendered_markdown"><code>https://play.rust-lang.org/?code={code}</code></span>
             </li>
         </ul>
-        <p>
-            {{#tr}}
-                For more examples and technical details, see the <z-link>help center documentation</z-link>
-                on adding code playgrounds.
-                {{#*inline "z-link"}}<a href="/help/code-blocks#code-playgrounds" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
-            {{/tr}}
-        </p>
 
         {{#if is_admin}}
         <form class="admin-playground-form">
@@ -39,7 +31,6 @@
                 <div class="new-playground-form wrapper">
                     <div class="settings-section-title">
                         {{t "Add a new code playground" }}
-                        {{> ../help_link_widget link="/help/code-blocks#code-playgrounds" }}
                     </div>
                     <div class="alert" id="admin-playground-status"></div>
                     <div class="input-group">

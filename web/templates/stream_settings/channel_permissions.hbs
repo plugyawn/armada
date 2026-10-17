@@ -17,7 +17,6 @@
               setting_name="is_default_stream"
               is_checked=check_default_stream
               label=(t "Default channel for new users")
-              help_link="/help/set-default-channels-for-new-users"
               }}
         </div>
     {{/if}}
@@ -49,14 +48,12 @@
     {{> ../settings/group_setting_value_pill_input
       setting_name="can_send_message_group"
       label=group_setting_labels.can_send_message_group
-      prefix=prefix
-      help_link="/help/channel-posting-policy" }}
+      prefix=prefix }}
 
     {{> ../settings/group_setting_value_pill_input
       setting_name="can_create_topic_group"
       label=group_setting_labels.can_create_topic_group
-      prefix=prefix
-      help_link="/help/configure-who-can-start-new-topics" }}
+      prefix=prefix }}
 
     <div class="input-group">
         <label for="{{prefix}}topics_policy" class="settings-field-label">{{> stream_topics_policy_label .}}</label>
@@ -120,7 +117,6 @@
         <div>
             <div class="input-group message-retention-setting-group time-limit-setting">
                 <label class="dropdown-title settings-field-label" for="{{prefix}}message_retention_days">{{t "Message retention period" }}
-                    {{> ../help_link_widget link="/help/message-retention-policy" }}
                 </label>
 
                 {{> ../settings/upgrade_tip_widget .}}

@@ -406,7 +406,6 @@ function open_custom_profile_field_creation_form_modal(): void {
 
     dialog_widget.launch({
         form_id: "add-new-custom-profile-field-form",
-        help_link: "/help/custom-profile-fields#add-a-custom-profile-field",
         modal_title_html: $t_html({defaultMessage: "Add a new custom profile field"}),
         modal_content_html,
         modal_submit_button_text: $t({defaultMessage: "Add"}),

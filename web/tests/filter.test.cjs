@@ -2704,11 +2704,8 @@ test("navbar_helpers", ({override}) => {
         const filter = new Filter(test_case.terms);
         const description = filter.get_description();
 
-        if (test_case.description !== undefined && test_case.link !== undefined) {
-            assert.deepEqual(description, {
-                description: test_case.description,
-                link: test_case.link,
-            });
+        if (test_case.description !== undefined) {
+            assert.deepEqual(description, {description: test_case.description});
         } else {
             assert.strictEqual(description, undefined);
         }
@@ -2834,7 +2831,6 @@ test("navbar_helpers", ({override}) => {
             title: "translated: Starred messages",
             redirect_url_with_search: "/#narrow/is/starred",
             description: "translated: Important messages, tasks, and other useful references.",
-            link: "/help/star-a-message#view-your-starred-messages",
         },
         {
             terms: in_home,
@@ -2871,7 +2867,6 @@ test("navbar_helpers", ({override}) => {
             title: "translated: Mentions",
             redirect_url_with_search: "/#narrow/is/mentioned",
             description: "translated: Messages where you are mentioned.",
-            link: "/help/view-your-mentions",
         },
         {
             terms: is_resolved,
@@ -2887,7 +2882,6 @@ test("navbar_helpers", ({override}) => {
             title: "translated: Followed topics",
             redirect_url_with_search: "/#narrow/topics/is/followed",
             description: "translated: Messages in topics you follow.",
-            link: "/help/follow-a-topic",
         },
         {
             terms: channel_topic_terms,
@@ -3052,7 +3046,6 @@ test("navbar_helpers", ({override}) => {
             title: "translated: Reactions",
             redirect_url_with_search: "/#narrow/has/reaction/sender/me",
             description: "translated: Emoji reactions to your messages.",
-            link: "/help/emoji-reactions",
         },
         {
             terms: is_alerted,

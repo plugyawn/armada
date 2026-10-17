@@ -9,7 +9,6 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Awaitable, Callable
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(TOOLS_DIR))
@@ -18,8 +17,6 @@ sys.path.insert(0, os.path.dirname(TOOLS_DIR))
 from tools.lib import sanity_check
 
 sanity_check.check_venv(__file__)
-
-from urllib.parse import urlsplit
 
 import aiohttp
 import aiohttp.web_fileresponse
@@ -73,22 +70,6 @@ parser.add_argument(
     action="store_true",
     help="Start app server in HTTPS mode, using reverse proxy",
 )
-parser.add_argument(
-    "--help-center-static-build",
-    action="store_true",
-    help="Host existing static build of help center with search",
-)
-parser.add_argument(
-    "-H",
-    "--help-center-dev-server",
-    action="store_true",
-    help="Run dev server for help center alongside the Zulip app. Hot reload will work for this mode, but search will not work in the generated website.",
-)
-parser.add_argument(
-    "--only-help-center",
-    action="store_true",
-    help="Run help center dev server on port 9991 without running the Zulip web app and related services",
-)
 add_provision_check_override_param(parser)
 options = parser.parse_args()
 if options.production_assets:
@@ -96,12 +77,7 @@ if options.production_assets:
         parser.error("--production-assets cannot be combined with --test")
     if options.minify:
         parser.error("--production-assets cannot be combined with --minify")
-    if options.help_center_dev_server or options.only_help_center:
-        parser.error("--production-assets cannot run a help-center development server")
     os.environ["ZULIP_DEV_PRODUCTION_ASSETS"] = "1"
-help_center_dev_server_enabled = (
-    options.help_center_dev_server and not options.help_center_static_build
-)
 
 assert_provisioning_status_ok(options.skip_provision_check)
 
@@ -169,7 +145,6 @@ proxy_port = base_port
 django_port = base_port + 1
 tornado_port = base_port + 2
 webpack_port = base_port + 3
-help_center_port = base_port + 4
 tusd_port = base_port + 5
 
 for mime_type, extension in EXTRA_MIME_TYPES:
@@ -353,91 +328,10 @@ async def forward(upstream_port: int, request: web.Request) -> web.StreamRespons
     return response
 
 
-def run_help_center_dev_server(
-    allowed_hosts: str, port: int = help_center_port
-) -> "subprocess.Popen[bytes]":
-    env = os.environ.copy()
-    env["ZULIP_WEB_APP_PROXY_PORT"] = str(proxy_port)
-
-    return subprocess.Popen(
-        [
-            "/usr/local/bin/corepack",
-            "pnpm",
-            "dev",
-            f"--port={port}",
-            "--host",
-            f"--allowed-hosts={allowed_hosts}",
-        ],
-        cwd="starlight_help",
-        env=env,
-    )
+app = web.Application()
 
 
-def get_help_center_allowed_hosts() -> str:
-    import django
-
-    django.setup()
-    from django.conf import settings
-
-    hostnames = set()
-    # * is not a valid value for --allowed-hosts in vite.
-    # Ports are not allowed for --allowed-hosts in vite.
-    for host in settings.ALLOWED_HOSTS:
-        if host != "*":
-            hostname = urlsplit(f"//{host}").hostname
-            if hostname:
-                hostnames.add(hostname)
-
-    return ",".join(hostnames)
-
-
-@web.middleware
-async def help_center_middleware(
-    request: web.Request, handler: Callable[[web.Request], Awaitable[web.StreamResponse]]
-) -> web.StreamResponse:
-    if request.path.startswith("/help"):
-        try:
-            filename = request.match_info["filename"]
-            _name, ext = os.path.splitext(filename)
-            if not ext:
-                filename = os.path.join(filename, "index.html")
-            request.match_info["filename"] = filename
-        except KeyError:
-            pass
-
-    return await handler(request)
-
-
-middlewares = []
-if options.help_center_static_build:
-    middlewares.append(help_center_middleware)
-
-app = web.Application(middlewares=middlewares)
-
-
-def setup_routes(
-    enable_help_center: bool = False, enable_help_center_dev_server: bool = False
-) -> None:
-    if enable_help_center:
-        # Order of adding the rules matters. aiohttp will stop at the first
-        # match, and we want `/help` to be matched before Django URIs.
-        try:
-            app.router.add_static("/help", "starlight_help/dist")
-        except ValueError:
-            print("""Please run the build step for the help center before enabling it.
-The instructions for the build step can be found in the `./devtools`
-page. `/help` urls will give you an error until you complete the
-build step and rerun `run-dev`.""")
-    elif enable_help_center_dev_server:
-
-        async def redirect_help(request: web.Request) -> web.HTTPFound:
-            return web.HTTPFound(request.url.with_port(help_center_port))
-
-        app.add_routes(
-            [
-                web.route(hdrs.METH_ANY, r"/{path:(help).*}", redirect_help),
-            ]
-        )
+def setup_routes() -> None:
     app.add_routes(
         [
             web.route(
@@ -461,12 +355,6 @@ build step and rerun `run-dev`.""")
 
 
 def print_listeners(external_host_url: str) -> None:
-    if options.only_help_center:
-        print(
-            f"\n{CYAN}Help center dev server running on:{ENDC} {external_host_url}/help\nZulip web app and other related services will not run in this mode."
-        )
-        return
-
     print(f"\nStarting Zulip on:\n\n\t{CYAN}{external_host_url}/{ENDC}\n\nInternal ports:")
     ports = [
         (proxy_port, "Development server proxy (connect here)"),
@@ -476,9 +364,6 @@ def print_listeners(external_host_url: str) -> None:
 
     if not options.test and not options.production_assets:
         ports.append((webpack_port, "webpack"))
-
-    if help_center_dev_server_enabled:
-        ports.append((help_center_port, "Help center - Astro dev server"))
 
     if not options.streamlined:
         ports.append((tusd_port, "tusd"))
@@ -510,12 +395,6 @@ async def serve() -> None:
     http_protocol = "https" if options.behind_https_proxy else "http"
     external_host_url = f"{http_protocol}://{external_host}"
 
-    if options.only_help_center:
-        help_center_allowed_hosts = get_help_center_allowed_hosts()
-        children.append(run_help_center_dev_server(help_center_allowed_hosts, proxy_port))
-        print_listeners(external_host_url)
-        return
-
     if options.production_assets:
         validate_production_assets()
     elif options.test:
@@ -523,11 +402,7 @@ async def serve() -> None:
     else:
         children.append(start_webpack_watcher())
 
-    if help_center_dev_server_enabled:
-        help_center_allowed_hosts = get_help_center_allowed_hosts()
-        children.append(run_help_center_dev_server(help_center_allowed_hosts))
-
-    setup_routes(options.help_center_static_build, options.help_center_dev_server)
+    setup_routes()
 
     children.extend(subprocess.Popen(cmd) for cmd in server_processes())
 

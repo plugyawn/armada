@@ -31,22 +31,13 @@ export function insert_demo_organization_warning(): void {
         .find(".settings-section")
         .prepend($(demo_organization_warning_container));
     const days_remaining = get_demo_organization_deadline_days_remaining();
-    let buttons: ActionButton[] = [
-        {
-            variant: "text",
-            label: $t({defaultMessage: "Learn more"}),
-            custom_classes: "demo-organizations-help",
-        },
-    ];
+    const buttons: ActionButton[] = [];
     if (current_user.is_owner) {
-        buttons = [
-            ...buttons,
-            {
-                variant: "subtle",
-                label: $t({defaultMessage: "Convert"}),
-                custom_classes: "convert-demo-organization",
-            },
-        ];
+        buttons.push({
+            variant: "subtle",
+            label: $t({defaultMessage: "Convert"}),
+            custom_classes: "convert-demo-organization",
+        });
     }
     const demo_organization_warning_banner: banners.Banner = {
         intent: days_remaining <= 7 ? "danger" : "info",
@@ -146,8 +137,6 @@ export function show_convert_demo_organization_modal(): void {
         modal_submit_button_text: $t({defaultMessage: "Convert"}),
         id: "demo-organization-conversion-modal",
         loading_spinner: true,
-        help_link:
-            "/help/demo-organizations#convert-a-demo-organization-to-a-permanent-organization",
     });
 }
 
@@ -156,9 +145,5 @@ export function handle_demo_organization_conversion(): void {
         e.stopPropagation();
         e.preventDefault();
         show_convert_demo_organization_modal();
-    });
-
-    $(".demo-organization-warning").on("click", ".demo-organizations-help", () => {
-        window.open("https://zulip.com/help/demo-organizations", "_blank", "noopener,noreferrer");
     });
 }

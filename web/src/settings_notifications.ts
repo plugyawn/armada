@@ -63,13 +63,7 @@ const MOBILE_PUSH_NOTIFICATION_BANNER: banners.Banner = {
     label: $t({
         defaultMessage: "Mobile push notifications are not enabled on this server.",
     }),
-    buttons: [
-        {
-            label: $t({defaultMessage: "Learn more"}),
-            custom_classes: "banner-external-link",
-            variant: "subtle",
-        },
-    ],
+    buttons: [],
     custom_classes: "mobile-push-notifications-banner",
     close_button: false,
 };
@@ -405,12 +399,6 @@ export function set_up(settings_panel: SettingsPanel): void {
             const permission = await Notification.requestPermission();
             if (permission === "granted") {
                 update_desktop_notification_banner();
-            } else if (permission === "denied") {
-                window.open(
-                    "/help/desktop-notifications#check-platform-settings",
-                    "_blank",
-                    "noopener noreferrer",
-                );
             }
         })();
     });
@@ -419,7 +407,6 @@ export function set_up(settings_panel: SettingsPanel): void {
     settings_banner.set_up_banner(
         $(".mobile-push-notifications-banner-container"),
         MOBILE_PUSH_NOTIFICATION_BANNER,
-        "/help/mobile-notifications#enabling-push-notifications-for-self-hosted-servers",
     );
 
     if (for_realm_settings) {

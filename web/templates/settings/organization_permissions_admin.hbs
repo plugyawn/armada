@@ -43,7 +43,6 @@
                 <div class="input-group time-limit-setting">
                     <label for="id_realm_waiting_period_threshold" class="settings-field-label">
                         {{t "Waiting period before new members turn into full members" }}
-                        {{> ../help_link_widget link="/help/restrict-permissions-of-new-members" }}
                     </label>
                     <select name="realm_waiting_period_threshold" id="id_realm_waiting_period_threshold" class="prop-element settings_select bootstrap-focus-style" data-setting-widget-type="time-limit">
                         {{> dropdown_options_widget option_values=waiting_period_threshold_dropdown_values}}
@@ -63,7 +62,6 @@
         <div id="org-stream-permissions" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Channel permissions" }}
-                    {{> ../help_link_widget link="/help/channel-permissions" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="stream-permissions" show_save_discard_buttons=true }}
             </div>
@@ -78,8 +76,7 @@
                   prefix="id_"
                   is_checked=realm_enable_spectator_access
                   label=admin_settings_label.realm_enable_spectator_access
-                  is_disabled=disable_enable_spectator_access_setting
-                  help_link="/help/public-access-option"}}
+                  is_disabled=disable_enable_spectator_access_setting}}
 
                 {{> ../dropdown_widget_with_label
                   widget_name="realm_can_create_web_public_channel_group"
@@ -97,20 +94,17 @@
 
                 {{> group_setting_value_pill_input
                   setting_name="realm_can_mention_many_users_group"
-                  label=group_setting_labels.can_mention_many_users_group
-                  help_link="/help/restrict-wildcard-mentions"}}
+                  label=group_setting_labels.can_mention_many_users_group}}
 
                 {{> group_setting_value_pill_input
                   setting_name="realm_can_set_topics_policy_group"
-                  label=group_setting_labels.can_set_topics_policy_group
-                  help_link="/help/require-topics"}}
+                  label=group_setting_labels.can_set_topics_policy_group}}
             </div>
         </div>
 
         <div id="org-group-permissions" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Group permissions" }}
-                    {{> ../help_link_widget link="/help/manage-user-groups" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="group-permissions" show_save_discard_buttons=true }}
             </div>
@@ -128,7 +122,6 @@
         <div id="org-direct-message-permissions" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Direct message permissions" }}
-                    {{> ../help_link_widget link="/help/restrict-direct-messages" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="direct-message-permissions" show_save_discard_buttons=true }}
             </div>
@@ -145,7 +138,6 @@
         <div id="org-msg-editing" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Message editing" }}
-                    {{> ../help_link_widget link="/help/restrict-message-editing-and-deletion" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="msg-editing" show_save_discard_buttons=true }}
             </div>
@@ -193,7 +185,6 @@
         <div id="org-moving-msgs" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Moving messages" }}
-                    {{> ../help_link_widget link="/help/restrict-moving-messages" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="moving-msgs" show_save_discard_buttons=true }}
             </div>
@@ -256,7 +247,6 @@
         <div id="org-msg-deletion" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "Message deletion" }}
-                    {{> ../help_link_widget link="/help/delete-a-message" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="msg-deletion" show_save_discard_buttons=true }}
             </div>
@@ -300,7 +290,6 @@
         <div id="org-user-identity" class="settings-subsection-parent">
             <div class="subsection-header">
                 <h3>{{t "User identity" }}
-                    {{> ../help_link_widget link="/help/restrict-name-and-email-changes" }}
                 </h3>
                 {{> settings_save_discard_widget section_name="user-identity" show_save_discard_buttons=true }}
             </div>
@@ -356,8 +345,7 @@
                 {{> ../dropdown_widget_with_label
                   widget_name="realm_can_access_all_users_group"
                   label=group_setting_labels.can_access_all_users_group
-                  value_type="number"
-                  help_link="/help/guest-users#configure-whether-guests-can-see-all-other-users"}}
+                  value_type="number"}}
             </div>
         </div>
 

@@ -28,7 +28,6 @@ export function confirm_deactivation(
             modal_title_html: $t_html({defaultMessage: "Deactivate your account"}),
             modal_content_html,
             on_click: handle_confirm,
-            help_link: "/help/deactivate-your-account",
             loading_spinner,
         });
         return;
@@ -95,7 +94,6 @@ export function confirm_deactivation(
                     {defaultMessage: "Deactivate {name}?"},
                     {name: user.full_name},
                 ),
-                help_link: "/help/deactivate-or-reactivate-a-user#deactivating-a-user",
                 modal_content_html,
                 modal_submit_button_text: $t({defaultMessage: "Deactivate"}),
                 id: "deactivate-user-modal",
@@ -117,7 +115,6 @@ export function confirm_bot_deactivation(
 
     dialog_widget.launch({
         modal_title_html: $t_html({defaultMessage: "Deactivate {name}?"}, {name: bot.full_name}),
-        help_link: "/help/deactivate-or-reactivate-a-bot",
         modal_content_html: $t_html({
             defaultMessage:
                 "A deactivated bot cannot send messages, access data, or take any other action.",
@@ -159,7 +156,6 @@ export function confirm_reactivation(
 
     confirm_dialog.launch({
         modal_title_html: $t_html({defaultMessage: "Reactivate {name}"}, {name: user.full_name}),
-        help_link: "/help/deactivate-or-reactivate-a-user#reactivating-a-user",
         modal_content_html,
         on_click: handle_confirm,
         loading_spinner,

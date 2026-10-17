@@ -2,14 +2,12 @@
     <p>
         {{#tr}}
             Armada lets you follow topics you are interested in, and mute topics you want to ignore.
-            You can also <z-automatically-follow>automatically follow</z-automatically-follow>
+            You can also automatically follow
             topics you start or participate in, and topics where you're mentioned.
-            {{#*inline "z-automatically-follow"}}<a href="/help/follow-a-topic#automatically-follow-topics" target="_blank" rel="noopener noreferrer">{{> @partial-block}}</a>{{/inline}}
         {{/tr}}
     </p>
     <div class="settings_panel_list_header">
         <h3>{{t "Topic settings"}}
-            {{> ../help_link_widget link="/help/topic-notifications" }}
         </h3>
         {{> settings_save_discard_widget section_name="user-topics-settings" }}
         {{> filter_text_input id="user_topics_search" placeholder=(t 'Filter') aria_label=(t 'Filter invitations')}}

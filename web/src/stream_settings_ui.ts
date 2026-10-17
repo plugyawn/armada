@@ -60,13 +60,7 @@ const STREAM_INFO_BANNER: Banner = {
     label: $t({
         defaultMessage: "Channels organize conversations based on who needs to see them.",
     }),
-    buttons: [
-        {
-            label: $t({defaultMessage: "Learn more"}),
-            custom_classes: "banner-external-link",
-            variant: "subtle",
-        },
-    ],
+    buttons: [],
     close_button: false,
 };
 
@@ -1065,11 +1059,7 @@ function setup_page(callback: () => void): void {
             throttled_redraw_left_and_clear_right_panels();
         });
 
-        settings_banner.set_up_banner(
-            $(".stream-info-banner"),
-            STREAM_INFO_BANNER,
-            "/help/introduction-to-channels",
-        );
+        settings_banner.set_up_banner($(".stream-info-banner"), STREAM_INFO_BANNER);
 
         // When hitting Enter in the stream creation box, we open the
         // "create stream" UI with the stream name prepopulated.  This

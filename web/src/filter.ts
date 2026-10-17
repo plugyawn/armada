@@ -1502,7 +1502,6 @@ export class Filter {
         title?: string;
         title_html?: string;
         description?: string | undefined;
-        link?: string | undefined;
         is_spectator: boolean;
     }): IconData {
         // We have special icons for the simple narrows available for the via sidebars.
@@ -1699,27 +1698,24 @@ export class Filter {
         return undefined;
     }
 
-    get_description(): {description: string; link: string} | undefined {
+    get_description(): {description: string} | undefined {
         const term_types = this.sorted_term_types();
         switch (term_types[0]) {
             case "is-mentioned":
                 return {
                     description: $t({defaultMessage: "Messages where you are mentioned."}),
-                    link: "/help/view-your-mentions",
                 };
             case "is-starred":
                 return {
                     description: $t({
                         defaultMessage: "Important messages, tasks, and other useful references.",
                     }),
-                    link: "/help/star-a-message#view-your-starred-messages",
                 };
             case "is-followed":
                 return {
                     description: $t({
                         defaultMessage: "Messages in topics you follow.",
                     }),
-                    link: "/help/follow-a-topic",
                 };
         }
         if (
@@ -1730,7 +1726,6 @@ export class Filter {
                 description: $t({
                     defaultMessage: "Emoji reactions to your messages.",
                 }),
-                link: "/help/emoji-reactions",
             };
         }
         return undefined;

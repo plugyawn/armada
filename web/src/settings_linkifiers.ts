@@ -196,7 +196,6 @@ function open_linkifier_edit_form(linkifier_id: number): void {
 
     const dialog_widget_id = dialog_widget.launch({
         modal_title_html: $t_html({defaultMessage: "Edit linkifier"}),
-        help_link: "/help/add-a-custom-linkifier",
         modal_content_html,
         id: "edit-linkifier-modal",
         on_click() {
@@ -298,7 +297,6 @@ function open_linkifier_add_form(): void {
 
     const dialog_widget_id = dialog_widget.launch({
         modal_title_html: $t_html({defaultMessage: "Add a new linkifier"}),
-        help_link: "/help/add-a-custom-linkifier",
         modal_content_html,
         modal_submit_button_text: $t({defaultMessage: "Add"}),
         id: "add-linkifier-modal",

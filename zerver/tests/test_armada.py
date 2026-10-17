@@ -3149,6 +3149,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertNotIn("developerInstructions", resumed_params)
         self.assertNotIn("ephemeral", resumed_params)
         self.assertNotIn("dynamicTools", resumed_params)
+        # Only the thread's id is read back, never its turns.
+        self.assertIs(resumed_params["excludeTurns"], True)
+        self.assertNotIn("excludeTurns", runner.thread_params())
 
     def test_gemini_interactions_addressing_router_uses_stateless_json(self) -> None:
         payload = get_armada_session_payload()
@@ -8920,6 +8923,9 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
         fork_params = requests[0][1]
         self.assertEqual(fork_params["threadId"], "root-1")
         self.assertIs(fork_params["ephemeral"], True)
+        # Codex 0.163.0 refuses an ephemeral fork that would send the
+        # parent's turns back.
+        self.assertIs(fork_params["excludeTurns"], True)
         self.assertIn(
             ARMADA_CODEX_SIDE_DEVELOPER_INSTRUCTIONS,
             str(fork_params["developerInstructions"]),

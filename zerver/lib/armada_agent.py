@@ -3088,6 +3088,10 @@ class ArmadaCodexAppServerToolRunner:
             params["threadId"] = existing_thread_id
             params.pop("ephemeral", None)
             params.pop("dynamicTools", None)
+            # Only the thread's id is read back. Without this, Codex sends
+            # the thread's whole history, which it deprecates for paginated
+            # threads.
+            params["excludeTurns"] = True
         else:
             params["developerInstructions"] = build_armada_codex_developer_instructions(
                 browser=bool(self.browser_dir), plugin_servers=self.plugin_servers
@@ -3121,6 +3125,10 @@ class ArmadaCodexAppServerToolRunner:
             "cwd": self.workdir,
             "developerInstructions": developer_instructions,
             "ephemeral": True,
+            # Codex 0.163.0 refuses an ephemeral fork that would send the
+            # parent's history back ("ephemeral paginated thread/fork
+            # requires excludeTurns: true"); only the fork's id is read.
+            "excludeTurns": True,
             "serviceTier": self.service_tier,
             "model": self.model,
             "sandbox": self.sandbox,

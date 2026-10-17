@@ -28,12 +28,16 @@ Usage: ./manage.py armada_plugins init-team-repo -r <realm> [--mirror <address> 
 
     @override
     def add_arguments(self, parser: ArgumentParser) -> None:
-        subcommands = parser.add_subparsers(dest="subcommand", required=True)
-        init = subcommands.add_parser(
-            "init-team-repo", help="Make the plugins channel and its repository."
+        # An action, not a subparser: manage.py appends --traceback after
+        # every command's arguments, which only the command's own parser
+        # knows.
+        parser.add_argument(
+            "action",
+            choices=["init-team-repo"],
+            help="init-team-repo: make the plugins channel and its repository.",
         )
-        self.add_realm_args(init, required=True)
-        mirror = init.add_mutually_exclusive_group()
+        self.add_realm_args(parser, required=True)
+        mirror = parser.add_mutually_exclusive_group()
         mirror.add_argument(
             "--mirror",
             metavar="<address>",

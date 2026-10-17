@@ -73,7 +73,10 @@ class TeamPluginRepositoryTest(ZulipTestCase):
 
     def init(self, *args: str) -> str:
         out = StringIO()
-        call_command("armada_plugins", "init-team-repo", "--realm", "zulip", *args, stdout=out)
+        # As manage.py runs it, with --traceback after the arguments.
+        call_command(
+            "armada_plugins", "init-team-repo", "--realm", "zulip", *args, "--traceback", stdout=out
+        )
         return out.getvalue()
 
     def origin(self) -> str:

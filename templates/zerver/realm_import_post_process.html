@@ -1,53 +1,32 @@
-{% extends "zerver/portico_signup.html" %}
-{% set entrypoint = "register" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("Finalize organization import") }} | Zulip</title>
+<title>{{ _("Finalize organization import") }} | Armada</title>
 {% endblock %}
 
 {% block portico_content %}
-<div class="app register-page">
-    <div class="app-main register-page-container new-style flex full-page center">
-        <div class="register-form left" id="realm-import-post-process">
-            <div class="lead">
-                <h1 class="get-started">{{ _("Organization import completed!") }}</h1>
-            </div>
-            <div class="white-box">
-                <form method="post" class="form-inline" action="{{ url('realm_import_post_process', args=[key]) }}">
-                    {{ csrf_input }}
-                    <div class="input-box no-validation">
-                        <input type='hidden' name='key' value='{{ key }}' />
-                    </div>
-                    <div class="input-box slack-import-extra-info">
-                        <div class="not-editable-realm-field">
-                            {% trans %}
-                            No account in the imported data matched the email address you've verified with Zulip
-                            (<strong>{{ verified_email }}</strong>).
-                            Select an account to associate your email address with.
-                            {% endtrans %}
-                        </div>
-                    </div>
-                    <div class="input-box">
-                        <label for="email" class="inline-block label-title">{{ _("Select your account") }}</label>
-                        <select id="realm-import-owner" name="user_id" class="required">
-                            <option selected value="">
-                                {{ _("Create new account") }}
-                            </option>
-                            {% for user in users %}
-                                <option value="{{ user.id }}">
-                                    {{ user.full_name }} ({{user.delivery_email}})
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="input-box">
-                        <button type="submit" class="register-button">
-                            {{ _("Confirm") }}
-                        </button>
-                    </div>
-                </form>
-            </div>
+{{ portico.head(_("Organization import completed!")) }}
+<form method="post" class="armada-portico-form" id="realm-import-post-process" action="{{ url('realm_import_post_process', args=[key]) }}">
+    {{ csrf_input }}
+    <input type="hidden" name="key" value="{{ key }}" />
+    <div class="armada-portico-prose">
+        <p>
+            {% trans %}No account in the imported data matched the email address you've verified (<strong>{{ verified_email }}</strong>). Select an account to associate your email address with.{% endtrans %}
+        </p>
+    </div>
+    <div class="armada-portico-field">
+        <label class="armada-portico-label" for="realm-import-owner">{{ _("Select your account") }}</label>
+        <div class="armada-portico-choice">
+            <select class="armada-portico-entry" id="realm-import-owner" name="user_id">
+                <option selected value="">{{ _("Create new account") }}</option>
+                {% for user in users %}
+                <option value="{{ user.id }}">{{ user.full_name }} ({{ user.delivery_email }})</option>
+                {% endfor %}
+            </select>
+            <svg class="armada-glyph" aria-hidden="true"><use href="#armada-glyph-down" /></svg>
         </div>
     </div>
-</div>
+    <button type="submit" class="armada-portico-submit">{{ _("Confirm") }}</button>
+</form>
 {% endblock %}

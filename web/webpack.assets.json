@@ -41,6 +41,7 @@
         "./styles/portico/billing.css"
     ],
     "portico": ["./src/bundles/legacy_portico_bundle.ts"],
+    "armada-portico": ["./src/bundles/armada_portico.ts"],
     "error-styles": [
         "./third/bootstrap/css/bootstrap.portico.css",
         "./styles/portico/legacy_portico_styles_bundle.css"
@@ -94,11 +95,6 @@
         "jquery-validation",
         "./src/portico/signup.ts"
     ],
-    "register": [
-        "./src/bundles/legacy_portico_bundle.ts",
-        "jquery-validation",
-        "./src/portico/signup.ts"
-    ],
     "slack-import": [
         "./src/bundles/legacy_portico_bundle.ts",
         "jquery-validation",
@@ -121,11 +117,8 @@
         "./src/portico/tippyjs.ts",
         "tippy.js/dist/tippy.css"
     ],
-    "desktop-login": ["./src/bundles/legacy_portico_bundle.ts", "./src/portico/desktop-login.ts"],
-    "desktop-redirect": [
-        "./src/bundles/legacy_portico_bundle.ts",
-        "./src/portico/desktop-redirect.ts"
-    ],
+    "desktop-login": ["./src/bundles/armada_portico.ts", "./src/portico/desktop-login.ts"],
+    "desktop-redirect": ["./src/bundles/armada_portico.ts", "./src/portico/desktop-redirect.ts"],
     "stats": [
         "./src/bundles/legacy_portico_bundle.ts",
         "./styles/portico/stats.css",

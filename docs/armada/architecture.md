@@ -93,6 +93,7 @@ web/src/armada/
                         typing.ts, question.ts, footer.ts, *.css      (no Preact here)
   surfaces/             nav/ header/ band/ composer/ column/ checklist/ lists/ trace/ home/ readme/ files/ changes/ artifacts/
                         emoji/ palette/ dialogs/ settings/      each: index.tsx, parts, <name>.css, commands.ts, showroom.tsx
+                        portico/: the pages before the app, which the server draws; portico.css and the armada-portico entry
   showroom/             index.tsx, fixtures.ts, bench.ts, showroom.css: the dev page /devtools/armada/ (every component
                         in every state, Preact and DOM side by side, the four palettes, the motion and sound benches)
   bridge/               temporary hosts and styles for old surfaces; README.md lists each with its deleter
@@ -320,7 +321,7 @@ its budget. Checks the table calls new are created by the plan's packages.
 | message search results                         | a search is run from the palette                                                           | never                                          |
 | sound buffers                                  | rendered on the first gesture; the `AudioContext` does not exist before it, or while muted | n/a                                            |
 
-**Gone from every bundle:** the Handlebars compiler (one import, 208 kB minified), Sentry (370 kB), core-js, regenerator-runtime and the `light-dark()` expansion, jquery-validation, both emoji sprite sheets, FontAwesome, flatpickr, and the webpack entries of pages Armada stops serving, each with its route (K-96). Kept entries: `app`, `common`, `signup`, `register`, `dev-login`, `error-styles`, `desktop-login`, the dev showroom, and four pages Armada serves: `portico` (error and account pages), `redirect-to-post` (the link in a sign-up email), `desktop-redirect` (the desktop app's sign-in) and `help` (`/policies/`).
+**Gone from every bundle:** the Handlebars compiler (one import, 208 kB minified), Sentry (370 kB), core-js, regenerator-runtime and the `light-dark()` expansion, jquery-validation, both emoji sprite sheets, FontAwesome, flatpickr, and the webpack entries of pages Armada stops serving, each with its route (K-96). Kept entries: `app`, `common`, `signup` (the old pages under `corporate/`), `dev-login`, `error-styles` (a server's custom 5xx page), `desktop-login`, the dev showroom, and the pages Armada serves: `armada-portico` (the pages before the app, the 4xx and 5xx pages among them; `templates/zerver/armada_portico.html`), `portico` (the old shell's pages: integrations, development pages), `redirect-to-post` (the link in a sign-up email), `desktop-redirect` (the desktop app's sign-in) and `help` (`/policies/`).
 
 ## Names
 

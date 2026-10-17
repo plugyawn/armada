@@ -748,10 +748,6 @@ html_rules: list["Rule"] = [
         "pattern": r'placeholder="[^{#](?:(?!\.com).)+$',
         "description": "`placeholder` value should be translatable.",
         "exclude_line": {
-            (
-                "templates/zerver/create_realm/realm_creation_subdomain_form_field.html",
-                'placeholder="acme"',
-            ),
             ("templates/zerver/slack_import.html", 'placeholder="xoxb-…"'),
         },
         "exclude": {
@@ -878,7 +874,7 @@ html_rules: list["Rule"] = [
     {
         "pattern": "style ?=",
         "description": "Avoid using the `style=` attribute; we prefer styling in CSS files",
-        "exclude_pattern": r""".*style ?=["'](display: ?none|background: {{|color: {{|background-color: {{).*|style=["'](narrow|long|short)["']""",
+        "exclude_pattern": r""".*style ?=["'](display: ?none|background: {{|color: {{|background-color: {{|--k-provider-mark: url\('{{).*|style=["'](narrow|long|short)["']""",
         "exclude": {
             # 5xx page doesn't have external CSS
             "web/html/5xx.html",

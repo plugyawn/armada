@@ -804,7 +804,7 @@ class PasswordResetTest(ZulipTestCase):
 
         # check the redirect link telling you to check mail for password reset link
         self.assertEqual(result.status_code, 404)
-        self.assert_in_response("There is no Zulip organization at", result)
+        self.assert_in_response("There is no organization at", result)
         self.assert_in_response("Please try a different URL", result)
 
         from django.core.mail import outbox
@@ -1046,7 +1046,7 @@ class LoginTest(ZulipTestCase):
     def test_login_invalid_subdomain(self) -> None:
         result = self.login_with_return(self.example_email("hamlet"), "xxx", subdomain="invalid")
         self.assertEqual(result.status_code, 404)
-        self.assert_in_response("There is no Zulip organization at", result)
+        self.assert_in_response("There is no organization at", result)
         self.assert_in_response("Please try a different URL", result)
         self.assert_logged_in_user_id(None)
 
@@ -2161,8 +2161,8 @@ class UserSignUpTest(ZulipTestCase):
         )
         self.assert_in_success_response(
             [
-                "Import settings from existing Zulip account",
-                "selected >\n                                Zulip Dev",
+                "Import settings from an existing account",
+                "selected>\n                        Zulip Dev",
                 "Enter your account details to complete registration.",
             ],
             result,
@@ -2405,9 +2405,7 @@ class UserSignUpTest(ZulipTestCase):
     def test_signup_confirm_injection(self) -> None:
         result = self.client_get("/accounts/send_confirm/?email=bogus@example.com")
         self.assert_in_success_response(
-            [
-                'check your email account (<span class="user_email semi-bold">bogus@example.com</span>)'
-            ],
+            ['check your email account (<strong class="user_email">bogus@example.com</strong>)'],
             result,
         )
 
@@ -2422,7 +2420,7 @@ class UserSignUpTest(ZulipTestCase):
 
     def test_access_signup_page_in_root_domain_without_realm(self) -> None:
         result = self.client_get("/register", subdomain="", follow=True)
-        self.assert_in_success_response(["Find your Zulip accounts"], result)
+        self.assert_in_success_response(["Find your accounts"], result)
 
     @override_settings(
         AUTHENTICATION_BACKENDS=(
@@ -3794,7 +3792,7 @@ class TestLoginPage(ZulipTestCase):
 class TestFindMyTeam(ZulipTestCase):
     def test_template(self) -> None:
         result = self.client_get("/accounts/find/")
-        self.assertIn("Find your Zulip accounts", result.content.decode())
+        self.assertIn("Find your accounts", result.content.decode())
 
     def test_result(self) -> None:
         # We capitalize a letter in cordelia's email to test that the search is case-insensitive.

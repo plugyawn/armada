@@ -1,35 +1,23 @@
-<div class="realm-creation-editable-inputs {% if user_registration_form and not form.realm_subdomain.errors %}hide{% endif %}">
-    <div class="input-box">
-        <label class="static org-url">
-            {{ _('Organization URL') }}
-        </label>
-        {% if root_domain_available %}
-        <label class="checkbox static" for="realm_in_root_domain">
-            <input type="checkbox" name="realm_in_root_domain" id="realm_in_root_domain"
-              {% if not form.realm_subdomain.value() and not form.realm_subdomain.errors %}checked="checked"{% endif %}/>
-            <span class="rendered-checkbox"></span>
-            {% trans %}Use {{ external_host }}{% endtrans %}
-        </label>
-        {% endif %}
-
-        <div id="subdomain_section" {% if root_domain_available and
-          not form.realm_subdomain.errors and not form.realm_subdomain.value() %}style="display: none;"{% endif %}>
-            <div class="or"><span>{{ _('OR') }}</span></div>
-            <div class="inline-block relative">
-                <input id="id_team_subdomain"
-                  class="{% if root_domain_landing_page %}required{% endif %} subdomain" type="text"
-                  placeholder="acme"
-                  value="{% if form.realm_subdomain.value() %}{{ form.realm_subdomain.value() }}{% endif %}"
-                  name="realm_subdomain" maxlength="{{ MAX_REALM_SUBDOMAIN_LENGTH }}"
-                  {% if root_domain_landing_page %}required{% endif %} />
-                <label for="id_team_subdomain" class="realm_subdomain_label">.{{ external_host }}</label>
-                <p id="id_team_subdomain_error_client" class="error help-inline text-error"></p>
-            </div>
-            {% if form.realm_subdomain.errors %}
-                {% for error in form.realm_subdomain.errors %}
-                <p class="error help-inline text-error team_subdomain_error_server">{{ error }}</p>
-                {% endfor %}
-            {% endif %}
-        </div>
+{# With the checkbox ticked the organization takes the server's own
+address, and portico.css hides the field for another one. #}
+<div class="armada-portico-field" id="realm_subdomain_field">
+    <span class="armada-portico-label">{{ _('Organization URL') }}</span>
+    {% if root_domain_available %}
+    <label class="armada-portico-check" for="realm_in_root_domain">
+        <span class="armada-portico-box"><input type="checkbox" name="realm_in_root_domain" id="realm_in_root_domain" data-armada-root-domain
+          {% if not form.realm_subdomain.value() and not form.realm_subdomain.errors %}checked="checked"{% endif %} /><svg class="armada-glyph" data-size="12" aria-hidden="true"><use href="#armada-glyph-check" /></svg></span>
+        <span>{% trans %}Use {{ external_host }}{% endtrans %}</span>
+    </label>
+    {% endif %}
+    <div class="armada-portico-address" id="subdomain_section" data-armada-subdomain>
+        <input class="armada-portico-entry" id="id_team_subdomain" type="text" name="realm_subdomain"
+          placeholder="{{ _('your-organization') }}" aria-label="{{ _('Organization URL') }}"
+          value="{% if form.realm_subdomain.value() %}{{ form.realm_subdomain.value() }}{% endif %}"
+          maxlength="{{ MAX_REALM_SUBDOMAIN_LENGTH }}" {% if root_domain_landing_page %}required{% endif %}
+          {% if form.realm_subdomain.errors %}aria-invalid="true"{% endif %} />
+        <span class="armada-portico-suffix">.{{ external_host }}</span>
     </div>
+    {% for error in form.realm_subdomain.errors %}
+    <p class="armada-portico-error">{{ error }}</p>
+    {% endfor %}
 </div>

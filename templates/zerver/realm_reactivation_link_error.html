@@ -1,18 +1,10 @@
-{% extends "zerver/portico_signup.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("Organization reactivation link expired or invalid") }} | Zulip</title>
+<title>{{ _("Organization reactivation link expired or invalid") }} | Armada</title>
 {% endblock %}
 
 {% block portico_content %}
-<div class="app portico-page">
-    <div class="app-main portico-page-container center-block flex full-page account-creation new-style">
-        <div class="inline-block">
-
-            <div class="get-started">
-                <h1>{{ _("The organization reactivation link has expired or is not valid.") }}</h1>
-            </div>
-        </div>
-    </div>
-</div>
+{{ portico.head(_("The organization reactivation link has expired or is not valid.")) }}
 {% endblock %}

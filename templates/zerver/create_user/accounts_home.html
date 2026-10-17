@@ -1,104 +1,57 @@
-{% extends "zerver/portico_signup.html" %}
-{# Home page for not logged-in users. #}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
 <title>{{ _("Sign up") }} | Armada</title>
 {% endblock %}
 
-{# This is where we pitch the app and solicit signups. #}
-
 {% block portico_content %}
+<div data-page-id="accounts-home" hidden></div>
+{% if realm_name %}
+{{ portico.head(_("Sign up for %(realm_name)s", realm_name=realm_name), realm=True, lead=realm_url.split("://")[-1]) }}
+{% else %}
+{{ portico.head(_("Sign up for Armada")) }}
+{% endif %}
 
-<!-- The following empty tag has unique data-page-id so that this
-page can be easily identified in it's respective JavaScript file -->
-<div data-page-id="accounts-home"></div>
-<div class="app register-page split-view flex full-page new-style">
-    <div class="inline-block">
-        <div class="lead">
-            <h1 class="get-started">{{ _("Sign up for Armada") }}</h1>
-        </div>
-        <div class="app-main register-page-container white-box {% if realm_invite_required and not from_multiuse_invite %}closed-realm{% endif %}">
-            <div class="register-form new-style">
-                {% if realm_name %}
-                <div class="left-side">
-                    <div class="org-header">
-                        <img class="avatar" src="{{ realm_icon }}" alt="" />
-                        <div class="info-box">
-                            <div class="organization-name">{{ realm_name }}</div>
-                            <div class="organization-path">{{ realm_url }}</div>
-                        </div>
-                    </div>
-                    <div class="description">
-                        {{ realm_description|safe }}
-                    </div>
-
-                    <div class="invite-required">
-                        <hr />
-                        <i class="fa fa-lock"></i>{{ _("You need an invitation to join this organization.") }}
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="right-side">
-                    {% if no_auth_enabled %}
-                        <div class="alert">
-                            <p>No authentication backends are enabled on this
-                            server yet, so it is impossible to register!</p>
-
-                            <p>
-                                See
-                                the <a href="https://zulip.readthedocs.io/en/latest/production/install.html#step-3-configure-zulip">Zulip
-                                authentication documentation</a> to learn how to
-                                configure authentication backends.
-                            </p>
-                        </div>
-                    {% else %}
-                        {% if password_auth_enabled %}
-                            <form class="form-inline" id="send_confirm" name="email_form"
-                              action="{{ current_url() }}" method="post">
-                                {{ csrf_input }}
-
-                                <div class="input-box no-validate">
-                                    <input type="email" id="email" class="email" name="email" value="" autofocus required />
-                                    <label for="email">{{ _('Email') }}</label>
-                                    <div class="alert alert-error email-frontend-error"></div>
-                                    {% if form.email.errors %}
-                                        {% for error in form.email.errors %}
-                                        <div class="email-backend-error alert alert-error">{{ error }}</div>
-                                        {% endfor %}
-                                    {% endif %}
-                                </div>
-
-                                <button class="full-width" type="submit">{{ _('Sign up') }}</button>
-                            </form>
-
-                            {% if external_authentication_methods|length > 0 %}
-                            <div class="or"><span>{{ _('OR') }}</span></div>
-                            {% endif %}
-                        {% endif %}
-
-                        {% for backend in external_authentication_methods %}
-                        <div class="login-social">
-                            <form class="form-inline" action="{{ backend.signup_url }}" method="get">
-                                {% if next %}
-                                <input type="hidden" name="next" value="{{ next }}" />
-                                {% endif %}
-                                <input type='hidden' name='multiuse_object_key' value='{{ multiuse_object_key }}' />
-                                <button id="register_auth_button_{{ backend.name }}" class="login-social-button full-width"
-                                  {% if backend.display_icon %} style="background-image:url({{ backend.display_icon }})"  {% endif %}>
-                                    {{ _('Sign up with %(identity_provider)s', identity_provider=backend.display_name) }}
-                                </button>
-                            </form>
-                        </div>
-                        {% endfor %}
-                        <div class="register-form-login-redirect actions">
-                            {{ _('Already have an account?') }}<a class="register-link" href="/login/"> {{ _('Log in') }}</a>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
+{% if no_auth_enabled %}
+<div class="armada-portico-prose">
+    <p>
+        {% trans %}No authentication backends are enabled on this server yet, so it is impossible to register.{% endtrans %}
+    </p>
 </div>
-
+{% elif realm_invite_required and not from_multiuse_invite %}
+<div class="armada-portico-prose">
+    <p>{{ _("You need an invitation to join this organization.") }}</p>
+    {% for error in form.email.errors %}
+    <p class="armada-portico-error">{{ error }}</p>
+    {% endfor %}
+</div>
+<div class="armada-portico-note">
+    {{ _('Already have an account?') }} <a class="armada-portico-verb" href="/login/">{{ _('Log in') }}</a>
+</div>
+{% else %}
+<div class="armada-portico-ways" data-armada-carry-fragment>
+    {% if password_auth_enabled %}
+    <form class="armada-portico-form" id="send_confirm" name="email_form" action="{{ current_url() }}" method="post">
+        {{ csrf_input }}
+        <div class="armada-portico-field">
+            <label class="armada-portico-label" for="email">{{ _('Email') }}</label>
+            <input class="armada-portico-entry" type="email" id="email" name="email" value="" autocomplete="email"
+              autofocus required {% if form.email.errors %}aria-invalid="true"{% endif %} />
+            {% for error in form.email.errors %}
+            <p class="armada-portico-error">{{ error }}</p>
+            {% endfor %}
+        </div>
+        <button class="armada-portico-submit" type="submit">{{ _('Sign up') }}</button>
+    </form>
+    {% if external_authentication_methods %}
+    <p class="armada-portico-or">{{ _("or") }}</p>
+    {% endif %}
+    {% endif %}
+    {{ portico.providers(external_authentication_methods, "signup", next=next, multiuse_object_key=multiuse_object_key) }}
+</div>
+<div class="armada-portico-note">
+    {{ _('Already have an account?') }} <a class="armada-portico-verb" href="/login/">{{ _('Log in') }}</a>
+</div>
+{% endif %}
 {% endblock %}

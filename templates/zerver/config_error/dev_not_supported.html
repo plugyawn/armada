@@ -3,12 +3,12 @@
 {% block error_content %}
     <p>
         You attempted to use the <code>DevAuthBackend</code> authentication method,
-        which is used for logging in without a password in the Zulip development
+        which is used for logging in without a password in the development
         environment.
     </p>
     <p>This backend is not available for this realm, either because:</p>
     <ul>
-        <li>This Zulip server is configured as a production server.</li>
+        <li>This server is configured as a production server.</li>
         <li>
             <code>DevAuthBackend</code> is disabled in
             <code>AUTHENTICATION_BACKENDS</code> in

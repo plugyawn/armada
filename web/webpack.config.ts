@@ -82,7 +82,9 @@ const config = (
         new HtmlWebpackPlugin({
             filename: "5xx.html",
             template: env.custom_5xx_file ? "html/" + env.custom_5xx_file : "html/5xx.html",
-            chunks: ["error-styles"],
+            // Armada's own page is drawn like the other pages before the
+            // app; a server's custom page keeps the old styles.
+            chunks: [env.custom_5xx_file ? "error-styles" : "armada-portico"],
             publicPath: production ? "/static/webpack-bundles/" : "/webpack/",
         }),
     ];

@@ -1,23 +1,23 @@
-{% extends "zerver/portico.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 {% set entrypoint = "desktop-redirect" %}
 
 {% block title %}
-<title>{{ _("Log in to desktop app") }} | Zulip</title>
+<title>{{ _("Log in to desktop app") }} | Armada</title>
 {% endblock %}
 
-{% block content %}
-<div class="flex new-style">
-    <div class="desktop-redirect-box white-box">
-        <img class="avatar desktop-redirect-image" src="{{ realm_icon_url }}" alt=""/><br />
-        <p class="copy-token-info">{% trans %}Copy this login token and return to your Zulip app to finish logging in:{% endtrans %}</p>
-        <p>
-            <span class="input-box">
-                <input id="desktop-data" value="{{ desktop_data }}" type="text" readonly />
-            </span>
-            <button id="copy" tabindex="0" data-clipboard-target="#desktop-data">{% trans %}Copy{% endtrans %}</button>
-        </p>
-        <p>{% trans %}You may then close this window.{% endtrans %}</p>
-        <p><a href="{{ browser_url }}">{% trans %}Or, continue in your browser.{% endtrans %}</a></p>
-    </div>
+{% block portico_content %}
+<div class="armada-portico-head">
+    <img class="armada-portico-face" src="{{ realm_icon_url }}" alt="" />
+    <h1 class="armada-portico-title">{{ _("Log in to the desktop app") }}</h1>
+    <p class="armada-portico-lead">{{ _("Copy this login token and return to the desktop app to finish logging in:") }}</p>
+</div>
+<div class="armada-portico-form">
+    <input class="armada-portico-entry" id="desktop-data" value="{{ desktop_data }}" type="text" readonly aria-label="{{ _('Login token') }}" />
+    <button class="armada-portico-submit" id="copy" data-clipboard-target="#desktop-data">{{ _("Copy") }}</button>
+</div>
+<div class="armada-portico-note">
+    <p>{{ _("You may then close this window.") }}</p>
+    <p><a href="{{ browser_url }}">{{ _("Or, continue in your browser.") }}</a></p>
 </div>
 {% endblock %}

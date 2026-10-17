@@ -1,10 +1,8 @@
-{% extends "zerver/portico.html" %}
+{% extends "zerver/armada_portico.html" %}
 
-{% block portico_class_name %}error{% endblock %}
+{# An error the server draws before the app: a title and what to do. #}
 
 {% block portico_content %}
-<div class="error_page">
-    {% block error_page_content %}
-    {% endblock %}
-</div>
+{% block error_page_content %}
+{% endblock %}
 {% endblock %}

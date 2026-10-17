@@ -1,15 +1,16 @@
 {% extends "zerver/portico_error_pages/portico_error_page.html" %}
 
 {% block title %}
-<title>{{ _("Confirmation link expired or deactivated") }} | Zulip</title>
+<title>{{ _("Confirmation link expired or deactivated") }} | Armada</title>
 {% endblock %}
 
 {% block error_page_content %}
-<img class="hourglass-img" src="{{ static('images/errors/timeout_hourglass.png') }}" alt=""/>
-<div class="errorbox">
-    <div class="errorcontent">
-        <h1 class="lead">{{ _("Whoops. The confirmation link has expired or been deactivated.") }}</h1>
-        <p>{{ _("Please contact your organization administrator for a new link.") }}</p>
-    </div>
+<div class="armada-portico-head">
+    <h1 class="armada-portico-title">{{ _("Whoops. The confirmation link has expired or been deactivated.") }}</h1>
+</div>
+<div class="armada-portico-prose">
+    <p>
+        {{ _("Please contact your organization administrator for a new link.") }}
+    </p>
 </div>
 {% endblock %}

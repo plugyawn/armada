@@ -1,0 +1,20 @@
+{% extends "zerver/base.html" %}
+{% set entrypoint = entrypoint|default("armada-portico") %}
+
+{# The pages before the app, in Armada's own language
+(web/src/armada/surfaces/portico/): signing in and up, a password reset,
+an organization's address, and the errors the server draws. One column,
+no header strip and no footer. #}
+
+{% block content %}
+{% include "zerver/app/armada_sprite.svg" %}
+<div class="armada-kit armada-portico" data-plane="content" data-platform="{{ platform }}">
+    <div class="armada-portico-top">
+        <span class="armada-portico-product">Armada</span>
+    </div>
+    <main class="armada-portico-main" {% block portico_width %}{% endblock %}>
+        {% block portico_content %}
+        {% endblock %}
+    </main>
+</div>
+{% endblock %}

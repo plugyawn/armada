@@ -1,0 +1,516 @@
+/* The pages before the app: signing in, signing up, a password reset, an
+   organization's address, and the errors the server draws. One column on
+   the plane, with the organization's face and name over it; its fields
+   are the composer's field drawn for a form (a raised shape with an edge
+   and a lift), its default button is a bubble of mine, and anything else
+   to press is a neutral fill. No header strip, no footer. */
+@layer armada.surfaces {
+    :root:has(.armada-portico) {
+        height: 100%;
+        color-scheme: light dark;
+        background: var(--content);
+    }
+
+    :root[data-theme="light"]:has(.armada-portico) {
+        color-scheme: light;
+    }
+
+    :root[data-theme="dark"]:has(.armada-portico) {
+        color-scheme: dark;
+    }
+
+    body:has(> .armada-portico) {
+        height: 100%;
+        margin: 0;
+    }
+
+    .armada-portico {
+        --plane: var(--content);
+        /* The column: wide enough for a field and its label's link. */
+        --k-portico-w: calc(var(--px) * 360);
+
+        min-height: 100%;
+        display: grid;
+        grid-template-rows: var(--h-line1) 1fr var(--h-line1);
+        background: var(--content);
+    }
+
+    /* A link is my colour, underlined under the pointer; a component
+       that is a link draws itself. */
+    .armada-portico :where(a[href]) {
+        color: var(--accent-text);
+        text-decoration: none;
+    }
+
+    .armada-portico :where(a[href]:hover) {
+        text-decoration: underline;
+        text-decoration-thickness: var(--px);
+        text-underline-offset: calc(var(--px) * 3);
+    }
+
+    /* The product's name, where the nav's top row stands in the app. */
+    .armada-portico-top {
+        display: flex;
+        align-items: center;
+        padding: 0 var(--s-6);
+    }
+
+    .armada-portico-product {
+        font: var(--t-strong);
+        color: var(--ink-1);
+    }
+
+    .armada-portico-main {
+        place-self: center;
+        width: min(var(--k-portico-w), calc(100% - var(--s-8)));
+        padding: var(--s-6) 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-8);
+    }
+
+    .armada-portico-main[data-width="wide"] {
+        --k-portico-w: calc(var(--px) * 448);
+    }
+
+    /* Who you are joining or signing in to, and what this page is for. */
+    .armada-portico-head {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: var(--s-1);
+    }
+
+    /* The organization's face: its icon, or its initial on the neutral
+       stone. */
+    .armada-portico-face {
+        width: calc(var(--px) * 56);
+        height: calc(var(--px) * 56);
+        border-radius: var(--r-pop);
+        object-fit: cover;
+        margin-bottom: var(--s-3);
+        display: grid;
+        place-items: center;
+        background: var(--p-flint);
+        color: var(--p-flint-ink);
+        font: var(--t-title);
+    }
+
+    .armada-portico-title {
+        font: var(--t-title);
+        color: var(--ink-1);
+        text-wrap: balance;
+    }
+
+    .armada-portico-lead {
+        font: var(--t-text);
+        color: var(--ink-2);
+        text-wrap: pretty;
+    }
+
+    .armada-portico-lead:where(p + p) {
+        margin-top: var(--s-2);
+    }
+
+    /* Text that is read: a page with no form, an explanation, centred
+       under its title. */
+    .armada-portico-prose {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
+        font: var(--t-talk);
+        color: var(--ink-1);
+        text-align: center;
+        text-wrap: pretty;
+    }
+
+    .armada-portico-prose :where(code) {
+        font: var(--t-code);
+    }
+
+    /* A list or a page of instructions reads from the leading edge. */
+    .armada-portico-prose :where(ul, ol),
+    .armada-portico-main[data-width="wide"] .armada-portico-prose {
+        text-align: start;
+    }
+
+    .armada-portico-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-4);
+    }
+
+    .armada-portico-group {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
+    }
+
+    .armada-portico-group-title {
+        font: var(--t-strong);
+        color: var(--ink-1);
+    }
+
+    .armada-portico-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-2);
+        min-width: 0;
+    }
+
+    .armada-portico-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--s-3);
+        font: var(--t-text);
+        color: var(--ink-1);
+    }
+
+    /* A fact that is not edited here, read where a field would be. */
+    .armada-portico-fact {
+        font: var(--t-talk);
+        color: var(--ink-1);
+        overflow-wrap: anywhere;
+    }
+
+    /* The field: the composer's shape drawn for one line of a form. */
+    .armada-portico-entry {
+        all: unset;
+        box-sizing: border-box;
+        display: block;
+        width: 100%;
+        height: var(--h-l);
+        padding: 0 var(--pad-x);
+        border-radius: var(--r-bubble);
+        background: var(--raised);
+        color: var(--ink-1);
+        font: var(--t-talk);
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge), var(--shadow-field);
+        caret-color: var(--accent-text);
+        transition: background-color var(--fade-out) linear;
+    }
+
+    .armada-portico-entry::placeholder {
+        color: var(--ink-2);
+        opacity: 1;
+    }
+
+    .armada-portico-entry:focus {
+        /* prettier-ignore */
+        box-shadow: 0 0 0 1px var(--edge-2), var(--shadow-field-focus);
+    }
+
+    .armada-portico-entry:disabled {
+        color: var(--ink-2);
+        background: var(--content);
+    }
+
+    /* A choice from a list: the field's shape, with the glyph that says
+       it opens. */
+    .armada-portico-choice {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    /* A list's words sit on the line a field's do. */
+    .armada-portico-choice > .armada-portico-entry {
+        padding-top: var(--pad-y);
+        padding-bottom: var(--pad-y);
+        padding-right: var(--s-10);
+        cursor: default;
+    }
+
+    .armada-portico-choice > .armada-glyph {
+        position: absolute;
+        right: var(--s-4);
+        color: var(--ink-2);
+        pointer-events: none;
+    }
+
+    /* An address: what you type, then the part that is fixed. */
+    .armada-portico-address {
+        display: flex;
+        align-items: center;
+        gap: var(--s-2);
+    }
+
+    .armada-portico-address > .armada-portico-entry {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* An organization on the server's own address needs no other one. */
+    .armada-portico-field:has(:where([data-armada-root-domain]:checked))
+        > [data-armada-subdomain] {
+        display: none;
+    }
+
+    /* The detail a choice asks for, shown when it is chosen. */
+    .armada-portico-field > [data-found-by] {
+        display: none;
+    }
+
+    .armada-portico-field:has(:where(option[value="other"]:checked))
+        > [data-found-by="other"],
+    .armada-portico-field:has(:where(option[value="ad"]:checked))
+        > [data-found-by="ad"],
+    .armada-portico-field:has(:where(option[value="existing_user"]:checked))
+        > [data-found-by="existing_user"],
+    .armada-portico-field:has(:where(option[value="review_site"]:checked))
+        > [data-found-by="review_site"],
+    .armada-portico-field:has(:where(option[value="ai_chatbot"]:checked))
+        > [data-found-by="ai_chatbot"] {
+        display: block;
+    }
+
+    .armada-portico-suffix {
+        font: var(--t-talk);
+        color: var(--ink-2);
+        white-space: nowrap;
+    }
+
+    /* A password: the field, and a control in it that shows what is typed. */
+    .armada-portico-secret {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+
+    .armada-portico-secret > .armada-portico-entry {
+        padding-right: var(--s-10);
+    }
+
+    .armada-portico-secret > .armada-control {
+        position: absolute;
+        right: calc(var(--px) * 4);
+    }
+
+    .armada-portico-hint {
+        font: var(--t-caption);
+        color: var(--ink-2);
+    }
+
+    .armada-portico-error {
+        font: var(--t-text);
+        color: var(--failure);
+    }
+
+    .armada-portico-error:empty {
+        display: none;
+    }
+
+    /* A checkbox and its words: the native box, drawn as the kit's, with
+       the kit's tick over it when it is checked. */
+    .armada-portico-check {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--s-2);
+        font: var(--t-text);
+        color: var(--ink-1);
+    }
+
+    .armada-portico-box {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: var(--s-4);
+        height: var(--s-4);
+        margin-top: calc(var(--px) * 2);
+        color: var(--on-accent);
+    }
+
+    .armada-portico-box > input {
+        all: unset;
+        grid-area: 1 / 1;
+        width: var(--s-4);
+        height: var(--s-4);
+        border-radius: var(--r-mark);
+        /* prettier-ignore */
+        box-shadow: inset 0 0 0 1px var(--edge-ctl);
+    }
+
+    .armada-portico-box > input:checked {
+        background-color: var(--accent);
+        box-shadow: none;
+    }
+
+    .armada-portico-box > .armada-glyph {
+        grid-area: 1 / 1;
+        pointer-events: none;
+        visibility: hidden;
+    }
+
+    .armada-portico-box > :where(input:checked) + .armada-glyph {
+        visibility: visible;
+    }
+
+    /* The default button: a bubble of mine as wide as the column. */
+    .armada-portico-submit {
+        all: unset;
+        box-sizing: border-box;
+        width: 100%;
+        height: var(--h-l);
+        padding: 0 var(--s-4);
+        border-radius: var(--r-bubble);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--s-2);
+        background-color: var(--accent);
+        color: var(--on-accent);
+        font: var(--t-strong);
+        text-align: center;
+        cursor: default;
+        transition:
+            transform var(--touch-t) var(--spring-touch),
+            background-color var(--fade-out) linear;
+    }
+
+    .armada-portico-submit:is(:hover, [data-force="hover"]) {
+        background-color: var(--accent-hover);
+    }
+
+    .armada-portico-submit:is(:active, [data-force="press"]) {
+        background-color: var(--accent-press);
+        transform: scale(var(--dip));
+        transition-duration: var(--k-now);
+    }
+
+    .armada-portico-submit:disabled {
+        background-color: var(--fill-2);
+        color: var(--ink-2);
+        transform: none;
+    }
+
+    /* Another way in: a neutral fill as wide as the column, the
+       provider's mark and a verb. */
+    .armada-portico-alternate {
+        all: unset;
+        box-sizing: border-box;
+        width: 100%;
+        height: var(--h-l);
+        padding: 0 var(--s-4);
+        border-radius: var(--r-bubble);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--s-2);
+        background-color: var(--fill-1);
+        color: var(--ink-1);
+        font: var(--t-strong);
+        cursor: default;
+        transition:
+            transform var(--touch-t) var(--spring-touch),
+            background-color var(--fade-out) linear;
+    }
+
+    .armada-portico-alternate:is(:hover, [data-force="hover"]) {
+        background-color: var(--fill-2);
+    }
+
+    .armada-portico-alternate:is(:active, [data-force="press"]) {
+        background-color: var(--fill-press);
+        transform: scale(var(--dip));
+        transition-duration: var(--k-now);
+    }
+
+    /* A provider's mark, drawn in the ink of its words. */
+    .armada-portico-provider {
+        width: var(--s-4);
+        height: var(--s-4);
+        flex: none;
+        background-color: currentcolor;
+        mask: var(--k-provider-mark) center / contain no-repeat;
+    }
+
+    .armada-portico-ways {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-3);
+    }
+
+    .armada-portico-ways > form {
+        display: contents;
+    }
+
+    /* The word between two ways in, in the second ink and no rule. */
+    .armada-portico-or {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        text-align: center;
+    }
+
+    /* What follows the form: another page, in the second ink. */
+    .armada-portico-note {
+        font: var(--t-text);
+        color: var(--ink-2);
+        text-align: center;
+        text-wrap: pretty;
+    }
+
+    .armada-portico-note :where(form) {
+        display: inline;
+    }
+
+    /* A link or a button that is a verb: Strong, in my colour. */
+    .armada-portico-verb {
+        all: unset;
+        font: var(--t-strong);
+        color: var(--accent-text);
+        cursor: default;
+    }
+
+    .armada-portico-verb:hover {
+        text-decoration: underline;
+        text-decoration-thickness: var(--px);
+        text-underline-offset: calc(var(--px) * 3);
+    }
+
+    /* A list of choices that are each a whole row: an account to use. */
+    .armada-portico-rows {
+        display: flex;
+        flex-direction: column;
+        gap: var(--s-1);
+    }
+
+    .armada-portico-row {
+        all: unset;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: var(--s-3);
+        min-height: calc(var(--px) * 56);
+        padding: var(--s-2) var(--s-3);
+        border-radius: var(--r-block);
+        font: var(--t-text);
+        color: var(--ink-1);
+        cursor: default;
+    }
+
+    .armada-portico-row > img {
+        width: var(--avatar);
+        height: var(--avatar);
+        border-radius: var(--r-round);
+        flex: none;
+    }
+
+    .armada-portico-row-words {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .armada-portico-row-words > :last-child {
+        font: var(--t-caption);
+        color: var(--ink-2);
+        overflow-wrap: anywhere;
+    }
+
+    .armada-portico [hidden] {
+        display: none;
+    }
+}

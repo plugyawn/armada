@@ -1,22 +1,11 @@
-{% extends "zerver/portico_signup.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("New password successfully set") }} | Zulip</title>
+<title>{{ _("New password successfully set") }} | Armada</title>
 {% endblock %}
 
 {% block portico_content %}
-<div class="app portico-page">
-    <div class="app-main portico-page-container center-block flex full-page account-creation new-style">
-        <div class="inline-block">
-
-            <div class="get-started">
-                <h1>{{ _("You've set a new password!") }}</h1>
-            </div>
-
-            <div class="white-box">
-                <p>{% trans login_url=url('login') %}Please <a href="{{ login_url }}">log in</a> with your new password.{% endtrans %}</p>
-            </div>
-        </div>
-    </div>
-</div>
+{{ portico.head(_("You've set a new password!"), lead=_("Please log in with your new password.")) }}
+<a class="armada-portico-submit" href="{{ url('login') }}">{{ _("Log in") }}</a>
 {% endblock %}

@@ -115,7 +115,7 @@ class EmailChangeTestCase(ZulipTestCase):
         response = self.client_post("/accounts/confirm_new_email/", {"key": key})
         self.assert_in_success_response(
             [
-                "This confirms that the email address for your Zulip",
+                "This confirms that the email address for your account",
                 f'<a href="mailto:{escape(new_email)}">{escape(new_email_address.username)}@<wbr>{escape(new_email_address.domain)}</wbr></a>',
             ],
             response,
@@ -182,7 +182,7 @@ class EmailChangeTestCase(ZulipTestCase):
         do_deactivate_user(user_profile, acting_user=None)
         response = self.use_email_change_confirmation_link(activation_url)
         self.assertEqual(response.status_code, 401)
-        error_page_title = "<title>Account is deactivated | Zulip</title>"
+        error_page_title = "<title>Account is deactivated | Armada</title>"
         self.assert_in_response(error_page_title, response)
 
         do_reactivate_user(user_profile, acting_user=None)
@@ -391,7 +391,7 @@ class EmailChangeTestCase(ZulipTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assert_in_success_response(
-            ["This confirms that the email address for your Zulip"], response
+            ["This confirms that the email address for your account"], response
         )
         user_profile = get_user_profile_by_id(user_profile.id)
         self.assertEqual(user_profile.delivery_email, new_email)
@@ -451,9 +451,7 @@ class EmailChangeTestCase(ZulipTestCase):
         password_set_url = result["Location"]
         result = self.client_get(password_set_url, subdomain=realm.string_id)
         self.assertEqual(result.status_code, 200)
-        self.assert_in_success_response(
-            ["Set a new password", "low-traffic newsletter (a few emails a year)"], result
-        )
+        self.assert_in_success_response(["Set a new password"], result)
 
         user_profile.refresh_from_db()
         self.assertEqual(user_profile.delivery_email, "demo-owner@example.com")

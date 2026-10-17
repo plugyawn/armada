@@ -16,14 +16,14 @@
 <p>
     You have not configured any reverse proxies in {{ setting() }},
     and an HTTP request was received without any reverse proxy
-    headers.  Zulip requires that all client traffic to it be over
-    HTTPS.  Since you have configured Zulip itself to be served over
+    headers.  Armada requires that all client traffic to it be over
+    HTTPS.  Since you have configured Armada itself to be served over
     HTTP, it must be placed behind a proxy which does TLS termination.
 </p>
 
 <p>
-    You must configure a reverse proxy in front of Zulip which serves
-    traffic over HTTPS, and configure Zulip to trust that proxy, by
+    You must configure a reverse proxy in front of Armada which serves
+    traffic over HTTPS, and configure Armada to trust that proxy, by
     adding its IP to {{ setting() }}.  See our <a href="https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html"
     >documentation about deploying behind reverse proxies</a> for more
     details.
@@ -39,7 +39,7 @@
 
 <p>
     Add <code>{{ remote_addr }}</code> to {{ setting() }} and restart
-    your Zulip server.  See
+    your server.  See
     our <a href="https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html"
     >documentation about deploying behind reverse proxies</a> for more
     details.
@@ -70,7 +70,7 @@
 
 <p>
     You should update {{ setting() }} to include <code>{{ remote_addr }}</code>,
-    and restart your Zulip server.  See our <a href="https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html"
+    and restart your server.  See our <a href="https://zulip.readthedocs.io/en/stable/production/reverse-proxies.html"
     >documentation about deploying behind reverse proxies</a> for more
     details.
 </p>

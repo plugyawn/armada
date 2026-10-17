@@ -1,20 +1,16 @@
 {% extends "zerver/portico_error_pages/portico_error_page.html" %}
 
 {% block title %}
-<title>{{ _("Organization creation link required") }} | Zulip</title>
+<title>{{ _("Organization creation link required") }} | Armada</title>
 {% endblock %}
 
 {% block error_page_content %}
-<img src="{{ static('images/errors/500art.svg') }}" alt=""/>
-<div class="errorbox">
-    <div class="errorcontent">
-        <h1 class="lead">{{ _("Organization creation link required") }}</h1>
-        <p>
-            {% trans %}
-            Creating a new organization on this server requires a valid organization creation link.
-            Please see <a href="https://zulip.readthedocs.io/en/stable/production/multiple-organizations.html">documentation</a> on creating a new organization for more information.
-            {% endtrans %}
-        </p>
-    </div>
+<div class="armada-portico-head">
+    <h1 class="armada-portico-title">{{ _("Organization creation link required") }}</h1>
+</div>
+<div class="armada-portico-prose">
+    <p>
+        {% trans %}Creating a new organization on this server requires a valid organization creation link. Please ask this server's administrators for one.{% endtrans %}
+    </p>
 </div>
 {% endblock %}

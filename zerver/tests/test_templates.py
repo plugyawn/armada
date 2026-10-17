@@ -219,11 +219,30 @@ class ArmadaFontPreloadsTest(ZulipTestCase):
     def test_page_outside_the_app(self) -> None:
         # Sign-in and its neighbours are set in Hanken Grotesk alone,
         # whichever files of Söhne the machine has.
-        for entrypoint in ["signup", "register", "dev-login", "common"]:
+        for entrypoint in ["signup", "dev-login", "common"]:
             self.assertEqual(
                 self.preloaded_files(
                     entrypoint, *self.OPEN_FONTS, "../fonts/licensed/soehne-buch.woff2"
                 ),
+                ["HankenGrotesk-VF.woff2"],
+            )
+
+    def test_pages_before_the_app(self) -> None:
+        # Sign-in and its neighbours are set in Söhne, with no code for
+        # Geist Mono to draw.
+        for entrypoint in ["armada-portico", "desktop-login", "desktop-redirect"]:
+            self.assertEqual(
+                self.preloaded_files(
+                    entrypoint,
+                    *self.OPEN_FONTS,
+                    "../fonts/licensed/soehne-buch.woff2",
+                    "../fonts/licensed/soehne-kraftig.woff2",
+                    "../fonts/licensed/soehne-halbfett.woff2",
+                ),
+                ["soehne-buch.woff2", "soehne-halbfett.woff2", "soehne-kraftig.woff2"],
+            )
+            self.assertEqual(
+                self.preloaded_files(entrypoint, *self.OPEN_FONTS),
                 ["HankenGrotesk-VF.woff2"],
             )
 
@@ -238,13 +257,13 @@ class ArmadaFontPreloadsTest(ZulipTestCase):
             "zerver.lib.templates.webpack_stats",
             return_value={
                 **webpack_stats_with_fonts(*self.OPEN_FONTS, "../fonts/licensed/soehne-buch.woff2"),
-                "chunks": {"signup": []},
+                "chunks": {"armada-portico": []},
             },
         ):
             result = self.client_get("/login/")
         self.assertEqual(result.status_code, 200)
         self.assert_in_response(
-            '<link rel="preload" href="http://testserver/static/webpack-bundles/files/HankenGrotesk-VF.woff2"'
+            '<link rel="preload" href="http://testserver/static/webpack-bundles/files/soehne-buch.woff2"'
             ' as="font" type="font/woff2" crossorigin="anonymous" />',
             result,
         )

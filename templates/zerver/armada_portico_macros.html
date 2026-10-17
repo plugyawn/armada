@@ -1,0 +1,70 @@
+{# The parts the pages before the app are built from (armada_portico.html,
+web/src/armada/surfaces/portico/portico.css). #}
+
+{# Who you are signing in to or joining, and what this page is for. An
+organization shows its uploaded icon, or else its initial on a stone. #}
+{% macro head(title, realm=False, lead=None) -%}
+    <div class="armada-portico-head">
+        {% if realm and realm_icon_uploaded %}
+        <img class="armada-portico-face" src="{{ realm_icon }}" alt="" />
+        {% elif realm and realm_name %}
+        <span class="armada-portico-face" aria-hidden="true">{{ realm_name[:1] }}</span>
+        {% endif %}
+        <h1 class="armada-portico-title">{{ title }}</h1>
+        {% if lead %}
+        <p class="armada-portico-lead">{{ lead }}</p>
+        {% endif %}
+    </div>
+{%- endmacro %}
+
+{# A password field, with the control that shows what is typed. #}
+{% macro secret(id, name, label, autocomplete, value="", autofocus=False, hint=None, errors=(), reset_url=None) -%}
+    <div class="armada-portico-field">
+        <div class="armada-portico-label">
+            <label for="{{ id }}">{{ label }}</label>
+            {% if reset_url %}
+            <a href="{{ reset_url }}">{{ _('Forgot your password?') }}</a>
+            {% endif %}
+        </div>
+        <div class="armada-portico-secret">
+            <input class="armada-portico-entry" id="{{ id }}" name="{{ name }}" type="password"
+              autocomplete="{{ autocomplete }}" value="{{ value }}" required
+              {% if autofocus %}autofocus{% endif %} {% if errors %}aria-invalid="true"{% endif %} />
+            <button type="button" class="armada-control armada-hover" data-shape="square" data-armada-reveal="{{ id }}"
+              aria-pressed="false" aria-label="{{ _('Show password') }}"
+              data-label-show="{{ _('Show password') }}" data-label-hide="{{ _('Hide password') }}">
+                <svg class="armada-glyph" aria-hidden="true"><use href="#armada-glyph-eye" /></svg>
+            </button>
+        </div>
+        {% if hint %}
+        <p class="armada-portico-hint">{{ hint }}</p>
+        {% endif %}
+        {% for error in errors %}
+        <p class="armada-portico-error">{{ error }}</p>
+        {% endfor %}
+    </div>
+{%- endmacro %}
+
+{# The other ways in: one button for each identity provider. #}
+{% macro providers(methods, verb, next=None, multiuse_object_key=None) -%}
+    {% for backend in methods %}
+    <form action="{{ backend.signup_url if verb == 'signup' else backend.login_url }}" method="get">
+        {% if next %}
+        <input type="hidden" name="next" value="{{ next }}" />
+        {% endif %}
+        {% if verb == "signup" %}
+        <input type="hidden" name="multiuse_object_key" value="{{ multiuse_object_key }}" />
+        {% endif %}
+        <button id="{{ 'register' if verb == 'signup' else 'login' }}_auth_button_{{ backend.name }}" class="armada-portico-alternate">
+            {% if backend.display_icon %}
+            <span class="armada-portico-provider" style="--k-provider-mark: url('{{ backend.display_icon }}')"></span>
+            {% endif %}
+            {% if verb == "signup" %}
+            {{ _('Sign up with %(identity_provider)s', identity_provider=backend.display_name) }}
+            {% else %}
+            {{ _('Log in with %(identity_provider)s', identity_provider=backend.display_name) }}
+            {% endif %}
+        </button>
+    </form>
+    {% endfor %}
+{%- endmacro %}

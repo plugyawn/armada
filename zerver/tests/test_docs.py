@@ -676,7 +676,7 @@ class PlansPageTest(ZulipTestCase):
         non_existent_domain = "moo"
         result = self.client_get("/plans/", subdomain=non_existent_domain)
         self.assertEqual(result.status_code, 404)
-        self.assert_in_response("There is no Zulip organization at", result)
+        self.assert_in_response("There is no organization at", result)
 
         realm = get_realm("zulip")
         realm.plan_type = Realm.PLAN_TYPE_STANDARD_FREE
@@ -856,7 +856,7 @@ class PrivacyTermsTest(ZulipTestCase):
         self.assert_not_in_success_response([get_canonical_url("/policies/")], response)
 
     def test_custom_terms_of_service_template(self) -> None:
-        not_configured_message = "This server is an installation"
+        not_configured_message = "This server has not been configured to display its"
         with self.settings(POLICIES_DIRECTORY="zerver/policies_absent"):
             response = self.client_get("/policies/terms")
         self.assert_in_response(not_configured_message, response)
@@ -872,7 +872,7 @@ class PrivacyTermsTest(ZulipTestCase):
         self.assert_in_success_response(["Kandra Labs"], response)
 
     def test_custom_privacy_policy_template(self) -> None:
-        not_configured_message = "This server is an installation"
+        not_configured_message = "This server has not been configured to display its"
         with self.settings(POLICIES_DIRECTORY="zerver/policies_absent"):
             response = self.client_get("/policies/privacy")
         self.assert_in_response(not_configured_message, response)

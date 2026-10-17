@@ -738,7 +738,7 @@ class HomeTest(ZulipTestCase):
 
         result = self.client_get("/", HTTP_USER_AGENT="ZulipElectron/2.3.82")
         html = result.content.decode()
-        self.assertIn("You are using old version of the Zulip desktop", html)
+        self.assertIn("You are using an old version of the desktop app", html)
 
     def test_unsupported_browser(self) -> None:
         user = self.example_user("hamlet")
@@ -753,7 +753,7 @@ class HomeTest(ZulipTestCase):
         for user_agent in unsupported_user_agents:
             result = self.client_get("/", HTTP_USER_AGENT=user_agent)
             html = result.content.decode()
-            self.assertIn("Internet Explorer is not supported by Zulip.", html)
+            self.assertIn("Internet Explorer is not supported by Armada.", html)
 
     def test_terms_of_service_first_time_template(self) -> None:
         user = self.example_user("hamlet")
@@ -790,8 +790,7 @@ class HomeTest(ZulipTestCase):
         self.assertEqual(result.status_code, 200)
         self.assert_in_response("I agree to the", result)
         self.assert_in_response(
-            "Administrators of this Zulip organization will be able to see this email address.",
-            result,
+            f'<option value="{UserProfile.EMAIL_ADDRESS_VISIBILITY_ADMINS}" selected>', result
         )
 
         result = self.client_post(
@@ -847,8 +846,7 @@ class HomeTest(ZulipTestCase):
             result = self.client_get("/", dict(stream="Denmark"))
             self.assertEqual(result.status_code, 200)
             self.assert_in_response(
-                "Administrators of this Zulip organization will be able to see this email address.",
-                result,
+                f'<option value="{UserProfile.EMAIL_ADDRESS_VISIBILITY_ADMINS}" selected>', result
             )
 
             result = self.client_post(

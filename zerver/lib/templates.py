@@ -237,6 +237,9 @@ ARMADA_TYPE_ENTRYPOINTS = {
     # INTERIM BETA: /beta/ is set in the same faces; removed with web/src/armada/beta/.
     "armada-beta",
 }
+# The pages before the app (templates/zerver/armada_portico.html): set in
+# Söhne too, with no code for Geist Mono to draw.
+ARMADA_PORTICO_ENTRYPOINTS = {"armada-portico", "desktop-login", "desktop-redirect"}
 
 
 def font_preloads(entrypoint: str) -> list[str]:
@@ -251,20 +254,22 @@ def font_preloads(entrypoint: str) -> list[str]:
     tools/setup/build_armada_fonts found them (the italic loads on
     use), Geist Mono, and Hanken Grotesk only while it still draws
     text, which is when Söhne is absent or is Klim's test files, which
-    hold no punctuation. A page outside the app gets Hanken Grotesk
-    alone.
+    hold no punctuation. The pages before the app get the same but
+    Geist Mono, and any other page Hanken Grotesk alone.
     """
     built_from = {
         os.path.basename(asset.get("sourceFilename", "")): asset["name"]
         for asset in webpack_stats().get("assets", {}).values()
     }
-    if entrypoint in ARMADA_TYPE_ENTRYPOINTS:
+    if entrypoint in ARMADA_TYPE_ENTRYPOINTS | ARMADA_PORTICO_ENTRYPOINTS:
         soehne = sorted(
             name
             for name in built_from
             if name.endswith(".woff2") and "soehne" in name and "kursiv" not in name
         )
-        wanted = [*soehne, "GeistMonoVF.woff2"]
+        wanted = [*soehne]
+        if entrypoint in ARMADA_TYPE_ENTRYPOINTS:
+            wanted.append("GeistMonoVF.woff2")
         if not soehne or any("test" in name for name in soehne):
             wanted.append("HankenGrotesk-VF.woff2")
     else:

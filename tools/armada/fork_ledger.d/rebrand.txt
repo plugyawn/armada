@@ -56,3 +56,72 @@ kept templates/zerver/documentation_main.html  # the /api/ and /policies/ shell:
 kept zerver/views/documentation.py  # the API docs', policies' and integrations' page titles name Armada or no product
 kept zerver/tests/test_docs.py  # the API docs' and integrations' new titles
 kept zerver/tests/test_middleware.py  # the /api/ page's new title and description
+kept templates/404.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/4xx.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/500.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/confirmation/confirm_email_change.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/confirmation/confirm_preregistrationuser.html  # the title says Armada
+kept templates/confirmation/link_does_not_exist.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/confirmation/link_expired.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/confirmation/link_malformed.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/confirmation/redirect_to_post.html  # the title says Armada
+kept templates/zerver/accounts_accept_terms.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/close_window.html  # the window's title says Armada
+kept templates/zerver/config_error/apple.html  # names no product
+kept templates/zerver/config_error/container.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/config_error/dev_not_supported.html  # names no product
+kept templates/zerver/config_error/proxy.html  # says Armada
+kept templates/zerver/confirm_continue_registration.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/create_demo_realm.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/create_realm.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/found_zulip_form_field.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/realm_creation_base_form_fields.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/realm_creation_import_form_field.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/realm_creation_name_form_field.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_realm/realm_creation_subdomain_form_field.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+deleted templates/zerver/create_user/change_email_address_visibility_modal.html  # the pages before the app: the email-visibility dialog is a list on the page
+kept templates/zerver/create_user/new_user_email_address_visibility.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/create_user/terms_of_service_form_field.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/deactivated.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/desktop_login.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/desktop_redirect.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/dev_env_email_access_details.html  # drawn in the portico's hint
+kept templates/zerver/digest_base.html  # the digest page says Armada
+kept templates/zerver/find_account.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/footer.html  # no Powered by Zulip, help center or legal links off zulip.com's own site
+deleted templates/zerver/include/back_to_login_component.html  # the pages before the app: the Electron-only back link is gone; pages link to log in themselves
+kept templates/zerver/invalid_email.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/invalid_realm.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/log_into_subdomain_token_invalid.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/meta_tags.html  # og: tags name Armada and show Armada's icon
+kept templates/zerver/no_spare_licenses.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/policies_absent/missing.md  # /policies/ without policies names no product
+kept templates/zerver/portico-header-dropdown.html  # the old shell's header names Armada
+kept templates/zerver/portico-header.html  # the old shell's header names Armada, not Zulip's wordmark
+kept templates/zerver/portico_error_pages/auth_subdomain.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/demo_creation_disabled.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/insecure_desktop_app.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/portico_error_page.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/rate_limit_exceeded.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/realm_creation_disabled.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/realm_creation_link_invalid.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/remote_realm_server_mismatch_error.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/unsupported_browser.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/portico_error_pages/user_deactivated.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/realm_import_post_process.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/realm_reactivation.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/realm_reactivation_link_error.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/realm_redirect.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/reset.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/reset_confirm.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/reset_done.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/reset_emailed.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/social_auth_select_email.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/unsubscribe_link_error.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept templates/zerver/unsubscribe_success.html  # the pages before the app: drawn in Armada's language (surfaces/portico), says Armada
+kept web/html/5xx.html  # the static 5xx page is drawn like the pages before the app and says Armada
+kept web/src/portico/signup.ts  # the email-visibility dialog it drove is gone; register shows a list instead
+kept zerver/context_processors.py  # realm_icon_uploaded: the pages before the app show an uploaded icon, or the organization's initial
+kept zerver/tests/test_decorators.py  # the invalid-organization page's new wording
+kept zerver/tests/test_email_change.py  # the email-change page's new wording; the demo email's new subject; no onboarding emails
+kept zerver/tests/test_signup.py  # the pages before the app and the confirmation email say Armada; Welcome Bot; the dev data's default channels' order

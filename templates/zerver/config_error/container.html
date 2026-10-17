@@ -1,34 +1,20 @@
-{% extends "zerver/portico.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("Configuration error") }} | Zulip</title>
+<title>{{ _("Configuration error") }} | Armada</title>
 {% endblock %}
 
+{% block portico_width %}data-width="wide"{% endblock %}
+
 {% block portico_content %}
-<div id="config_error_page" class="flex full-page">
-    <div class="new-style">
-        <div class="pitch">
-            <h1>
-                {{ _("Configuration error") }}
-            </h1>
-        </div>
-        <div class="white-box">
-            <div class="errorbox config-error">
-                <div class="errorcontent">
-                    {% block error_body %}
-                    <p>
-                        {% block error_content %}
-                        {% endblock %}
-                    </p>
-
-                    <p>After making your changes, remember to restart the Zulip server.</p>
-
-                    <p><a href="">Refresh</a> to try again or
-                        <a href="{{ go_back_to_url }}">go back to {{ go_back_to_url_name }}</a>.</p>
-                    {% endblock %}
-                </div>
-            </div>
-        </div>
-    </div>
+{{ portico.head(_("Configuration error")) }}
+<div class="armada-portico-prose" id="config_error_page">
+    {% block error_body %}
+    {% block error_content %}
+    {% endblock %}
+    <p>After making your changes, remember to restart the server.</p>
+    <p><a href="">Refresh</a> to try again or <a href="{{ go_back_to_url }}">go back to {{ go_back_to_url_name }}</a>.</p>
+    {% endblock %}
 </div>
 {% endblock %}

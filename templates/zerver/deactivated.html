@@ -1,7 +1,8 @@
-{% extends "zerver/portico_signup.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("Deactivated organization") }} | Zulip</title>
+<title>{{ _("Deactivated organization") }} | Armada</title>
 {% endblock %}
 
 {% block customhead %}
@@ -10,62 +11,31 @@
 {% endblock %}
 
 {% block portico_content %}
-
-<div class="app portico-page">
-    <div class="app-main portico-page-container center-block flex full-page account-creation new-style">
-        <div class="inline-block">
-
-            <div class="get-started">
-                {% if deactivated_redirect %}
-                    <h1>{{ _("Organization moved") }}</h1>
-                {% else %}
-                    <h1>{{ _("Deactivated organization") }}</h1>
-                {% endif %}
-            </div>
-
-            <div class="white-box deactivated-realm-container">
-                <p>
-                    {% if deactivated_redirect %}
-                        {% trans %}
-                        This organization has moved to <a href="{{ deactivated_redirect }}">{{ deactivated_redirect }}</a>.
-                        {% endtrans %}
-                        {% if auto_redirect_to %}
-                        {% trans %}
-                            This page will automatically redirect to the <a href="{{ auto_redirect_to }}" id="deactivated-org-auto-redirect">new URL</a> in <span id="deactivated-org-auto-redirect-countdown">5</span> seconds.
-                        {% endtrans %}
-                        {% endif %}
-                    {% elif realm_data_deleted %}
-                        {{ _("This organization has been deactivated, and all organization data has been deleted.") }}
-                        {% if corporate_enabled %}
-                            {% trans %}
-                            You can <a href="mailto:{{ support_email }}">contact Zulip support</a> to inquire about reusing this URL for a new organization.
-                            {% endtrans %}
-                        {% else %}
-                            {% trans %}
-                            You can <a href="mailto:{{ support_email }}">contact this Zulip server's administrators</a> to inquire about reusing this URL for a new organization.
-                            {% endtrans %}
-                        {% endif %}
-                    {% else %}
-                        {{ _("This organization has been deactivated.") }}
-                        {% if corporate_enabled %}
-                            {% trans %}
-                            If you are an owner of this organization, you can <a href="mailto:{{ support_email }}">contact Zulip support</a> to reactivate it.
-                            {% endtrans %}
-                            <br /><br />
-                            {% trans %}
-                            If you're a member of the organization and want information about why it has been deactivated, please reach out to the organization's administrators directly.
-                            {% endtrans %}
-                        {% else %}
-                            {% trans %}
-                            If you are an owner of this organization, you can <a href="mailto:{{ support_email }}">contact this Zulip server's administrators</a> to reactivate it.
-                            {% endtrans %}
-                        {% endif %}
-                    {% endif %}
-                </p>
-            </div>
-
-        </div>
-    </div>
+{% if deactivated_redirect %}
+{{ portico.head(_("Organization moved")) }}
+{% else %}
+{{ portico.head(_("Deactivated organization")) }}
+{% endif %}
+<div class="armada-portico-prose deactivated-realm-container">
+    {% if deactivated_redirect %}
+    <p>
+        {% trans %}This organization has moved to <a href="{{ deactivated_redirect }}">{{ deactivated_redirect }}</a>.{% endtrans %}
+    </p>
+    {% if auto_redirect_to %}
+    <p>
+        {% trans %}This page will take you to the <a href="{{ auto_redirect_to }}" id="deactivated-org-auto-redirect" data-armada-redirect-after="5">new URL</a> in a few seconds.{% endtrans %}
+    </p>
+    {% endif %}
+    {% elif realm_data_deleted %}
+    <p>{{ _("This organization has been deactivated, and all organization data has been deleted.") }}</p>
+    <p>
+        {% trans %}You can <a href="mailto:{{ support_email }}">contact this server's administrators</a> to inquire about reusing this URL for a new organization.{% endtrans %}
+    </p>
+    {% else %}
+    <p>{{ _("This organization has been deactivated.") }}</p>
+    <p>
+        {% trans %}If you are an owner of this organization, you can <a href="mailto:{{ support_email }}">contact this server's administrators</a> to reactivate it.{% endtrans %}
+    </p>
+    {% endif %}
 </div>
-
 {% endblock %}

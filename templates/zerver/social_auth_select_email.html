@@ -1,81 +1,35 @@
-{% extends "zerver/portico_signup.html" %}
+{% extends "zerver/armada_portico.html" %}
+{% import "zerver/armada_portico_macros.html" as portico with context %}
 
 {% block title %}
-<title>{{ _("Select account for authentication") }} | Zulip</title>
+<title>{{ _("Select account for authentication") }} | Armada</title>
 {% endblock %}
 
 {% block portico_content %}
-<div class="register-account flex full-page new-style" id="choose_email">
-    <div class="lead">
-        {% trans %}
-        <h1 class="get-started">Select account</h1>
-        {% endtrans %}
-    </div>
-
-    <div class="white-box">
-        <form method="post" class="select-email-form" action="/complete/{{ backend }}/" tabindex="0">
-            <div class="choose-email-box">
-                <input type="hidden" name="email" value="{{ primary_email }}" />
-                {% if avatar_urls[primary_email] %}
-                <img src="{{ avatar_urls[primary_email] }}" alt=""/>
-                {% else %}
-                <i class="fa fa-plus" aria-hidden="true"></i>
-                {% endif %}
-                <div>
-                    <p class="email">
-                        {{ primary_email }}
-                    </p>
-                    <p>
-                        GitHub primary
-                        {% if avatar_urls[primary_email] %}
-                        - Log in
-                        {% else %}
-                        - Create new account
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </form>
-        {% for email in verified_non_primary_emails %}
-        <form method="post" class="select-email-form" action="/complete/{{ backend }}/" tabindex="0">
-            <div class="choose-email-box">
-                <input type="hidden" name="email" value="{{ email }}" />
-                {% if avatar_urls[email] %}
-                <img src="{{ avatar_urls[email] }}" alt="" class="no-drag"/>
-                {% else %}
-                <i class="fa fa-plus" aria-hidden="true"></i>
-                {% endif %}
-                <div>
-                    <p class="email">
-                        {{ email }}
-                    </p>
-                    <p>
-                        {% if avatar_urls[email] %}
-                        Log in
-                        {% else %}
-                        Create new account
-                        {% endif %}
-                    </p>
-                </div>
-            </div>
-        </form>
-        {% endfor %}
-    </div>
-    {% if unverified_emails %}
-    <div class="bottom-text">
-        <p>
-            {% trans %}
-            Your GitHub account also has unverified email addresses
-            associated with it.
-            {% endtrans %}
-        </p>
-        <p>
-            {% trans %}
-            To use one of these to log in to Zulip, you must first
-            <a href="https://github.com/settings/emails">verify it with GitHub.</a>
-            {% endtrans %}
-        </p>
-    </div>
-    {% endif %}
+{{ portico.head(_("Select an email address")) }}
+<div class="armada-portico-rows" id="choose_email">
+    {% for email in [primary_email] + verified_non_primary_emails %}
+    <form method="post" class="select-email-form" action="/complete/{{ backend }}/">
+        <input type="hidden" name="email" value="{{ email }}" />
+        <button class="armada-portico-row armada-hover">
+            {% if avatar_urls[email] %}
+            <img src="{{ avatar_urls[email] }}" alt="" />
+            {% else %}
+            <span class="armada-control" data-shape="square" aria-hidden="true"><svg class="armada-glyph"><use href="#armada-glyph-plus" /></svg></span>
+            {% endif %}
+            <span class="armada-portico-row-words">
+                <span class="email">{{ email }}</span>
+                <span>
+                    {% if avatar_urls[email] %}{{ _("Log in") }}{% else %}{{ _("Create a new account") }}{% endif %}{% if email == primary_email %} · {{ _("GitHub primary") }}{% endif %}
+                </span>
+            </span>
+        </button>
+    </form>
+    {% endfor %}
 </div>
+{% if unverified_emails %}
+<div class="armada-portico-note">
+    {% trans %}Your GitHub account also has unverified email addresses. To use one of them, first <a href="https://github.com/settings/emails">verify it with GitHub</a>.{% endtrans %}
+</div>
+{% endif %}
 {% endblock %}

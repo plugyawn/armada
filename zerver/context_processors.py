@@ -187,6 +187,7 @@ def zulip_default_context(request: HttpRequest) -> dict[str, Any]:
         "realm_url": realm_url,
         "realm_name": realm_name,
         "realm_icon": realm_icon,
+        "realm_icon_uploaded": realm is not None and realm.icon_source == realm.ICON_UPLOADED,
         "root_domain_url": settings.ROOT_DOMAIN_URI,
         "apps_page_url": get_apps_page_url(),
         "apps_page_web": apps_page_web,

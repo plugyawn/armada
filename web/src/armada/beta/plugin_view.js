@@ -5,6 +5,8 @@
      and gives the row back its focus;
    - the "+" menu, from the group's last row, its foot level with that row's: what I hid, with Show; what the team
      offers, with Add; All plugins;
+   - Edit, from the sheet or a row's own menu (with Hide for me): my options as controls, the widget drawn with them,
+     and Onix's field, which asks Onix in the plugin's topic of the plugins channel until PL12 gives it its tools;
    - the rows of a list a plugin links to a place, in the slots plugins.js keeps for it in the column, and the
      commands Jump to lists for plugins;
    - an item opened from a row, which borrows the column as an artifact does and gives it back on Close (below 1408, where
@@ -100,12 +102,101 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       if (!doc) return `<p class="wnote">${x.p.state === "waiting" ? `${esc(x.p.name)} waits for its settings, on its page.` : `Nothing from ${esc(x.p.name)} yet.`}</p>`;
       return staleNote(s, x.w) + blocksHTML(doc) + actionsHTML(doc);
     }
+    const viewHTML = (x) => `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wedit>Edit</button><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`;
     function openSheet(id, kbd) {
       const x = navEntry(id); if (!x) return;
-      const e = float("widget", id, "", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`, x.label);
+      const e = float("widget", id, "", viewHTML(x), x.label);
       Object.assign(sheet, {install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")});
       if (x.s && x.s.document) mountBlocks(e, x.s.document); else host(e);
       if (kbd) ($("[data-wopen], .wb button, .wb [tabindex]", e) || e).focus(); else ready();
+    }
+
+    /* ---------- Edit (ROUND2.md, section D): what is mine as controls, the widget drawn with them, and Onix's field ---------- */
+    const pickHTML = (attr, choices, current, label) => `<span class="pk-w"><select class="pick" ${attr} aria-label="${esc(label)}">${choices.map(([v, t]) => `<option value="${esc(v)}"${v === current ? " selected" : ""}>${esc(t)}</option>`).join("")}</select>${ic("down")}</span>`;
+    const switchHTML = (field, on, label) => `<button class="switch${on ? " on" : ""}" role="switch" aria-checked="${on}" aria-label="${esc(label)}" data-pref="${field}"></button>`;
+    /* the values a facet takes in the team's document, in the order its rows give them */
+    function facetValues(doc, key) { const out = []; for (const b of (doc && doc.blocks) || []) if (isObj(b) && b.type === "list") for (const r of P.rowsOf(doc, b)) { const v = isObj(r.facets) ? r.facets[key] : undefined; if (v !== undefined && !out.includes(v)) out.push(v); } return out; }
+    function controlsHTML(x) {
+      const w = x.w, o = isObj(w.options) ? w.options : {}, pref = x.pref || {}, raw = (P.widgets.get(P.scopeOf(x.p.id, w.key, null, "")) || {}).document, row = (label, ctl) => `<div><span class="l">${label}</span>${ctl}</div>`, out = [];
+      const figures = Array.isArray(o.figures) ? o.figures : [];
+      if (figures.length) { const own = raw && isObj(raw.rest) ? figures.find((f) => f.figure === raw.rest.figure) : null;
+        out.push(row("At rest", pickHTML('data-pref="rest_figure"', [["", own ? own.title : "Its own"], ...figures.filter((f) => f !== own).map((f) => [f.key, f.title])], own && pref.rest_figure === own.key ? "" : pref.rest_figure || "", "At rest"))); }
+      for (const f of Array.isArray(o.facets) ? o.facets : []) { const cur = isObj(pref.filters) && f.key in pref.filters ? JSON.stringify(pref.filters[f.key]) : "";
+        out.push(row(esc(f.title), pickHTML(`data-facet="${esc(f.key)}"`, [["", "All"], ...facetValues(raw, f.key).map((v) => [JSON.stringify(v), `${v} only`])], cur, f.title))); }
+      for (const a of Array.isArray(o.alerts) ? o.alerts : []) { const lo = typeof a.min === "number" ? a.min : 1, hi = Math.min(typeof a.max === "number" ? a.max : lo + 31, lo + 63), more = a.op === "<=" ? "or fewer" : "or more";
+        const cur = isObj(pref.alerts) && a.key in pref.alerts ? String(pref.alerts[a.key]) : "";
+        out.push(row(esc(a.title), pickHTML(`data-alert="${esc(a.key)}"`, [["", "Never"], ...Array.from({length: Math.floor(hi - lo) + 1}, (_, i) => [String(lo + i), `${lo + i} ${more}`])], cur, a.title))); }
+      out.push(row("Name", `<input class="inp" data-pref="label" maxlength="24" spellcheck="false" placeholder="${esc(w.label)}" value="${esc(pref.label || "")}" aria-label="Name">`));
+      if ((w.in || []).includes("nav")) out.push(row("In my nav", switchHTML("shown", P.inMyNav(w, (x.p.widget_defaults || {})[w.key], pref), "In my nav")));
+      if ((w.in || []).includes("column")) out.push(row("In my column", switchHTML("in_column", P.inMyColumn(w, (x.p.widget_defaults || {})[w.key], pref), "In my column")));
+      return out.join("");
+    }
+    const editHTML = (x) => `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wdone>Done</button></div><div class="wb">
+      <section class="sec"><div class="sh"><span>For you</span><span class="e"><span class="m">only you see these</span></span></div><div class="eo">${controlsHTML(x)}</div></section>
+      <div class="ew">${x.s && x.s.document ? blocksHTML(x.s.document) : ""}</div><div class="ex" hidden></div></div>
+      ${askHTML(`Ask Onix to change ${x.label}`, "Ask")}<p class="cap">A change that needs new code changes ${esc(x.label)} for everyone.</p>`;
+    /* Onix's field: my words, and its verb, the view's one accent once there are words */
+    const askHTML = (placeholder, verb) => `<div class="of"><textarea class="of-tx" rows="1" data-ask placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}"></textarea><button class="disc dip" data-ask-go aria-label="${esc(verb)}"><span class="cell"><span>${esc(verb)}</span><i class="sz">${esc(verb)}</i></span></button></div>`;
+    /* Edit, from the sheet or the row's menu: the same sheet, turned into its form, its foot where it was; what is mine and
+       the widget scroll inside it when the window is short, and Onix's field stays on its foot */
+    function openEdit(id, kbd) {
+      const x = navEntry(id); if (!x) return;
+      if (!sheet || sheet.kind !== "widget" || sheet.id !== id) { float("widget", id, "", "", x.label); Object.assign(sheet, {install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")}); }
+      sheet.mode = "edit"; sheet.el.classList.add("ed"); sheet.el.innerHTML = editHTML(x); if (x.s && x.s.document) mountBlocks($(".ew", sheet.el), x.s.document); else host(sheet.el);
+      if (kbd) ($(".eo select, .eo input, .eo button", sheet.el) || sheet.el).focus(); else ready();
+    }
+    /* Done: the widget again, as I now see it */
+    function closeEdit() { const x = navEntry(sheet.id); if (!x) { closeSheet(); return; } sheet.mode = "view"; sheet.el.classList.remove("ed"); sheet.el.innerHTML = viewHTML(x); if (x.s && x.s.document) mountBlocks(sheet.el, x.s.document); else host(sheet.el); const b = $("[data-wedit]", sheet.el); if (b) b.focus({preventScroll: true}); }
+    /* my view changed (a control here, or another device): the widget under the controls follows, and each control
+       says what is set, unless it is the one in my hands */
+    function updateEdit(x) {
+      $(".ch > span", sheet.el).textContent = x.label; const f = $("[data-ask]", sheet.el), say = `Ask Onix to change ${x.label}`;
+      if (f.placeholder !== say) { f.placeholder = say; f.setAttribute("aria-label", say); $(":scope > .cap", sheet.el).textContent = `A change that needs new code changes ${x.label} for everyone.`; }
+      const ew = $(".ew", sheet.el), doc = x.s && x.s.document;
+      if (doc && !patchDoc(ew, doc)) { ew.innerHTML = blocksHTML(doc); mountBlocks(ew, doc); }
+      const box = document.createElement("div"); box.innerHTML = controlsHTML(x);
+      $$(".eo [data-pref], .eo [data-facet], .eo [data-alert]", sheet.el).forEach((c, i) => { const want = $$("[data-pref], [data-facet], [data-alert]", box)[i]; if (!want || c === document.activeElement) return;
+        if (c.matches(".switch")) { c.classList.toggle("on", want.classList.contains("on")); c.setAttribute("aria-checked", want.getAttribute("aria-checked")); } else c.value = want.value; });
+    }
+    /* a control's change, mine at once (setPreference writes it before it is sent) */
+    function changePref(c) {
+      const x = navEntry(sheet.id); if (!x) return; const pref = x.pref || {}, set = (changes) => P.setPreference(x.p.id, x.w.key, changes, c);
+      if (c.matches(".switch")) { const on = c.getAttribute("aria-checked") !== "true"; c.classList.toggle("on", on); c.setAttribute("aria-checked", String(on)); set({[c.dataset.pref]: on}); return; }
+      if (c.dataset.pref === "label") { set({label: c.value.trim()}); return; }
+      if (c.dataset.pref === "rest_figure") { set({rest_figure: c.value}); return; }
+      const field = c.dataset.facet !== undefined ? "filters" : "alerts", key = c.dataset.facet ?? c.dataset.alert, next = {...(isObj(pref[field]) ? pref[field] : {})};
+      if (c.value === "") delete next[key]; else next[key] = field === "filters" ? JSON.parse(c.value) : Number(c.value);
+      set({[field]: next});
+    }
+
+    /* ---------- asking Onix, until its own tools for plugins are here (PL12) ----------
+       The request is a message of mine that mentions Onix, in the plugin's own topic of the team's plugins repository
+       (the "plugins" channel, ROUND2.md decision 1), where Onix builds and changes plugins; with no such channel, in the
+       place in view. The answer comes there; the sheet says where and opens it. */
+    function askPlace(topic) {
+      const plugins = [...streams.values()].find((s) => s.name.toLowerCase() === "plugins");
+      if (plugins) return {stream_id: plugins.stream_id, stream: plugins.name, topic};
+      const p = state.place, s = p && p.kind === "topic" ? streams.get(p.stream_id) : null; return s ? {stream_id: s.stream_id, stream: s.name, topic: p.topic} : null;
+    }
+    async function ask(words, topic, content, from) {
+      const where = askPlace(topic); if (!where) { M.say(from, "There is no plugins channel here to ask in yet.", 2400); return null; }
+      try { await api("POST", "messages", {type: "stream", to: String(where.stream_id), topic: where.topic, content}); return where; }
+      catch (e) { M.say(from, e.message, 2400); return null; }
+    }
+    async function askEdit(b) {
+      const f = $("[data-ask]", sheet.el), words = f.value.trim(), x = navEntry(sheet.id); if (!words || !x) { f.focus(); return; }
+      const where = await ask(words, x.p.plugin, `${state.agentMention} About the ${x.label} widget (the ${x.p.name} plugin, \`${x.p.plugin}\`): ${words}`, b);
+      if (!where || !sheet || sheet.mode !== "edit") return; f.value = ""; b.classList.remove("armed");
+      const ex = $(".ex", sheet.el); ex.hidden = false;
+      ex.innerHTML = `<p class="ex-me">${esc(words)}</p><div class="ex-rec">${mk("done")}<span>Asked Onix in ${esc(where.stream)} › ${esc(where.topic)}</span><button class="lk" data-ask-open="${esc(`s:${where.stream_id}:${where.topic.toLowerCase()}`)}">Open</button></div>`; host(ex);
+      if (ex.scrollIntoView) ex.scrollIntoView({block: "nearest"});
+    }
+
+    /* ---------- a widget row's own menu: Edit, and Hide for me ---------- */
+    function openRowMenu(id, kbd) {
+      const x = navEntry(id); if (!x) return;
+      const e = float("menu", id, "pmenu", `<ul class="pm-l"><li><button class="mi" role="menuitem" data-wedit>${ic("edit")}<span class="t">Edit</span></button></li><li><button class="mi" role="menuitem" data-whide="${esc(id)}">${ic("eye")}<span class="t">Hide for me</span></button></li></ul>`, `${x.label}: more`, "menu");
+      host(e); if (kbd) $("[role=menuitem]", e).focus(); else ready();
     }
 
     /* ---------- the "+" menu (ROUND2.md, section E) ---------- */
@@ -132,8 +223,10 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* a new document for the widget open in a sheet: its rows change in place when they are the same rows; else its body is
        drawn again. The sheet's foot stays level with its row's foot. */
     function updateSheet() {
-      if (sheet.kind === "menu") { updateMenu(); return; }
-      const x = navEntry(sheet.id); if (!x) { closeSheet(); return; } const body = $(".wb", sheet.el), doc = x.s && x.s.document;
+      if (sheet.kind === "menu") { if (sheet.id === "plus") updateMenu(); return; }
+      const x = navEntry(sheet.id); if (!x) { closeSheet(); return; }
+      if (sheet.mode === "edit") { updateEdit(x); return; }
+      const body = $(".wb", sheet.el), doc = x.s && x.s.document;
       if (doc && patchDoc(body, doc)) { const note = $(":scope > .wnote", body), want = staleNote(x.s, x.w); if ((note ? note.outerHTML : "") !== want) { if (note) note.remove(); if (want) body.insertAdjacentHTML("afterbegin", want); } return; }
       body.innerHTML = sheetBodyHTML(x); if (doc) mountBlocks(body, doc);
     }
@@ -265,6 +358,17 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* a sheet's Open goes to the plugin's page */
     press(document.body, ".wsheet [data-wopen]", () => { const id = sheet && sheet.install_id; closeSheet(true); if (id) openPlace(placeFromKey(`plugin:${id}`)); });
     press(document.body, ".wd [data-wclose]", () => closeItem(false));
+    /* Edit, from the sheet or a row's menu; Done; a control; Ask; and Open, where I asked */
+    press(document.body, ".wsheet [data-wedit]", (b, e, ptr) => { const id = sheet && sheet.id; if (id) openEdit(id, !ptr); });
+    press(document.body, ".wsheet.ed [data-wdone]", () => closeEdit());
+    press(document.body, ".wsheet.ed .eo .switch", (c) => changePref(c));
+    document.addEventListener("change", (e) => { if (sheet && sheet.mode === "edit" && e.target.closest && e.target.closest(".wsheet.ed .eo") && e.target.matches("select, input")) changePref(e.target); });
+    press(document.body, ".wsheet.ed [data-ask-go]", (b) => askEdit(b));
+    /* the verb is the view's one accent once the field has words */
+    document.addEventListener("input", (e) => { if (!e.target.matches || !e.target.matches(".wsheet [data-ask]")) return; const go = $("[data-ask-go]", e.target.parentElement); if (go) go.classList.toggle("armed", e.target.value.trim() !== ""); });
+    press(document.body, ".wsheet [data-ask-open]", (b) => { closeSheet(true); openPlace(placeFromKey(b.dataset.askOpen)); });
+    /* Hide for me: the row leaves my nav, and the "+" holds it under Hidden by you; the keyboard is left on the "+" */
+    press(document.body, ".pmenu [data-whide]", (b, e, ptr) => { const [install_id, key] = b.dataset.whide.split("/"); closeSheet(true); P.setPreference(+install_id, key, {shown: false}, P.rowEl("plus")); const plus = P.rowEl("plus"); if (!ptr && plus) plus.focus({preventScroll: true}); });
     /* the menu's verbs: Show and Add put the widget in my nav, from where I am; All plugins opens Plugins */
     press(document.body, ".pmenu [data-wshow]", (b) => { const [install_id, key] = b.dataset.wshow.split("/"); P.setPreference(+install_id, key, {shown: true}, b); });
     press(document.body, ".pmenu [data-wall]", () => { closeSheet(true); openPlace(placeFromKey("plugins")); });
@@ -278,6 +382,8 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     document.addEventListener("keydown", (e) => {
       if (confirming) return;
       if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(":is(.wsheet, .wd) .wl > li[tabindex]")) { e.preventDefault(); e.target.click(); return; }
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.target.matches && e.target.matches(".wsheet [data-ask]")) { e.preventDefault(); e.stopPropagation(); const go = $("[data-ask-go]", sheet.el); if (go) go.click(); return; }
+      if (e.key === "Enter" && e.target.matches && e.target.matches(".wsheet.ed .eo input")) { e.preventDefault(); e.stopPropagation(); e.target.blur(); return; }
       if (e.key !== "Escape" || (document.activeElement && document.activeElement.closest && document.activeElement.closest(".pal, .menu, .pop, .pcard, #lightbox"))) return;
       if (sheet) { e.preventDefault(); e.stopPropagation(); closeSheet(false, true); return; }
       if (item && item.el.contains(document.activeElement)) { e.preventDefault(); e.stopPropagation(); closeItem(false); } }, true);
@@ -463,7 +569,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     if (pane()) press(pane(), "[data-install]", (b) => { const en = INDEX.entries.find((x) => x.id === b.dataset.install); if (en) install(en, b); });
 
     return {
-      openSheet, closeSheet, openMenu, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
+      openSheet, closeSheet, openMenu, openRowMenu, openEdit, openRow, closeItem, sparkPoints, sectionsHTML, patchColumn, items,
       /* a new document for a scope: what is open of it changes in place */
       update(scope) { if (sheet && (sheet.scope === scope || sheet.kind === "menu")) updateSheet(); if (item) updateItem(scope); },
       /* an install removed: what is open of it closes */

@@ -35,7 +35,7 @@ nav .row.wg.plus[aria-expanded="true"] { color: var(--ink-1); }
 .wsheet { --foot: calc(2 * var(--s-2) + (1 + var(--below, 0)) * var(--h-m)); position: fixed; z-index: 7; left: calc(var(--nav-w) + var(--s-2)); bottom: var(--foot); width: 344px; max-height: calc(100vh - var(--s-2) - var(--foot)); border-radius: var(--r-pop); padding: var(--s-2) var(--s-4) var(--s-3); display: flex; flex-direction: column; }
 .wsheet > .ch { height: var(--h-m); display: flex; align-items: center; gap: var(--s-2); font: var(--t-strong); flex: none; }
 .wsheet > .ch > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wsheet > .ch > .lk { margin-right: calc(-1 * var(--s-2)); }
+.wsheet > .ch > .lk:last-child { margin-right: calc(-1 * var(--s-2)); }
 .wsheet > .wb { min-height: 0; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
 .wsheet .sec { margin-top: var(--s-3); }
 .wsheet .sec + .sec { margin-top: var(--gap-group); }
@@ -45,6 +45,39 @@ nav .row.wg.plus[aria-expanded="true"] { color: var(--ink-1); }
 .wsheet .wacts, .wd .wacts { display: flex; flex-wrap: wrap; gap: var(--s-4); margin-top: var(--s-3); }
 .wsheet .wacts .lk:first-child, .wd .wacts .lk:first-child { margin-left: calc(-1 * var(--s-2)); }
 .wsheet .wnote, .wd .wnote { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-3); }
+
+/* ---------- Edit: what is mine as controls, the widget drawn with them under, Onix's field for the rest (ROUND2.md, D) ----------
+   The same sheet from the same row, so its foot stays level with that row's foot; 360 wide; its body scrolls inside when
+   the window is short. */
+.wsheet.ed { width: 360px; }
+.ed .eo > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-3); min-height: 36px; }
+.ed .eo .l { font: var(--t-text); color: var(--ink-1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed .eo .switch { justify-self: end; }
+.ed .eo .inp { height: var(--h-m); width: 160px; padding: 0 var(--s-2); border-radius: var(--r-ctl); background: var(--raised); box-shadow: 0 0 0 1px var(--edge); font: var(--t-text); color: var(--ink-1); border: 0; outline: none; text-align: right; }
+.ed .eo .inp:focus { box-shadow: 0 0 0 1px var(--edge-2); text-align: left; }
+.ed .eo .inp::placeholder { color: var(--ink-2); }
+/* a choice: the platform's own menu, drawn as the kit's picker (its words, then the down glyph), so the keyboard and a
+   screen reader get what they expect of a select */
+.wsheet .pk-w { position: relative; display: inline-flex; align-items: center; justify-self: end; margin-right: calc(-1 * var(--s-1)); }
+.wsheet .pk-w > .pick { appearance: none; border: 0; background: transparent; font: var(--t-text); color: var(--ink-1); height: var(--h-m); padding: 0 calc(var(--s-1) + 16px + var(--s-1)) 0 var(--s-3); border-radius: var(--r-ctl); text-align: right; max-width: 200px; text-overflow: ellipsis; }
+.wsheet .pk-w > .pick:hover { background-color: var(--fill-2); }
+.wsheet .pk-w > .ic { position: absolute; right: var(--s-1); color: var(--ink-2); pointer-events: none; }
+.ed .ew { margin-top: var(--s-1); }
+/* the exchange: my words as a bubble of mine, then the record with its one verb (Onix answers in the plugin's topic) */
+.wsheet .ex { display: flex; flex-direction: column; gap: var(--s-1); margin-top: var(--s-3); padding-top: var(--s-3); box-shadow: inset 0 1px 0 var(--line); }
+.wsheet .ex[hidden] { display: none; }
+.wsheet .ex-me { align-self: flex-end; max-width: 80%; font: var(--t-talk); color: var(--on-me); background: var(--bubble-me); border-radius: var(--r-bubble); padding: 6px var(--s-4); overflow-wrap: anywhere; }
+.wsheet .ex-rec { display: flex; align-items: center; gap: var(--s-2); min-height: var(--h-s); font: var(--t-caption); color: var(--ink-2); }
+.wsheet .ex-rec > .mk { color: var(--ink-2); flex: none; }
+.wsheet .ex-rec > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wsheet .ex-rec > .lk { margin-right: calc(-1 * var(--s-2)); }
+/* Onix's field in a sheet: raised by its edge, my words in Talk, its verb the view's one accent once there are words */
+.wsheet .of { display: flex; align-items: flex-end; gap: var(--s-2); margin-top: var(--s-3); padding: 6px; border-radius: var(--r-field); background: var(--raised); box-shadow: 0 0 0 1px var(--edge); flex: none; }
+.wsheet .of:focus-within { box-shadow: 0 0 0 1px var(--edge-2); }
+.wsheet .of-tx { flex: 1; min-width: 0; font: var(--t-talk); color: var(--ink-1); padding: 4px 0 4px var(--s-3); border: 0; background: transparent; outline: none; resize: none; field-sizing: content; min-height: var(--h-k); max-height: 120px; }
+.wsheet .of-tx::placeholder { color: var(--ink-2); }
+.wsheet .of .disc { flex: none; }
+.wsheet .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); padding-left: var(--s-3); }
 
 /* ---------- the plugin vocabulary's list: rows with a mark, a second line, a sparkline, one figure ---------- */
 :is(.wsheet, .wd) .wl { display: flex; flex-direction: column; }

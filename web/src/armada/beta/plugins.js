@@ -176,7 +176,7 @@ const setOpenWidget = (id) => { openWidget = id; for (const r of $$(".row.wg", g
    artifact's blocks are drawn by the artifact's own chunk (and a scene by the scene's), which arrive with it */
 const pluginsPage = () => ({installs, widgets, scopeOf, rowsOf, listsOf, markOf, rowOn, figureText, glyphOf, staleOf, restOf, navWidgets, linkHere,
   setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawWidgets, refreshPlace,
-  prefOf, setPreference, teamWidgets, seen,
+  prefOf, setPreference, teamWidgets, seen, inMyNav, inMyColumn,
   artifactView: () => loadedChunk("artifact"), sceneView: () => loadedChunk("scene"),
   api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf});
 /* the chunk's view, made once it has arrived (null before: a press then waits for it, and does nothing if another press,
@@ -254,9 +254,12 @@ function wirePlugins() {
   groupEl = document.createElement("div"); groupEl.className = "wgs"; groupEl.setAttribute("role", "group"); groupEl.setAttribute("aria-label", "Widgets"); nav.insertBefore(groupEl, $(":scope > .row.me", nav));
   groupSig = ""; drawWidgets(); watchStale();
   press(groupEl, ".row.wg:not(.plus)", (r, e, ptr) => showWidget(r.dataset.w, !ptr));
+  /* a widget row's own menu: a right press, or the menu key or Shift F10 on it */
+  groupEl.addEventListener("contextmenu", (e) => { const r = e.target.closest(".row.wg:not(.plus)"); if (!r) return; e.preventDefault(); withView((v) => v.openRowMenu(r.dataset.w, false)); });
   press(groupEl, ".row.wg.plus", (r, e, ptr) => { if (openWidget === "plus") { const v = view(); if (v) v.closeSheet(); return; } withView((v) => v.openMenu(!ptr)); });
   /* the rows are nav rows: Up and Down move between them, Home and End go to the ends; Return and Space press one */
   groupEl.addEventListener("keydown", (e) => { const rows = $$(".row.wg", groupEl), i = rows.indexOf(document.activeElement); if (i < 0) return;
+    if ((e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) && !rows[i].matches(".plus")) { e.preventDefault(); const id = rows[i].dataset.w; withView((v) => v.openRowMenu(id, true)); return; }
     const to = {ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: rows.length - 1}[e.key]; if (to === undefined || e.metaKey || e.ctrlKey || e.altKey) return;
     e.preventDefault(); const r = rows[Math.max(0, Math.min(rows.length - 1, to))]; M.focusKbd(r); });
 }

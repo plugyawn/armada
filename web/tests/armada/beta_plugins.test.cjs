@@ -1211,3 +1211,228 @@ run_test(
         );
     },
 );
+
+run_test(
+    "Edit: what is mine as controls, each mine in the frame of the press, the widget drawn with them",
+    async () => {
+        await pressOn(rowOf("GPUs"));
+        const open = sheet();
+        assert.deepEqual(
+            [...open.querySelectorAll(".ch > button")].map((b) => b.textContent),
+            ["Edit", "Open"],
+        );
+        // Edit turns the same sheet into its form, its foot where it was.
+        await pressOn(open.querySelector("[data-wedit]"));
+        assert.equal(sheet(), open);
+        assert.equal(open.style.getPropertyValue("--below"), "1");
+        const control = (name) => open.querySelector(`.eo [aria-label="${name}"]`);
+        assert.deepEqual(
+            [...open.querySelectorAll(".eo > div > .l")].map((l) => l.textContent),
+            [
+                "At rest",
+                "GPU",
+                "Started by",
+                "When this many are free",
+                "Name",
+                "In my nav",
+                "In my column",
+            ],
+        );
+        // Each choice is what the manifest declares, and the values the team's document holds.
+        const choices = (name) => [...control(name).options].map((o) => o.textContent);
+        assert.deepEqual(choices("At rest"), ["Free GPUs", "Jobs running"]);
+        assert.deepEqual(choices("GPU"), ["All", "H100 only", "A100 only", "RTX 4090 only"]);
+        assert.deepEqual(choices("Started by"), ["All", "iago only", "hamlet only"]);
+        assert.equal(choices("When this many are free").length, 65);
+        assert.equal(choices("When this many are free")[4], "4 or more");
+        const machines = () =>
+            [...open.querySelectorAll(".ew section.sec")][0].querySelectorAll(".wl > li");
+        assert.equal(machines().length, 4);
+
+        const choose = (name, value) => {
+            control(name).value = value;
+            control(name).dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+        };
+        // H100 only: the widget under the controls shows it at once, and it is sent.
+        choose("GPU", '"H100"');
+        assert.deepEqual(
+            [...machines()].map((li) => li.dataset.row),
+            ["nlscale-a", "nlscale-c"],
+        );
+        assert.deepEqual(requests.at(-1), {
+            method: "PATCH",
+            path: "/json/armada/widgets/7/gpus/preference",
+            body: {filters: '{"gpu":"H100"}'},
+        });
+        // The figure at rest, and a mark when 4 or more are free: my nav row.
+        choose("At rest", "jobs");
+        assert.equal(trail("GPUs").textContent, "2 jobs");
+        choose("When this many are free", "4");
+        assert.deepEqual(requests.at(-1).body, {alerts: '{"free_at_least":4}'});
+        assert.ok(rowOf("GPUs").querySelector(".wf .mk.needs"));
+        choose("When this many are free", "");
+        assert.deepEqual(requests.at(-1).body, {alerts: "{}"});
+        assert.equal(trail("GPUs").textContent, "2 jobs");
+        // My name for it: the row and the sheet say it.
+        control("Name").value = "Pods ";
+        control("Name").dispatchEvent(new dom.window.Event("change", {bubbles: true}));
+        assert.ok(rowOf("Pods"));
+        assert.equal(open.querySelector(".ch > span").textContent, "Pods");
+        assert.equal(open.querySelector("[data-ask]").placeholder, "Ask Onix to change Pods");
+        assert.deepEqual(requests.at(-1).body, {label: "Pods"});
+        // Out of my nav and back, by the switch; the sheet stays where it was.
+        await pressOn(control("In my nav"));
+        assert.equal(rowOf("Pods"), undefined);
+        assert.equal(control("In my nav").getAttribute("aria-checked"), "false");
+        assert.deepEqual(requests.at(-1).body, {shown: "false"});
+        assert.equal(sheet(), open);
+        await pressOn(control("In my nav"));
+        assert.ok(rowOf("Pods"));
+        // A change from another device: each control says what is set.
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "update",
+            preference: {
+                ...plugins.prefs.get("7/gpus"),
+                filters: {gpu: "A100"},
+            },
+        });
+        assert.equal(control("GPU").value, '"A100"');
+        assert.deepEqual(
+            [...machines()].map((li) => li.dataset.row),
+            ["nlscale-b"],
+        );
+
+        // Done: the widget again, as I now see it.
+        await pressOn(open.querySelector("[data-wdone]"));
+        assert.equal(sheet(), open);
+        assert.equal(open.querySelector(".eo"), null);
+        assert.deepEqual(
+            [...open.querySelectorAll('li[data-row^="nl"]')].map((li) => li.dataset.row),
+            ["nlscale-b"],
+        );
+        assert.equal(document.activeElement, open.querySelector("[data-wedit]"));
+        dom.press("Escape");
+        assert.equal(sheet(), null);
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 7,
+            widget: "gpus",
+        });
+        assert.ok(rowOf("GPUs"));
+    },
+);
+
+run_test(
+    "Ask Onix to change it: a message of mine that mentions Onix, in the plugin's topic of plugins",
+    async () => {
+        beta_state.state.agentMention = "@**Onix**";
+        await pressOn(rowOf("GPUs"));
+        await pressOn(sheet().querySelector("[data-wedit]"));
+        const field = sheet().querySelector("[data-ask]");
+        const ask = sheet().querySelector("[data-ask-go]");
+        assert.equal(field.getAttribute("aria-label"), "Ask Onix to change GPUs");
+        // The verb is the accent only once there are words.
+        assert.ok(!ask.classList.contains("armed"));
+        field.value = "add their temperatures";
+        field.dispatchEvent(new dom.window.Event("input", {bubbles: true}));
+        assert.ok(ask.classList.contains("armed"));
+
+        // With no plugins channel, it is asked where I am.
+        field.focus();
+        dom.press("Enter");
+        await settle();
+        assert.deepEqual(requests.at(-1), {
+            method: "POST",
+            path: "/json/messages",
+            body: {
+                type: "stream",
+                to: "10",
+                topic: "lr-sweep",
+                content:
+                    "@**Onix** About the GPUs widget (the GPU tracker plugin, `gpus`): add their temperatures",
+            },
+        });
+        assert.equal(field.value, "");
+        assert.ok(!ask.classList.contains("armed"));
+        assert.equal(sheet().querySelector(".ex-me").textContent, "add their temperatures");
+        assert.equal(
+            sheet().querySelector(".ex-rec > span").textContent,
+            "Asked Onix in nextlat-scaling › lr-sweep",
+        );
+
+        // The team's plugins repository: the plugin's own topic.
+        beta_state.streams.set(12, {stream_id: 12, name: "plugins"});
+        field.value = "only the H100s";
+        await pressOn(ask);
+        assert.deepEqual([requests.at(-1).body.to, requests.at(-1).body.topic], ["12", "gpus"]);
+        assert.equal(
+            sheet().querySelector(".ex-rec > span").textContent,
+            "Asked Onix in plugins › gpus",
+        );
+        // Nothing to say is nothing sent; a refusal is said, and my words stay.
+        const sent = requests.length;
+        await pressOn(ask);
+        assert.equal(requests.length, sent);
+        answers.set("POST /json/messages", {result: "error", msg: "Not allowed."});
+        field.value = "add a row";
+        await pressOn(ask);
+        assert.equal(said.at(-1), "Not allowed.");
+        assert.equal(field.value, "add a row");
+        answers.delete("POST /json/messages");
+        // Nowhere to ask: no plugins channel, and not in a topic.
+        beta_state.streams.delete(12);
+        beta_state.state.place = {key: "home", kind: "home"};
+        await pressOn(ask);
+        assert.equal(said.at(-1), "There is no plugins channel here to ask in yet.");
+        beta_state.state.place = place;
+        dom.press("Escape");
+        assert.equal(sheet(), null);
+    },
+);
+
+run_test("a widget row's own menu: Edit, and Hide for me", async () => {
+    // A right press on the row.
+    rowOf("GPUs").dispatchEvent(
+        new dom.window.MouseEvent("contextmenu", {bubbles: true, cancelable: true, button: 2}),
+    );
+    await settle();
+    assert.equal(sheet().getAttribute("role"), "menu");
+    assert.deepEqual(
+        [...sheet().querySelectorAll("[role=menuitem]")].map((b) => b.textContent),
+        ["Edit", "Hide for me"],
+    );
+    await pressOn(sheet().querySelector("[data-wedit]"));
+    assert.equal(sheet().getAttribute("role"), "dialog");
+    assert.ok(sheet().querySelector(".eo"));
+    dom.press("Escape");
+    assert.equal(document.activeElement, rowOf("GPUs"));
+
+    // From the keyboard: the menu key on the row, then Hide for me.
+    dom.press("ContextMenu");
+    await settle();
+    assert.equal(document.activeElement.textContent, "Edit");
+    dom.press("ArrowDown");
+    await pressByKeyboard(document.activeElement);
+    assert.equal(rowOf("GPUs"), undefined);
+    assert.equal(sheet(), null);
+    assert.deepEqual(requests.at(-1).body, {shown: "false"});
+    assert.equal(document.activeElement, plus());
+    // The "+" holds it, under Hidden by you.
+    await pressOn(plus());
+    assert.equal(sheet().querySelector(".pm-h").textContent, "Hidden by you");
+    dom.press("Escape");
+    rowOf("Training").focus();
+    dom.press("F10", {shiftKey: true});
+    await settle();
+    assert.equal(document.activeElement.textContent, "Edit");
+    dom.press("Escape");
+    plugins.onPreferenceEvent({
+        type: "armada_widget_preference",
+        op: "remove",
+        install_id: 7,
+        widget: "gpus",
+    });
+    assert.ok(rowOf("GPUs"));
+});

@@ -15,6 +15,9 @@ from tools.lib.test_script import add_provision_check_override_param, assert_pro
 
 exclude = [
     "stubs/",
+    # The agent's skills' template plugin, written for its own environment
+    # (tools/linter_lib/exclude.py).
+    "zerver/codex_skills/",
 ]
 
 parser = argparse.ArgumentParser(description="Run mypy on files tracked by git.")

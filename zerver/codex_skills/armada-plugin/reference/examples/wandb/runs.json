@@ -1,0 +1,16 @@
+{
+    "version": 1,
+    "title": "Training",
+    "data": {
+        "running": "3 running",
+        "news": null,
+        "runs": [
+            {"key": "lr-3e-4-b", "label": "lr-3e-4-b", "code": true, "state": "live", "figure": 2.31, "open": {"widget": "run"}},
+            {"key": "lr-1e-3-b", "label": "lr-1e-3-b", "code": true, "state": "live", "figure": 2.27, "open": {"widget": "run"}},
+            {"key": "lr-1e-4-a", "label": "lr-1e-4-a", "code": true, "state": "done", "figure": 2.29, "open": {"widget": "run"}}
+        ]
+    },
+    "rest": {"figure": "data.running", "news": "data.news", "sizer": "88 running"},
+    "blocks": [{"type": "list", "label": "Training", "caption": "loss", "slots": 3, "bind": "data.runs"}],
+    "actions": [{"label": "Ask Onix", "prompt": "How are the runs linked to this worktree doing?"}]
+}

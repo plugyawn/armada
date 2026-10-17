@@ -18,3 +18,5 @@ pnpm-lock.yaml
 # INTERIM BETA (/beta/): the prototype's kit and a spike, moved in whole and
 # deleted when the rebuild's conversation lands (web/src/armada/beta/README.md).
 /web/src/armada/beta
+# The agent's Codex skills (tools/linter_lib/exclude.py).
+/zerver/codex_skills

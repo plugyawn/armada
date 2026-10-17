@@ -2998,7 +2998,8 @@ class ArmadaSessionDefaultsTest(TestCase):
                 provisioned = armada_provision_codex_skills(codex_home)
 
             destination = Path(codex_home) / "skills" / "workspace-editing" / "SKILL.md"
-            self.assertEqual(provisioned, ["workspace-editing"])
+            # The repository's own skills come too.
+            self.assertEqual(provisioned, ["armada-plugin", "workspace-editing"])
             self.assertEqual(
                 destination.read_text(encoding="utf-8"),
                 "# workspace-editing\n\nEdit workspace files safely.\n",
@@ -3010,7 +3011,7 @@ class ArmadaSessionDefaultsTest(TestCase):
                         encoding="utf-8"
                     )
                 ),
-                {"version": 1, "skills": ["workspace-editing"]},
+                {"version": 1, "skills": ["armada-plugin", "workspace-editing"]},
             )
 
     def test_agent_text_results_preserve_final_prose_as_one_result(self) -> None:

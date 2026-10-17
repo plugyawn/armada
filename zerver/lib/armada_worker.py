@@ -67,7 +67,7 @@ from zerver.lib.armada_agent import (
 )
 from zerver.lib.armada_plugin_agents import ArmadaPluginServer, armada_plugin_servers
 from zerver.lib.armada_run_card import record_agent_run_event
-from zerver.lib.armada_skills import reconcile_armada_codex_skills
+from zerver.lib.armada_skills import ARMADA_BUILTIN_SKILLS_DIR, reconcile_armada_codex_skills
 from zerver.lib.context_managers import lockfile
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.message import bulk_access_stream_messages_query
@@ -934,11 +934,13 @@ def armada_codex_skills_source_dir() -> Path | None:
 
 
 def armada_provision_codex_skills(codex_home: str | Path) -> list[str]:
+    """The repository's skills, and the deployment's, which replace the
+    repository's of the same name."""
+    source_dirs = [ARMADA_BUILTIN_SKILLS_DIR]
     source_dir = armada_codex_skills_source_dir()
-    if source_dir is None or not source_dir.is_dir():
-        return []
-
-    return reconcile_armada_codex_skills(source_dir, codex_home)
+    if source_dir is not None and source_dir.is_dir():
+        source_dirs.append(source_dir)
+    return reconcile_armada_codex_skills(source_dirs, codex_home)
 
 
 def armada_normalize_path(path: str | Path) -> Path:

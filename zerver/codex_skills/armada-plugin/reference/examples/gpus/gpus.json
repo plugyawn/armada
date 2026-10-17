@@ -1,0 +1,160 @@
+{
+    "version": 1,
+    "title": "GPUs",
+    "data": {
+        "free": "4 free",
+        "news": null,
+        "machines": [
+            {
+                "key": "nlscale-a",
+                "label": "nlscale-a",
+                "code": true,
+                "glyph": "gpu",
+                "sub": "8 × H100 · Prime Intellect",
+                "spark": {
+                    "values": [
+                        12,
+                        96,
+                        98,
+                        99,
+                        99,
+                        100
+                    ],
+                    "domain": [
+                        0,
+                        100
+                    ]
+                },
+                "figure": "0 free",
+                "facets": {
+                    "gpu": "H100"
+                }
+            },
+            {
+                "key": "nlscale-b",
+                "label": "nlscale-b",
+                "code": true,
+                "glyph": "gpu",
+                "sub": "4 × A100 · Prime Intellect",
+                "spark": {
+                    "values": [
+                        80,
+                        81,
+                        79,
+                        52,
+                        50,
+                        50
+                    ],
+                    "domain": [
+                        0,
+                        100
+                    ]
+                },
+                "figure": "2 free",
+                "facets": {
+                    "gpu": "A100"
+                }
+            },
+            {
+                "key": "lab-4090",
+                "label": "lab-4090",
+                "code": true,
+                "glyph": "gpu",
+                "sub": "2 × RTX 4090 · over ssh",
+                "spark": {
+                    "values": [
+                        0,
+                        0,
+                        1,
+                        0,
+                        0,
+                        0
+                    ],
+                    "domain": [
+                        0,
+                        100
+                    ]
+                },
+                "figure": "2 free",
+                "facets": {
+                    "gpu": "RTX 4090"
+                }
+            },
+            {
+                "key": "nlscale-c",
+                "label": "nlscale-c",
+                "code": true,
+                "state": "waiting",
+                "sub": "8 × H100 · Prime Intellect",
+                "figure": "Starting",
+                "action": {
+                    "label": "End it",
+                    "tool": "pod_terminate",
+                    "arguments": {
+                        "name": "nlscale-c"
+                    },
+                    "confirm": "End nlscale-c? It has not started yet."
+                },
+                "facets": {
+                    "gpu": "H100"
+                }
+            }
+        ],
+        "jobs": [
+            {
+                "key": "lr-3e-4-b",
+                "label": "lr-3e-4-b",
+                "code": true,
+                "state": "live",
+                "sub": "nlscale-a, GPUs 0 to 3 · Iago",
+                "figure": "2h 14m",
+                "facets": {
+                    "gpu": "H100",
+                    "user": "iago"
+                }
+            },
+            {
+                "key": "data-mix-sweep",
+                "label": "data-mix-sweep",
+                "code": true,
+                "state": "waiting",
+                "sub": "waits for 8 × H100 · King Hamlet",
+                "figure": "12m",
+                "facets": {
+                    "gpu": "H100",
+                    "user": "hamlet"
+                }
+            }
+        ],
+        "free_count": 4,
+        "running": "2 jobs"
+    },
+    "rest": {
+        "figure": "data.free",
+        "news": "data.news",
+        "sizer": "88 free"
+    },
+    "blocks": [
+        {
+            "type": "list",
+            "label": "Machines",
+            "caption": "free",
+            "slots": 3,
+            "bind": "data.machines"
+        },
+        {
+            "type": "list",
+            "label": "Jobs",
+            "bind": "data.jobs"
+        }
+    ],
+    "actions": [
+        {
+            "label": "Tell me when 8 are free",
+            "tool": "notify_when_free",
+            "arguments": {
+                "count": 8
+            }
+        }
+    ]
+}

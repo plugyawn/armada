@@ -1,0 +1,24 @@
+{
+    "version": 1,
+    "title": "lr-3e-4-b",
+    "data": {
+        "step": 42100,
+        "lines": ["step 42100 loss 2.3112 lr 3.0e-04 grad_norm 1.12", "step 42200 loss 2.3098 lr 3.0e-04 grad_norm 1.09"],
+        "metrics": [
+            {"key": "loss", "label": "loss", "spark": {"values": [2.61, 2.52, 2.46, 2.40, 2.35, 2.31]}, "figure": 2.31},
+            {"key": "val_loss", "label": "validation loss", "spark": {"values": [2.66, 2.58, 2.50, 2.44, 2.40, 2.38]}, "figure": 2.38},
+            {"key": "lr", "label": "learning rate", "spark": {"values": [0.0003, 0.0003, 0.0003, 0.0003]}, "figure": "3e-4"},
+            {"key": "grad_norm", "label": "gradient norm", "spark": {"values": [1.4, 1.2, 9.8, 1.1, 1.12]}, "figure": 1.12}
+        ]
+    },
+    "blocks": [
+        {"type": "copy", "body": "On nlscale-a, GPUs 0 to 3, for 2h 14m."},
+        {"type": "meter", "label": "step", "value": 42100, "bind": "data.step", "total": 60000},
+        {"type": "list", "label": "Metrics", "bind": "data.metrics"},
+        {"type": "log", "label": "Last lines", "lines": [], "bind": "data.lines"}
+    ],
+    "actions": [
+        {"label": "Open in W&B", "url": "https://wandb.ai/runix/nextlat-scaling/runs/lr-3e-4-b"},
+        {"label": "Ask Onix", "prompt": "Look at lr-3e-4-b: is it healthy, and should it keep running?"}
+    ]
+}

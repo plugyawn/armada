@@ -3,6 +3,10 @@
 The manifest records ownership so removing or renaming an Armada skill deletes its
 provisioned copy without touching user- or plugin-managed skills in the same
 CODEX_HOME.
+
+The skills come from the repository (ARMADA_BUILTIN_SKILLS_DIR) and from the
+deployment's own directory (ARMADA_CODEX_SKILLS_DIR); a deployment's skill
+replaces the repository's of the same name.
 """
 
 from __future__ import annotations
@@ -12,9 +16,12 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 ARMADA_MANAGED_SKILLS_MANIFEST = ".armada-managed-skills.json"
+# The skills that ship with Armada, such as armada-plugin.
+ARMADA_BUILTIN_SKILLS_DIR = Path(__file__).resolve().parent.parent / "codex_skills"
 ARMADA_MANAGED_SKILL_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 
 
@@ -99,21 +106,26 @@ def _write_managed_skills_manifest(manifest_path: Path, skills: list[str]) -> No
         temporary.unlink(missing_ok=True)
 
 
-def reconcile_armada_codex_skills(source_dir: Path, codex_home: str | Path) -> list[str]:
-    if not source_dir.is_dir():
-        raise OSError("Skills source directory is unavailable.")
+def reconcile_armada_codex_skills(source_dirs: Sequence[Path], codex_home: str | Path) -> list[str]:
+    """Provision the skills of source_dirs into codex_home; a later
+    directory's skill replaces an earlier one's of the same name."""
+    for source_dir in source_dirs:
+        if not source_dir.is_dir():
+            raise OSError("Skills source directory is unavailable.")
 
     skills_home = Path(codex_home).expanduser() / "skills"
     skills_home.mkdir(parents=True, exist_ok=True)
     manifest_path = skills_home / ARMADA_MANAGED_SKILLS_MANIFEST
     previously_managed = _read_managed_skills_manifest(manifest_path)
-    source_skills: list[tuple[str, Path]] = []
-    for source_skill_dir in sorted(source_dir.iterdir(), key=lambda path: path.name):
-        if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
-            continue
-        if ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(source_skill_dir.name) is None:
-            raise OSError("Skills source contains an invalid skill directory name.")
-        source_skills.append((source_skill_dir.name, source_skill_dir))
+    sources: dict[str, Path] = {}
+    for source_dir in source_dirs:
+        for source_skill_dir in source_dir.iterdir():
+            if not source_skill_dir.is_dir() or not (source_skill_dir / "SKILL.md").is_file():
+                continue
+            if ARMADA_MANAGED_SKILL_NAME_PATTERN.fullmatch(source_skill_dir.name) is None:
+                raise OSError("Skills source contains an invalid skill directory name.")
+            sources[source_skill_dir.name] = source_skill_dir
+    source_skills = sorted(sources.items())
 
     provisioned_skills = [name for name, _source in source_skills]
     for retired_skill in sorted(previously_managed - set(provisioned_skills)):

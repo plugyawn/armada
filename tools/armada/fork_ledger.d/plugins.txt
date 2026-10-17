@@ -2,6 +2,7 @@
 kept api_docs/include/rest-endpoints.md  # the plugin endpoints in the API documentation's sidebar
 kept scripts/restart-server  # restarts the plugin host on a deploy, where puppet/armada runs one
 kept scripts/setup/generate_secrets.py  # armada_plugin_secrets_key, the Fernet key for plugins' secrets
+kept tools/run-mypy  # the agent's skills (zerver/codex_skills) are not type-checked: a template plugin for its own environment
 kept zerver/filters.py  # error reports mask the secrets form field
 kept zerver/models/realm_audit_logs.py  # PLUGIN_* event types: what each install did, its Recent list
 kept zproject/sentry.py  # Sentry events drop the secrets form field

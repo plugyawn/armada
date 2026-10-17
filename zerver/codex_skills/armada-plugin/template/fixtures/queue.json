@@ -1,0 +1,39 @@
+{
+    "version": 1,
+    "title": "Queue",
+    "data": {
+        "waiting": "2 waiting",
+        "running": "1 running",
+        "waiting_count": 2,
+        "news": null,
+        "jobs": [
+            {
+                "key": "job-1",
+                "label": "eval-small",
+                "code": true,
+                "state": "live",
+                "sub": "iago",
+                "facets": { "owner": "iago" }
+            },
+            {
+                "key": "job-2",
+                "label": "eval-large",
+                "code": true,
+                "state": "waiting",
+                "sub": "hamlet",
+                "facets": { "owner": "hamlet" }
+            },
+            {
+                "key": "job-3",
+                "label": "eval-long",
+                "code": true,
+                "state": "waiting",
+                "sub": "iago",
+                "facets": { "owner": "iago" }
+            }
+        ]
+    },
+    "rest": { "figure": "data.waiting", "news": "data.news", "sizer": "88 waiting" },
+    "blocks": [{ "type": "list", "label": "Queue", "bind": "data.jobs" }],
+    "actions": [{ "label": "Ask Onix", "prompt": "What is waiting in the queue, and why?" }]
+}

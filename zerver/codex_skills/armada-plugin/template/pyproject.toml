@@ -1,0 +1,14 @@
+[project]
+name = "armada-plugin-example"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.3,<3", "uvicorn>=0.30", "zulip>=0.9"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

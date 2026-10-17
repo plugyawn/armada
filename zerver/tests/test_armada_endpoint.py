@@ -91,7 +91,6 @@ from zerver.lib.armada_worker import (
     ArmadaDatabaseWorkerRunStore,
     ArmadaQueueWorkerDispatcher,
     armada_expected_project_cache_path,
-    armada_expected_topic_workdir,
     armada_git_branch_name_is_valid,
     armada_git_current_branch_name,
     armada_git_output,
@@ -2718,6 +2717,10 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                     "zerver.lib.armada_worker.Path.is_file",
                     side_effect=PermissionError,
                 ),
+                # That patch reaches every Path, and provisioning the
+                # skills reads the repository's own; it is not what this
+                # test is about.
+                patch("zerver.lib.armada_worker.armada_provision_codex_skills", return_value=[]),
                 patch(
                     "zerver.lib.armada_worker.subprocess.run",
                     return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),

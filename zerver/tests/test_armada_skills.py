@@ -19,7 +19,7 @@ class ArmadaSkillsTest(TestCase):
             ignored.mkdir()
             (ignored / "README.md").write_text("not a skill\n", encoding="utf-8")
 
-            self.assertEqual(reconcile_armada_codex_skills(source, codex_home), ["workspace"])
+            self.assertEqual(reconcile_armada_codex_skills([source], codex_home), ["workspace"])
 
             skills_home = Path(codex_home) / "skills"
             self.assertEqual(
@@ -44,7 +44,7 @@ class ArmadaSkillsTest(TestCase):
                 (skill / "SKILL.md").write_text(f"# {name}\n", encoding="utf-8")
 
             self.assertEqual(
-                reconcile_armada_codex_skills(source, codex_home),
+                reconcile_armada_codex_skills([source], codex_home),
                 ["alpha", "beta"],
             )
             third_party = skills_home / "third-party"
@@ -58,7 +58,7 @@ class ArmadaSkillsTest(TestCase):
             (gamma / "SKILL.md").write_text("# gamma\n", encoding="utf-8")
 
             self.assertEqual(
-                reconcile_armada_codex_skills(source, codex_home),
+                reconcile_armada_codex_skills([source], codex_home),
                 ["beta", "gamma"],
             )
 
@@ -86,7 +86,7 @@ class ArmadaSkillsTest(TestCase):
             (skills_home / ".armada-managed-skills.json").symlink_to(outside_manifest)
 
             with self.assertRaisesRegex(OSError, "must not be a symbolic link"):
-                reconcile_armada_codex_skills(source, codex_home)
+                reconcile_armada_codex_skills([source], codex_home)
 
             self.assertEqual(
                 outside_manifest.read_text(encoding="utf-8"),
@@ -106,7 +106,7 @@ class ArmadaSkillsTest(TestCase):
             (outside / "SKILL.md").write_text("# outside\n", encoding="utf-8")
             (skills_home / "workspace").symlink_to(outside, target_is_directory=True)
 
-            reconcile_armada_codex_skills(source, codex_home)
+            reconcile_armada_codex_skills([source], codex_home)
 
             self.assertFalse((skills_home / "workspace").is_symlink())
             self.assertEqual(
@@ -117,3 +117,44 @@ class ArmadaSkillsTest(TestCase):
                 (outside / "SKILL.md").read_text(encoding="utf-8"),
                 "# outside\n",
             )
+
+    def test_a_later_directorys_skill_replaces_an_earlier_ones(self) -> None:
+        with (
+            TemporaryDirectory() as builtin_root,
+            TemporaryDirectory() as deployment_root,
+            TemporaryDirectory() as codex_home,
+        ):
+            for root, text in ((builtin_root, "the repository's\n"), (deployment_root, "ours\n")):
+                skill = Path(root) / "armada-plugin"
+                skill.mkdir()
+                (skill / "SKILL.md").write_text(text, encoding="utf-8")
+            only_builtin = Path(builtin_root) / "workspace"
+            only_builtin.mkdir()
+            (only_builtin / "SKILL.md").write_text("# workspace\n", encoding="utf-8")
+
+            self.assertEqual(
+                reconcile_armada_codex_skills(
+                    [Path(builtin_root), Path(deployment_root)], codex_home
+                ),
+                ["armada-plugin", "workspace"],
+            )
+            self.assertEqual(
+                (Path(codex_home) / "skills" / "armada-plugin" / "SKILL.md").read_text(
+                    encoding="utf-8"
+                ),
+                "ours\n",
+            )
+
+    def test_a_missing_directory_or_a_bad_skill_name_is_refused(self) -> None:
+        with TemporaryDirectory() as source_root, TemporaryDirectory() as codex_home:
+            with self.assertRaisesRegex(OSError, "Skills source directory is unavailable."):
+                reconcile_armada_codex_skills(
+                    [Path(source_root), Path(source_root) / "missing"], codex_home
+                )
+            bad = Path(source_root) / ".hidden"
+            bad.mkdir()
+            (bad / "SKILL.md").write_text("# hidden\n", encoding="utf-8")
+            with self.assertRaisesRegex(
+                OSError, "Skills source contains an invalid skill directory name."
+            ):
+                reconcile_armada_codex_skills([Path(source_root)], codex_home)

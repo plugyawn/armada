@@ -12,7 +12,9 @@ from web/src/armada_artifact_contract_generated.ts.  A plugin's manifest and
 widget documents are checked from zerver/lib/armada_plugin_contract.py, and
 drawn from web/src/armada/api/plugin_contract_generated.ts.  Each carries its
 schemas as compact JSON literals, so the server and the web app can never
-disagree.
+disagree.  The agent's skill for making plugins
+(zerver/codex_skills/armada-plugin/reference/) holds the same schemas, and
+copies of the first two plugins' fixtures as its examples.
 
 A widget document is an artifact document with what the plugin contract adds
 (widget_schema below), and the glyphs and run states either contract may name
@@ -41,6 +43,15 @@ PYTHON = "zerver/lib/armada_artifact_contract.py"
 TYPESCRIPT = "web/src/armada_artifact_contract_generated.ts"
 PLUGIN_PYTHON = "zerver/lib/armada_plugin_contract.py"
 PLUGIN_TYPESCRIPT = "web/src/armada/api/plugin_contract_generated.ts"
+SKILL_REFERENCE = "zerver/codex_skills/armada-plugin/reference"
+PLUGIN_FIXTURES = "zerver/tests/fixtures/armada_plugins"
+SKILL_EXAMPLES = [
+    "wandb/armada-plugin.json",
+    "wandb/runs.json",
+    "wandb/run.json",
+    "gpus/armada-plugin.json",
+    "gpus/gpus.json",
+]
 HEADER = f"Generated from {SOURCE}. Do not edit."
 PLUGIN_HEADER = f"Generated from {PLUGIN_SOURCE} and {SOURCE}. Do not edit."
 SPRITE_NAMES = {
@@ -170,6 +181,20 @@ export const ARMADA_WIDGET_SCHEMA: Record<string, unknown> = JSON.parse(
 """
 
 
+def skill_reference(contract: dict[str, Any], plugin: dict[str, Any]) -> list[tuple[str, str]]:
+    """The skill's own copy of the contract, readable rather than compact,
+    and its examples."""
+    manifest, widget = plugin_schemas(contract, plugin)
+    files = [
+        (f"{SKILL_REFERENCE}/manifest.schema.json", json.dumps(manifest, indent=2) + "\n"),
+        (f"{SKILL_REFERENCE}/widget.schema.json", json.dumps(widget, indent=2) + "\n"),
+    ]
+    for example in SKILL_EXAMPLES:
+        with open(os.path.join(ROOT, PLUGIN_FIXTURES, example), encoding="utf-8") as f:
+            files.append((f"{SKILL_REFERENCE}/examples/{example}", f.read()))
+    return files
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--write", action="store_true", help="write every copy")
@@ -188,9 +213,11 @@ def main() -> int:
         (TYPESCRIPT, typescript_copy(contract)),
         (PLUGIN_PYTHON, plugin_python_copy(contract, plugin)),
         (PLUGIN_TYPESCRIPT, plugin_typescript_copy(contract, plugin)),
+        *skill_reference(contract, plugin),
     ):
         full = os.path.join(ROOT, path)
         if options.write:
+            os.makedirs(os.path.dirname(full), exist_ok=True)
             with open(full, "w", encoding="utf-8") as f:
                 f.write(content)
             continue
@@ -202,7 +229,7 @@ def main() -> int:
         if current != content:
             print(
                 f"{path} is not what tools/armada/artifact_contract.py writes."
-                f" Change {SOURCE}, {PLUGIN_SOURCE} or the sprite and run"
+                f" Change {SOURCE}, {PLUGIN_SOURCE}, the sprite or the plugin fixtures and run"
                 " tools/armada/artifact_contract.py --write;"
                 " the contracts' copies are never edited by hand."
             )

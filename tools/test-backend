@@ -47,6 +47,9 @@ source_files = [
 
 not_yet_fully_covered = [
     "*/migrations/*.py",
+    # The agent's skills' template plugin, which runs in its own
+    # environment with its own tests (zerver/codex_skills/).
+    "zerver/codex_skills/**/*.py",
     "*/management/commands/*.py",
     # Analytics fixtures library is used to generate test fixtures;
     # isn't properly accounted for in test coverage analysis since it

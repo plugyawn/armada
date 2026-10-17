@@ -1,0 +1,80 @@
+{
+    "id": "example",
+    "name": "Example",
+    "version": "0.1.0",
+    "description": "A queue of jobs: how many wait, how many run, and whose they are.",
+    "glyph": "queue",
+    "requires": {
+        "armada": ">=1"
+    },
+    "run": {
+        "setup": ["uv", "sync", "--frozen"],
+        "command": ["uv", "run", "python", "plugin.py"]
+    },
+    "settings": {
+        "type": "object",
+        "required": ["queue"],
+        "properties": {
+            "queue": {
+                "type": "string",
+                "title": "Queue",
+                "description": "The name of the queue to show."
+            }
+        }
+    },
+    "secrets": {
+        "api_key": {
+            "title": "API key",
+            "env": "EXAMPLE_API_KEY",
+            "required": true,
+            "help": "From the queue's own settings."
+        }
+    },
+    "provides": {
+        "widgets": [
+            {
+                "key": "queue",
+                "label": "Queue",
+                "in": ["nav"],
+                "cadence": 30,
+                "team_default": "shown",
+                "options": {
+                    "figures": [
+                        {
+                            "key": "waiting",
+                            "title": "Jobs waiting",
+                            "figure": "data.waiting",
+                            "sizer": "88 waiting"
+                        },
+                        {
+                            "key": "running",
+                            "title": "Jobs running",
+                            "figure": "data.running",
+                            "sizer": "88 running"
+                        }
+                    ],
+                    "facets": [
+                        {
+                            "key": "owner",
+                            "title": "Owner"
+                        }
+                    ],
+                    "alerts": [
+                        {
+                            "key": "backlog",
+                            "title": "Jobs waiting",
+                            "value": "data.waiting_count",
+                            "op": ">=",
+                            "min": 0,
+                            "max": 1000
+                        }
+                    ]
+                }
+            }
+        ],
+        "tools": {
+            "path": "/mcp",
+            "instructions": "Use for the example queue: what waits, what runs, and whose it is."
+        }
+    }
+}

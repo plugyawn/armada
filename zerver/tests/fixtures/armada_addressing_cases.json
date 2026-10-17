@@ -1,0 +1,821 @@
+{
+  "about": "Hand-written chat situations, labelled with whom the last message is for: the agent or the people. No real user data. {agent} stands for ARMADA_AGENT_NAME. A message is [sender, sender is a bot, text]; new_message is [sender, text]. Used by tools/armada/typesafe_addressing_eval and by zerver/tests/test_armada_typesafe.py. Each message is at most 240 characters, the router's own limit, so the evaluation sends what the server would. The last 14 cases were written after the request to TypeSafe was settled, and run once to check that the result holds on chats it was not tuned on.",
+  "cases": [
+    {
+      "id": "follow-up-show-them-here",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "flaky login test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "@**{agent}** why does test_login fail on CI but not locally?"],
+        ["{agent}", true, "CI runs with TZ=UTC and the fixture builds its dates in local time, so the session expiry lands a day early. Three other tests build dates the same way."]
+      ],
+      "new_message": ["Priya", "can you show them here?"]
+    },
+    {
+      "id": "pair-rerun-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "resnet baseline",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Kenji", false, "@**{agent}** train the resnet50 baseline on the new split, 10 epochs"],
+        ["{agent}", true, "Done. Final val accuracy 76.2% with lr 1e-3 and batch 256. The loss plateaus after epoch 6; the curve is in the thread."]
+      ],
+      "new_message": ["Kenji", "can you rerun it with lr 3e-4?"]
+    },
+    {
+      "id": "pair-rerun-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "resnet baseline",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The new split is ready: 48k train, 6k val, 6k test, stratified by class."],
+        ["Kenji", false, "thanks. I trained the baseline on it overnight with lr 1e-3, val accuracy 75.9%"]
+      ],
+      "new_message": ["Sofia", "can you rerun it with lr 3e-4?"]
+    },
+    {
+      "id": "pair-review-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "lint cleanup",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Maya", false, "@**{agent}** fix the lint errors in the settings module"],
+        ["{agent}", true, "Fixed all 23 lint errors and pushed to the branch. Anything else?"]
+      ],
+      "new_message": ["Maya", "can you take a look at PR #415 too?"]
+    },
+    {
+      "id": "pair-review-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "lint cleanup",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Fixed all 23 lint errors and pushed to the branch."],
+        ["Arjun", false, "I have a free hour after lunch if anyone needs a reviewer"]
+      ],
+      "new_message": ["Maya", "can you take a look at PR #415 too?"]
+    },
+    {
+      "id": "pair-what-about-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "disk alerts",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "@**{agent}** build-3 keeps paging about disk, can you clean it up?"],
+        ["{agent}", true, "The alert on build-3 came from docker images older than 30 days. I pruned them and freed 41 GB; usage is at 52% now."]
+      ],
+      "new_message": ["Lena", "what about build-4?"]
+    },
+    {
+      "id": "pair-what-about-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "infra",
+      "topic": "disk alerts",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Disk usage on the database hosts is under 60% everywhere."],
+        ["Ben", false, "build-3 was full of old docker images, I cleaned it up by hand this morning"]
+      ],
+      "new_message": ["Lena", "what about build-4?"]
+    },
+    {
+      "id": "pair-yes-please-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "orders migration",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** write the migration that splits the address column"],
+        ["{agent}", true, "The migration is ready and passes on a copy of the staging database. Want me to open a PR against main?"]
+      ],
+      "new_message": ["Ben", "yes please"]
+    },
+    {
+      "id": "pair-yes-please-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "orders migration",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The migration is ready and passes on a copy of the staging database."],
+        ["Arjun", false, "nice. I'm going downstairs, want me to grab you a coffee?"]
+      ],
+      "new_message": ["Ben", "yes please"]
+    },
+    {
+      "id": "pair-fix-them-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "django upgrade",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Arjun", false, "@**{agent}** bump django to 5.2 and run the tests"],
+        ["{agent}", true, "Bumped. 3 tests fail in test_auth because the default password hasher changed."]
+      ],
+      "new_message": ["Arjun", "fix them"]
+    },
+    {
+      "id": "pair-fix-them-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "docs",
+      "topic": "install guide",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The install guide builds without warnings now."],
+        ["Ben", false, "I read it through once more and found 3 typos in the troubleshooting section"]
+      ],
+      "new_message": ["Arjun", "fix them, you have the file open anyway"]
+    },
+    {
+      "id": "follow-up-correction",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "docs",
+      "topic": "readme refresh",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Maya", false, "@**{agent}** update the README with the new install steps"],
+        ["{agent}", true, "Updated the README with the new install steps and pushed to the branch."]
+      ],
+      "new_message": ["Maya", "that's not right, we dropped python 3.10 support and it still says 3.10+"]
+    },
+    {
+      "id": "follow-up-why",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "cache race",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Arjun", false, "@**{agent}** the session cache sometimes returns stale users, find out why"],
+        ["{agent}", true, "Fixed: two requests could refill the cache at once. The refill now takes the lock before it reads."]
+      ],
+      "new_message": ["Arjun", "why does that fix it though? the read was already atomic"]
+    },
+    {
+      "id": "request-name-without-mention",
+      "kind": "request",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "dataloader speed",
+      "agent_run_in_progress": false,
+      "messages": [],
+      "new_message": ["Kenji", "{agent}, can you profile the dataloader and tell me where the time goes?"]
+    },
+    {
+      "id": "follow-up-add-test",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "checkout tests",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Sofia", false, "@**{agent}** write tests for the discount code path in checkout"],
+        ["{agent}", true, "Added 6 tests for discount codes: valid, expired, wrong currency, stacked, case-insensitive and empty. All pass."]
+      ],
+      "new_message": ["Sofia", "add one for the empty-cart case too"]
+    },
+    {
+      "id": "steer-type-hints",
+      "kind": "steer",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "payment client refactor",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["Sofia", false, "@**{agent}** split the payment client into one module per provider"],
+        ["{agent}", true, "Working on it: 3 of 7 files moved so far."]
+      ],
+      "new_message": ["Sofia", "also add type hints while you're at it"]
+    },
+    {
+      "id": "steer-use-v2-config",
+      "kind": "steer",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "benchmark suite",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["Kenji", false, "@**{agent}** run the full benchmark suite on the new checkpoint"],
+        ["{agent}", true, "Starting the full benchmark suite now, about 20 minutes."]
+      ],
+      "new_message": ["Kenji", "wait, use the v2 config, not v1"]
+    },
+    {
+      "id": "steer-how-long",
+      "kind": "steer",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "migration dry run",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["Sofia", false, "@**{agent}** dry-run the user table migration on a copy of the prod snapshot"],
+        ["{agent}", true, "Restored the snapshot and started the migration on the copy."]
+      ],
+      "new_message": ["Sofia", "how long will this take?"]
+    },
+    {
+      "id": "follow-up-plot",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "warmup ablation",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Kenji", false, "@**{agent}** compare 500 and 2000 warmup steps on the small model"],
+        ["{agent}", true, "Both runs finished. 2000 warmup steps ends 0.04 lower in val loss; 500 is ahead until step 8k."]
+      ],
+      "new_message": ["Kenji", "make a plot of that, val loss against step for both runs"]
+    },
+    {
+      "id": "follow-up-screenshot",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "settings redesign",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Maya", false, "@**{agent}** deploy the new settings page to the preview server"],
+        ["{agent}", true, "Deployed. The new settings page is at /settings/beta on the preview server."]
+      ],
+      "new_message": ["Maya", "send me a screenshot of the notifications tab?"]
+    },
+    {
+      "id": "follow-up-thanks-and-more",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "empty states",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** add empty states to the projects page"],
+        ["{agent}", true, "Added empty states for no projects, no search results and no access."]
+      ],
+      "new_message": ["Ben", "thanks! now do the same for the admin page"]
+    },
+    {
+      "id": "follow-up-does-it-retry",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "webhook client",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "@**{agent}** where is the retry logic for outgoing webhooks?"],
+        ["{agent}", true, "It lives in client/retry.py: exponential backoff, up to 5 tries, on connection errors and 5xx answers."]
+      ],
+      "new_message": ["Priya", "does it retry on 429 too?"]
+    },
+    {
+      "id": "mixed-request-naming-a-person",
+      "kind": "mixed",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "tokenizer eval",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Kenji", false, "@**{agent}** evaluate the new tokenizer on the code subset"]
+      ],
+      "new_message": ["Kenji", "{agent}, once that's done write up the results so @**Arjun** can review them tomorrow"]
+    },
+    {
+      "id": "follow-up-option-pick",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "rate limit cache",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "@**{agent}** how should we cache the rate limit counters?"],
+        ["{agent}", true, "Two options: (a) cache per user, (b) cache per organization. (b) is simpler but lets one user's traffic count against everyone."]
+      ],
+      "new_message": ["Lena", "go with a"]
+    },
+    {
+      "id": "follow-up-and-push",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "nginx timeouts",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** raise the upstream timeout for the export endpoint to 5 minutes"],
+        ["{agent}", true, "Changed the timeout and committed it on the topic branch; nginx -t passes."]
+      ],
+      "new_message": ["Ben", "and push it"]
+    },
+    {
+      "id": "follow-up-also-mention",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "docs",
+      "topic": "release 3.2",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Maya", false, "@**{agent}** draft the changelog for 3.2"],
+        ["{agent}", true, "Drafted the changelog for 3.2 in docs/changelog.md: 14 entries under features, fixes and internal."]
+      ],
+      "new_message": ["Maya", "can you also mention the breaking change to the export API?"]
+    },
+    {
+      "id": "follow-up-still-failing",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "flaky websocket test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** test_live_updates is flaky again, fix it"],
+        ["{agent}", true, "Fixed: the test now waits for the websocket to connect before it sends."]
+      ],
+      "new_message": ["Ben", "still failing on my machine, same timeout error"]
+    },
+    {
+      "id": "mixed-either-of-you",
+      "kind": "mixed",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "flaky websocket test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "test_live_updates failed twice on main this morning"]
+      ],
+      "new_message": ["Ben", "@**Arjun** or {agent}, can one of you look at it?"]
+    },
+    {
+      "id": "person-did-you-see",
+      "kind": "to-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "flaky login test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "@**{agent}** why does test_login fail on CI but not locally?"],
+        ["{agent}", true, "CI runs with TZ=UTC and the fixture builds its dates in local time, so the session expiry lands a day early."]
+      ],
+      "new_message": ["Priya", "@**Arjun** did you see this?"]
+    },
+    {
+      "id": "chatter-lunch",
+      "kind": "chatter",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "random",
+      "agent_run_in_progress": false,
+      "messages": [],
+      "new_message": ["Lena", "anyone want lunch? thinking ramen"]
+    },
+    {
+      "id": "third-person-broke-the-build",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "ci",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Pushed the fix for the import cycle to main."],
+        ["Ben", false, "main is red now, the frontend build fails"]
+      ],
+      "new_message": ["Arjun", "lol {agent} broke the build again"]
+    },
+    {
+      "id": "third-person-benchmark-first",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "infra",
+      "topic": "job queue",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Switched the job queue to a priority queue; high-priority jobs no longer wait behind exports."]
+      ],
+      "new_message": ["Ben", "I think {agent}'s change is fine but we should benchmark it before we merge"]
+    },
+    {
+      "id": "third-person-has-anyone-asked",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "infra",
+      "topic": "worker memory",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "the export worker is at 6 GB again after a day"]
+      ],
+      "new_message": ["Priya", "has anyone tried asking {agent} about the memory leak?"]
+    },
+    {
+      "id": "third-person-praise",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "warmup ablation",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Both runs finished. 2000 warmup steps ends 0.04 lower in val loss; the plot is in the thread."]
+      ],
+      "new_message": ["Lena", "{agent} is scary fast at this"]
+    },
+    {
+      "id": "after-agent-ask-a-person",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "infra",
+      "topic": "api latency",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "@**{agent}** benchmark the search endpoint after the index change"],
+        ["{agent}", true, "Benchmark done: p50 12 ms and p99 48 ms, down from 31 ms and 140 ms."]
+      ],
+      "new_message": ["Priya", "nice! @**Ben** what do you think, good enough to ship?"]
+    },
+    {
+      "id": "after-agent-person-answers-person",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "infra",
+      "topic": "api latency",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Benchmark done: p50 12 ms and p99 48 ms, down from 31 ms and 140 ms."],
+        ["Priya", false, "Ben, does this match what you saw on staging?"]
+      ],
+      "new_message": ["Ben", "yeah, same numbers on staging"]
+    },
+    {
+      "id": "after-agent-thanks",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "orders migration",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** open the PR"],
+        ["{agent}", true, "Done, PR #88 is open against main."]
+      ],
+      "new_message": ["Ben", "thanks!"]
+    },
+    {
+      "id": "after-agent-nice-ty",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "docs",
+      "topic": "release 3.2",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Added the breaking change to the export API section of the changelog."]
+      ],
+      "new_message": ["Maya", "nice, ty"]
+    },
+    {
+      "id": "mixed-ask-person-about-agent-work",
+      "kind": "mixed",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "schema changes",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Squashed the migrations 0040 to 0052 into one."]
+      ],
+      "new_message": ["Lena", "@**Arjun** can you check what {agent} did to the migrations? looks off to me"]
+    },
+    {
+      "id": "person-on-call",
+      "kind": "to-person",
+      "label": "people",
+      "channel": "infra",
+      "topic": "on call",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The weekend deploy freeze starts Friday at 18:00."]
+      ],
+      "new_message": ["Sofia", "who's on call this weekend?"]
+    },
+    {
+      "id": "chatter-heading-out",
+      "kind": "chatter",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "settings redesign",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Deployed. The new settings page is at /settings/beta on the preview server."]
+      ],
+      "new_message": ["Maya", "I'm heading out, back tomorrow morning"]
+    },
+    {
+      "id": "chatter-release-plan",
+      "kind": "chatter",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "release 3.2",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Arjun", false, "the last two features landed this morning"]
+      ],
+      "new_message": ["Lena", "let's freeze the release branch on Thursday"]
+    },
+    {
+      "id": "person-gpu-quota",
+      "kind": "to-person",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "cluster",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The sweep is queued; it needs 8 GPUs and the cluster has 4 free."]
+      ],
+      "new_message": ["Sofia", "Kenji, did the GPU quota increase come through?"]
+    },
+    {
+      "id": "after-agent-person-disagrees",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "infra",
+      "topic": "python versions",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Arjun", false, "@**{agent}** should we drop python 3.9?"],
+        ["{agent}", true, "I'd drop it: 2% of installs report 3.9, and two dependencies have already dropped it."]
+      ],
+      "new_message": ["Arjun", "I'm not sure, Maya's team still deploys on 3.9. @**Maya** can you confirm?"]
+    },
+    {
+      "id": "during-run-chatter",
+      "kind": "during-run",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "test suite",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["Ben", false, "@**{agent}** run the full test suite on the branch"],
+        ["{agent}", true, "Running the full test suite, about 15 minutes."]
+      ],
+      "new_message": ["Ben", "coffee while we wait?"]
+    },
+    {
+      "id": "during-run-person-to-person",
+      "kind": "during-run",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "payment client refactor",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["{agent}", true, "Working on it: 5 of 7 files moved so far."]
+      ],
+      "new_message": ["Sofia", "@**Lena** are you joining the 4pm sync?"]
+    },
+    {
+      "id": "third-person-ask-it-later",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "eval fixtures",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Kenji", false, "the eval fixtures are stale since the tokenizer change"]
+      ],
+      "new_message": ["Lena", "Priya, ask {agent} to regenerate the fixtures when you get a chance"]
+    },
+    {
+      "id": "third-person-explain-to-newcomer",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "welcome",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Tomás", false, "hi all, first day here. who is {agent}?"]
+      ],
+      "new_message": ["Maya", "{agent} is the agent, you can mention it in any topic and it works on that topic's branch"]
+    },
+    {
+      "id": "person-thanks-person",
+      "kind": "to-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "auth refactor",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The auth refactor is split into 4 commits on the branch."],
+        ["Ben", false, "@**Priya** I left comments on your PR, mostly naming"]
+      ],
+      "new_message": ["Priya", "thanks, will fix them tonight"]
+    },
+    {
+      "id": "third-person-cost-question",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "infra",
+      "topic": "budget",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "finance wants the tooling costs for Q3 by Friday"]
+      ],
+      "new_message": ["Arjun", "do we know how much {agent}'s runs cost us last month?"]
+    },
+    {
+      "id": "after-agent-complaint",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "module rename",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Arjun", false, "@**{agent}** rename utils to helpers everywhere"],
+        ["{agent}", true, "Done: renamed the module and updated 14 imports."]
+      ],
+      "new_message": ["Lena", "ugh, this conflicts with my branch"]
+    },
+    {
+      "id": "follow-up-missing-header",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "docs",
+      "topic": "api examples",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "@**{agent}** add curl examples to the message endpoints"],
+        ["{agent}", true, "Added curl examples for the 6 message endpoints."]
+      ],
+      "new_message": ["Priya", "the delete one is missing the auth header"]
+    },
+    {
+      "id": "pair-staging-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "certificates",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "@**{agent}** rotate the TLS certificate on prod"],
+        ["{agent}", true, "Rotated the TLS certificate on prod; it is valid until March."]
+      ],
+      "new_message": ["Lena", "and the staging one?"]
+    },
+    {
+      "id": "pair-staging-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "infra",
+      "topic": "certificates",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The certificate check now runs every night."],
+        ["Ben", false, "I renewed the prod certificate by hand this morning"]
+      ],
+      "new_message": ["Lena", "and the staging one?"]
+    },
+    {
+      "id": "person-merging-fix",
+      "kind": "to-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "date picker",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The date picker tests pass on Safari and Chromium."]
+      ],
+      "new_message": ["Arjun", "@**Sofia** your fix for the date picker works, merging"]
+    },
+    {
+      "id": "third-person-commit-messages",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "conventions",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "the git log is getting hard to read"]
+      ],
+      "new_message": ["Maya", "{agent} keeps writing really long commit messages, should we write down a style for it?"]
+    },
+    {
+      "id": "steer-skip-admin",
+      "kind": "steer",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "error messages",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["Maya", false, "@**{agent}** rewrite the error messages to say what to do next"],
+        ["{agent}", true, "Rewriting the error messages: 40 of 120 done."]
+      ],
+      "new_message": ["Maya", "skip the admin ones, they're going away"]
+    },
+    {
+      "id": "during-run-borrow-gpus",
+      "kind": "during-run",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "lr sweep",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["{agent}", true, "The sweep is running: 4 of 12 configurations done."]
+      ],
+      "new_message": ["Arjun", "@**Kenji** can I borrow two GPUs while this runs?"]
+    },
+    {
+      "id": "request-dry-run-flag",
+      "kind": "request",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "deploy script",
+      "agent_run_in_progress": false,
+      "messages": [],
+      "new_message": ["Sofia", "{agent} what does the --dry-run flag in deploy.sh actually skip?"]
+    },
+    {
+      "id": "after-agent-weekly-update",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "infra",
+      "topic": "load test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Sofia", false, "@**{agent}** load test the upload endpoint"],
+        ["{agent}", true, "Load test done: the upload endpoint holds 2,000 requests per second before errors."]
+      ],
+      "new_message": ["Sofia", "great, I'll put this in the weekly update"]
+    },
+    {
+      "id": "follow-up-gzip",
+      "kind": "follow-up",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "csv export",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** the CSV export runs out of memory on big orgs"],
+        ["{agent}", true, "The CSV export now streams rows; memory stays under 200 MB on the largest org."]
+      ],
+      "new_message": ["Ben", "can it also gzip the output?"]
+    },
+    {
+      "id": "mixed-person-after-agent-done",
+      "kind": "mixed",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "lr sweep",
+      "agent_run_in_progress": true,
+      "messages": [
+        ["{agent}", true, "The sweep is running: 9 of 12 configurations done."]
+      ],
+      "new_message": ["Lena", "Kenji, when {agent} is done with the sweep can you pick the best checkpoint?"]
+    },
+    {
+      "id": "pair-try-again-after-agent",
+      "kind": "context-pair",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "staging deploy",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "@**{agent}** deploy the branch to staging"],
+        ["{agent}", true, "The deploy to staging failed: the health check timed out after 60 s."]
+      ],
+      "new_message": ["Lena", "try it again"]
+    },
+    {
+      "id": "pair-try-again-after-person",
+      "kind": "context-pair",
+      "label": "people",
+      "channel": "infra",
+      "topic": "staging deploy",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Staging is on the new branch and healthy."],
+        ["Lena", false, "my VPN dropped right in the middle of uploading the dump"]
+      ],
+      "new_message": ["Ben", "try it again"]
+    },
+    {
+      "id": "third-person-asked-yesterday",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "flaky login test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Priya", false, "I think the CI flake is a timezone thing"]
+      ],
+      "new_message": ["Arjun", "I asked {agent} yesterday and it said the same thing"]
+    }
+  ]
+}

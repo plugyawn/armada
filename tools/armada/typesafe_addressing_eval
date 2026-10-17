@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""Measure the TypeSafe addressing router on hand-labelled chats, live.
+
+    tools/armada/typesafe_addressing_eval [--variants a,b] [--out results.json]
+
+Each chat in zerver/tests/fixtures/armada_addressing_cases.json is sent to
+TypeSafe's API as the server would send it (zerver/lib/armada_typesafe.py),
+once per variant, one request at a time.  The report gives, per variant,
+latency, input tokens per decision and, at each threshold on the agent's
+probability, accuracy, the false positives (a run started for people
+talking to each other) and the false negatives (the agent left silent).
+A request unanswered within --timeout (the server's 3 seconds by default)
+is counted as the server counts it: the agent stays silent.
+
+It spends real tokens, about 700 per chat and variant, so it never runs in
+CI.  It needs only the standard library.  The API key is read from
+~/.config/armada/typesafe.token (--key-file) and is never printed.
+
+Variants:
+    production         what the server sends: the description of the agent
+                       in the question's instructions
+    no-context         without the description of the agent
+    context-in-state   the description in the state instead
+    agent-first        production, with the agent's option listed first
+"""
+
+import argparse
+import ast
+import copy
+import json
+import statistics
+import sys
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_DIR))
+
+from zerver.lib.armada_typesafe import (
+    ARMADA_TYPESAFE_QUESTION_ID,
+    armada_typesafe_agent_context,
+    armada_typesafe_agent_probability,
+    build_armada_typesafe_addressing_request,
+)
+
+CASES = ROOT_DIR / "zerver/tests/fixtures/armada_addressing_cases.json"
+URL = "https://api.typesafe.ai/v1/systemone"
+THRESHOLDS = (0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95)
+
+
+def agent_name() -> str:
+    """ARMADA_AGENT_NAME, read from its one definition without importing
+    zerver.lib.armada, which needs Django."""
+    tree = ast.parse((ROOT_DIR / "zerver/lib/armada.py").read_text())
+    for node in tree.body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "ARMADA_AGENT_NAME"
+            and node.value is not None
+        ):
+            return str(ast.literal_eval(node.value))
+    raise SystemExit("ARMADA_AGENT_NAME is not in zerver/lib/armada.py")
+
+
+def production_request(case: dict[str, Any], agent: str, model: str) -> dict[str, Any]:
+    def named(text: str) -> str:
+        return text.replace("{agent}", agent)
+
+    sender, text = case["new_message"]
+    return build_armada_typesafe_addressing_request(
+        agent_name=agent,
+        model=model,
+        channel=case["channel"],
+        topic=case["topic"],
+        agent_run_in_progress=case["agent_run_in_progress"],
+        recent_messages=[
+            {"sender": named(name), "sender_is_bot": is_bot, "content": named(content)}
+            for name, is_bot, content in case["messages"]
+        ],
+        new_message_sender=named(sender),
+        new_message=named(text),
+    )
+
+
+def no_context(request: dict[str, Any], agent: str) -> dict[str, Any]:
+    request = copy.deepcopy(request)
+    question = request["questions"][ARMADA_TYPESAFE_QUESTION_ID]
+    question["instructions"] = question["instructions"]["question"]
+    return request
+
+
+def context_in_state(request: dict[str, Any], agent: str) -> dict[str, Any]:
+    request = no_context(request, agent)
+    request["state"] = {"about": armada_typesafe_agent_context(agent), **request["state"]}
+    return request
+
+
+def agent_first(request: dict[str, Any], agent: str) -> dict[str, Any]:
+    request = copy.deepcopy(request)
+    question = request["questions"][ARMADA_TYPESAFE_QUESTION_ID]
+    question["criteria"] = dict(reversed(question["criteria"].items()))
+    return request
+
+
+VARIANTS: dict[str, Callable[[dict[str, Any], str], dict[str, Any]]] = {
+    "production": lambda request, agent: request,
+    "no-context": no_context,
+    "context-in-state": context_in_state,
+    "agent-first": agent_first,
+}
+
+
+def ask(request: dict[str, Any], key: str, timeout: float) -> tuple[dict[str, Any], float]:
+    """The answer, and the seconds it took.  A rate limit or an overload is
+    tried again after a pause, which is not counted."""
+    body = json.dumps(request).encode()
+    attempt = 0
+    while True:
+        http_request = urllib.request.Request(
+            URL,
+            data=body,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(http_request, timeout=timeout) as response:
+                answer = json.loads(response.read())
+                return answer, time.perf_counter() - started
+        except urllib.error.HTTPError as error:
+            if error.code not in (429, 529) or attempt == 3:
+                detail = error.read().decode(errors="replace")[:300]
+                raise SystemExit(f"TypeSafe answered HTTP {error.code}: {detail}") from error
+        time.sleep(2**attempt)
+        attempt += 1
+
+
+def scores(rows: list[dict[str, Any]], threshold: float) -> dict[str, Any]:
+    false_positives = [
+        row["id"]
+        for row in rows
+        if row["label"] == "people" and row["p_agent"] is not None and row["p_agent"] >= threshold
+    ]
+    false_negatives = [
+        row["id"]
+        for row in rows
+        if row["label"] == "agent" and (row["p_agent"] is None or row["p_agent"] < threshold)
+    ]
+    return {
+        "threshold": threshold,
+        "accuracy": 1 - (len(false_positives) + len(false_negatives)) / len(rows),
+        "false_positives": false_positives,
+        "false_negatives": false_negatives,
+    }
+
+
+def evaluate(
+    cases: list[dict[str, Any]], variant: str, key: str, model: str, timeout: float
+) -> dict[str, Any]:
+    agent = agent_name()
+    rows = []
+    for case in cases:
+        request = VARIANTS[variant](production_request(case, agent, model), agent)
+        row: dict[str, Any] = {"id": case["id"], "label": case["label"], "p_agent": None}
+        try:
+            answer, seconds = ask(request, key, timeout)
+        except (TimeoutError, urllib.error.URLError) as error:
+            row["unanswered"] = str(error)
+        else:
+            row["p_agent"] = armada_typesafe_agent_probability(answer)
+            row["seconds"] = seconds
+            row["input_tokens"] = answer["usage"]["input_tokens"]
+            row["model"] = answer["model"]
+        rows.append(row)
+    answered = [row for row in rows if row["p_agent"] is not None]
+    if not answered:
+        raise SystemExit(f"TypeSafe answered none of the {variant} requests")
+    latencies = sorted(row["seconds"] for row in answered)
+    summary = {
+        "models": sorted({row["model"] for row in answered}),
+        "unanswered": len(rows) - len(answered),
+        "input_tokens_mean": statistics.mean(row["input_tokens"] for row in answered),
+        "latency_p50": statistics.median(latencies),
+        "latency_p90": latencies[int(0.9 * (len(latencies) - 1))],
+        "latency_max": latencies[-1],
+        "by_threshold": [scores(rows, threshold) for threshold in THRESHOLDS],
+    }
+    return {"summary": summary, "rows": rows}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--key-file", type=Path, default=Path.home() / ".config/armada/typesafe.token"
+    )
+    parser.add_argument("--cases", type=Path, default=CASES, help="the labelled chats")
+    parser.add_argument("--model", default="jev-latest")
+    parser.add_argument("--timeout", type=float, default=3, help="seconds to wait for an answer")
+    parser.add_argument("--variants", default=",".join(VARIANTS))
+    parser.add_argument("--out", type=Path, help="write every answer and score here, as JSON")
+    args = parser.parse_args()
+
+    key = args.key_file.read_text().strip()
+    cases = json.loads(args.cases.read_text())["cases"]
+    results = {}
+    for variant in args.variants.split(","):
+        results[variant] = evaluate(cases, variant, key, args.model, args.timeout)
+        summary = results[variant]["summary"]
+        print(
+            f"{variant}: {', '.join(summary['models'])}, "
+            f"{summary['input_tokens_mean']:.0f} input tokens a decision, latency "
+            f"p50 {summary['latency_p50'] * 1000:.0f} ms, "
+            f"p90 {summary['latency_p90'] * 1000:.0f} ms, "
+            f"max {summary['latency_max'] * 1000:.0f} ms, "
+            f"{summary['unanswered']} unanswered within {args.timeout:g} s"
+        )
+        for score in summary["by_threshold"]:
+            print(
+                f"  >= {score['threshold']:.2f}: accuracy {score['accuracy']:.1%}, "
+                f"false positives {', '.join(score['false_positives']) or 'none'}, "
+                f"false negatives {', '.join(score['false_negatives']) or 'none'}"
+            )
+    if args.out is not None:
+        args.out.write_text(json.dumps(results, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

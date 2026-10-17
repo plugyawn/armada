@@ -197,6 +197,21 @@ messages consumers`, then restart the worker as above.
 Codex is signed out, so no agent run can start. A person signs in again
 (`deploy.md`, 6.3), and runs wait in the queue meanwhile.
 
+### addressing-router
+
+Three or more messages in the last 15 minutes could not be routed: the
+addressing router (`deploy.md`, "The addressing router") is on and its
+model is failing, so Onix answers only messages that mention it or say
+its name to it, and each topic it failed in got a note saying so. The reason is in
+`/var/log/zulip/events_armada_addressing.log`, after "Addressing router
+failed." in the traceback's last line: for TypeSafe, "TypeSafe answered
+HTTP 401" is a wrong or revoked key (`armada_typesafe_api_key` in
+`zulip-secrets.conf`; restart after changing it), 429 a rate limit, 529
+or "did not answer" TypeSafe overloaded or unreachable (also check that
+Smokescreen runs: `supervisorctl status smokescreen`). It recovers by
+itself once messages route again. To stop routing meanwhile, set
+`ARMADA_ADDRESSING_ROUTER_RUNTIME = "disabled"` and restart.
+
 ### certificate
 
 Certbot renews on its own; under 21 days means renewal is failing.

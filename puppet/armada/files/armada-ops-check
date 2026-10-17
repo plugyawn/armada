@@ -40,12 +40,18 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 STATE_FILE = "/var/lib/armada-ops/state.json"
 BACKUP_STAMPS = "/var/lib/armada-backup"
 CERTIFICATE = "/etc/ssl/certs/zulip.combined-chain.crt"
 CODEX = "/opt/codex/bin/codex"
+# The addressing router logs in its queue's program's log, or, on a small
+# machine, in the log of the one program that runs every queue.
+ADDRESSING_LOGS = ("/var/log/zulip/events_armada_addressing.log", "/var/log/zulip/events.log")
+ADDRESSING_WINDOW_MINUTES = 15
+ADDRESSING_FAILURES_TO_WARN = 3
+LOG_TAIL_BYTES = 4 * 1024 * 1024
 RUNBOOK_URL = "https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md"
 
 OK, WARN, CRITICAL = "ok", "warn", "critical"
@@ -281,11 +287,42 @@ def check_updates() -> Result:
     return Result(OK, "no security update waiting", "patching")
 
 
+def recent_log_lines(path: str, since: datetime) -> list[str]:
+    """The lines a Zulip log has written since `since` (in the server's
+    time, as the log writes it), read from the end of the file."""
+    try:
+        with open(path, "rb") as log:
+            log.seek(max(log.seek(0, os.SEEK_END) - LOG_TAIL_BYTES, 0))
+            text = log.read().decode(errors="replace")
+    except FileNotFoundError:
+        return []
+    stamp = since.strftime("%Y-%m-%d %H:%M:%S")
+    # A record's first line starts with its time; a traceback's do not.
+    return [line for line in text.splitlines() if line[:2] == "20" and line[:19] >= stamp]
+
+
+def check_addressing_router() -> Result:
+    # The log's times are the server's local time.
+    since = datetime.now(timezone.utc).astimezone() - timedelta(minutes=ADDRESSING_WINDOW_MINUTES)
+    lines = [line for path in ADDRESSING_LOGS for line in recent_log_lines(path, since)]
+    routed = sum("Ambient router decision:" in line for line in lines)
+    failed = sum("Addressing router failed." in line for line in lines)
+    window = f"in {ADDRESSING_WINDOW_MINUTES} minutes"
+    if failed >= ADDRESSING_FAILURES_TO_WARN:
+        return Result(
+            WARN,
+            f"{failed} of {routed} messages {window} could not be routed",
+            "addressing-router",
+        )
+    return Result(OK, f"{routed} messages routed {window}, {failed} failed", "addressing-router")
+
+
 CHECKS: dict[str, Callable[[], Result]] = {
     "processes": check_supervisor,
     "health": check_health,
     "queues": check_queues,
     "codex-login": check_codex_login,
+    "addressing-router": check_addressing_router,
     "certificate": check_certificate,
     "disk": check_disk,
     "database-backup": check_database_backup,

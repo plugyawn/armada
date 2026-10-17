@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import urllib.parse
+from datetime import datetime, timedelta, timezone
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from types import ModuleType
@@ -170,6 +171,55 @@ class OpsCheckTests(TestCase):
             ops_check.main()
         self.assertEqual([check for check, _, _ in self.posts], self.real_checks)
         self.assertLessEqual(set(self.runbooks), sections)
+
+    def test_the_addressing_router_warns_when_messages_cannot_be_routed(self) -> None:
+        now = datetime.now(timezone.utc).astimezone()
+
+        def logged(minutes_ago: float, level: str, message: str) -> str:
+            stamp = (now - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%d %H:%M:%S.000")
+            return f"{stamp} {level} [zr] {message}\n"
+
+        failure = logged(1, "WARN", "Addressing router failed.")
+        decision = logged(
+            1,
+            "INFO",
+            "Ambient router decision: message_id=7 stream='web-app' topic='lint' "
+            "addressee=uncertain requested_action=ignore effective_action=ignore",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            log = os.path.join(directory, "events_armada_addressing.log")
+            absent = os.path.join(directory, "events.log")
+            with open(log, "w") as f:
+                # Failures older than the window, and a traceback, do not count.
+                f.write(logged(20, "WARN", "Addressing router failed.") * 5)
+                f.write("Traceback (most recent call last):\n")
+                f.write((failure + decision) * 2 + decision)
+            with mock.patch.object(ops_check, "ADDRESSING_LOGS", (log, absent)):
+                self.assertEqual(
+                    ops_check.check_addressing_router(),
+                    ops_check.Result(
+                        ops_check.OK,
+                        "3 messages routed in 15 minutes, 2 failed",
+                        "addressing-router",
+                    ),
+                )
+                with open(log, "a") as f:
+                    f.write(failure + decision)
+                self.assertEqual(
+                    ops_check.check_addressing_router(),
+                    ops_check.Result(
+                        ops_check.WARN,
+                        "3 of 4 messages in 15 minutes could not be routed",
+                        "addressing-router",
+                    ),
+                )
+                # Only the end of a long log is read.
+                tail = decision + failure + decision
+                with mock.patch.object(ops_check, "LOG_TAIL_BYTES", len(tail)):
+                    self.assertEqual(
+                        ops_check.check_addressing_router().detail,
+                        "2 messages routed in 15 minutes, 1 failed",
+                    )
 
     def test_disk_thresholds(self) -> None:
         usage = mock.Mock(total=100, used=85)

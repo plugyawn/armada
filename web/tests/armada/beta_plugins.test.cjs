@@ -1499,3 +1499,151 @@ run_test(
         beta_state.streams.delete(12);
     },
 );
+
+// A paste, as the browser sends it: the words on the clipboard, and a
+// default a handler may prevent. Returns whether it went on.
+function paste(field, text) {
+    field.focus();
+    const event = new dom.window.Event("paste", {bubbles: true, cancelable: true});
+    Object.defineProperty(event, "clipboardData", {value: {getData: () => text}});
+    return field.dispatchEvent(event);
+}
+const KEY = "sk-proj-4fQ9xT2mZr8LkW1vB7nYc3Hd";
+const guard = () => find(".pguard");
+const guardVerbs = () => [...guard().querySelectorAll("button")].map((b) => b.textContent);
+
+run_test(
+    "the paste guard, in Onix's field: a key is held, and offered to the plugin's settings",
+    async () => {
+        await pressOn(rowOf("GPUs"));
+        await pressOn(sheet().querySelector("[data-wedit]"));
+        const field = sheet().querySelector("[data-ask]");
+        // Words that are not a key paste as they are.
+        assert.equal(paste(field, "only the H100s"), true);
+        assert.equal(guard(), null);
+        // A key does not: it is held, and the line says why.
+        assert.equal(paste(field, KEY), false);
+        assert.equal(field.value, "");
+        assert.match(guard().textContent, /That looks like a key\./);
+        assert.deepEqual(guardVerbs(), ["Open settings", "Paste anyway"]);
+        // Paste anyway puts it where the caret is.
+        field.value = "use  please";
+        field.setSelectionRange(4, 4);
+        paste(field, KEY);
+        await pressOn(guard().querySelector("[data-guard-go]"));
+        assert.equal(field.value, `use ${KEY} please`);
+        assert.equal(guard(), null);
+        assert.equal(document.activeElement, field);
+        // Words about to be sent with a key in them wait for Send anyway.
+        const sent = requests.length;
+        await pressOn(sheet().querySelector("[data-ask-go]"));
+        assert.equal(requests.length, sent);
+        assert.deepEqual(guardVerbs(), ["Open settings", "Send anyway"]);
+        await pressOn(guard().querySelector("[data-guard-go]"));
+        assert.equal(requests.length, sent + 1);
+        assert.match(requests.at(-1).body.content, /use sk-proj-/);
+        // Open settings names the plugin whose page it opens (the harness opens it:
+        // build/plugins/PL13-14.md); a paste that is not a key leaves the line as it is.
+        paste(field, KEY);
+        assert.equal(guard().querySelector("[data-guard-open]").dataset.guardOpen, "7");
+        paste(field, "words");
+        assert.ok(guard());
+        dom.press("Escape");
+
+        // Make a widget…: there is no plugin yet, so Onix asks for it in the new one's settings.
+        await pressOn(plus());
+        await pressOn(sheet().querySelector("[data-wmake]"));
+        paste(sheet().querySelector("[data-ask]"), KEY);
+        assert.match(guard().textContent, /the new plugin's settings/);
+        assert.deepEqual(guardVerbs(), ["Paste anyway"]);
+        // Closing the sheet takes the line with it.
+        dom.press("Escape");
+        assert.equal(guard(), null);
+    },
+);
+
+run_test(
+    "the paste guard, in a plain setting: a key is offered to the plugin's secret instead",
+    async () => {
+        const full = {
+            ...wandb(),
+            manifest: WANDB_MANIFEST,
+            settings: {entity: "runix", posts: "both"},
+            secrets: [{name: "api_key", title: "API key", required: true, set: false}],
+            detail: "",
+            installed_by: ME,
+            disabled_tools: [],
+            date_installed: seconds(),
+            date_removed: null,
+            sha: "9b1f0c4a",
+        };
+        answers.set("GET /json/armada/plugins", {result: "success", plugins: [full]});
+        answers.set("PATCH /json/armada/plugins/8", {result: "success", plugin: full});
+        const page = plugins.pluginPlaceFromKey("plugin:8");
+        beta_state.state.place = page;
+        plugins.openPlugins(page);
+        await settle();
+        const box = find("#plugins");
+        const entity = box.querySelector('input[data-set="entity"]');
+        // A W&B key is forty hex digits: in a setting, that is a key.
+        const wandbKey = "3c51a9e0b8f2d4c6a1e9f7b5d3c1a0e8f6d4b2a9";
+        assert.equal(paste(entity, "runix-ml"), true);
+        assert.equal(paste(entity, wandbKey), false);
+        assert.equal(entity.value, "runix");
+        assert.match(guard().textContent, /Settings are shown to everyone/);
+        assert.deepEqual(guardVerbs(), ["Put it in API key", "Paste anyway"]);
+        // Put it in API key writes the secret, and the setting keeps its words.
+        await pressOn(guard().querySelector("[data-guard-put]"));
+        await settle();
+        assert.deepEqual(JSON.parse(requests.at(-1).body.secrets), {api_key: wandbKey});
+        assert.equal(guard(), null);
+        assert.equal(entity.value, "runix");
+
+        // The page to install a plugin: the key goes into its secret's field.
+        const store = plugins.pluginPlaceFromKey("plugins");
+        beta_state.state.place = store;
+        plugins.openPlugins(store);
+        await settle();
+        plugins.pluginView().setIndex([
+            {
+                id: "wandb",
+                repository: "plugyawn/armada-wandb",
+                commit: "3c51a9e",
+                manifest: WANDB_MANIFEST,
+            },
+        ]);
+        await pressOn(box.querySelector("[data-index-open]"));
+        paste(box.querySelector('input[data-install-set="entity"]'), KEY);
+        await pressOn(guard().querySelector("[data-guard-put]"));
+        const secret = box.querySelector('input[data-install-secret="api_key"]');
+        assert.equal(secret.value, KEY);
+        assert.equal(document.activeElement, secret);
+        assert.equal(box.querySelector('input[data-install-set="entity"]').value, "");
+        // A plugin with no secrets: only Paste anyway, and the words say why.
+        const bare = {
+            ...WANDB_MANIFEST,
+            secrets: {},
+        };
+        plugins.pluginView().setIndex([
+            {
+                id: "wandb",
+                repository: "plugyawn/armada-wandb",
+                commit: "3c51a9e",
+                manifest: bare,
+            },
+        ]);
+        plugins.openPlugins(store);
+        await settle();
+        await pressOn(box.querySelector("[data-index-open]"));
+        paste(box.querySelector('input[data-install-set="entity"]'), KEY);
+        assert.equal(
+            guard().querySelector("p").textContent,
+            "That looks like a key, and settings are shown to everyone who opens this page.",
+        );
+        assert.deepEqual(guardVerbs(), ["Paste anyway"]);
+        for (const key of ["GET /json/armada/plugins", "PATCH /json/armada/plugins/8"]) {
+            answers.delete(key);
+        }
+        beta_state.state.place = place;
+    },
+);

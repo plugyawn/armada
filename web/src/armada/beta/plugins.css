@@ -78,6 +78,13 @@ nav .row.wg.plus[aria-expanded="true"] { color: var(--ink-1); }
 .wsheet .of-tx::placeholder { color: var(--ink-2); }
 .wsheet .of .disc { flex: none; }
 .wsheet .cap { font: var(--t-caption); color: var(--ink-2); margin-top: var(--s-1); padding-left: var(--s-3); }
+/* the paste guard: why a key is held, under the field it was meant for, and the verbs that put it where only the plugin
+   reads it, or go on */
+.pguard { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: var(--s-2); align-items: start; margin-top: var(--s-2); font: var(--t-caption); color: var(--ink-1); }
+.pguard > .mk { color: var(--attention); }
+.pguard .t { max-width: 560px; }
+.pguard .v { display: flex; flex-wrap: wrap; column-gap: var(--s-4); margin-top: var(--s-1); }
+#plugins .set .rows > .pguard { margin: 0 0 var(--s-3); }
 /* Make a widget: one sentence of what happens, the field, where it will show */
 .wsheet.mk-sheet { width: 400px; }
 .mk-sheet > .ch + .cap { padding-left: 0; max-width: 340px; }

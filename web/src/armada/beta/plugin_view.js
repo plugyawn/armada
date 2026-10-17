@@ -8,6 +8,8 @@
    - Edit, from the sheet or a row's own menu (with Hide for me): my options as controls, the widget drawn with them,
      and Onix's field, which asks Onix in the plugin's topic of the plugins channel until PL12 gives it its tools;
    - Make a widget…, from the "+" menu: Onix's field again, its request in the plugins channel's topic for new widgets;
+   - the paste guard (paste_guard.js): a key pasted into Onix's field or a plugin's plain setting is held, and offered
+     to the plugin's secrets;
    - the rows of a list a plugin links to a place, in the slots plugins.js keeps for it in the column, and the
      commands Jump to lists for plugins;
    - an item opened from a row, which borrows the column as an artifact does and gives it back on Close (below 1408, where
@@ -17,6 +19,8 @@
      and Remove.
    The other blocks of a document (copy, metric, meter, series, log, key_value, scene) are drawn by the artifact's chunk,
    which arrives with this one. */
+
+import {findKey} from "./paste_guard.js";
 
 /* What it uses of the page is handed in when it arrives (chunks.js); plugins.js hands in the store and its seams. */
 export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf, ready, isObj, text}) {
@@ -184,8 +188,9 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       try { await api("POST", "messages", {type: "stream", to: String(where.stream_id), topic: where.topic, content}); return where; }
       catch (e) { M.say(from, e.message, 2400); return null; }
     }
-    async function askEdit(b) {
+    async function askEdit(b, anyway = false) {
       const f = $("[data-ask]", sheet.el), words = f.value.trim(), x = navEntry(sheet.id); if (!words || !x) { f.focus(); return; }
+      if (!anyway && findKey(words)) { guardField(f, null, () => askEdit(b, true)); return; } dropGuard();
       const where = await ask(words, x.p.plugin, `${state.agentMention} About the ${x.label} widget (the ${x.p.name} plugin, \`${x.p.plugin}\`): ${words}`, b);
       if (!where || !sheet || sheet.mode !== "edit") return; f.value = ""; b.classList.remove("armed");
       const ex = $(".ex", sheet.el); ex.hidden = false;
@@ -226,18 +231,54 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
         <div class="mk-row"><span>Shows in</span>${pickHTML("data-make-in", [["shown", "everyone's nav"], ["offered", "offered in +"]], "shown", "Shows in")}</div>`, "Make a widget");
       host(e); if (kbd) $("[data-ask]", e).focus(); else ready();
     }
-    async function make(b) {
+    async function make(b, anyway = false) {
       const f = $("[data-ask]", sheet.el), words = f.value.trim(); if (!words) { f.focus(); return; }
+      if (!anyway && findKey(words)) { guardField(f, null, () => make(b, true)); return; } dropGuard();
       const shown = $("[data-make-in]", sheet.el).value === "shown", me = state.meName;
       const where = await ask(words, NEW_WIDGETS, `${state.agentMention} Make a widget, for ${me}, from the + menu. ${shown ? "It shows in everyone's nav." : "It is offered in +, not shown."} ${words}`, b);
       if (!where || !sheet || sheet.kind !== "make") return; closeSheet(false);
       const plus = P.rowEl("plus"); if (plus) M.say(plus, `Asked Onix in ${where.stream} › ${where.topic}`, 2400);
     }
 
+    /* ---------- the paste guard (ROUND2.md, decision 4): a key is put in a plugin's settings, never in a message ----------
+       Something shaped like a key (paste_guard.js), pasted into Onix's field or about to be sent from it, is held, and a
+       line under the field says why and offers the plugin's settings, where only its process reads a secret; Paste anyway
+       (or Send anyway) goes on. A key pasted into a plain setting, which everyone who opens the page reads, is offered to
+       the plugin's secrets instead. Until PL12, Onix cannot yet ask for a secret itself (armada_plugin_request_settings). */
+    let held = null;   /* {guard, go}: the line drawn, and what Paste anyway or Send anyway does */
+    function dropGuard() { if (held) { held.guard.remove(); held = null; } }
+    function showGuard(after, words, verbs, go) {
+      dropGuard(); const g = el("div", "pguard", `${mk("needs")}<div><p class="t">${words}</p><div class="v">${verbs}</div></div>`); g.setAttribute("role", "alert");
+      after.insertAdjacentElement("afterend", g); host(g); held = {guard: g, go}; return g;
+    }
+    /* what was pasted, put where the caret is, as the paste would have */
+    const insert = (field, text) => { field.focus(); field.setRangeText(text, field.selectionStart, field.selectionEnd, "end"); field.dispatchEvent(new Event("input", {bubbles: true})); };
+    /* Onix's field in a sheet: held what was pasted (text), or the words about to be sent (null) */
+    function guardField(field, text, send) {
+      const install = sheet && sheet.kind === "widget" ? sheet.install_id : null, verb = text === null ? "Send anyway" : "Paste anyway";
+      const words = install ? "That looks like a key. In a message it stays in everyone's history; the plugin's settings keep it where only the plugin reads it." : "That looks like a key. Onix asks for one in the new plugin's settings, where only the plugin reads it, never in a message.";
+      showGuard(field.closest(".of"), words, `${install ? `<button class="lk" data-guard-open="${install}">Open settings</button>` : ""}<button class="lk" data-guard-go>${verb}</button>`, text === null ? send : () => insert(field, text));
+    }
+    /* a plain setting on a plugin's page, or on the page to install one: offered to the plugin's secrets */
+    function guardSetting(field, text) {
+      const x = pageInstall(), secrets = x ? (x.secrets || []).map((sec) => ({name: sec.name, title: sec.title, put: (v) => write(x, {secrets: JSON.stringify({[sec.name]: v})}, field)}))
+        : $$("[data-install-secret]", pane()).map((f) => ({name: f.dataset.installSecret, title: f.getAttribute("aria-label"), put: (v) => { f.value = v; f.focus(); }}));
+      const g = showGuard(field.closest(".r"), secrets.length ? "That looks like a key. Settings are shown to everyone who opens this page; a secret is written once, and only the plugin reads it." : "That looks like a key, and settings are shown to everyone who opens this page.",
+        secrets.slice(0, 3).map((sec, i) => `<button class="lk" data-guard-put="${i}">Put it in ${esc(sec.title)}</button>`).join("") + '<button class="lk" data-guard-go>Paste anyway</button>', () => insert(field, text));
+      held.put = (i) => { secrets[i].put(text); dropGuard(); }; return g;
+    }
+    document.addEventListener("paste", (e) => {
+      const t = e.target, text = e.clipboardData ? e.clipboardData.getData("text/plain") : ""; if (!t.matches || !text) return;
+      if (t.matches(".wsheet [data-ask]") && findKey(text)) { e.preventDefault(); guardField(t, text); return; }
+      if (t.matches("#plugins :is(input[type=text], textarea):is([data-set], [data-install-set])") && findKey(text, {hex: true})) { e.preventDefault(); guardSetting(t, text); } }, true);
+    press(document.body, ".pguard [data-guard-go]", () => { const go = held && held.go; dropGuard(); if (go) go(); });
+    press(document.body, ".pguard [data-guard-put]", (b) => { if (held && held.put) held.put(+b.dataset.guardPut); });
+    press(document.body, ".pguard [data-guard-open]", (b) => { dropGuard(); closeSheet(true); openPlace(placeFromKey(`plugin:${b.dataset.guardOpen}`)); });
+
     /* a press anywhere but the sheet and the widgets' rows closes it, and the press goes on */
     const outside = (e) => { if (!sheet || (e.target.closest && e.target.closest(".wsheet, nav .row.wg, .dlg"))) return; closeSheet(true); };
     function closeSheet(quiet, back) {
-      if (!sheet) return; const {el: e, id} = sheet; sheet = null; P.setOpenWidget(null); removeEventListener("pointerdown", outside, true); e.inert = true;
+      if (!sheet) return; const {el: e, id} = sheet; sheet = null; P.setOpenWidget(null); if (held && e.contains(held.guard)) held = null; removeEventListener("pointerdown", outside, true); e.inert = true;
       if (quiet) e.remove(); else M.leave(e, () => e.remove());
       if (back) { const r = P.rowEl(id); if (r) r.focus({preventScroll: true}); }
     }

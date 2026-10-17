@@ -37,6 +37,7 @@ from zerver.lib.typed_endpoint import (
     typed_endpoint,
     typed_endpoint_without_parameters,
 )
+from zerver.lib.types import UserGroupMembersDict
 from zerver.lib.user_groups import (
     get_group_setting_value_for_register_api,
     get_members_and_subgroups_of_groups,
@@ -111,6 +112,20 @@ def edit_and_delete_rules(realm: Realm) -> dict[str, object]:
     }
 
 
+def add_subscribers_rule(realm: Realm) -> int | UserGroupMembersDict:
+    """Who may add people to any channel they can see: the realm's
+    can_add_subscribers_group, written as register's realm bundle writes
+    it. With a channel's own groups for it (in its subscription) and an
+    administrator's right, it tells the page whom to offer Add; the
+    server decides either way, and the realm event keeps it current."""
+    group_id = realm.can_add_subscribers_group_id
+    if NamedUserGroup.objects.filter(id=group_id).exists():
+        return group_id
+    return get_group_setting_value_for_register_api(
+        group_id, get_members_and_subgroups_of_groups([group_id])
+    )
+
+
 def link_preview_settings(realm: Realm) -> dict[str, bool]:
     """Which links and pictures the server previews, as register's realm
     bundle writes it: my echo keeps a place for a link's card by the
@@ -137,9 +152,9 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
     the partner pack, so that its species.json can be kept for good under
     each version; and the little it would otherwise register for whole
     bundles to learn: the agent's user ids (from realm_bot), the rules
-    for editing and deleting, which links the server previews, and how
-    often to report presence and when a person counts as gone (from
-    realm)."""
+    for editing and deleting, who may add people to channels, which
+    links the server previews, and how often to report presence and when
+    a person counts as gone (from realm)."""
     pack = load_pack()
     return render(
         request,
@@ -156,6 +171,7 @@ def armada_beta_page(request: HttpRequest, user_profile: UserProfile) -> HttpRes
                 armada_bot_user_ids_for_realm(user_profile.realm)
             ).decode(),
             "edit_and_delete": orjson.dumps(edit_and_delete_rules(user_profile.realm)).decode(),
+            "add_subscribers": orjson.dumps(add_subscribers_rule(user_profile.realm)).decode(),
             "link_previews": orjson.dumps(link_preview_settings(user_profile.realm)).decode(),
             "presence_ping_interval_seconds": settings.PRESENCE_PING_INTERVAL_SECS,
             "presence_offline_threshold_seconds": settings.OFFLINE_THRESHOLD_SECS,

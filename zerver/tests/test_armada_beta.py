@@ -375,6 +375,46 @@ class ArmadaBetaTest(ZulipTestCase):
             int(data["presence-offline"]), state["server_presence_offline_threshold_seconds"]
         )
 
+    def test_the_page_says_who_may_add_people_to_channels(self) -> None:
+        # The realm's can_add_subscribers_group, as register writes it:
+        # with a channel's own groups and an administrator's right, the
+        # page offers Add only to whom the server would allow it.
+        hamlet = self.example_user("hamlet")
+        realm = hamlet.realm
+        self.login_user(hamlet)
+
+        def rule() -> object:
+            return orjson.loads(
+                self.beta_data(self.client_get("/beta/").content.decode())["add-subscribers"]
+            )
+
+        def registered() -> object:
+            state = fetch_initial_state_data(hamlet, realm=realm, event_types=["realm"])
+            return state["realm_can_add_subscribers_group"]
+
+        self.assertIsInstance(rule(), int)
+        self.assertEqual(rule(), registered())
+
+        moderators = NamedUserGroup.objects.get(
+            name=SystemGroups.MODERATORS, realm_for_sharding=realm, is_system_group=True
+        )
+        do_change_realm_permission_group_setting(
+            realm,
+            "can_add_subscribers_group",
+            self.create_or_update_anonymous_group_for_setting(
+                [self.example_user("cordelia")], [moderators]
+            ),
+            acting_user=None,
+        )
+        self.assertEqual(
+            rule(),
+            {
+                "direct_members": [self.example_user("cordelia").id],
+                "direct_subgroups": [moderators.id],
+            },
+        )
+        self.assertEqual(rule(), registered())
+
     def test_read_receipts_off_is_written_into_the_page(self) -> None:
         hamlet = self.example_user("hamlet")
         hamlet.realm.enable_read_receipts = False

@@ -99,14 +99,19 @@ function wordsOf(m) { tplQ.innerHTML = m.content || ""; const kids = [...tplQ.co
   return [...tplQ.content.children].map((x) => x.textContent).join("\n") || tplQ.content.textContent; }
 function linkOf(m) { const p = state.place; return p.kind === "topic" ? `${location.origin}/#narrow/channel/${p.stream_id}/topic/${encodeURIComponent(p.topic)}/near/${m.id}` : `${location.origin}/#narrow/near/${m.id}`; }
 function startReply(m) { if (!m || typeof m.id !== "number") return; replyTo = {id: m.id, uid: m.sender_id, name: nameOf(m.sender_id), line: quoteLine(wordsOf(m)), link: linkOf(m), key: state.place.key}; state.threadTx = null; drawReply(); ready(); }
+/* a new thread (a topic's card, channel_view.js): what I send next here starts one, which opens under it. It stands in the
+   reply's strip and goes as a reply does: Esc, another place, or the send that uses it. */
+function startThread() { replyTo = {thread: true, key: state.place.key}; state.threadTx = null; drawReply(); ready(); }
+const threadNext = () => !!replyTo && !!replyTo.thread;
 function clearReply() { if (!replyTo) return; replyTo = null; drawReply(); }
 /* a reply belongs to its place: another place's field does not carry it */
 const syncReply = () => { if (replyTo && (!state.place || state.place.key !== replyTo.key)) clearReply(); };
 function drawReply() { let box = $(":scope .txw > .rq", cz); cz.classList.toggle("replying", !!replyTo);
   if (!replyTo) { if (box) box.remove(); return; } if (!box) { box = el("span", "rq"); $(".txw", cz).prepend(box); }
-  box.innerHTML = `${ic("answer")}<span class="rqn">${esc(replyTo.name)}</span><span class="q">${esc(replyTo.line)}</span><button class="x" data-unreply aria-label="Cancel the reply" data-tip="Cancel the reply" data-key="Esc">${ic("x")}</button>`; host(box); }
+  const t = replyTo.thread, x = t ? "Cancel the new thread" : "Cancel the reply";
+  box.innerHTML = `${ic(t ? "thread" : "answer")}<span class="rqn">${t ? "New thread" : esc(replyTo.name)}</span><span class="q">${t ? "What you send starts it" : esc(replyTo.line)}</span><button class="x" data-unreply aria-label="${x}" data-tip="${x}" data-key="Esc">${ic("x")}</button>`; host(box); }
 /* the quote to send before my words, once: the reply is used up */
-function takeReply() { if (!replyTo) return ""; const q = quoteWire(replyTo); clearReply(); return q; }
+function takeReply() { if (!replyTo) return ""; const q = replyTo.thread ? "" : quoteWire(replyTo); clearReply(); return q; }
 /* editing a reply: its quote stands in the strip while its words are in the field, and goes back before them on save; the
    reply the draft had before comes back when the edit ends */
 function holdReply(quote) { const was = replyTo; replyTo = quote ? {...quote, key: state.place.key} : null; drawReply(); return was; }
@@ -145,5 +150,5 @@ function wireMentions() {
   press(lane, ".rq[data-quote]", (b) => jumpTo(+b.dataset.quote));
 }
 
-export {fillFromWire, holdReply, jumpTo, quoteHTML, refLook, reseed, restoreReply, seedField, startReply, syncReply, takeReply,
-  wireMentions};
+export {fillFromWire, holdReply, jumpTo, quoteHTML, refLook, reseed, restoreReply, seedField, startReply, startThread, syncReply, takeReply,
+  threadNext, wireMentions};

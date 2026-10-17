@@ -3,14 +3,15 @@
 import {$$} from "./util.js";
 import {msgIndex, state} from "./state.js";
 import {api} from "./connection.js";
-import {feed, lane} from "./frame.js";
+import {feed, lane, tx} from "./frame.js";
 import {partsOf} from "./parts.js";
 import {note} from "./composer.js";
 import {removeRow, sectionOf, shown, stale} from "./feed.js";
 import {drawTicks, retick} from "./receipts.js";
 import {updateMessage} from "./agent_turn.js";
 import {clearFailMark, failMark} from "./send.js";
-import {clientKey} from "./mention_text.js";
+import {clientKey, fieldEmpty} from "./mention_text.js";
+import {openThread} from "./threads.js";
 
 async function transmit(c, m, ph) {
   /* contract C4: the key is made once for the message and sent again on every retry, so the server sends it once */
@@ -34,6 +35,8 @@ function adopt(c, m, id, server) {
   if (server) { const was = JSON.stringify(partsOf(m).map((p) => [p.t, p.html])); Object.assign(m, server, {id}); const is = JSON.stringify(partsOf(m).map((p) => [p.t, p.html])); if (was !== is) { if (shown(c)) updateMessage(c, m); else stale(c, id); } }
   c.msgs.sort((a, b) => (typeof a.id === "number" && typeof b.id === "number" ? a.id - b.id : 0));
   if (c === state.P) drawTicks(id);   /* sent: one tick lands */
+  /* a new thread's first message: its thread opens under it, its field taking the caret unless I have gone on writing */
+  if (m.startsThread) { m.startsThread = false; if (c === state.P && shown(c)) openThread(id, false, {focus: document.activeElement === tx && fieldEmpty(tx)}); }
 }
 
 export {adopt, transmit};

@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): a chunk (chunks.js): what the nav says of a channel or a topic when the pointer rests on its
    row (statement 53). A card raised beside the nav, its head level with the row's: for a channel, what it is for, who is
    in it, its repository, and "+" for a new topic (a worktree, in a repository); for a topic, who has spoken there, the
-   latest word and its run. It comes up as a tooltip does: after the pointer rests on a row for the tooltip's delay, at
+   latest word, its run, and "+" for a new thread. It comes up as a tooltip does: after the pointer rests on a row for the tooltip's delay, at
    once while a card is up, and it waits for the pointer crossing to it. A row that takes focus from the keyboard brings
    its card up too; Tab goes into it, and on past it to the next row. It never stands in flow: it is over the
    conversation's edge, beside the pointer, so nothing under the pointer moves.
@@ -11,7 +11,7 @@
 export default function channelViewChunk(P) {
   const {$, $$, el, esc, T, streams, repoStreams, members, marks, places, topicsOf, worktrees, runsSeen, people, age,
     api, faceOf, nameOf, presOf, isOnix, openPlace, placeFromKey, tkey, topicLabel, loadTopics, loadMembers, repoPath, nav,
-    navScroll, ready} = P;
+    navScroll, ready, state, startThread} = P;
 
   /* ---------- the card: one at a time, for one row, known by the row's key (the nav is drawn again under it) ---------- */
   let card = null, pending = "", showTimer = 0, hideTimer = 0, goneAt = -1e9, quiet = "";
@@ -40,7 +40,7 @@ export default function channelViewChunk(P) {
       box.addEventListener("pointerenter", () => clearTimeout(hideTimer)); box.addEventListener("pointerleave", hideSoon); box.addEventListener("keydown", onCardKey);
       box.addEventListener("mousedown", (e) => { if (!e.target.closest("input")) e.preventDefault(); });   /* a press here leaves the caret where it was */
       box.addEventListener("focusout", (e) => { if (card && card.el === box && !box.contains(e.relatedTarget) && !navScroll.contains(e.relatedTarget)) hide({stay: true}); });   /* focus gone elsewhere takes it */
-      P.press(box, "[data-card-new]", newTopic);
+      P.press(box, "[data-card-new]", newTopic); P.press(box, "[data-card-thread]", newThread);
       document.body.append(box); card = {el: box}; }
     Object.assign(card, at, {back: null}); card.el.setAttribute("aria-label", at.kind === "channel" ? streams.get(at.sid).name : topicLabel(at.topic));
     draw(); place(); if (before) M.flip(card.el, before, "touch"); else { M.fade(card.el, 1); M.release(card.el, {x: -(T["pane-rise"] || 4)}, "touch"); }
@@ -76,11 +76,11 @@ export default function channelViewChunk(P) {
   async function askRepo(sid) { await loadTopics(sid); const s = streams.get(sid), wt = worktrees.get(sid), t = (topicsOf.get(sid) || []).find((x) => wt && wt.has(x.name.toLowerCase()));
     let path = s ? s.name : ""; if (s && t) try { const ctx = (await api("GET", "armada/topic-context", {stream: s.name, topic: t.name, include_git: false})).armada_topic_context; path = repoPath(ctx.repository_url || ctx.github_repo, s.name); } catch (e) {}
     repos.set(sid, path); if (card && card.sid === sid && card.kind === "channel") { const d = $('[data-fact="repo"]', card.el); if (d) d.textContent = path; } }
-  /* a topic: its glyph (a worktree's branch, else a thread's) and its name, then its people, its latest word and its run.
+  /* a topic: its glyph (a worktree's branch, else a thread's), its name and "+", then its people, its latest word and its run.
      What is not known yet is "…" in a cell that is already there, so the card keeps its size as the facts arrive. */
   const RUN_WORDS = {needs: "Onix asks you", live: "Onix is working", queued: "Queued", failed: "The last run failed", paused: "Paused"};
   function topicHTML() { const {key, topic, sid} = card, wt = worktrees.get(sid), mark = marks.get(key), f = facts.get(key);
-    return `<div class="ih">${ic(wt && wt.has(topic.toLowerCase()) ? "branch" : "thread")}<b>${esc(topicLabel(topic))}</b></div>`
+    return `<div class="ih">${ic(wt && wt.has(topic.toLowerCase()) ? "branch" : "thread")}<b>${esc(topicLabel(topic))}</b>${plusHTML("data-card-thread", `New thread in ${topicLabel(topic)}`, "New thread")}</div>`
       + `<dl class="facts">${fact("People", f ? peopleHTML(f.who) : "…", "people")}${fact("Latest", f ? latestHTML(f.last) : "…", "latest")}${mark ? fact("Run", `${mk(mark)}<span class="t">${esc((RUN_WORDS[mark] || "") + (mark === "live" ? overviewOf(key) : ""))}</span>`, "run") : ""}</dl>`; }
   const overviewOf = (key) => { const r = (runsSeen.get(key) || []).find((x) => x.status === "running" && x.overview); return r ? `: ${r.overview}` : ""; };
   const first = (id) => nameOf(id).split(/[ ,]/)[0];
@@ -115,6 +115,11 @@ export default function channelViewChunk(P) {
     if (!name) { M.refuse(input); S.play("nope"); return; }
     const known = (topicsOf.get(sid) || []).find((t) => t.name.toLowerCase() === name.toLowerCase()), p = placeFromKey(tkey(sid, name));
     p.topic = known ? known.name : name; hide({stay: true}); openPlace(p); }
+
+  /* ---------- "+" on a topic: a new thread there. The topic opens (it may be open already) and what I send next starts the
+     thread, which opens under it (mentions.js, startThread) ---------- */
+  function newThread() { if (!card || card.kind !== "topic") return; const p = placeFromKey(card.key); hide({stay: true}); if (!p) return;
+    if (!state.place || state.place.key !== p.key) openPlace(p); startThread(); }
 
   /* ---------- the keyboard: Tab from the row goes into its card, and from its last control to the next row; Shift-Tab from
      its first goes back to the row; Esc closes it and gives the row its focus; Return in the topic's name opens it ---------- */

@@ -73,6 +73,12 @@ set_global("M", {
     halt: noop,
     refuse: noop,
     say: noop,
+    land: noop,
+    figure: noop,
+    rest: () => ({top: 0, left: 0}),
+    swap(cell, html) {
+        cell.innerHTML = html;
+    },
     focusKbd(element) {
         element.focus();
     },
@@ -91,6 +97,23 @@ set_global("fig", String);
 set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
 set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
 set_global("face", (_spec, cls) => `<i class="av ${cls || ""}"></i>`);
+// A thread's field, as the kit draws one (focusable, as contenteditable makes it in a browser).
+set_global(
+    "composerHTML",
+    () =>
+        '<div class="cz flat"><div class="sh"><div class="txw"><div class="tx" tabindex="0"></div></div><button class="disc"><span class="cell"><span>Reply</span></span></button></div></div>',
+);
+dom.window.Range.prototype.getBoundingClientRect = () => ({
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+});
+Object.defineProperty(document, "fonts", {
+    value: {addEventListener() {}, ready: Promise.resolve()},
+});
 
 const ME = 11;
 const CORDELIA = 8;
@@ -120,6 +143,23 @@ set_global("fetch", async (url, init = {}) => {
 const success = (data = {}) => ({result: "success", msg: "", ...data});
 const MEMBERS = {[NLS]: [ME, CORDELIA, HAMLET, OTHELLO, MIHIR, ONIX], [OPS]: [ME, HAMLET, OTHELLO]};
 const at = (seconds_ago) => Math.floor(Date.now() / 1000) - seconds_ago;
+// eval-harness: Cordelia, Onix, then King Hamlet, twelve minutes ago.
+const TOPIC = [
+    [1, CORDELIA, 900],
+    [2, ONIX, 800],
+    [3, HAMLET, 720],
+].map(([id, sender_id, seconds_ago]) => ({
+    id,
+    type: "stream",
+    stream_id: NLS,
+    subject: "eval-harness",
+    sender_id,
+    timestamp: at(seconds_ago),
+    content: "<p>A word.</p>",
+    reactions: [],
+    submessages: [],
+    flags: ["read"],
+}));
 function serve() {
     requests.length = 0;
     answers = [
@@ -128,18 +168,8 @@ function serve() {
             /^\/json\/streams\/\d+\/members$/,
             (path) => success({subscribers: MEMBERS[Number(path.split("/")[3])]}),
         ],
-        [
-            "GET",
-            /^\/json\/messages$/,
-            () =>
-                success({
-                    messages: [
-                        {id: 1, sender_id: CORDELIA, timestamp: at(900)},
-                        {id: 2, sender_id: ONIX, timestamp: at(800)},
-                        {id: 3, sender_id: HAMLET, timestamp: at(720)},
-                    ],
-                }),
-        ],
+        ["GET", /^\/json\/messages$/, () => success({messages: TOPIC, found_oldest: true})],
+        ["POST", /^\/json\/messages$/, () => success({id: 5001})],
         [
             "GET",
             /^\/json\/armada\/topic-context$/,
@@ -215,6 +245,8 @@ const routing = zrequire("armada/beta/routing.js");
 const nav = zrequire("armada/beta/nav.js");
 const channels = zrequire("armada/beta/channels.js");
 const chunks = zrequire("armada/beta/chunks.js");
+const send = zrequire("armada/beta/send.js");
+const mentions = zrequire("armada/beta/mentions.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Iago";
@@ -252,6 +284,8 @@ const place = routing.placeFromKey(routing.tkey(NLS, "lr-sweep"));
 beta_state.state.place = place;
 beta_state.state.P = routing.cacheOf(place);
 nav.drawNav();
+// The field's keys, as the page wires them at boot.
+mentions.wireMentions();
 clock.tick(1);
 
 // The chunk arrives as the page's idle prefetch brings it.
@@ -284,6 +318,14 @@ function away() {
     }
 }
 const asked = (url) => requests.filter((r) => r.url === url).length;
+function press(target) {
+    target.dispatchEvent(new dom.window.MouseEvent("pointerdown", {bubbles: true, button: 0}));
+}
+function write(text) {
+    field.textContent = text;
+    field.dispatchEvent(new dom.window.InputEvent("input", {bubbles: true}));
+}
+const strip = () => find(".cz .txw > .rq");
 
 run_test("resting on a channel's row brings its card up after the tooltip's delay", async () => {
     serve();
@@ -484,4 +526,100 @@ run_test("from the keyboard: a row's focus brings its card, Tab goes into it and
     assert.equal(document.activeElement, row(`c:${NLS}`));
     field.focus();
     away();
+});
+
+run_test("+ on a topic's card starts a thread there with what I send next", async () => {
+    serve();
+    const key = routing.tkey(NLS, "eval-harness");
+    rest_on(row(key));
+    clock.tick(500);
+    press(card().querySelector('[aria-label="New thread in eval-harness"]'));
+    assert.equal(card(), null);
+    // The topic opens, and the field says what it will do.
+    assert.equal(beta_state.state.place.key, key);
+    assert.equal(document.activeElement, field);
+    assert.equal(strip().querySelector(".rqn").textContent, "New thread");
+    await settle();
+
+    write("Seeds for the eval");
+    send.send({at: 0});
+    // The strip is used up; the words go as written, with no quote.
+    assert.equal(strip(), null);
+    await settle();
+    const post = requests.find((r) => r.method === "POST" && r.url === "/json/messages");
+    assert.equal(post.body.content, "Seeds for the eval");
+    assert.equal(post.body.thread_root_message_id, undefined);
+    // Once the server has it, its thread opens under it, its field ready.
+    const thread = find('.thr-in[data-mid="5001"]');
+    assert.ok(thread);
+    assert.equal(document.activeElement, thread.querySelector(".tx"));
+
+    // The next message is an ordinary one.
+    field.focus();
+    write("And the shards");
+    send.send({at: 0});
+    await settle();
+    assert.equal(document.querySelectorAll(".thr-in").length, 1);
+});
+
+run_test("a new thread is given up with Esc, by going elsewhere, or for a reply", async () => {
+    serve();
+    const key = routing.tkey(NLS, "eval-harness");
+    for (const give_up of ["Escape", "elsewhere", "reply"]) {
+        rest_on(row(key));
+        clock.tick(500);
+        press(card().querySelector("[data-card-thread]"));
+        assert.equal(strip().querySelector(".rqn").textContent, "New thread");
+        if (give_up === "Escape") {
+            dom.press("Escape");
+            assert.equal(strip(), null);
+        } else if (give_up === "elsewhere") {
+            routing.openPlace(routing.placeFromKey(routing.tkey(NLS, "lr-sweep")));
+            assert.equal(strip(), null);
+            await settle();
+            routing.openPlace(routing.placeFromKey(key));
+            assert.equal(strip(), null);
+        } else {
+            mentions.startReply(beta_state.state.P.byId.get(3));
+            assert.equal(strip().querySelector(".rqn").textContent, "King Hamlet");
+        }
+        await settle();
+        away();
+    }
+    // Sent after it was given up, a message starts no thread: the reply
+    // goes with its quote, as any reply does.
+    requests.length = 0;
+    write("Same shards");
+    send.send({at: 0});
+    await settle();
+    const post = requests.find((r) => r.method === "POST" && r.url === "/json/messages");
+    assert.match(post.body.content, /^@_\*\*King Hamlet\|12\*\* \[said\]/);
+    assert.equal(document.querySelectorAll(".thr-in").length, 1);
+});
+
+run_test("a new thread's field waits for me when I have gone on writing", async () => {
+    serve();
+    let answer;
+    answers.unshift([
+        "POST",
+        /^\/json\/messages$/,
+        () =>
+            new Promise((resolve) => {
+                answer = () => resolve(success({id: 5002}));
+            }),
+    ]);
+    const key = routing.tkey(NLS, "eval-harness");
+    rest_on(row(key));
+    clock.tick(500);
+    press(card().querySelector("[data-card-thread]"));
+    write("Flaky shards");
+    send.send({at: 0});
+    await settle();
+    // Before the server answers, I start the next message.
+    write("Also");
+    answer();
+    await settle();
+    assert.ok(find('.thr-in[data-mid="5002"]'));
+    assert.equal(document.activeElement, field);
+    assert.equal(field.textContent, "Also");
 });

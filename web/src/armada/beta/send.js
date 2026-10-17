@@ -7,7 +7,7 @@ import {addMsg, keepEnd} from "./routing.js";
 import {lane, nav, sh, tx} from "./frame.js";
 import {echoHTML} from "./parts.js";
 import {drawAtts, note, ready, syncField} from "./composer.js";
-import {seedField, takeReply} from "./mentions.js";
+import {seedField, takeReply, threadNext} from "./mentions.js";
 import {wireOf, withPath} from "./mention_text.js";
 import {appendMessage, grown, haltLane, hush, sectionOf} from "./feed.js";
 import {drawTrail} from "./nav.js";
@@ -45,9 +45,10 @@ function send(o = {}) {
      to each other here do not answer a run that waits. */
   const p = state.place, c = state.P, live = liveRun(c), ask = waitingRun(c), toOnix = agentCanRun(p, c) && (!!o.onix || text.includes(state.agentMention)), starts = toOnix && !live;
   if (inView && toOnix && o.text == null) text = withPath(text, inView, state.agentMention);
+  const startsThread = o.text == null && threadNext();   /* a new thread: its thread opens once the server has the message (outbox.js) */
   if (o.text == null) text = takeReply() + text;   /* a reply: its one-line quote goes first */
   const raw = text, shown = echoHTML(text);
-  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: shown, raw, toOnix, reactions: [], submessages: localSubmessages(text)};   /* a /poll or /todo shows as one at once (widgets.js) */
+  const m = {id: "L" + ++state.localSeq, local: true, pending: true, sender_id: state.ME, timestamp: Math.floor(now() / 1000), content: shown, raw, toOnix, reactions: [], submessages: localSubmessages(text), startsThread};   /* a /poll or /todo shows as one at once (widgets.js) */
   let ph = null; if (starts) ph = {id: "O" + state.localSeq, local: true, onix: true, sender_id: [...armadaBots][0], timestamp: m.timestamp, content: "", reactions: [], is_agent_message: true, for: m.id};
   state.pinned = true; haltLane();
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); addMsg(c, m); const r = appendMessage(lane, m); if (o.text == null) { tx.textContent = ""; state.atts = []; drawAtts(); } syncField(); if (ph) { addMsg(c, ph); r.onix = appendMessage(lane, ph); } return r; }, "touch", {clamp: {y: 240}});

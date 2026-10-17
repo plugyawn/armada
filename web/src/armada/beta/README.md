@@ -40,7 +40,7 @@ into the engineered client deletes the module it replaces.
 | `connection.js` | `api()`, `register()`, the event queue (`poll`), event dispatch (`handle`, `on`), the session (`session`), signing out, the tabs of this browser told of each other's session, reloading for new code | connection |
 | `link.js` | the connection's rules, with nothing of the page in them: one register in flight, backoff with jitter, the long poll's 65 s deadline, the CSRF token mended from `GET armada/session`, signed out and signed in elsewhere (resilience.md R1); tested by `web/tests/armada/beta_link.test.cjs` | connection |
 | `routing.js` | place keys and addresses, the place caches and what fills them, `openPlace()`, marking read | connection |
-| `outbox.js` | a message on its way (`transmit`), the server's copy taking its place (`adopt`), a local row dropped | connection |
+| `outbox.js` | a message on its way (`transmit`), the server's copy taking its place (`adopt`) and a new thread's first message opening its thread, a local row dropped | connection |
 | `faces.js` | names, initials, stones, presence, `faceOf()` | faces |
 | `presence.js` | presence reported as the old interface reports it (active or idle, on the server's interval), and heard | faces |
 | `partners.js` | the sprite pack, the team's partners, faces redrawn, the evolution caption | faces |
@@ -50,7 +50,7 @@ into the engineered client deletes the module it replaces.
 | `send.js` | sending: the words addressed and echoed, `send()`, `retry()` | composer |
 | `caret.js` | the field's caret: the browser's own while it moves, a drawn one that blinks on the compositor at rest | composer |
 | `model_picker.js` | the model and effort picker | composer |
-| `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble) | composer |
+| `mentions.js` | the `@` and `#` pickers, pills in the field, the switch's `@Onix` pill, a reply's quote (in the field and above a bubble), and in the same strip a new thread (`startThread`, from a topic's card: what I send next starts a thread) | composer |
 | `mention_text.js` | pure: the field's words on the wire and back (mentions in place, `@onix` typed by hand), the pickers' order, the echo of a mention, a reply's quote, a send's client key (contract C4); node tests in `web/tests/armada/beta_mention_text.test.cjs` | composer |
 | `parts.js` | the rule: server HTML becomes bubbles and blocks (`partsOf`); the local echo (`echoHTML`); a block of streamed words (`streamHTML`) | feed |
 | `previews.js` | a link's card under the words that hold it: a page's preview, a video's still, a quote of a linked message (and its chip in the words), at most three a bubble with "+N more"; the place a preview the server is still fetching keeps from the first draw (statement 41); its sheet is `previews.css`; tested by `web/tests/armada/beta_previews.test.cjs` | feed |
@@ -74,7 +74,7 @@ into the engineered client deletes the module it replaces.
 | `column.js` | the column: the checklist's standing home, Changes, Runs, People | feed |
 | `nav.js` | the nav: channels, topics, direct messages, their trailing marks and counts | none this sprint |
 | `channels.js` | New, from the nav's "+": a raised surface under it that makes a channel (`POST channels/create`, which refuses a name that is taken) and lists the public channels I am not in (`GET streams`, asked when it opens), each joined with one press; the channels I join and leave, kept in the nav by the `subscription` event, a repository's as a repository; a channel's members (`loadMembers`, `GET streams/<id>/members` once, then the event's `peer_add` and `peer_remove`), which receipts count; its sheet is `channels.css`; tested by `web/tests/armada/beta_channels.test.cjs` | channels |
-| `channel_view.js` | a chunk (`chunks.js`) that wires the nav when it arrives: a channel's or a topic's card, raised beside the nav when the pointer rests on its row (the tooltip's delay, at once while one is up) or the row takes focus (Tab goes into it): a channel's description, members and repository, and "+" for a new topic named in the card; a topic's people, latest word and run; its rules are in `channels.css`; tested by `web/tests/armada/beta_channel_view.test.cjs` | channels |
+| `channel_view.js` | a chunk (`chunks.js`) that wires the nav when it arrives: a channel's or a topic's card, raised beside the nav when the pointer rests on its row (the tooltip's delay, at once while one is up) or the row takes focus (Tab goes into it): a channel's description, members and repository, and "+" for a new topic named in the card; a topic's people, latest word and run, and "+" for a new thread; its rules are in `channels.css`; tested by `web/tests/armada/beta_channel_view.test.cjs` | channels |
 | `header.js` | the header: the repository's facts (`repoPath`, which a channel's card reads too) | none this sprint |
 | `band.js` | the band: what the run is doing, its clock, Stop | none this sprint |
 | `views.js` | the views: README, Files, Changes | none this sprint |

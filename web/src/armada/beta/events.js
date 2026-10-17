@@ -33,7 +33,9 @@ function onMessage(ev) {
   else if (!state.dms.some((d) => dkey(d.user_ids) === key)) { state.dms.unshift({user_ids: key.slice(2).split(",").filter(Boolean).map(Number), max_message_id: m.id}); drawNav(); }
   const seenNow = state.place && state.place.key === key && !document.hidden && state.tab === "Chat";
   if (!mine && !flags.includes("read")) { if (seenNow) markSeen(m.id); else { let s = unread.get(key); if (!s) unread.set(key, (s = new Set())); s.add(m.id); drawTrail(key); if (flags.includes("mentioned") || flags.includes("stream_wildcard_mentioned") || flags.includes("topic_wildcard_mentioned")) mentions.set(m.id, m); drawHomeRow(key); } }
-  { const runs = (c && c.runsLoaded ? c.runs : runsSeen.get(key)) || [], r = runs.find((x) => x.status === "queued" || x.status === "running");   /* a question asked, or answered by someone */
+  /* a question asked, or answered by someone: the run is looked for in the place's own runs, which a run's events fill from
+     the moment the place is held (before its runs are read), and in those seen for the place before it was held */
+  { const r = [...(c ? c.runs : []), ...(runsSeen.get(key) || [])].find((x) => x.status === "queued" || x.status === "running");
     if (r && isOnix(m.sender_id) && QUESTION.test(m.content || "")) { r.waiting = true; r.answeredAt = 0; r.askedAt = m.timestamp; r.question = questionOf(m); marks.set(key, "needs"); drawTrail(key); drawHomeRow(key); if (c === state.P) drawRunState(); }
     else if (r && r.waiting && !isOnix(m.sender_id) && namesOnix(m)) { answered(r); marks.set(key, runMark(r)); drawTrail(key); drawHomeRow(key); if (c === state.P) drawRunState(); } }
   if (!c || !c.loaded) return;

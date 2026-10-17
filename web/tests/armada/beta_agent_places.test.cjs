@@ -64,6 +64,10 @@ set_global("M", {
     refuse: noop,
     figure: noop,
     say: noop,
+    cross: noop,
+    swap(cell, html) {
+        cell.innerHTML = html;
+    },
     current: () => [{}, {}],
     rest: () => ({top: 0, left: 0}),
 });
@@ -365,4 +369,44 @@ run_test("a question that waits is answered by its options, as a typed reply", a
     runs.drawAsks();
     assert.equal(runs.askOption(2), null);
     assert.equal(runs.answerWith(find('[data-answer="Blue"]'), 0), false);
+});
+
+run_test("a question asked before the place's runs are read is live at once", () => {
+    // As on runix.chat: a run's events were seen for #general > greetings
+    // before the place was held (runs 9 and 10), and the place's own runs
+    // are not read yet when run 11 starts and asks.
+    const key = routing.tkey(3, "greetings again");
+    runs.runsSeen.set(key, [{id: 10, status: "done", trigger_message_id: 48}]);
+    const c = open(routing.placeFromKey(key));
+    c.msgs.length = 0;
+    const now = Math.floor(Date.now() / 1000);
+    events.onRun({
+        type: "agent_run",
+        run_id: 11,
+        event_type: "running",
+        status: "running",
+        stream: "general",
+        topic: "greetings again",
+        trigger_message_id: 52,
+        result_message_id: 53,
+        run_date_created: now,
+        date_created: now,
+        plan: null,
+    });
+    events.onMessage({
+        message: {
+            id: 54,
+            type: "stream",
+            stream_id: 3,
+            subject: "greetings again",
+            sender_id: AGENT,
+            timestamp: now,
+            content: question.rendered,
+            reactions: [],
+        },
+        flags: ["read"],
+    });
+    // The run waits on its question from the moment it is asked, not from
+    // the server's first reminder that it waits, 15 s later.
+    assert.equal(runs.waitingRun(c).id, 11);
 });

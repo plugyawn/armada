@@ -1,7 +1,7 @@
 /* INTERIM BETA (README.md): read receipts and Info. */
 
 import {$, $$, clamp, el, esc, T} from "./util.js";
-import {armadaBots, DATA, msgIndex, people, state, stats} from "./state.js";
+import {armadaBots, DATA, members, msgIndex, people, state, stats} from "./state.js";
 import {hhmm} from "./time.js";
 import {api} from "./connection.js";
 import {feed, lane, main} from "./frame.js";
@@ -9,6 +9,7 @@ import {faceOf, nameOf, presOf} from "./faces.js";
 import {ready} from "./composer.js";
 import {closeMenu, overHide} from "./hover.js";
 import {sectionOf} from "./feed.js";
+import {loadMembers} from "./channels.js";
 
 /* ----- read receipts: the r4 receipts study (design/r4/receipts/RECEIPTS.md), pushed by the server (contract C2) -----
    My turns carry ticks beside their time, in a 16 px cell that exists from the frame of the send and changes only what it
@@ -26,7 +27,7 @@ const RCPT_FRESH = 10000, RCPT_BATCH = 20;                 /* RCPT_BATCH: my lat
 const rcpt = new Map();                                    /* message id -> {read: Set of user ids, at, err}, for messages a place holds */
 const tickOf = new Map();                                  /* message id -> the button that holds its time and ticks (receiptButton) */
 const idOf = (mid) => (/^\d+$/.test(mid) ? +mid : mid);
-const rcptLog = [], rcptInfoLog = [], rcptInflight = new Map(), members = new Map();
+const rcptLog = [], rcptInfoLog = [], rcptInflight = new Map();
 let info = null;
 stats.receipts = {requests: 0, refused: 0, maxPerMinute: 0};
 function rcptAllowed(forInfo) { const t = performance.now(), log = forInfo ? rcptInfoLog : rcptLog; while (log.length && t - log[0] >= 60000) log.shift();
@@ -39,9 +40,8 @@ function fetchReceipts(id, o = {}) { if (!RECEIPTS || typeof id !== "number") re
   const p = api("GET", `messages/${id}/read_receipts`).then((r) => ({read: new Set(r.user_ids), at: performance.now()}), (e) => ({read: had ? had.read : new Set(), at: performance.now(), err: e.message}))
     .then((x) => { rcpt.set(id, x); rcptInflight.delete(id); drawTicks(id); if (info && info.id === id) drawInfo(); return x; });
   rcptInflight.set(id, p); return p; }
-function loadMembers(sid) { if (members.has(sid)) return Promise.resolve(members.get(sid));
-  const p = api("GET", `streams/${sid}/members`).then((r) => { const s = new Set(r.subscribers); members.set(sid, s); for (const id of [...tickOf.keys()]) drawTicks(id); if (info) drawInfo(); return s; }, () => { members.delete(sid); return null; });
-  members.set(sid, p); return p; }
+/* who a channel's ticks and Info count changed (channels.js, loadMembers and the subscription event): drawn again */
+function drawReceipts() { for (const id of [...tickOf.keys()]) drawTicks(id); if (info) drawInfo(); }
 /* who a message's receipts count, as far as the page can know: the channel's subscribers now (or the conversation's
    people), less the sender, bots (Onix among them: it answers, it does not read), deactivated people and people I muted.
    Null until the channel's subscribers are known. */
@@ -120,5 +120,5 @@ function drawInfo() { if (!info) return; const c = msgIndex.get(info.id), m = c 
 function closeInfo(quiet) { if (!info) return; const {el: box, from, kbd, id} = info; info = null; if (tickOf.has(id)) tickOf.get(id).classList.remove("open"); box.inert = true; M.leave(box, () => box.remove());
   if (quiet) return; if (kbd && from && from.isConnected) M.focusKbd(from); else ready(); }
 
-export {closeInfo, drawTicks, fetchReceipts, forgetReceipts, info, loadMembers, loadReceipts, onReadReceipts, openInfo, rcpt,
+export {closeInfo, drawReceipts, drawTicks, fetchReceipts, forgetReceipts, info, loadReceipts, onReadReceipts, openInfo, rcpt,
   receiptButton, RECEIPTS, retick, toggleInfo, untick};

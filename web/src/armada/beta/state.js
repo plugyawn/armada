@@ -42,11 +42,12 @@ const unread = new Map();                                  /* place key -> Set o
 const marks = new Map();                                   /* place key -> "needs" | "live" | "queued" | "failed" | "paused": a run's mark in the nav */
 const places = new Map();                                  /* place key -> what is known of it */
 const groups = new Map();                                  /* user group id -> {members, subgroups}: Sets of ids, the subgroups direct */
+const members = new Map();                                 /* stream id -> Set of its subscribers' user ids, or the request for them (channels.js, loadMembers) */
 const msgIndex = new Map();                                /* message id -> its place's cache */
 /* what the page keeps of the places it has opened (routing.js, keep): a place left keeps its newest KEEP messages and their
    rows; the place in view, its end in view, trims back to KEEP once it holds CAP; PLACES_KEPT places are kept at most */
 const KEEP = 100, CAP = 400, PLACES_KEPT = 10;
 const expanded = new Set(JSON.parse(store.get("open") || "[]")), allKids = new Set();
 
-export {allKids, armadaBots, CAP, DATA, expanded, groups, KEEP, LIVE_RUN_IDS, marks, msgIndex, people, places, PLACES_KEPT, pluginBots,
+export {allKids, armadaBots, CAP, DATA, expanded, groups, KEEP, LIVE_RUN_IDS, marks, members, msgIndex, people, places, PLACES_KEPT, pluginBots,
   QUESTION_TIMEOUT, repoStreams, state, stats, streams, topicsOf, unread, worktrees};

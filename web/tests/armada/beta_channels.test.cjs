@@ -14,7 +14,9 @@
 // channels I am not in, asked for (GET streams) only when it opens. Join
 // is one press: the row says Joining at once and Open once I am in, and
 // keeps its place; the nav takes the channel when the event comes; Open
-// opens its first place. Deleted with web/src/armada/beta/.
+// opens its first place. A channel's members are asked for once and kept
+// by the same event as people join and leave. Deleted with
+// web/src/armada/beta/.
 
 const assert = require("node:assert/strict");
 
@@ -489,6 +491,78 @@ run_test("the nav follows the channels I join and leave", () => {
         user_ids: [5],
     });
     assert.deepEqual(nav_rows(), before);
+});
+
+run_test("a channel's members are asked for once, and kept as people join and leave", async () => {
+    serve();
+    let release_members;
+    answers.push([
+        "GET",
+        /^\/json\/streams\/10\/members$/,
+        () =>
+            new Promise((resolve) => {
+                release_members = () => resolve(success({subscribers: [ME, 5]}));
+            }),
+    ]);
+    const members_of = (sid) => {
+        const known = beta_state.members.get(sid);
+        return known instanceof Set ? [...known].toSorted((a, b) => a - b) : known;
+    };
+    const asked = () => requests.filter((r) => r.url === "/json/streams/10/members").length;
+    beta_state.members.delete(10);
+
+    const first = channels.loadMembers(10);
+    const second = channels.loadMembers(10);
+    assert.equal(asked(), 1);
+    // Someone joins and someone leaves while the server is asked: the
+    // answer may be older than either, so both are applied to it.
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_add",
+        stream_ids: [10],
+        user_ids: [9],
+    });
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_remove",
+        stream_ids: [10],
+        user_ids: [5],
+    });
+    release_members();
+    await settle();
+    assert.equal(await first, beta_state.members.get(10));
+    assert.equal(await second, beta_state.members.get(10));
+    assert.deepEqual(members_of(10), [ME, 9]);
+
+    // Once known, the event keeps them; nothing is asked again.
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_add",
+        stream_ids: [10, 77],
+        user_ids: [11, 12],
+    });
+    channels.onSubscription({
+        type: "subscription",
+        op: "peer_remove",
+        stream_ids: [10],
+        user_ids: [9],
+    });
+    assert.deepEqual(members_of(10), [ME, 11, 12]);
+    await channels.loadMembers(10);
+    assert.equal(asked(), 1);
+    // A channel whose members were never asked for is not guessed at.
+    assert.equal(beta_state.members.get(77), undefined);
+
+    // A channel I join comes with its members; one I leave forgets them.
+    channels.onSubscription({
+        type: "subscription",
+        op: "add",
+        subscriptions: [{stream_id: 31, name: "ops", subscribers: [ME, 4]}],
+    });
+    assert.deepEqual(members_of(31), [ME, 4]);
+    assert.equal(beta_state.streams.get(31).subscribers, undefined);
+    channels.onSubscription({type: "subscription", op: "remove", subscriptions: [{stream_id: 31}]});
+    assert.equal(beta_state.members.get(31), undefined);
 });
 
 // The public channels the server knows: #general and #ops are mine; it

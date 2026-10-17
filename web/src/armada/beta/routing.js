@@ -9,7 +9,7 @@ import {cutRows, drawLane, dropRows, ends, isQuestion, pin, releaseRows, showLan
 import {drawNav, drawTrail, loadTopics} from "./nav.js";
 import {askState, drawAsks, inferAsk, liveRun, runMark, runsSeen} from "./runs.js";
 import {drawHeader} from "./header.js";
-import {closeInfo, forgetReceipts, loadMembers, loadReceipts, RECEIPTS} from "./receipts.js";
+import {closeInfo, forgetReceipts, loadReceipts, RECEIPTS} from "./receipts.js";
 import {drawFooters} from "./agent_turn.js";
 import {drawTyping} from "./events.js";
 import {drawRunState} from "./band.js";
@@ -25,6 +25,7 @@ import {openPage, pageFromHash, pageFromKey, pageHash} from "./pages.js";
 import {closeChoices, drawPending} from "./later.js";
 import {closeArtifact} from "./artifacts.js";
 import {closeWidgetViews, openPlugins, pluginHash, pluginPlaceFromHash, pluginPlaceFromKey} from "./plugins.js";
+import {loadMembers} from "./channels.js";
 
 const tkey = (sid, topic) => `s:${sid}:${topic.toLowerCase()}`, dkey = (ids) => "d:" + [...ids].sort((a, b) => a - b).join(",");
 const topicLabel = (t) => t || "general chat";

@@ -3,7 +3,7 @@
    every request) are link.js's; this module gives them the page. */
 
 import {$, el, esc} from "./util.js";
-import {groups, msgIndex, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
+import {groups, members, msgIndex, people, places, repoStreams, state, stats, streams, unread} from "./state.js";
 import {dkey, openPlace, tkey} from "./routing.js";
 import {closeMenu, overHide} from "./hover.js";
 import {closePicker} from "./model_picker.js";
@@ -73,7 +73,7 @@ function applyRegister(r) {
   /* the groups the realm's rules for deleting name ("realm_user_groups"; the rules came with the page) */
   state.realm.guest = !!r.is_guest;
   groups.clear(); for (const g of r.realm_user_groups || []) groups.set(g.id, {members: new Set(g.members), subgroups: new Set(g.direct_subgroup_ids)});
-  streams.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);
+  streams.clear(); members.clear(); for (const s of r.subscriptions || []) if (!s.is_archived) streams.set(s.stream_id, s);   /* a channel's members are asked for again: events may have been missed */
   repoStreams.clear(); (r.repository_stream_ids || []).forEach((i) => streams.has(i) && repoStreams.add(i));
   state.dms = (r.recent_private_conversations || []).slice(0, 12);
   applyLater(r);   /* Later and Send when: my reminders, stars and held messages (later.js) */

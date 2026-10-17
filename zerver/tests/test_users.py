@@ -1147,7 +1147,7 @@ class QueryCountTest(ZulipTestCase):
         prereg_user = PreregistrationUser.objects.get(email="fred@zulip.com")
 
         with (
-            self.assert_database_query_count(99),
+            self.assert_database_query_count(92),
             self.assert_memcached_count(24),
             self.capture_send_event_calls(expected_num_events=11) as events,
         ):
@@ -2404,7 +2404,7 @@ class ActivateTest(ZulipTestCase):
     def test_clear_scheduled_jobs(self) -> None:
         user = self.example_user("hamlet")
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             user.realm,
             to_user_ids=[user.id],
             delay=timedelta(hours=1),
@@ -2417,7 +2417,7 @@ class ActivateTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         iago = self.example_user("iago")
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             iago.realm,
             to_user_ids=[hamlet.id, iago.id],
             delay=timedelta(hours=1),
@@ -2433,7 +2433,7 @@ class ActivateTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         iago = self.example_user("iago")
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             iago.realm,
             to_user_ids=[hamlet.id, iago.id],
             delay=timedelta(hours=1),
@@ -2448,7 +2448,7 @@ class ActivateTest(ZulipTestCase):
         iago = self.example_user("iago")
         hamlet = self.example_user("hamlet")
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             iago.realm,
             to_user_ids=[hamlet.id, iago.id],
             delay=timedelta(hours=1),
@@ -2475,7 +2475,7 @@ class ActivateTest(ZulipTestCase):
         hamlet = self.example_user("hamlet")
         to_user_ids = [hamlet.id, iago.id]
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             iago.realm,
             to_user_ids=to_user_ids,
             delay=timedelta(hours=1),
@@ -2501,7 +2501,7 @@ class ActivateTest(ZulipTestCase):
             [
                 f"WARNING:zulip.send_email:ScheduledEmail {email_id} at {scheduled_at} "
                 "had empty users and address attributes: "
-                "{'template_prefix': 'zerver/emails/onboarding_zulip_topics', 'from_name': None, "
+                "{'template_prefix': 'zerver/emails/account_registered', 'from_name': None, "
                 "'from_address': None, 'language': None, 'context': {}}"
             ],
         )
@@ -3938,7 +3938,7 @@ class DeleteUserTest(ZulipTestCase):
         self.assertEqual(name_change_log.modified_user, hamlet)
 
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             realm,
             to_user_ids=[hamlet.id],
             delay=timedelta(hours=1),

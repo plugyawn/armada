@@ -54,6 +54,7 @@ from zerver.lib.server_initialization import create_internal_realm, create_users
 from zerver.lib.storage import static_path
 from zerver.lib.stream_color import STREAM_ASSIGNMENT_COLORS
 from zerver.lib.stream_subscription import bulk_create_stream_subscriptions
+from zerver.lib.streams import ensure_stream
 from zerver.lib.types import AnalyticsDataUploadLevel, ProfileFieldData
 from zerver.lib.upload import upload_message_attachment_from_request
 from zerver.lib.users import add_service
@@ -116,6 +117,22 @@ DEFAULT_EMOJIS = [
     ("confetti_ball", "1f38a"),
     ("hundred_points", "1f4af"),
 ]
+
+
+# Armada's new organizations have no "Zulip" channel; the development
+# and test data keep one in each realm, so that the tests written
+# against it still hold.
+ZULIP_DISCUSSION_CHANNEL_NAME = "Zulip"
+
+
+def create_zulip_discussion_channel(realm: Realm) -> None:
+    channel = ensure_stream(
+        realm,
+        ZULIP_DISCUSSION_CHANNEL_NAME,
+        stream_description="Questions and discussion about using Zulip.",
+        acting_user=None,
+    )
+    DefaultStream.objects.create(stream=channel, realm=realm)
 
 
 def clear_database() -> None:
@@ -412,6 +429,7 @@ class Command(ZulipBaseCommand):
                 enable_read_receipts=True,
                 enable_spectator_access=True,
             )
+            create_zulip_discussion_channel(zulip_realm)
             RealmDomain.objects.create(realm=zulip_realm, domain="zulip.com")
             assert zulip_realm.new_stream_announcements_stream is not None
             zulip_realm.new_stream_announcements_stream.name = "Verona"
@@ -434,6 +452,7 @@ class Command(ZulipBaseCommand):
                     plan_type=Realm.PLAN_TYPE_SELF_HOSTED,
                     org_type=Realm.ORG_TYPES["business"]["id"],
                 )
+                create_zulip_discussion_channel(mit_realm)
                 RealmDomain.objects.create(realm=mit_realm, domain="mit.edu")
 
                 lear_realm = do_create_realm(
@@ -444,6 +463,7 @@ class Command(ZulipBaseCommand):
                     plan_type=Realm.PLAN_TYPE_SELF_HOSTED,
                     org_type=Realm.ORG_TYPES["business"]["id"],
                 )
+                create_zulip_discussion_channel(lear_realm)
 
             # Realms should have matching RemoteRealm entries - simulating having realms registered
             # with the bouncer, which is going to be the primary case for modern servers. Tests
@@ -701,7 +721,7 @@ class Command(ZulipBaseCommand):
             create_if_missing_realm_internal_bots()
 
             # Create streams.
-            zulip_discussion_channel_name = str(Realm.ZULIP_DISCUSSION_CHANNEL_NAME)
+            zulip_discussion_channel_name = ZULIP_DISCUSSION_CHANNEL_NAME
             zulip_sandbox_channel_name = str(Realm.ZULIP_SANDBOX_CHANNEL_NAME)
 
             stream_list = [

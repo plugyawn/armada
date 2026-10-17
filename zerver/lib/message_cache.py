@@ -479,7 +479,7 @@ class MessageDict:
             obj["rendered_content"] = rendered_content
         else:
             obj["rendered_content"] = (
-                "<p>[Zulip note: Sorry, we could not understand the formatting of your message]</p>"
+                "<p>[Note: Sorry, we could not understand the formatting of your message]</p>"
             )
 
         if rendered_content is not None:

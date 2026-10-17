@@ -35,10 +35,7 @@ class TutorialTests(ZulipTestCase):
         self.login_user(user)
         for content in messages:
             self.send_personal_message(user, bot, content)
-            expected_response = (
-                "You can [download](/apps/) the [mobile and desktop apps](/apps/). "
-                "Zulip also works great in a browser."
-            )
+            expected_response = "Armada runs in your web browser."
             self.assertEqual(most_recent_message(user).content, expected_response)
 
     def test_response_to_pm_for_edit(self) -> None:
@@ -50,8 +47,7 @@ class TutorialTests(ZulipTestCase):
             self.send_personal_message(user, bot, content)
             expected_response = (
                 "Go to [Profile settings](#settings/profile) "
-                "to add a [profile picture](/help/change-your-profile-picture) "
-                "and edit your [profile information](/help/edit-your-profile)."
+                "to add a profile picture and edit your profile information."
             )
             self.assertEqual(most_recent_message(user).content, expected_response)
 
@@ -63,10 +59,8 @@ class TutorialTests(ZulipTestCase):
         for content in messages:
             self.send_personal_message(user, bot, content)
             expected_response = (
-                "You can switch between [light and dark theme](/help/dark-theme), "
-                "[pick your favorite emoji set](/help/emoji-and-emoticons#change-your-emoji-set), "
-                "[change your language](/help/change-your-language), and otherwise customize "
-                "your Zulip experience in your [Preferences](#settings/preferences)."
+                "You can switch between light and dark theme, pick your favorite emoji set, "
+                "and otherwise customize Armada in your [Preferences](#settings/preferences)."
             )
             self.assertEqual(most_recent_message(user).content, expected_response)
 
@@ -92,9 +86,10 @@ class TutorialTests(ZulipTestCase):
         for content in messages:
             self.send_personal_message(user, bot, content)
             expected_response = (
-                "[Topics](/help/introduction-to-topics) summarize what each conversation in Zulip "
-                "is about. You can read Zulip one topic at a time, seeing each message in context, "
-                "no matter how many other conversations are going on.\n\n"
+                "Topics summarize what each conversation is about. You can read one topic at "
+                "a time, seeing each message in context, no matter how many other "
+                "conversations are going on. In a channel that holds a git repository, each "
+                "topic is a worktree of its own.\n\n"
                 "When you start a conversation, label it with a new topic. For a good topic name, "
                 "think about finishing the sentence: “Hey, can we chat about…?”\n\n"
                 "Check out [Recent conversations](#recent) for a list of topics that are being discussed."
@@ -109,7 +104,7 @@ class TutorialTests(ZulipTestCase):
         for content in messages:
             self.send_personal_message(user, bot, content)
             expected_response = (
-                "Zulip's [keyboard shortcuts](#keyboard-shortcuts) "
+                "[Keyboard shortcuts](#keyboard-shortcuts) "
                 "let you navigate the app quickly and efficiently.\n\n"
                 "Press `?` any time to see a [cheat sheet](#keyboard-shortcuts)."
             )
@@ -143,9 +138,7 @@ class TutorialTests(ZulipTestCase):
             expected_response = (
                 "Here are a few messages I understand: "
                 "`apps`, `profile`, `theme`, "
-                "`channels`, `topics`, `message formatting`, `keyboard shortcuts`.\n\n"
-                "Check out our [Getting started guide](/help/getting-started-with-zulip), "
-                "or browse the [help center](/help/) to learn more!"
+                "`channels`, `topics`, `message formatting`, `keyboard shortcuts`."
             )
             message = most_recent_message(user)
             self.assertEqual(message.content, expected_response)
@@ -190,10 +183,7 @@ class TutorialTests(ZulipTestCase):
 
         # Check if Welcome bot still replies for bot commands
         self.send_personal_message(user, bot, "apps")
-        expected_response = (
-            "You can [download](/apps/) the [mobile and desktop apps](/apps/). "
-            "Zulip also works great in a browser."
-        )
+        expected_response = "Armada runs in your web browser."
         self.assertEqual(most_recent_message(user).content, expected_response)
 
     def test_no_response_to_group_pm(self) -> None:

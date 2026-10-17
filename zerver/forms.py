@@ -332,7 +332,7 @@ class HomepageForm(forms.Form):
             except LicenseLimitError:
                 raise ValidationError(
                     _(
-                        "New members cannot join this organization because all Zulip licenses are in use. Please contact the person who "
+                        "New members cannot join this organization because all of its licenses are in use. Please contact the person who "
                         "invited you and ask them to increase the number of licenses, then try again."
                     )
                 )
@@ -736,5 +736,5 @@ class RealmRedirectForm(forms.Form):
         try:
             get_realm(subdomain)
         except Realm.DoesNotExist:
-            raise ValidationError(_("We couldn't find that Zulip organization."))
+            raise ValidationError(_("We couldn't find that organization."))
         return subdomain

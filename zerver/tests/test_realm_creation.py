@@ -25,6 +25,7 @@ from zerver.models import (
     RealmAuditLog,
     Recipient,
     ScheduledEmail,
+    Stream,
     UserProfile,
 )
 from zerver.models.realm_audit_logs import AuditLogEventType
@@ -81,9 +82,8 @@ class DemoCreationTest(ZulipTestCase):
             sender__email="welcome-bot@zulip.com",
             recipient__type=Recipient.DIRECT_MESSAGE_GROUP,
         ).latest("id")
-        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Zulip!"))
-        self.assertIn("getting started guide", welcome_msg.content)
-        self.assertNotIn("using Zulip for a class guide", welcome_msg.content)
+        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Armada!"))
+        self.assertNotIn("/help/", welcome_msg.content)
         self.assertIn("demo organization", welcome_msg.content)
 
         # Confirm we have the expected audit log data.
@@ -253,8 +253,8 @@ class RealmCreationTest(ZulipTestCase):
         # confirmation link and visit it
         confirmation_url = self.get_confirmation_url_from_outbox(
             email,
-            email_subject_contains="Create your Zulip organization",
-            email_body_contains="You have requested a new Zulip organization",
+            email_subject_contains="Create your Armada organization",
+            email_body_contains="You have requested a new Armada organization",
         )
         result = self.client_get(confirmation_url)
         self.assertEqual(result.status_code, 200)
@@ -314,6 +314,18 @@ class RealmCreationTest(ZulipTestCase):
             self.assert_length(messages, message_count)
             self.assertEqual(topic, messages[0].topic_name())
             self.assertIn(text, messages[0].content)
+
+        # No channel is named after Zulip, and nothing Welcome Bot sends
+        # names it or links to the help center.
+        self.assertFalse(Stream.objects.filter(realm=realm, name="Zulip").exists())
+        welcome_bot_messages = Message.objects.filter(
+            realm_id=realm.id, sender__email="welcome-bot@zulip.com"
+        )
+        self.assertTrue(welcome_bot_messages.exists())
+        for message in welcome_bot_messages:
+            self.assertNotIn("Zulip", message.topic_name())
+            self.assertNotIn("Zulip", message.content)
+            self.assertNotIn("/help/", message.content)
 
         # Check admin organization's signups stream messages
         recipient = signups_stream.recipient
@@ -647,12 +659,10 @@ class RealmCreationTest(ZulipTestCase):
             sender__email="welcome-bot@zulip.com",
             recipient__type=Recipient.DIRECT_MESSAGE_GROUP,
         ).latest("id")
-        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Zulip!"))
-
-        # Organization type is not education or education_nonprofit,
-        # and organization is not a demo organization.
-        self.assertIn("getting started guide", welcome_msg.content)
-        self.assertNotIn("using Zulip for a class guide", welcome_msg.content)
+        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Armada!"))
+        self.assertNotIn("Zulip", welcome_msg.content)
+        self.assertNotIn("/help/", welcome_msg.content)
+        # The organization is not a demo organization.
         self.assertNotIn("demo organization", welcome_msg.content)
 
         # Organization has tracked onboarding messages.
@@ -668,58 +678,8 @@ class RealmCreationTest(ZulipTestCase):
             sender__email="welcome-bot@zulip.com",
             recipient__type=Recipient.DIRECT_MESSAGE_GROUP,
         ).latest("id")
-        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Zulip!"))
+        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Armada!"))
         self.assertNotIn("I've kicked off some conversations", welcome_msg.content)
-
-    @override_settings(OPEN_REALM_CREATION=True)
-    def test_create_education_organization_welcome_bot_direct_message(self) -> None:
-        password = "test"
-        string_id = "custom-test"
-        email = "user1@test.com"
-        realm_name = "Test"
-
-        # Create new realm with the email.
-        result = self.submit_realm_creation_form(
-            email,
-            realm_subdomain=string_id,
-            realm_name=realm_name,
-            realm_type=Realm.ORG_TYPES["education"]["id"],
-        )
-        self.assertEqual(result.status_code, 302)
-        self.assertTrue(
-            result["Location"].endswith(
-                f"/accounts/new/send_confirm/?email={quote(email)}&realm_name={quote_plus(realm_name)}&realm_type=35&realm_default_language=en&realm_subdomain={string_id}"
-            )
-        )
-        result = self.client_get(result["Location"])
-        self.assert_in_response("check your email", result)
-
-        # Visit the confirmation link.
-        confirmation_url = self.get_confirmation_url_from_outbox(email)
-        result = self.client_get(confirmation_url)
-        self.assertEqual(result.status_code, 200)
-
-        result = self.submit_reg_form_for_user(
-            email,
-            password,
-            realm_subdomain=string_id,
-            realm_name=realm_name,
-            enable_marketing_emails=False,
-            realm_type=Realm.ORG_TYPES["education"]["id"],
-        )
-        self.assertEqual(result.status_code, 302)
-
-        # Make sure the correct Welcome Bot direct message is sent.
-        welcome_msg = Message.objects.filter(
-            realm_id=get_realm(string_id).id,
-            sender__email="welcome-bot@zulip.com",
-            recipient__type=Recipient.DIRECT_MESSAGE_GROUP,
-        ).latest("id")
-        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Zulip!"))
-
-        # Organization type is education.
-        self.assertNotIn("getting started guide", welcome_msg.content)
-        self.assertIn("using Zulip for a class guide", welcome_msg.content)
 
     @override_settings(OPEN_REALM_CREATION=True)
     def test_create_realm_with_custom_language(self) -> None:
@@ -782,7 +742,9 @@ class RealmCreationTest(ZulipTestCase):
         greetings_message_content = "Thema ist ein toller Ort um “hi”"
         experiments_channel = "Sandbox"
         experiments_topic = "Experimente"
-        experiments_message_content = "Verwende dieses Thema um"
+        # This text is new and has no German translation (S-01 cuts
+        # the other languages); the topic name above still has one.
+        experiments_message_content = "Use this topic to try out message formatting."
 
         for stream_name, topic, text, message_count in [
             (greetings_channel, greetings_topic, greetings_message_content, 2),

@@ -831,7 +831,7 @@ class UserGroupAPITestCase(UserGroupTestCase):
         original_plan_type = hamlet.realm.plan_type
         do_change_realm_plan_type(hamlet.realm, Realm.PLAN_TYPE_LIMITED, acting_user=None)
         result = self.client_post("/json/user_groups/create", info=params)
-        self.assert_json_error(result, "Available on Zulip Cloud Standard. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Standard plan. Upgrade to access.")
         self.assert_length(NamedUserGroup.objects.filter(realm_for_sharding=hamlet.realm), 10)
         do_change_realm_plan_type(hamlet.realm, original_plan_type, acting_user=None)
 

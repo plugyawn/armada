@@ -33,7 +33,6 @@ from zerver.actions.users import change_user_is_active, do_deactivate_user
 from zerver.decorator import do_two_factor_login
 from zerver.forms import HomepageForm
 from zerver.lib.default_streams import get_slim_realm_default_streams
-from zerver.lib.email_notifications import enqueue_welcome_emails
 from zerver.lib.i18n import get_default_language_for_new_user
 from zerver.lib.initial_password import initial_password
 from zerver.lib.mobile_auth_otp import (
@@ -792,7 +791,7 @@ class PasswordResetTest(ZulipTestCase):
 
         with translation.override("de"):
             body = self.get_reset_mail_body("lear")
-            self.assertIn("hat ein neues Passwort", body)
+            self.assertIn("Du hast aktive Accounts", body)
 
     def test_invalid_subdomain(self) -> None:
         email = self.example_email("hamlet")
@@ -1068,7 +1067,7 @@ class LoginTest(ZulipTestCase):
         # to sending messages, such as getting the welcome bot, looking up
         # the alert words for a realm, etc.
         with (
-            self.assert_database_query_count(101),
+            self.assert_database_query_count(94),
             self.assert_memcached_count(19),
             self.captureOnCommitCallbacks(execute=True),
         ):
@@ -1263,9 +1262,14 @@ class EmailUnsubscribeTests(ZulipTestCase):
         click even when logged out to stop receiving them.
         """
         user_profile = self.example_user("hamlet")
-        # Simulate scheduling welcome e-mails for a new user.
-        enqueue_welcome_emails(user_profile)
-        self.assertEqual(2, ScheduledEmail.objects.filter(users=user_profile).count())
+        # Simulate a welcome e-mail still scheduled for a new user.
+        send_future_email(
+            "zerver/emails/account_registered",
+            user_profile.realm,
+            to_user_ids=[user_profile.id],
+            delay=timedelta(hours=1),
+        )
+        self.assertEqual(1, ScheduledEmail.objects.filter(users=user_profile).count())
 
         # Simulate unsubscribing from the welcome e-mails.
         unsubscribe_link = one_click_unsubscribe_link(user_profile, "welcome")
@@ -1401,7 +1405,7 @@ class UserSignUpTest(ZulipTestCase):
 
         # Visit the confirmation link.
         confirmation_url = self.get_confirmation_url_from_outbox(
-            email, email_body_contains="You recently signed up for Zulip. Awesome!"
+            email, email_body_contains="You recently signed up for Armada. Awesome!"
         )
         result = self.client_get(confirmation_url, **client_kwargs)
         self.assertEqual(result.status_code, 200)
@@ -1911,7 +1915,7 @@ class UserSignUpTest(ZulipTestCase):
 
         existing_default_streams = DefaultStream.objects.filter(realm=realm)
         self.assert_length(existing_default_streams, 3)
-        expected_default_streams = ["Zulip", "sandbox", "Verona"]
+        expected_default_streams = ["sandbox", "Verona", "Zulip"]
         for i, expected_default_stream in enumerate(expected_default_streams):
             self.assertEqual(existing_default_streams[i].stream.name, expected_default_stream)
             default_streams.add(existing_default_streams[i].stream)
@@ -2304,7 +2308,7 @@ class UserSignUpTest(ZulipTestCase):
         with self.settings(BILLING_ENABLED=True):
             form = HomepageForm({"email": self.nonreg_email("test")}, realm=realm)
             self.assertIn(
-                "New members cannot join this organization because all Zulip licenses",
+                "New members cannot join this organization because all of its licenses",
                 form.errors["email"][0],
             )
             last_message = Message.objects.last()
@@ -2323,7 +2327,7 @@ class UserSignUpTest(ZulipTestCase):
         with self.settings(BILLING_ENABLED=True):
             form = HomepageForm({"email": self.nonreg_email("test")}, realm=realm)
             self.assertIn(
-                "New members cannot join this organization because all Zulip licenses",
+                "New members cannot join this organization because all of its licenses",
                 form.errors["email"][0],
             )
 
@@ -2333,7 +2337,7 @@ class UserSignUpTest(ZulipTestCase):
         with self.settings(BILLING_ENABLED=True):
             form = HomepageForm({"email": self.nonreg_email("test")}, realm=realm)
             self.assertIn(
-                "New members cannot join this organization because all Zulip licenses",
+                "New members cannot join this organization because all of its licenses",
                 form.errors["email"][0],
             )
             last_message = Message.objects.last()
@@ -3617,11 +3621,9 @@ class UserSignUpTest(ZulipTestCase):
             sender__email="welcome-bot@zulip.com",
             recipient__type=Recipient.DIRECT_MESSAGE_GROUP,
         ).latest("id")
-        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Zulip!"))
-
-        # Organization type is education, and organization is a demo organization.
-        self.assertNotIn("getting started guide", welcome_msg.content)
-        self.assertIn("using Zulip for a class guide", welcome_msg.content)
+        self.assertTrue(welcome_msg.content.startswith("Hello, and welcome to Armada!"))
+        self.assertNotIn("Zulip", welcome_msg.content)
+        self.assertNotIn("/help/", welcome_msg.content)
         self.assertIn("demo organization", welcome_msg.content)
 
     def test_get_default_language_for_new_user(self) -> None:
@@ -3824,7 +3826,7 @@ class TestFindMyTeam(ZulipTestCase):
 
         self.assert_length(outbox, 1)
         message = outbox[0]
-        self.assertIn("Unfortunately, no Zulip Cloud accounts", message.body)
+        self.assertIn("Unfortunately, no Armada accounts", message.body)
 
     def test_find_team_reject_invalid_email(self) -> None:
         result = self.client_post("/accounts/find/", dict(emails="invalid_string"))
@@ -3863,7 +3865,7 @@ class TestFindMyTeam(ZulipTestCase):
 
         self.assert_length(outbox, 1)
         message = outbox[0]
-        self.assertIn("Unfortunately, no Zulip Cloud accounts", message.body)
+        self.assertIn("Unfortunately, no Armada accounts", message.body)
 
     def test_find_team_zero_emails(self) -> None:
         data = {"emails": ""}
@@ -3893,7 +3895,7 @@ class TestFindMyTeam(ZulipTestCase):
 
         self.assert_length(outbox, 1)
         message = outbox[0]
-        self.assertIn("Unfortunately, no Zulip Cloud accounts", message.body)
+        self.assertIn("Unfortunately, no Armada accounts", message.body)
 
     def test_find_team_deactivated_realm(self) -> None:
         do_deactivate_realm(
@@ -3909,7 +3911,7 @@ class TestFindMyTeam(ZulipTestCase):
 
         self.assert_length(outbox, 1)
         message = outbox[0]
-        self.assertIn("Unfortunately, no Zulip Cloud accounts", message.body)
+        self.assertIn("Unfortunately, no Armada accounts", message.body)
 
     def test_find_team_bot_email(self) -> None:
         data = {"emails": self.example_email("webhook_bot")}
@@ -3919,7 +3921,7 @@ class TestFindMyTeam(ZulipTestCase):
 
         self.assert_length(outbox, 1)
         message = outbox[0]
-        self.assertIn("Unfortunately, no Zulip Cloud accounts", message.body)
+        self.assertIn("Unfortunately, no Armada accounts", message.body)
 
     def test_find_team_more_than_ten_emails(self) -> None:
         data = {"emails": ",".join(f"hamlet-{i}@zulip.com" for i in range(11))}
@@ -4042,7 +4044,7 @@ class RealmRedirectTest(ZulipTestCase):
         self.assertEqual(result["Location"], "http://zephyr.testserver/login/")
 
         result = self.client_post("/accounts/go/", {"subdomain": "invalid"})
-        self.assert_in_success_response(["We couldn&#39;t find that Zulip organization."], result)
+        self.assert_in_success_response(["We couldn&#39;t find that organization."], result)
 
     def test_realm_redirect_with_next_param(self) -> None:
         result = self.client_get("/accounts/go/", {"next": "billing"})

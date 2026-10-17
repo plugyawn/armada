@@ -98,7 +98,6 @@ class OrgTypeDict(TypedDict):
     id: int
     hidden: bool
     display_order: int
-    onboarding_zulip_guide_url: str | None
 
 
 class VideoChatProviderDict(TypedDict):
@@ -459,7 +458,6 @@ class Realm(models.Model):
     # Defaults for new users
     default_language = models.CharField(default="en", max_length=MAX_LANGUAGE_ID_LENGTH)
 
-    ZULIP_DISCUSSION_CHANNEL_NAME = gettext_lazy("Zulip")
     ZULIP_SANDBOX_CHANNEL_NAME = gettext_lazy("sandbox")
     DEFAULT_NOTIFICATION_STREAM_NAME = gettext_lazy("general")
     STREAM_EVENTS_NOTIFICATION_TOPIC_NAME = gettext_lazy("channel events")
@@ -493,7 +491,7 @@ class Realm(models.Model):
         on_delete=models.SET_NULL,
     )
 
-    ZULIP_UPDATE_ANNOUNCEMENTS_TOPIC_NAME = gettext_lazy("Zulip updates")
+    ZULIP_UPDATE_ANNOUNCEMENTS_TOPIC_NAME = gettext_lazy("Armada updates")
     zulip_update_announcements_stream = models.ForeignKey(
         "Stream",
         related_name="+",
@@ -524,91 +522,78 @@ class Realm(models.Model):
             "id": OrgTypeEnum.Unspecified.value,
             "hidden": True,
             "display_order": 0,
-            "onboarding_zulip_guide_url": None,
         },
         "business": {
             "name": "Business",
             "id": OrgTypeEnum.Business.value,
             "hidden": False,
             "display_order": 1,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/business/",
         },
         "opensource": {
             "name": "Open-source project",
             "id": OrgTypeEnum.OpenSource.value,
             "hidden": False,
             "display_order": 2,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/open-source/",
         },
         "education_nonprofit": {
             "name": "Education (non-profit)",
             "id": OrgTypeEnum.EducationNonProfit.value,
             "hidden": False,
             "display_order": 3,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/education/",
         },
         "education": {
             "name": "Education (for-profit)",
             "id": OrgTypeEnum.Education.value,
             "hidden": False,
             "display_order": 4,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/education/",
         },
         "research": {
             "name": "Research",
             "id": OrgTypeEnum.Research.value,
             "hidden": False,
             "display_order": 5,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/research/",
         },
         "event": {
             "name": "Event or conference",
             "id": OrgTypeEnum.Event.value,
             "hidden": False,
             "display_order": 6,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/events/",
         },
         "nonprofit": {
             "name": "Non-profit (registered)",
             "id": OrgTypeEnum.NonProfit.value,
             "hidden": False,
             "display_order": 7,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/communities/",
         },
         "government": {
             "name": "Government",
             "id": OrgTypeEnum.Government.value,
             "hidden": False,
             "display_order": 8,
-            "onboarding_zulip_guide_url": None,
         },
         "political_group": {
             "name": "Political group",
             "id": OrgTypeEnum.PoliticalGroup.value,
             "hidden": False,
             "display_order": 9,
-            "onboarding_zulip_guide_url": None,
         },
         "community": {
             "name": "Community",
             "id": OrgTypeEnum.Community.value,
             "hidden": False,
             "display_order": 10,
-            "onboarding_zulip_guide_url": "https://zulip.com/for/communities/",
         },
         "personal": {
             "name": "Personal",
             "id": OrgTypeEnum.Personal.value,
             "hidden": False,
             "display_order": 100,
-            "onboarding_zulip_guide_url": None,
         },
         "other": {
             "name": "Other",
             "id": OrgTypeEnum.Other.value,
             "hidden": False,
             "display_order": 1000,
-            "onboarding_zulip_guide_url": None,
         },
     }
 
@@ -619,8 +604,8 @@ class Realm(models.Model):
         choices=[(t["id"], t["name"]) for t in ORG_TYPES.values()],
     )
 
-    UPGRADE_TEXT_STANDARD = gettext_lazy("Available on Zulip Cloud Standard. Upgrade to access.")
-    UPGRADE_TEXT_PLUS = gettext_lazy("Available on Zulip Cloud Plus. Upgrade to access.")
+    UPGRADE_TEXT_STANDARD = gettext_lazy("Available on the Standard plan. Upgrade to access.")
+    UPGRADE_TEXT_PLUS = gettext_lazy("Available on the Plus plan. Upgrade to access.")
     # plan_type controls various features around resource/feature
     # limitations for a Zulip organization on multi-tenant installations
     # like Zulip Cloud.

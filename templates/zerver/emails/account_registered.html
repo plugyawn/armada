@@ -1,25 +1,21 @@
 {% extends "zerver/emails/email_base_default.html" %}
 
-{% block illustration %}
-<img src="{{ email_images_base_url }}/email_logo.png" alt=""/>
-{% endblock %}
-
 {% block content %}
 {% if realm_creation %}
 <p>
-    {% trans %}Congratulations, you have created a new Zulip
+    {% trans %}Congratulations, you have created a new Armada
     organization: <b>{{ realm_name }}</b>.{% endtrans %}
 </p>
 {% else %}
-<p>{{ _('Welcome to Zulip!') }}</p>
+<p>{{ _('Welcome to Armada!') }}</p>
 <p>
-    {% trans %}You've joined the Zulip organization <b>{{ realm_name }}</b>.
+    {% trans %}You've joined the Armada organization <b>{{ realm_name }}</b>.
     {% endtrans %}
 </p>
 {% endif %}
 
 <p>
-    {% trans apps_page_link="https://zulip.com/apps/" %}You will use the following info to log into the Zulip web, <a href="{{ apps_page_link }}">mobile and desktop</a> apps:{% endtrans %}
+    {{ _('You will use the following info to log in:') }}
 </p>
 <ul>
     <li>{% trans organization_url=macros.link_tag(realm_url) %}Organization URL: {{ organization_url }}{% endtrans %}<br /></li>
@@ -35,13 +31,6 @@
 </ul>
 <p>
     <a class="button" href="{{ realm_url }}">{{ _('Go to organization') }}</a>
-</p>
-
-<p>
-    {% trans %}If you are new to Zulip, check out our <a href="{{ getting_user_started_link }}">getting started guide</a>!{% endtrans %}
-    {% if is_realm_admin %}
-    {% trans %}We also have a guide for <a href="{{ getting_organization_started_link }}">moving your organization to Zulip</a>.{% endtrans %}
-    {% endif %}
 </p>
 
 <p>

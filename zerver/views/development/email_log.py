@@ -12,7 +12,7 @@ from confirmation.models import Confirmation
 from zerver.actions.realm_settings import do_send_realm_reactivation_email
 from zerver.actions.user_settings import do_change_user_delivery_email
 from zerver.actions.users import change_user_is_active
-from zerver.lib.email_notifications import enqueue_welcome_emails, send_account_registered_email
+from zerver.lib.email_notifications import send_account_registered_email
 from zerver.lib.response import json_success
 from zerver.lib.typed_endpoint import typed_endpoint
 from zerver.models import Realm
@@ -150,16 +150,8 @@ def generate_all_emails(request: HttpRequest) -> HttpResponse:
         # Initial email with new account information for normal user
         send_account_registered_email(user_profile)
 
-        # Onboarding emails for normal user
-        enqueue_welcome_emails(user_profile)
-
         # Initial email with new account information for admin user
         send_account_registered_email(get_user_by_delivery_email("iago@zulip.com", realm))
-
-        # Onboarding emails for admin user
-        enqueue_welcome_emails(
-            get_user_by_delivery_email("iago@zulip.com", realm), realm_creation=True
-        )
 
         # Realm reactivation email
         do_send_realm_reactivation_email(realm, acting_user=None)

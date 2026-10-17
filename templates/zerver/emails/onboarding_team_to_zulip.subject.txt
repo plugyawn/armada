@@ -1,1 +1,0 @@
-{{ _("Choosing the chat app for your team") }}

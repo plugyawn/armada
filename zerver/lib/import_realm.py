@@ -2270,8 +2270,6 @@ def send_zulip_initial_messages_after_import(realm: Realm, target_channel: Strea
         send_initial_realm_messages(
             realm,
             override_channel_name_map={
-                OnboardingMessageTypeEnum.moving_messages: target_channel.name,
-                OnboardingMessageTypeEnum.welcome_to_zulip: target_channel.name,
                 OnboardingMessageTypeEnum.experiments: target_channel.name,
                 OnboardingMessageTypeEnum.greetings: target_channel.name,
                 # We shouldn't encourage people to start random threads in their organization's #general-type channel,

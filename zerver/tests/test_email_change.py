@@ -2,7 +2,6 @@ from datetime import timedelta
 from email.headerregistry import Address
 from typing import Any
 
-import orjson
 import time_machine
 from django.conf import settings
 from django.core import mail
@@ -423,7 +422,7 @@ class EmailChangeTestCase(ZulipTestCase):
         email_message = mail.outbox[0]
         self.assertEqual(
             email_message.subject,
-            "Verify your email address for your Zulip demo organization",
+            "Verify your email address for your Armada demo organization",
         )
         body = email_message.body
         self.assertIn(
@@ -456,22 +455,8 @@ class EmailChangeTestCase(ZulipTestCase):
         user_profile.refresh_from_db()
         self.assertEqual(user_profile.delivery_email, "demo-owner@example.com")
 
-        scheduled_emails = ScheduledEmail.objects.filter(users=user_profile).order_by(
-            "scheduled_timestamp"
-        )
-        self.assert_length(scheduled_emails, 3)
-        self.assertEqual(
-            orjson.loads(scheduled_emails[0].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_topics",
-        )
-        self.assertEqual(
-            orjson.loads(scheduled_emails[1].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_guide",
-        )
-        self.assertEqual(
-            orjson.loads(scheduled_emails[2].data)["template_prefix"],
-            "zerver/emails/onboarding_team_to_zulip",
-        )
+        # The onboarding follow-up emails are cut; none are scheduled.
+        self.assertFalse(ScheduledEmail.objects.filter(users=user_profile).exists())
 
         # Set password
         with self.settings(PASSWORD_MIN_LENGTH=3, PASSWORD_MIN_GUESSES=1000):

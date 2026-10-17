@@ -144,7 +144,7 @@ def too_many_recent_realm_invites(realm: Realm, num_invitees: int) -> bool:
 def check_invite_limit(realm: Realm, num_invitees: int) -> None:
     """Discourage using invitation emails as a vector for carrying spam."""
     msg = _(
-        "To protect users, Zulip limits the number of invitations you can send in one day. Because you have reached the limit, no invitations were sent."
+        "To protect users, Armada limits the number of invitations you can send in one day. Because you have reached the limit, no invitations were sent."
     )
     if not settings.OPEN_REALM_CREATION:
         return

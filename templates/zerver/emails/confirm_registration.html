@@ -1,13 +1,9 @@
 {% extends "zerver/emails/email_base_default.html" %}
 
-{% block illustration %}
-<img src="{{ email_images_base_url }}/registration_confirmation.png" alt=""/>
-{% endblock %}
-
 {% block content %}
     {% if create_realm %}
         <p>
-            {{ _("You have requested a new Zulip organization:") }}
+            {{ _("You have requested a new Armada organization:") }}
         </p>
         <ul>
             <li>{% trans %}Organization URL: {{ organization_url }}{% endtrans %}</li>
@@ -15,7 +11,7 @@
         </ul>
     {% else %}
         <p>
-            {{ _("You recently signed up for Zulip. Awesome!") }}
+            {{ _("You recently signed up for Armada. Awesome!") }}
         </p>
     {% endif %}
     <p>

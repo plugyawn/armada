@@ -29,7 +29,7 @@ from zerver.actions.users import (
 from zerver.lib.avatar import generate_and_upload_jdenticon_avatar
 from zerver.lib.create_user import create_user
 from zerver.lib.default_streams import get_slim_realm_default_streams
-from zerver.lib.email_notifications import enqueue_welcome_emails, send_account_registered_email
+from zerver.lib.email_notifications import send_account_registered_email
 from zerver.lib.exceptions import JsonableError
 from zerver.lib.invites import notify_invites_changed
 from zerver.lib.mention import silent_mention_syntax_for_user
@@ -307,7 +307,7 @@ def process_new_human_user(
             internal_send_private_message(
                 get_system_bot(settings.NOTIFICATION_BOT, prereg_user.referred_by.realm_id),
                 prereg_user.referred_by,
-                _("{user} accepted your invitation to join Zulip!").format(
+                _("{user} accepted your invitation to join Armada!").format(
                     user=silent_mention_syntax_for_user(user_profile)
                 ),
             )
@@ -339,8 +339,6 @@ def process_new_human_user(
     # Clear any scheduled invitation emails to prevent them
     # from being sent after the user is created.
     clear_scheduled_invitation_emails(user_profile.delivery_email)
-    if realm.send_welcome_emails:
-        enqueue_welcome_emails(user_profile, realm_creation)
 
     # Schedule an initial email with the user's
     # new account details and log-in information.

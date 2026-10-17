@@ -336,7 +336,7 @@ I'm a generic exception :(
             self.assertEqual(
                 bot_owner_notification.content,
                 """[A message](http://zulip.testserver/#narrow/channel/999-Verona/topic/Foo/near/) to your bot @_**Outgoing Webhook** triggered an outgoing webhook.
-The outgoing webhook server attempted to send a message in Zulip, but that request resulted in the following error:
+The outgoing webhook server attempted to send a message in Armada, but that request resulted in the following error:
 > Widgets: widget_content is not a dict\nThe response contains the following payload:\n```\n'{"content": "whatever", "widget_content": "test"}'\n```""",
             )
         assert bot_user.bot_owner is not None
@@ -366,7 +366,7 @@ The outgoing webhook server attempted to send a message in Zulip, but that reque
             self.assertEqual(
                 bot_owner_notification.content,
                 """[A message](http://zulip.testserver/#narrow/channel/999-Verona/topic/Foo/near/) to your bot @_**Outgoing Webhook** triggered an outgoing webhook.
-The outgoing webhook server attempted to send a message in Zulip, but that request resulted in the following error:
+The outgoing webhook server attempted to send a message in Armada, but that request resulted in the following error:
 > Invalid response format\nThe response contains the following payload:\n```\n'true'\n```""",
             )
         assert bot_user.bot_owner is not None
@@ -398,7 +398,7 @@ The outgoing webhook server attempted to send a message in Zulip, but that reque
             self.assertEqual(
                 bot_owner_notification.content,
                 """[A message](http://zulip.testserver/#narrow/channel/999-Verona/topic/Foo/near/) to your bot @_**Outgoing Webhook** triggered an outgoing webhook.
-The outgoing webhook server attempted to send a message in Zulip, but that request resulted in the following error:
+The outgoing webhook server attempted to send a message in Armada, but that request resulted in the following error:
 > Invalid JSON in response\nThe response contains the following payload:\n```\n"this isn't valid json"\n```""",
             )
         assert bot_user.bot_owner is not None

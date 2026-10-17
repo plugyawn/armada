@@ -125,3 +125,113 @@ kept zerver/context_processors.py  # realm_icon_uploaded: the pages before the a
 kept zerver/tests/test_decorators.py  # the invalid-organization page's new wording
 kept zerver/tests/test_email_change.py  # the email-change page's new wording; the demo email's new subject; no onboarding emails
 kept zerver/tests/test_signup.py  # the pages before the app and the confirmation email say Armada; Welcome Bot; the dev data's default channels' order
+kept templates/zerver/emails/account_registered.html  # emails: the welcome email says Armada and links to no help page
+kept templates/zerver/emails/account_registered.subject.txt  # emails: says Armada
+kept templates/zerver/emails/account_registered.txt  # emails: the welcome email says Armada and links to no help page
+kept templates/zerver/emails/confirm_demo_organization_email.html  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/confirm_demo_organization_email.subject.txt  # emails: says Armada
+kept templates/zerver/emails/confirm_demo_organization_email.txt  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/confirm_new_email.html  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/confirm_new_email.txt  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/confirm_registration.html  # emails: says Armada; no Zulip image
+kept templates/zerver/emails/confirm_registration.subject.txt  # emails: says Armada
+kept templates/zerver/emails/confirm_registration.txt  # emails: says Armada
+kept templates/zerver/emails/custom_email_base.pre.html  # emails: no Zulip logo
+kept templates/zerver/emails/deactivate.html  # emails: Zulip's name and logo leave the email
+kept templates/zerver/emails/deactivate.txt  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/digest.html  # emails: says Armada; no help-centre links
+kept templates/zerver/emails/digest.subject.txt  # emails: says Armada
+kept templates/zerver/emails/digest.txt  # emails: says Armada; no help-centre links
+kept templates/zerver/emails/email.css  # emails: the illustrations' rules go with the illustrations
+kept templates/zerver/emails/email_base_default.html  # emails: titled Armada; no Zulip illustration or fish
+kept templates/zerver/emails/email_base_marketing.html  # emails: titled Armada; no Zulip illustration or fish
+kept templates/zerver/emails/email_base_messages.html  # emails: titled Armada
+kept templates/zerver/emails/find_team.html  # emails: says Armada; no help-centre links
+kept templates/zerver/emails/find_team.subject.txt  # emails: says Armada
+kept templates/zerver/emails/find_team.txt  # emails: says Armada; no help-centre links
+kept templates/zerver/emails/invitation.html  # emails: says what Armada is; no Zulip image
+kept templates/zerver/emails/invitation.txt  # emails: says what Armada is
+kept templates/zerver/emails/invitation_reminder.html  # emails: says what Armada is; no Zulip image
+kept templates/zerver/emails/invitation_reminder.txt  # emails: says what Armada is
+kept templates/zerver/emails/macros.html  # emails: "this server's administrators"
+kept templates/zerver/emails/missed_message.html  # emails: Zulip's name and docs links leave the footer
+kept templates/zerver/emails/missed_message.txt  # emails: Zulip's name and docs links leave the footer
+kept templates/zerver/emails/notify_change_in_email.html  # emails: says Armada; no "Team Zulip"
+kept templates/zerver/emails/notify_change_in_email.subject.txt  # emails: says Armada
+kept templates/zerver/emails/notify_change_in_email.txt  # emails: says Armada; no "Team Zulip"
+kept templates/zerver/emails/notify_new_login.html  # emails: says Armada; no "Zulip Security"
+kept templates/zerver/emails/notify_new_login.txt  # emails: says Armada; no "Zulip Security"
+deleted templates/zerver/emails/onboarding_team_to_zulip.html  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_team_to_zulip.subject.txt  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_team_to_zulip.txt  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_guide.html  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_guide.subject.txt  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_guide.txt  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_topics.html  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_topics.subject.txt  # the onboarding follow-up emails are cut
+deleted templates/zerver/emails/onboarding_zulip_topics.txt  # the onboarding follow-up emails are cut
+kept templates/zerver/emails/password_reset.html  # emails: says Armada; no help-centre link
+kept templates/zerver/emails/password_reset.txt  # emails: says Armada; no help-centre link
+kept templates/zerver/emails/realm_auto_downgraded.html  # emails: no Zulip logo (the billing text is corporate's, S-10)
+kept templates/zerver/emails/realm_deactivated.html  # emails: Zulip's name and logo leave the email
+kept templates/zerver/emails/realm_deactivated.subject.txt  # emails: says Armada
+kept templates/zerver/emails/realm_deactivated.txt  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/realm_reactivation.html  # emails: Zulip's name and image leave the email
+kept templates/zerver/emails/realm_reactivation.subject.txt  # emails: says Armada
+kept templates/zerver/emails/realm_reactivation.txt  # emails: Zulip's name leaves the text
+kept templates/zerver/emails/remote_billing_legacy_server_confirm_login.html  # emails: no Zulip image (the billing text is corporate's, S-10)
+kept templates/zerver/emails/remote_realm_billing_confirm_login.html  # emails: no Zulip image (the billing text is corporate's, S-10)
+kept templates/zerver/emails/sponsorship_approved_community_plan.html  # emails: no Zulip logo (the billing text is corporate's, S-10)
+deleted static/images/emails/channels-and-topics.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/day2_1.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/day2_2.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/digest.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/email_logo.png  # Zulip's logo leaves the emails
+deleted static/images/emails/invitation_reminder.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/registration_confirmation.png  # Zulip's email illustrations leave with the emails that showed them
+deleted static/images/emails/streams-and-topics.png  # Zulip's email illustrations leave with the emails that showed them
+kept zerver/lib/send_email.py  # emails come from "Armada"; a scheduled email whose template is gone is dropped, not queued
+kept zerver/lib/email_notifications.py  # the onboarding follow-up emails are cut; the welcome email links to no help page; says Armada
+kept zerver/views/development/email_log.py  # /emails/generate/ no longer sends the cut onboarding emails
+kept zerver/views/user_settings.py  # a demo owner's new email no longer schedules onboarding emails; the LDAP error names no Zulip
+kept zerver/views/registration.py  # the find-accounts email gets no help-centre links
+kept zerver/actions/create_realm.py  # a new organization gets no "Zulip" channel; the sandbox says Armada
+kept zerver/actions/create_user.py  # no onboarding follow-up emails; Notification Bot says Armada
+kept zerver/actions/invites.py  # the invitation limit's error says Armada
+kept zerver/lib/onboarding.py  # Welcome Bot says Armada, links to no help page; no messages for the "Zulip" channel
+kept zerver/lib/outgoing_webhook.py  # Notification Bot's webhook failures say Armada
+kept zerver/lib/realm_description.py  # an organization without a description shows none
+kept zerver/lib/recipient_users.py  # the deactivated recipient's error says Armada
+kept zerver/lib/webhooks/common.py  # Notification Bot's webhook setup message names no Zulip
+kept zerver/lib/zulip_update_announcements.py  # the topic and the admins' notice say Armada and link to no help page
+kept zerver/models/realms.py  # no "Zulip" channel name; the update topic and upgrade texts name no Zulip
+kept zerver/signals.py  # the new-login email calls Zulip's apps Armada
+kept zerver/views/invite.py  # the already-a-member error says Armada
+kept zerver/views/onboarding_steps.py  # Welcome Bot's video reminder names no Zulip
+kept zerver/views/video_calls.py  # the video call rooms name Armada or no product
+kept zerver/tests/test_channel_creation.py  # the upgrade text's new wording
+kept zerver/tests/test_create_video_call.py  # the room's new name
+kept zerver/tests/test_digest.py  # the digest's new wording
+kept zerver/tests/test_email_notifications.py  # no onboarding emails; dropped scheduled emails; emails say Armada
+kept zerver/tests/test_i18n.py  # phrases whose English did not change; no onboarding emails
+kept zerver/tests/test_invite.py  # emails from Armada; Welcome Bot and errors say Armada
+kept zerver/tests/test_message_notification_emails.py  # the footer's new wording
+kept zerver/tests/test_message_send.py  # the deactivated recipient's new error
+kept zerver/tests/test_new_users.py  # the new-login browser and the confirmation subject say Armada
+kept zerver/tests/test_onboarding_steps.py  # the video reminder's new wording
+kept zerver/tests/test_outgoing_webhook_system.py  # Notification Bot's new wording
+kept zerver/tests/test_realm.py  # an empty description stays empty; a new organization's channels; new wordings
+kept zerver/tests/test_realm_creation.py  # Welcome Bot says Armada; no "Zulip" channel
+kept zerver/tests/test_settings.py  # the LDAP error's new wording
+kept zerver/tests/test_subs.py  # the upgrade text's new wording
+kept zerver/tests/test_tutorial.py  # Welcome Bot's replies say Armada and link to no help page
+kept zerver/tests/test_user_groups.py  # the upgrade text's new wording
+kept zerver/tests/test_users.py  # scheduled-email tests use a template that stays
+kept zerver/tests/test_zulip_update_announcements.py  # the admins' notice's new wording
+kept zerver/tests/test_email_log.py  # /emails/generate/ sends five fewer emails: the onboarding ones are cut
+kept zerver/tests/test_example.py  # /emails/generate/ sends five fewer emails: the onboarding ones are cut
+kept zerver/tests/test_mattermost_importer.py  # an import gets five fewer onboarding messages: the "Zulip" channel's are cut
+kept zerver/tests/test_rocketchat_importer.py  # an import gets five fewer onboarding messages: the "Zulip" channel's are cut
+kept zerver/tests/test_slack_importer.py  # an import gets five fewer onboarding messages: the "Zulip" channel's are cut
+kept zerver/tests/test_reminders.py  # Verona's id in the test data: the dev data's "Zulip" channel is now made after it
+kept zerver/forms.py  # the organization-not-found and licence errors name no product

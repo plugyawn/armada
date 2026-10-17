@@ -1962,11 +1962,6 @@ def find_account(request: HttpRequest) -> HttpResponse:
             # Links in find_team emails use the server's information
             # and not any particular realm's information.
             external_host_base_url = f"{settings.EXTERNAL_URI_SCHEME}{settings.EXTERNAL_HOST}"
-            help_base_url = f"{external_host_base_url}/help"
-            help_reset_password_link = (
-                f"{help_base_url}/change-your-password#if-youve-forgotten-or-never-had-a-password"
-            )
-            help_logging_in_link = f"{help_base_url}/logging-in#find-the-zulip-log-in-url"
             find_accounts_link = f"{external_host_base_url}/accounts/find/"
 
             for delivery_email, realm_context in context.items():
@@ -1977,7 +1972,6 @@ def find_account(request: HttpRequest) -> HttpResponse:
                         "account_found": True,
                         "external_host": settings.EXTERNAL_HOST,
                         "corporate_enabled": settings.CORPORATE_ENABLED,
-                        "help_reset_password_link": help_reset_password_link,
                         "realms": realm_context["realms"],
                         "email": delivery_email,
                     },
@@ -1999,7 +1993,6 @@ def find_account(request: HttpRequest) -> HttpResponse:
                             "external_host": settings.EXTERNAL_HOST,
                             "corporate_enabled": settings.CORPORATE_ENABLED,
                             "find_accounts_link": find_accounts_link,
-                            "help_logging_in_link": help_logging_in_link,
                         }
                     ),
                     from_address=FromAddress.SUPPORT,

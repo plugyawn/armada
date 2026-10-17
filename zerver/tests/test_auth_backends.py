@@ -1317,7 +1317,7 @@ class SocialAuthBase(DesktopFlowTestingLib, ZulipTestCase, ABC):
             self.example_user("hamlet").api_key,
         )
         self.assert_length(mail.outbox, 1)
-        self.assertIn("Zulip on Android", mail.outbox[0].body)
+        self.assertIn("Armada on Android", mail.outbox[0].body)
 
     def test_social_auth_desktop_success(self) -> None:
         desktop_flow_otp = "1234abcd" * 8
@@ -6093,7 +6093,7 @@ class GoogleAuthBackendTest(SocialAuthBase):
             self.example_user("hamlet").api_key,
         )
         self.assert_length(mail.outbox, 1)
-        self.assertIn("Zulip on Android", mail.outbox[0].body)
+        self.assertIn("Armada on Android", mail.outbox[0].body)
 
     def test_google_auth_enabled(self) -> None:
         with self.settings(AUTHENTICATION_BACKENDS=("zproject.backends.GoogleAuthBackend",)):
@@ -7424,7 +7424,7 @@ class TestZulipRemoteUserBackend(DesktopFlowTestingLib, ZulipTestCase):
             self.example_user("hamlet").api_key,
         )
         self.assert_length(mail.outbox, 1)
-        self.assertIn("Zulip on Android", mail.outbox[0].body)
+        self.assertIn("Armada on Android", mail.outbox[0].body)
 
     @override_settings(SEND_LOGIN_EMAILS=True)
     @override_settings(SSO_APPEND_DOMAIN="zulip.com")
@@ -7480,7 +7480,7 @@ class TestZulipRemoteUserBackend(DesktopFlowTestingLib, ZulipTestCase):
             self.example_user("hamlet").api_key,
         )
         self.assert_length(mail.outbox, 1)
-        self.assertIn("Zulip on Android", mail.outbox[0].body)
+        self.assertIn("Armada on Android", mail.outbox[0].body)
 
     @override_settings(SEND_LOGIN_EMAILS=True)
     @override_settings(

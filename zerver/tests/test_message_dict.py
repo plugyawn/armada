@@ -293,7 +293,7 @@ class MessageDictTest(ZulipTestCase):
         # because there is an ugly hack we need to cover.  So don't just say "row = message".
         dct = MessageDict.ids_to_dict([message.id])[0]
         error_content = (
-            "<p>[Zulip note: Sorry, we could not understand the formatting of your message]</p>"
+            "<p>[Note: Sorry, we could not understand the formatting of your message]</p>"
         )
         self.assertEqual(dct["rendered_content"], error_content)
 

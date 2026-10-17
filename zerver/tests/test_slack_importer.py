@@ -2261,7 +2261,7 @@ To Do
             },
         )
 
-        self.assertEqual(Message.objects.filter(realm=realm).count(), 95)
+        self.assertEqual(Message.objects.filter(realm=realm).count(), 90)
 
         # All auth backends are enabled initially.
         self.assertTrue(all(realm.authentication_methods_dict().values()))

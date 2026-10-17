@@ -1008,7 +1008,7 @@ class MessagePOSTTest(ZulipTestCase):
                 "to": orjson.dumps([othello.id]).decode(),
             },
         )
-        self.assert_json_error(result, f"'{othello.email}' is no longer using Zulip.")
+        self.assert_json_error(result, f"'{othello.email}' is no longer using Armada.")
 
         result = self.client_post(
             "/json/messages",
@@ -1018,7 +1018,7 @@ class MessagePOSTTest(ZulipTestCase):
                 "to": orjson.dumps([othello.id, cordelia.id]).decode(),
             },
         )
-        self.assert_json_error(result, f"'{othello.email}' is no longer using Zulip.")
+        self.assert_json_error(result, f"'{othello.email}' is no longer using Armada.")
 
     def test_personal_message_to_inaccessible_users(self) -> None:
         othello = self.example_user("othello")

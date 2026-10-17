@@ -125,4 +125,4 @@ class TestOnboardingSteps(ZulipTestCase):
         self.assertEqual(
             scheduled_message.sender.id, get_system_bot(settings.WELCOME_BOT, user.realm_id).id
         )
-        self.assertIn("Welcome to Zulip video", scheduled_message.content)
+        self.assertIn("welcome video", scheduled_message.content)

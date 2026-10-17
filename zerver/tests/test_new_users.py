@@ -88,7 +88,7 @@ class SendLoginEmailTest(ZulipTestCase):
             self.register("test@zulip.com", "test")
 
             # Verify that there's just 1 email for new user registration.
-            self.assertEqual(mail.outbox[0].subject, "Activate your Zulip account")
+            self.assertEqual(mail.outbox[0].subject, "Activate your Armada account")
             self.assert_length(mail.outbox, 1)
 
     def test_without_path_info_dont_send_login_emails_for_new_user_registration_logins(
@@ -265,16 +265,16 @@ class TestBrowserAndOsUserAgentStrings(ZulipTestCase):
                 "macOS",
             ),
             # Miscellaneous
-            ("ZulipAndroid/1.0", "Zulip", "Android"),
-            ("ZulipMobile/1.0.12 (Android 7.1.1)", "Zulip", "Android"),
-            ("ZulipMobile/0.7.1.1 (iOS 10.3.1)", "Zulip", "iOS"),
+            ("ZulipAndroid/1.0", "Armada", "Android"),
+            ("ZulipMobile/1.0.12 (Android 7.1.1)", "Armada", "Android"),
+            ("ZulipMobile/0.7.1.1 (iOS 10.3.1)", "Armada", "iOS"),
             (
                 (
                     "ZulipElectron/1.1.0-beta Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
                     " AppleWebKit/537.36 (KHTML, like Gecko) Zulip/1.1.0-beta"
                     " Chrome/56.0.2924.87 Electron/1.6.8 Safari/537.36"
                 ),
-                "Zulip",
+                "Armada",
                 "Windows",
             ),
             (

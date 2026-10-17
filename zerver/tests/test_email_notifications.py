@@ -1,24 +1,27 @@
 import tempfile
-from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import ldap
 import orjson
 from django.core import mail
-from django.core.mail.message import EmailMultiAlternatives
+from django.core.mail.message import EmailMessage, EmailMultiAlternatives
 from django.test import override_settings
+from django.utils.timezone import now as timezone_now
 from django_auth_ldap.config import LDAPSearch
 
-from zerver.lib.email_notifications import (
-    enqueue_welcome_emails,
-    get_onboarding_email_schedule,
-    send_account_registered_email,
+from zerver.actions.create_user import do_create_user
+from zerver.actions.realm_settings import do_set_realm_property
+from zerver.lib.email_notifications import MissedMessageData, send_account_registered_email
+from zerver.lib.send_email import (
+    queue_scheduled_emails,
+    send_custom_email,
+    send_custom_server_email,
 )
-from zerver.lib.send_email import send_custom_email, send_custom_server_email
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import mock_queue_publish
-from zerver.models import Realm, ScheduledEmail, UserProfile
+from zerver.models import ScheduledEmail, UserProfile
 from zerver.models.realms import get_realm
+from zerver.models.scheduled_jobs import NotificationTriggers
 from zilencer.models import RemoteZulipServer
 
 
@@ -252,39 +255,37 @@ class TestCustomEmails(ZulipTestCase):
             self.assert_length(mail.outbox, 0)
 
 
-class TestFollowupEmails(ZulipTestCase):
+class TestAccountRegisteredEmail(ZulipTestCase):
     def test_account_registered_email_context(self) -> None:
         hamlet = self.example_user("hamlet")
         with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
             send_account_registered_email(hamlet)
         m.assert_called_once()
         email_data = m.call_args[0][1]
+        self.assertEqual(email_data["template_prefix"], "zerver/emails/account_registered")
         self.assertEqual(email_data["context"]["email"], self.example_email("hamlet"))
-        self.assertEqual(email_data["context"]["is_realm_admin"], False)
-        self.assertEqual(
-            email_data["context"]["getting_user_started_link"],
-            "http://zulip.testserver/help/getting-started-with-zulip",
-        )
+        self.assertFalse(email_data["context"]["realm_creation"])
         self.assertNotIn("ldap_username", email_data["context"])
-
-        ScheduledEmail.objects.all().delete()
 
         iago = self.example_user("iago")
         with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(iago)
+            send_account_registered_email(iago, realm_creation=True)
         m.assert_called_once()
         email_data = m.call_args[0][1]
         self.assertEqual(email_data["context"]["email"], self.example_email("iago"))
-        self.assertEqual(email_data["context"]["is_realm_admin"], True)
-        self.assertEqual(
-            email_data["context"]["getting_organization_started_link"],
-            "http://zulip.testserver/help/moving-to-zulip",
-        )
-        self.assertEqual(
-            email_data["context"]["getting_user_started_link"],
-            "http://zulip.testserver/help/getting-started-with-zulip",
-        )
+        self.assertTrue(email_data["context"]["realm_creation"])
         self.assertNotIn("ldap_username", email_data["context"])
+
+    def test_no_onboarding_emails_for_new_member(self) -> None:
+        realm = get_realm("zulip")
+        with self.captureOnCommitCallbacks(execute=True):
+            user = do_create_user("newbie@zulip.com", "password", realm, "Newbie", acting_user=None)
+
+        # The onboarding follow-up emails are cut: nothing is scheduled,
+        # and the account details are sent at once.
+        self.assertFalse(ScheduledEmail.objects.filter(users=user).exists())
+        self.assert_length(mail.outbox, 1)
+        self.assertEqual(mail.outbox[0].subject, "Zulip Dev on Armada: Your new account details")
 
     # See https://zulip.readthedocs.io/en/latest/production/authentication-methods.html#ldap-including-active-directory
     # for case details.
@@ -311,7 +312,7 @@ class TestFollowupEmails(ZulipTestCase):
                 self.ldap_password("newuser_email_as_uid@zulip.com"),
             )
             user = UserProfile.objects.get(delivery_email="newuser_email_as_uid@zulip.com")
-            self.assert_length(ScheduledEmail.objects.filter(users=user), 2)
+            self.assertFalse(ScheduledEmail.objects.filter(users=user).exists())
             m.assert_called_once()
             email_data = m.call_args[0][1]
             self.assertEqual(email_data["context"]["ldap"], True)
@@ -338,7 +339,7 @@ class TestFollowupEmails(ZulipTestCase):
             self.login_with_return("newuser@zulip.com", self.ldap_password("newuser"))
 
             user = UserProfile.objects.get(delivery_email="newuser@zulip.com")
-            self.assert_length(ScheduledEmail.objects.filter(users=user), 2)
+            self.assertFalse(ScheduledEmail.objects.filter(users=user).exists())
             m.assert_called_once()
             email_data = m.call_args[0][1]
             self.assertEqual(email_data["context"]["ldap"], True)
@@ -360,288 +361,135 @@ class TestFollowupEmails(ZulipTestCase):
         ):
             self.login_with_return("newuser_with_email", self.ldap_password("newuser_with_email"))
             user = UserProfile.objects.get(delivery_email="newuser_email@zulip.com")
-            self.assert_length(ScheduledEmail.objects.filter(users=user), 2)
+            self.assertFalse(ScheduledEmail.objects.filter(users=user).exists())
             m.assert_called_once()
             email_data = m.call_args[0][1]
             self.assertEqual(email_data["context"]["ldap"], True)
             self.assertEqual(email_data["context"]["ldap_username"], "newuser_with_email")
-
-    def test_followup_emails_count(self) -> None:
-        hamlet = self.example_user("hamlet")
-        iago = self.example_user("iago")
-        cordelia = self.example_user("cordelia")
-        realm = get_realm("zulip")
-
-        # Hamlet has account only in Zulip realm so all onboarding emails should be sent
-        with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(self.example_user("hamlet"))
-            enqueue_welcome_emails(self.example_user("hamlet"))
-        m.assert_called_once()
-        self.assertEqual(m.call_args[0][1]["template_prefix"], "zerver/emails/account_registered")
-
-        scheduled_emails = ScheduledEmail.objects.filter(users=hamlet).order_by(
-            "scheduled_timestamp"
-        )
-        self.assert_length(scheduled_emails, 2)
-        self.assertEqual(
-            orjson.loads(scheduled_emails[0].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_topics",
-        )
-        self.assertEqual(
-            orjson.loads(scheduled_emails[1].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_guide",
-        )
-
-        ScheduledEmail.objects.all().delete()
-
-        # The onboarding_zulip_guide email should not be sent to non-admin users in organizations
-        # that are sent the `/for/communities/` guide; see note in enqueue_welcome_emails.
-        realm.org_type = Realm.ORG_TYPES["community"]["id"]
-        realm.save()
-
-        # Hamlet is not an admin so the `/for/communities/` zulip_guide should not be sent
-        with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(self.example_user("hamlet"))
-            enqueue_welcome_emails(self.example_user("hamlet"))
-        m.assert_called_once()
-        self.assertEqual(m.call_args[0][1]["template_prefix"], "zerver/emails/account_registered")
-
-        scheduled_emails = ScheduledEmail.objects.filter(users=hamlet).order_by(
-            "scheduled_timestamp"
-        )
-        self.assert_length(scheduled_emails, 1)
-        self.assertEqual(
-            orjson.loads(scheduled_emails[0].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_topics",
-        )
-
-        ScheduledEmail.objects.all().delete()
-
-        # Iago is an admin so the `/for/communities/` zulip_guide should be sent
-        with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(self.example_user("iago"))
-            enqueue_welcome_emails(self.example_user("iago"))
-        m.assert_called_once()
-        self.assertEqual(m.call_args[0][1]["template_prefix"], "zerver/emails/account_registered")
-
-        scheduled_emails = ScheduledEmail.objects.filter(users=iago).order_by("scheduled_timestamp")
-        self.assert_length(scheduled_emails, 2)
-        self.assertEqual(
-            orjson.loads(scheduled_emails[0].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_topics",
-        )
-        self.assertEqual(
-            orjson.loads(scheduled_emails[1].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_guide",
-        )
-
-        ScheduledEmail.objects.all().delete()
-
-        # The organization_type context for "education_nonprofit" orgs is simplified to be "education"
-        realm.org_type = Realm.ORG_TYPES["education_nonprofit"]["id"]
-        realm.save()
-
-        # Cordelia has account in more than 1 realm so onboarding_zulip_topics email should not be sent
-        with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(self.example_user("cordelia"))
-            enqueue_welcome_emails(self.example_user("cordelia"))
-        m.assert_called_once()
-        self.assertEqual(m.call_args[0][1]["template_prefix"], "zerver/emails/account_registered")
-
-        scheduled_emails = ScheduledEmail.objects.filter(users=cordelia).order_by(
-            "scheduled_timestamp"
-        )
-        self.assert_length(scheduled_emails, 1)
-        self.assertEqual(
-            orjson.loads(scheduled_emails[0].data)["template_prefix"],
-            "zerver/emails/onboarding_zulip_guide",
-        )
-
-        ScheduledEmail.objects.all().delete()
-
-        # Only a subset of Realm.ORG_TYPES are sent the zulip_guide_followup email
-        realm.org_type = Realm.ORG_TYPES["other"]["id"]
-        realm.save()
-
-        # In this case, Cordelia should only be sent the account_registered email
-        with mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m:
-            send_account_registered_email(self.example_user("cordelia"))
-            enqueue_welcome_emails(self.example_user("cordelia"))
-        m.assert_called_once()
-        self.assertEqual(m.call_args[0][1]["template_prefix"], "zerver/emails/account_registered")
-        scheduled_emails = ScheduledEmail.objects.filter(users=cordelia)
-        self.assert_length(scheduled_emails, 0)
-
-    def test_followup_emails_for_regular_realms(self) -> None:
-        cordelia = self.example_user("cordelia")
-        with self.captureOnCommitCallbacks(execute=True) as callbacks:
-            send_account_registered_email(self.example_user("cordelia"), realm_creation=True)
-            enqueue_welcome_emails(self.example_user("cordelia"), realm_creation=True)
-
-            scheduled_emails = ScheduledEmail.objects.filter(users=cordelia).order_by(
-                "scheduled_timestamp"
-            )
-            self.assert_length(scheduled_emails, 2)
-            self.assertEqual(
-                orjson.loads(scheduled_emails[0].data)["template_prefix"],
-                "zerver/emails/onboarding_zulip_guide",
-            )
-            self.assertEqual(
-                orjson.loads(scheduled_emails[1].data)["template_prefix"],
-                "zerver/emails/onboarding_team_to_zulip",
-            )
-
-        # The insert into the deferred_email_senders queue
-        self.assert_length(callbacks, 1)
-
-        # Exiting the block does the email-sending
-        from django.core.mail import outbox
-
-        self.assert_length(outbox, 1)
-
-        message = outbox[0]
-        self.assertIn("you have created a new Zulip organization", message.body)
-        self.assertNotIn("demo org", message.body)
-
-    def test_onboarding_zulip_guide_with_invalid_org_type(self) -> None:
-        cordelia = self.example_user("cordelia")
-        realm = get_realm("zulip")
-
-        invalid_org_type_id = 999
-        realm.org_type = invalid_org_type_id
-        realm.save()
-
-        with self.assertLogs(level="ERROR") as m:
-            enqueue_welcome_emails(self.example_user("cordelia"))
-
-        scheduled_emails = ScheduledEmail.objects.filter(users=cordelia)
-        self.assert_length(scheduled_emails, 0)
-        self.assertEqual(
-            m.output,
-            [f"ERROR:root:Unknown organization type '{invalid_org_type_id}'"],
-        )
-
-
-class TestOnboardingEmailDelay(ZulipTestCase):
-    def verify_onboarding_email_schedule(
-        self,
-        user: UserProfile,
-        date_joined: str,
-        onboarding_zulip_topics: int,
-        onboarding_zulip_guide: int,
-        onboarding_team_to_zulip: int,
-    ) -> None:
-        DAY_OF_WEEK = {
-            "Monday": datetime(2018, 1, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Tuesday": datetime(2018, 1, 2, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Wednesday": datetime(2018, 1, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Thursday": datetime(2018, 1, 4, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Friday": datetime(2018, 1, 5, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Saturday": datetime(2018, 1, 6, 1, 0, 0, 0, tzinfo=timezone.utc),
-            "Sunday": datetime(2018, 1, 7, 1, 0, 0, 0, tzinfo=timezone.utc),
-        }
-        WEEKEND = [6, 7]
-
-        user.date_joined = DAY_OF_WEEK[date_joined]
-        onboarding_email_schedule = get_onboarding_email_schedule(user)
-
-        # onboarding_zulip_topics
-        day_sent = (
-            DAY_OF_WEEK[date_joined] + onboarding_email_schedule["onboarding_zulip_topics"]
-        ).isoweekday()
-        self.assertEqual(day_sent, onboarding_zulip_topics)
-        self.assertNotIn(day_sent, WEEKEND)
-
-        # onboarding_zulip_guide
-        day_sent = (
-            DAY_OF_WEEK[date_joined] + onboarding_email_schedule["onboarding_zulip_guide"]
-        ).isoweekday()
-        self.assertEqual(day_sent, onboarding_zulip_guide)
-        self.assertNotIn(day_sent, WEEKEND)
-
-        # onboarding_team_to_zulip
-        day_sent = (
-            DAY_OF_WEEK[date_joined] + onboarding_email_schedule["onboarding_team_to_zulip"]
-        ).isoweekday()
-        self.assertEqual(day_sent, onboarding_team_to_zulip)
-        self.assertNotIn(day_sent, WEEKEND)
-
-    def test_get_onboarding_email_schedule(self) -> None:
-        user_profile = self.example_user("hamlet")
-
-        # joined Monday: schedule = Wednesday:3, Friday:5, Tuesday:2
-        self.verify_onboarding_email_schedule(user_profile, "Monday", 3, 5, 2)
-
-        # joined Tuesday: schedule = Thursday:4, Monday:1, Wednesday:3
-        self.verify_onboarding_email_schedule(user_profile, "Tuesday", 4, 1, 3)
-
-        # joined Wednesday: schedule = Friday:5, Tuesday:2, Thursday:4
-        self.verify_onboarding_email_schedule(user_profile, "Wednesday", 5, 2, 4)
-
-        # joined Thursday: schedule = Monday:1, Wednesday:3, Friday:5
-        self.verify_onboarding_email_schedule(user_profile, "Thursday", 1, 3, 5)
-
-        # joined Friday: schedule = Tuesday:2, Thursday:4, Monday:1
-        self.verify_onboarding_email_schedule(user_profile, "Friday", 2, 4, 1)
-
-        # joined Saturday: schedule = Monday:1, Wednesday:3, Friday:5
-        self.verify_onboarding_email_schedule(user_profile, "Saturday", 1, 3, 5)
-
-        # joined Sunday: schedule = Tuesday:2, Thursday:4, Monday:1
-        self.verify_onboarding_email_schedule(user_profile, "Sunday", 2, 4, 1)
-
-    def test_time_offset_for_onboarding_email_schedule(self) -> None:
-        user_profile = self.example_user("hamlet")
-        days_delayed = {
-            "4": timedelta(days=4, hours=-1),
-            "6": timedelta(days=6, hours=-1),
-            "8": timedelta(days=8, hours=-1),
-        }
-
-        # Time offset of America/Phoenix is -07:00
-        user_profile.timezone = "America/Phoenix"
-
-        # Test date_joined == Friday in UTC, but Thursday in the user's time zone
-        user_profile.date_joined = datetime(2018, 1, 5, 1, 0, 0, 0, tzinfo=timezone.utc)
-        onboarding_email_schedule = get_onboarding_email_schedule(user_profile)
-
-        # onboarding_zulip_topics email sent on Monday
-        self.assertEqual(
-            onboarding_email_schedule["onboarding_zulip_topics"],
-            days_delayed["4"],
-        )
-
-        # onboarding_zulip_guide sent on Wednesday
-        self.assertEqual(
-            onboarding_email_schedule["onboarding_zulip_guide"],
-            days_delayed["6"],
-        )
-
-        # onboarding_team_to_zulip sent on Friday
-        self.assertEqual(
-            onboarding_email_schedule["onboarding_team_to_zulip"],
-            days_delayed["8"],
-        )
 
 
 class TestCustomWelcomeEmailSender(ZulipTestCase):
     def test_custom_welcome_email_sender(self) -> None:
         name = "Nonreg Email"
         email = self.nonreg_email("test")
-        with override_settings(
-            WELCOME_EMAIL_SENDER={
-                "name": name,
-                "email": email,
-            }
+        with (
+            override_settings(
+                WELCOME_EMAIL_SENDER={
+                    "name": name,
+                    "email": email,
+                }
+            ),
+            mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m,
         ):
-            hamlet = self.example_user("hamlet")
-            enqueue_welcome_emails(hamlet)
-            scheduled_emails = ScheduledEmail.objects.filter(users=hamlet).order_by(
-                "scheduled_timestamp"
+            send_account_registered_email(self.example_user("hamlet"))
+        m.assert_called_once()
+        email_data = m.call_args[0][1]
+        self.assertEqual(email_data["from_name"], name)
+        self.assertEqual(email_data["from_address"], email)
+
+
+class TestScheduledEmailWithDeletedTemplate(ZulipTestCase):
+    def test_scheduled_email_with_deleted_template_is_dropped(self) -> None:
+        hamlet = self.example_user("hamlet")
+        # A row scheduled before the onboarding follow-up emails were
+        # cut, whose template is gone.
+        email = ScheduledEmail.objects.create(
+            type=ScheduledEmail.WELCOME,
+            scheduled_timestamp=timezone_now(),
+            realm=hamlet.realm,
+            data=orjson.dumps(
+                {
+                    "template_prefix": "zerver/emails/onboarding_zulip_topics",
+                    "from_name": None,
+                    "from_address": None,
+                    "language": None,
+                    "context": {},
+                }
+            ).decode(),
+        )
+        email.users.add(hamlet)
+        email_id = email.id
+        scheduled_at = email.scheduled_timestamp
+
+        with (
+            self.assertLogs("zulip.send_email", level="WARNING") as warning_log,
+            mock_queue_publish("zerver.lib.send_email.queue_event_on_commit") as m,
+        ):
+            queue_scheduled_emails(email)
+
+        m.assert_not_called()
+        self.assertFalse(ScheduledEmail.objects.filter(id=email_id).exists())
+        self.assertEqual(
+            warning_log.output,
+            [
+                f"WARNING:zulip.send_email:ScheduledEmail {email_id} at {scheduled_at} "
+                "names a template that no longer exists: zerver/emails/onboarding_zulip_topics"
+            ],
+        )
+
+
+class TestEmailsSayArmada(ZulipTestCase):
+    def assert_email_says_armada(self, message: EmailMessage) -> None:
+        assert isinstance(message, EmailMultiAlternatives)
+        html = message.alternatives[0][0]
+        assert isinstance(html, str)
+        texts = [str(message.subject), str(message.body), html, self.email_display_from(message)]
+        for text in texts:
+            self.assertNotIn("Zulip", text)
+        self.assertIn("Armada", "".join(texts))
+
+    # The development settings' physical address names Zulip; it is
+    # a server setting, not the emails' text.
+    @override_settings(PHYSICAL_ADDRESS="")
+    def test_emails_do_not_name_zulip(self) -> None:
+        realm = get_realm("zulip")
+        do_set_realm_property(realm, "name", "Elsinore", acting_user=None)
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            send_account_registered_email(hamlet)
+        self.assert_length(mail.outbox, 1)
+        self.assertEqual(self.email_display_from(mail.outbox[0]).split(" <")[0], "Armada")
+        self.assert_email_says_armada(mail.outbox[0])
+        mail.outbox.clear()
+
+        result = self.client_post("/accounts/password/reset/", {"email": hamlet.delivery_email})
+        self.assertEqual(result.status_code, 302)
+        self.assert_length(mail.outbox, 1)
+        self.assert_email_says_armada(mail.outbox[0])
+        mail.outbox.clear()
+
+        result = self.client_post("/accounts/home/", {"email": "new-member@zulip.com"})
+        self.assertEqual(result.status_code, 302)
+        self.assert_length(mail.outbox, 1)
+        self.assertEqual(self.email_display_from(mail.outbox[0]).split(" <")[0], "Armada")
+        self.assert_email_says_armada(mail.outbox[0])
+        mail.outbox.clear()
+
+        self.login("iago")
+        with self.captureOnCommitCallbacks(execute=True):
+            result = self.client_post(
+                "/json/invites",
+                {
+                    "invitee_emails": "invitee@zulip.com",
+                    "stream_ids": orjson.dumps([self.get_stream_id("Denmark")]).decode(),
+                    "invite_expires_in_minutes": 60,
+                },
             )
-            email_data = orjson.loads(scheduled_emails[0].data)
-            self.assertEqual(email_data["from_name"], name)
-            self.assertEqual(email_data["from_address"], email)
+        self.assert_json_success(result)
+        self.assert_length(mail.outbox, 1)
+        self.assertEqual(self.email_display_from(mail.outbox[0]).split(" <")[0], "Armada")
+        self.assert_email_says_armada(mail.outbox[0])
+        mail.outbox.clear()
+
+        message_id = self.send_personal_message(othello, hamlet, "Are you there?")
+        self.handle_missedmessage_emails(
+            hamlet.id,
+            {message_id: MissedMessageData(trigger=NotificationTriggers.DIRECT_MESSAGE)},
+        )
+        self.assert_length(mail.outbox, 1)
+        self.assert_email_says_armada(mail.outbox[0])
 
 
 class TestUtmParamsInEmailLinks(ZulipTestCase):

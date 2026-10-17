@@ -332,9 +332,9 @@ class WebexOAuthProvider(OAuthVideoCallProvider):
     # restricted to paid Webex organizations.
     def maybe_generate_public_room_id(self, user: UserProfile) -> str | None:
         create_room_payload = {
-            "title": "Webex Zulip Meeting",
+            "title": "Webex Armada Meeting",
             "isPublic": True,
-            "description": "A Webex meeting created via the Zulip client.",
+            "description": "A Webex meeting created via Armada.",
         }
         response = self.oauth_post(user, self.create_room_url, json=create_room_payload)
 
@@ -694,7 +694,7 @@ def make_constructor_groups_video_call(
     user_profile: UserProfile,
 ) -> HttpResponse:
     service = ConstructorGroupsService()
-    room_name = _("{full_name}'s Zulip room").format(full_name=user_profile.full_name)
+    room_name = _("{full_name}'s room").format(full_name=user_profile.full_name)
 
     room_data = service.get_or_create_default_room(
         creator_email=user_profile.delivery_email,

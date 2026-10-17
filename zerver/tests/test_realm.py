@@ -70,6 +70,7 @@ from zerver.lib.upload import upload_avatar_image, upload_message_attachment
 from zerver.models import (
     Attachment,
     CustomProfileField,
+    DefaultStream,
     DirectMessageGroup,
     ImageAttachment,
     Message,
@@ -462,7 +463,7 @@ class RealmTest(ZulipTestCase):
     def test_do_deactivate_realm_clears_scheduled_jobs(self) -> None:
         user = self.example_user("hamlet")
         send_future_email(
-            "zerver/emails/onboarding_zulip_topics",
+            "zerver/emails/account_registered",
             user.realm,
             to_user_ids=[user.id],
             delay=timedelta(hours=1),
@@ -513,8 +514,8 @@ class RealmTest(ZulipTestCase):
 
         realm.refresh_from_db()
         self.assertEqual(realm.rendered_description, "")
-        result = get_realm_rendered_description(realm)
-        self.assertEqual(result, "<p>The coolest place in the universe.</p>")
+        self.assertEqual(get_realm_rendered_description(realm), "")
+        self.assertEqual(get_realm_text_description(realm), "")
 
         # Check the case when description is set but rendered_description is None
         do_set_realm_property(realm, "description", new_description, acting_user=None)
@@ -698,10 +699,10 @@ class RealmTest(ZulipTestCase):
         self.assert_length(mail.outbox, 1)
         self.assert_length(mail.outbox, 1)
         self.assertIn(
-            f"Your Zulip organization {realm.name} has been deactivated", mail.outbox[0].subject
+            f"Your Armada organization {realm.name} has been deactivated", mail.outbox[0].subject
         )
         self.assertIn(
-            f"You have deactivated your Zulip demo organization, {realm.name},", mail.outbox[0].body
+            f"You have deactivated your demo organization, {realm.name},", mail.outbox[0].body
         )
         self.assert_logged_in_user_id(None)
 
@@ -713,9 +714,9 @@ class RealmTest(ZulipTestCase):
         self.assertEqual(realm.deactivated, True)
         self.assert_length(mail.outbox, 1)
         self.assertIn(
-            "Your Zulip organization Zulip Dev has been deactivated", mail.outbox[0].subject
+            "Your Armada organization Zulip Dev has been deactivated", mail.outbox[0].subject
         )
-        self.assertIn("Your Zulip organization, Zulip Dev, was deactivated on", mail.outbox[0].body)
+        self.assertIn("Your organization, Zulip Dev, was deactivated on", mail.outbox[0].body)
 
     def test_do_send_realm_deactivation_email_by_support(self) -> None:
         realm = get_realm("lear")
@@ -729,10 +730,10 @@ class RealmTest(ZulipTestCase):
         self.assertEqual(realm.deactivated, True)
         self.assert_length(mail.outbox, 1)
         self.assertIn(
-            "Your Zulip organization Lear & Co. has been deactivated", mail.outbox[0].subject
+            "Your Armada organization Lear & Co. has been deactivated", mail.outbox[0].subject
         )
         self.assertIn(
-            "Your Zulip organization, Lear & Co., was deactivated on",
+            "Your organization, Lear & Co., was deactivated on",
             mail.outbox[0].body,
         )
 
@@ -753,17 +754,15 @@ class RealmTest(ZulipTestCase):
         for email in mail.outbox:
             if email.to[0] == "iago@zulip.com":
                 self.assertIn(
-                    "Your Zulip organization Zulip Dev has been deactivated", email.subject
+                    "Your Armada organization Zulip Dev has been deactivated", email.subject
                 )
-                self.assertIn(
-                    "You have deactivated your Zulip organization, Zulip Dev, on", email.body
-                )
+                self.assertIn("You have deactivated your organization, Zulip Dev, on", email.body)
             else:
                 self.assertIn(
-                    "Your Zulip organization Zulip Dev has been deactivated", email.subject
+                    "Your Armada organization Zulip Dev has been deactivated", email.subject
                 )
                 self.assertIn(
-                    "Your Zulip organization, Zulip Dev, was deactivated by Iago on", email.body
+                    "Your organization, Zulip Dev, was deactivated by Iago on", email.body
                 )
             self.assertIn(
                 "All data associated with this organization will be permanently deleted on",
@@ -788,8 +787,8 @@ class RealmTest(ZulipTestCase):
             mock_scrub_realm.assert_called_once_with(realm, acting_user=None)
             self.assert_length(mail.outbox, 1)
             email = mail.outbox[0]
-            self.assertIn("Your Zulip organization Zulip Dev has been deactivated", email.subject)
-            self.assertIn("You have deactivated your Zulip organization, Zulip Dev, on", email.body)
+            self.assertIn("Your Armada organization Zulip Dev has been deactivated", email.subject)
+            self.assertIn("You have deactivated your organization, Zulip Dev, on", email.body)
             self.assertIn(
                 "All data associated with this organization has been permanently deleted.",
                 email.body,
@@ -810,7 +809,7 @@ class RealmTest(ZulipTestCase):
             self.email_display_from(mail.outbox[0]),
             rf"^testserver account security <{self.TOKENIZED_NOREPLY_REGEX}>\Z",
         )
-        self.assertIn("Reactivate your Zulip organization", mail.outbox[0].subject)
+        self.assertIn("Reactivate your Armada organization", mail.outbox[0].subject)
         self.assertIn("Dear former administrators", mail.outbox[0].body)
         admins = realm.get_human_admin_users()
         confirmation_url = self.get_confirmation_url_from_outbox(admins[0].delivery_email)
@@ -1918,7 +1917,7 @@ class RealmTest(ZulipTestCase):
         do_change_realm_plan_type(realm, Realm.PLAN_TYPE_LIMITED, acting_user=None)
         req = dict(message_retention_days=orjson.dumps(10).decode())
         result = self.client_patch("/json/realm", req)
-        self.assert_json_error(result, "Available on Zulip Cloud Standard. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Standard plan. Upgrade to access.")
 
         do_change_realm_plan_type(realm, Realm.PLAN_TYPE_STANDARD, acting_user=None)
         req = dict(message_retention_days=orjson.dumps(10).decode())
@@ -1968,6 +1967,8 @@ class RealmTest(ZulipTestCase):
         self.assertEqual(realm.name, "realm name")
         self.assertFalse(realm.emails_restricted_to_domains)
         self.assertEqual(realm.description, "")
+        self.assertEqual(get_realm_rendered_description(realm), "")
+        self.assertEqual(get_realm_text_description(realm), "")
         self.assertTrue(realm.invite_required)
         self.assertEqual(realm.plan_type, Realm.PLAN_TYPE_LIMITED)
         self.assertEqual(realm.org_type, Realm.ORG_TYPES["unspecified"]["id"])
@@ -1986,6 +1987,17 @@ class RealmTest(ZulipTestCase):
         self.assertEqual(realm.new_stream_announcements_stream.realm, realm)
 
         self.assertIsNone(realm.signup_announcements_stream)
+
+        # A new organization starts with "general" and "sandbox", both
+        # default channels, and nothing in it names Zulip.
+        channels = Stream.objects.filter(realm=realm)
+        self.assertEqual({channel.name for channel in channels}, {"general", "sandbox"})
+        self.assertEqual(
+            {default.stream.name for default in DefaultStream.objects.filter(realm=realm)},
+            {"general", "sandbox"},
+        )
+        for channel in channels:
+            self.assertNotIn("Zulip", channel.description)
 
         self.assertEqual(realm.plan_type, Realm.PLAN_TYPE_LIMITED)
 
@@ -2995,7 +3007,7 @@ class RealmAPITest(ZulipTestCase):
 
         req = {"enable_spectator_access": orjson.dumps(True).decode()}
         result = self.client_patch("/json/realm", req)
-        self.assert_json_error(result, "Available on Zulip Cloud Standard. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Standard plan. Upgrade to access.")
 
     def test_attachment_when_updating_enable_spectator_access(self) -> None:
         self.login("desdemona")
@@ -3031,7 +3043,7 @@ class RealmAPITest(ZulipTestCase):
         members_group = NamedUserGroup.objects.get(name="role:members", realm_for_sharding=realm)
         req = {"can_create_groups": orjson.dumps({"new": members_group.id}).decode()}
         result = self.client_patch("/json/realm", req)
-        self.assert_json_error(result, "Available on Zulip Cloud Standard. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Standard plan. Upgrade to access.")
 
     def test_changing_can_access_all_users_group_based_on_plan_type(self) -> None:
         realm = get_realm("zulip")
@@ -3041,12 +3053,12 @@ class RealmAPITest(ZulipTestCase):
         members_group = NamedUserGroup.objects.get(name="role:members", realm_for_sharding=realm)
         req = {"can_access_all_users_group": orjson.dumps({"new": members_group.id}).decode()}
         result = self.client_patch("/json/realm", req)
-        self.assert_json_error(result, "Available on Zulip Cloud Plus. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Plus plan. Upgrade to access.")
 
         do_change_realm_plan_type(realm, Realm.PLAN_TYPE_STANDARD, acting_user=None)
         req = {"can_access_all_users_group": orjson.dumps({"new": members_group.id}).decode()}
         result = self.client_patch("/json/realm", req)
-        self.assert_json_error(result, "Available on Zulip Cloud Plus. Upgrade to access.")
+        self.assert_json_error(result, "Available on the Plus plan. Upgrade to access.")
 
     def test_changing_workplace_users_group(self) -> None:
         realm = get_realm("zulip")

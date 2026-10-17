@@ -340,16 +340,10 @@ def do_create_realm(
 
     # Create channels once Realm object has been saved
     with override_language(realm.default_language):
-        zulip_discussion_channel = ensure_stream(
-            realm,
-            str(Realm.ZULIP_DISCUSSION_CHANNEL_NAME),
-            stream_description=_("Questions and discussion about using Zulip."),
-            acting_user=None,
-        )
         zulip_sandbox_channel = ensure_stream(
             realm,
             str(Realm.ZULIP_SANDBOX_CHANNEL_NAME),
-            stream_description=_("Experiment with Zulip here. :test_tube:"),
+            stream_description=_("Experiment with Armada here. :test_tube:"),
             acting_user=None,
         )
         new_stream_announcements_stream = ensure_stream(
@@ -364,9 +358,8 @@ def do_create_realm(
     realm.zulip_update_announcements_stream = new_stream_announcements_stream
 
     # With the current initial streams situation, the public channels are
-    # 'zulip_discussion_channel', 'zulip_sandbox_channel', 'new_stream_announcements_stream'.
+    # 'zulip_sandbox_channel' and 'new_stream_announcements_stream'.
     public_channels = [
-        DefaultStream(stream=zulip_discussion_channel, realm=realm),
         DefaultStream(stream=zulip_sandbox_channel, realm=realm),
         DefaultStream(stream=new_stream_announcements_stream, realm=realm),
     ]

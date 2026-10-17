@@ -713,7 +713,7 @@ class ConstructorGroupsVideoCallTest(ZulipTestCase):
         self.base_api_url = "https://example.constructor.app/api/groups/xapi"
 
         self.test_room_guid = "a13b8686-d383-4763-b3b7-d2d4dd7f34ec"
-        self.test_room_name = "King Hamlet's Zulip room"
+        self.test_room_name = "King Hamlet's room"
         self.test_room_url = f"https://example.constructor.app/groups/room/{self.test_room_name}"
 
         self.mock_valid_room = {
@@ -827,10 +827,10 @@ class ConstructorGroupsVideoCallTest(ZulipTestCase):
         assert responses.calls[0].request.body is not None
         request_body = orjson.loads(responses.calls[0].request.body)
         self.assertEqual(request_body["creator_email"], self.user_profile.delivery_email)
-        self.assertEqual(request_body["name"], f"{self.user_profile.full_name}'s Zulip room")
+        self.assertEqual(request_body["name"], f"{self.user_profile.full_name}'s room")
         self.assertEqual(
             request_body["fallback_name"],
-            f"{self.user_profile.full_name}'s Zulip room ({self.user_profile.realm_id}-{self.user_profile.id})",
+            f"{self.user_profile.full_name}'s room ({self.user_profile.realm_id}-{self.user_profile.id})",
         )
 
     def test_unsupported_http_method(self) -> None:

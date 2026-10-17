@@ -72,7 +72,7 @@ def validate_recipient_user_profiles(
             and not allow_deactivated
         ) or user_profile.realm.deactivated:
             raise ValidationError(
-                _("'{email}' is no longer using Zulip.").format(email=user_profile.email)
+                _("'{email}' is no longer using Armada.").format(email=user_profile.email)
             )
         recipient_profiles_map[user_profile.id] = user_profile
         if not is_cross_realm_bot_email(user_profile.email):

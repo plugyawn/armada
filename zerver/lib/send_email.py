@@ -27,7 +27,7 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef, QuerySet
 from django.db.models.functions import Lower
 from django.http import HttpRequest
-from django.template import loader
+from django.template import TemplateDoesNotExist, loader
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 from django.utils.translation import override as override_language
@@ -198,7 +198,7 @@ def build_email(
         logger.warning("Missing language for email template '%s'", template_prefix)
 
     if from_name is None:
-        from_name = "Zulip"
+        from_name = "Armada"
     if from_address is None:
         from_address = FromAddress.NOREPLY
     if from_address == FromAddress.tokenized_no_reply_placeholder:
@@ -230,7 +230,7 @@ def build_email(
     if reply_to_email is not None:
         reply_to = [reply_to_email]
     # Remove the from_name in the reply-to for noreply emails, so that users
-    # see "noreply@..." rather than "Zulip" or whatever the from_name is
+    # see "noreply@..." rather than "Armada" or whatever the from_name is
     # when they reply in their email client.
     elif from_address == FromAddress.NOREPLY:
         reply_to = [FromAddress.NOREPLY]
@@ -578,6 +578,21 @@ def queue_scheduled_emails(email: ScheduledEmail) -> None:
             email.id,
             email.scheduled_timestamp,
             data,
+        )
+        email.delete()
+        return
+
+    try:
+        loader.get_template(data["template_prefix"] + ".subject.txt", using="Jinja2_plaintext")
+    except TemplateDoesNotExist:
+        # Rows scheduled before their template was deleted (as the
+        # onboarding follow-up emails were) can never be rendered;
+        # queueing them would only fail in the email worker.
+        logger.warning(
+            "ScheduledEmail %s at %s names a template that no longer exists: %s",
+            email.id,
+            email.scheduled_timestamp,
+            data["template_prefix"],
         )
         email.delete()
         return

@@ -15,6 +15,7 @@ from zerver.actions.message_send import (
     internal_send_private_message,
 )
 from zerver.actions.reactions import do_add_reaction
+from zerver.lib.armada import ARMADA_AGENT_NAME
 from zerver.lib.demo_organizations import get_scheduled_deletion_global_time
 from zerver.lib.emoji import get_emoji_data
 from zerver.lib.markdown.fenced_code import get_unused_fence
@@ -78,38 +79,12 @@ def send_initial_direct_messages_to_user(
     realm_creation: bool = False,
     welcome_message_custom_text: str = "",
 ) -> InitialDirectMessageIDs:
-    # We adjust the initial Welcome Bot direct message for education organizations.
-    education_organization = user.realm.org_type in (
-        Realm.ORG_TYPES["education_nonprofit"]["id"],
-        Realm.ORG_TYPES["education"]["id"],
-    )
     welcome_bot_messages = []
 
     # We need to override the language in this code path, because it's
     # called from account registration, which is a pre-account API
     # request and thus may not have the user's language context yet.
     with override_language(user.default_language):
-        if education_organization:
-            getting_started_string = _("""
-To learn more, check out our [using Zulip for a class guide]({getting_started_url})!
-""").format(getting_started_url="/help/using-zulip-for-a-class")
-        else:
-            getting_started_string = _("""
-To learn more, check out our [getting started guide]({getting_started_url})!
-""").format(getting_started_url="/help/getting-started-with-zulip")
-
-        organization_setup_string = ""
-        # Add extra content on setting up a new organization for administrators.
-        if user.is_realm_admin:
-            if education_organization:
-                organization_setup_string = _("""
-We also have a guide for [setting up Zulip for a class]({organization_setup_url}).
-""").format(organization_setup_url="/help/setting-up-zulip-for-a-class")
-            else:
-                organization_setup_string = _("""
-We also have a guide for [moving your organization to Zulip]({organization_setup_url}).
-""").format(organization_setup_url="/help/moving-to-zulip")
-
         demo_organization_warning_string = ""
         # Add extra content about automatic deletion for demo organization creators.
         if (
@@ -118,14 +93,9 @@ We also have a guide for [moving your organization to Zulip]({organization_setup
             and user.realm.demo_organization_scheduled_deletion_date is not None
         ):
             demo_organization_warning_string = _("""
-This [demo organization]({demo_organization_help_url}) will be **automatically
-deleted** on {deletion_global_time}, unless it's [converted into
-a permanent organization]({convert_demo_organization_help_url}).
-""").format(
-                demo_organization_help_url="/help/demo-organizations",
-                deletion_global_time=get_scheduled_deletion_global_time(user.realm),
-                convert_demo_organization_help_url="/help/demo-organizations#convert-a-demo-organization-to-a-permanent-organization",
-            )
+This demo organization will be **automatically deleted** on
+{deletion_global_time}, unless it's converted into a permanent organization.
+""").format(deletion_global_time=get_scheduled_deletion_global_time(user.realm))
 
         inform_about_tracked_onboarding_messages_text = ""
         if OnboardingUserMessage.objects.filter(realm_id=user.realm_id).exists():
@@ -133,10 +103,6 @@ a permanent organization]({convert_demo_organization_help_url}).
 I've kicked off some conversations to help you get started. You can find
 them in your [Inbox](/#inbox).
 """)
-
-        navigation_tour_video_string = _("""
-You can always come back to the [Welcome to Zulip video]({navigation_tour_video_url}) for a quick app overview.
-""").format(navigation_tour_video_url=settings.NAVIGATION_TOUR_VIDEO_URL)
 
         welcome_bot_custom_message_string = ""
         # Add welcome bot custom message.
@@ -146,19 +112,17 @@ You can always come back to the [Welcome to Zulip video]({navigation_tour_video_
             )
 
         content = _("""
-Hello, and welcome to Zulip!👋 {inform_about_tracked_onboarding_messages_text}
+Hello, and welcome to Armada!👋 {inform_about_tracked_onboarding_messages_text}
 
-{getting_started_text} {organization_setup_text}
-
-{navigation_tour_video_text}
+In Armada, a channel can hold a git repository, and each topic in it is a
+worktree. Once your organization has set up {agent_name}, mention it in a
+topic when you want it to work there, and reply while it runs to steer it.
 
 {demo_organization_text}
 
 """).format(
             inform_about_tracked_onboarding_messages_text=inform_about_tracked_onboarding_messages_text,
-            getting_started_text=getting_started_string,
-            organization_setup_text=organization_setup_string,
-            navigation_tour_video_text=navigation_tour_video_string,
+            agent_name=ARMADA_AGENT_NAME,
             demo_organization_text=demo_organization_warning_string,
         )
 
@@ -216,20 +180,17 @@ def select_welcome_bot_response(human_response_lower: str) -> str:
     # message from the user to Welcome Bot, select the appropriate reply.
     if human_response_lower in ["app", "apps"]:
         return _("""
-You can [download](/apps/) the [mobile and desktop apps](/apps/).
-Zulip also works great in a browser.
+Armada runs in your web browser.
 """)
     elif human_response_lower == "profile":
         return _("""
-Go to [Profile settings](#settings/profile) to add a [profile picture](/help/change-your-profile-picture)
-and edit your [profile information](/help/edit-your-profile).
+Go to [Profile settings](#settings/profile) to add a profile picture
+and edit your profile information.
 """)
     elif human_response_lower == "theme":
         return _("""
-You can switch between [light and dark theme](/help/dark-theme), [pick your
-favorite emoji set](/help/emoji-and-emoticons#change-your-emoji-set), [change
-your language](/help/change-your-language), and otherwise customize your Zulip
-experience in your [Preferences](#settings/preferences).
+You can switch between light and dark theme, pick your favorite emoji set,
+and otherwise customize Armada in your [Preferences](#settings/preferences).
 """)
     elif human_response_lower in ["stream", "streams", "channel", "channels"]:
         return _("""
@@ -237,12 +198,13 @@ Channels organize conversations based on who needs to see them. For example,
 it's common to have a channel for each team in an organization.
 
 [Browse and subscribe to channels]({settings_link}).
-""").format(help_link="/help/introduction-to-channels", settings_link="#channels/all")
+""").format(settings_link="#channels/all")
     elif human_response_lower in ["topic", "topics"]:
         return _("""
-[Topics](/help/introduction-to-topics) summarize what each conversation in Zulip
-is about. You can read Zulip one topic at a time, seeing each message in
-context, no matter how many other conversations are going on.
+Topics summarize what each conversation is about. You can read one topic at
+a time, seeing each message in context, no matter how many other
+conversations are going on. In a channel that holds a git repository, each
+topic is a worktree of its own.
 
 When you start a conversation, label it with a new topic. For a good topic name,
 think about finishing the sentence: “Hey, can we chat about…?”
@@ -252,7 +214,7 @@ discussed.
 """)
     elif human_response_lower in ["keyboard", "shortcuts", "keyboard shortcuts"]:
         return _("""
-Zulip's [keyboard shortcuts](#keyboard-shortcuts) let you navigate the app
+[Keyboard shortcuts](#keyboard-shortcuts) let you navigate the app
 quickly and efficiently.
 
 Press `?` any time to see a [cheat sheet](#keyboard-shortcuts).
@@ -268,9 +230,6 @@ times, and more.
     elif human_response_lower in ["help", "?"]:
         return _("""
 Here are a few messages I understand: {bot_commands}
-
-Check out our [Getting started guide](/help/getting-started-with-zulip),
-or browse the [help center](/help/) to learn more!
 """).format(bot_commands=bot_commands(no_help_command=True))
     else:
         return _("""
@@ -315,8 +274,6 @@ def send_welcome_bot_response(send_request: SendMessageRequest) -> None:
 
 
 class OnboardingMessageTypeEnum(Enum):
-    moving_messages = 1
-    welcome_to_zulip = 2
     start_conversation = 3
     experiments = 4
     greetings = 5
@@ -340,8 +297,6 @@ def send_initial_realm_messages(
         channel_name_map = override_channel_name_map
     else:
         channel_name_map = {
-            OnboardingMessageTypeEnum.moving_messages: str(Realm.ZULIP_DISCUSSION_CHANNEL_NAME),
-            OnboardingMessageTypeEnum.welcome_to_zulip: str(Realm.ZULIP_DISCUSSION_CHANNEL_NAME),
             OnboardingMessageTypeEnum.start_conversation: str(Realm.ZULIP_SANDBOX_CHANNEL_NAME),
             OnboardingMessageTypeEnum.experiments: str(Realm.ZULIP_SANDBOX_CHANNEL_NAME),
             OnboardingMessageTypeEnum.greetings: str(Realm.DEFAULT_NOTIFICATION_STREAM_NAME),
@@ -360,44 +315,6 @@ def send_initial_realm_messages(
     #
     # remove_single_newlines needs to be called on any multiline
     # strings for them to render properly.
-    content1_of_moving_messages_topic_name = (
-        _("""
-If anything is out of place, it’s easy to [move messages]({move_content_another_topic_help_url}),
-[rename]({rename_topic_help_url}) and [split]({move_content_another_topic_help_url}) topics,
-or even move a topic [to a different channel]({move_content_another_channel_help_url}).
-""")
-    ).format(
-        move_content_another_topic_help_url="/help/move-content-to-another-topic",
-        rename_topic_help_url="/help/rename-a-topic",
-        move_content_another_channel_help_url="/help/move-content-to-another-channel",
-    )
-
-    content2_of_moving_messages_topic_name = _("""
-:point_right: Try moving this message to another topic and back.
-""")
-
-    content1_of_welcome_to_zulip_topic_name = _("""
-Zulip is organized to help you communicate more efficiently. Conversations are
-labeled with topics, which summarize what the conversation is about.
-
-For example, this message is in the “{topic_name}” topic in the
-#**{zulip_discussion_channel_name}** channel, as you can see in the left sidebar
-and above.
-""").format(
-        zulip_discussion_channel_name=channel_name_map[OnboardingMessageTypeEnum.welcome_to_zulip],
-        topic_name=_("welcome to Zulip!"),
-    )
-
-    content2_of_welcome_to_zulip_topic_name = _("""
-You can read Zulip one conversation at a time, seeing each message in context,
-no matter how many other conversations are going on.
-""")
-
-    content3_of_welcome_to_zulip_topic_name = _("""
-:point_right: When you're ready, check out your [Inbox](/#inbox) for other
-conversations with unread messages.
-""")
-
     content1_of_start_conversation_topic_name = _("""
 To kick off a new conversation, pick a channel in the left sidebar, and click
 the `+` button next to its name.
@@ -412,14 +329,11 @@ can we chat about…?”
 :point_right: Try starting a new conversation in this channel.
 """)
 
-    content1_of_experiments_topic_name = (
-        _("""
-:point_right:  Use this topic to try out [Zulip's messaging features]({format_message_help_url}).
+    content1_of_experiments_topic_name = _("""
+:point_right:  Use this topic to try out message formatting.
 """)
-    ).format(format_message_help_url="/help/format-your-message-using-markdown")
 
-    content2_of_experiments_topic_name = (
-        _("""
+    content2_of_experiments_topic_name = _("""
 ```spoiler Want to see some examples?
 
 ````python
@@ -431,14 +345,8 @@ print("code blocks")
 - bulleted
 - lists
 
-Link to a conversation: #**{zulip_discussion_channel_name}>{topic_name}**
-
 ```
 """)
-    ).format(
-        zulip_discussion_channel_name=channel_name_map[OnboardingMessageTypeEnum.welcome_to_zulip],
-        topic_name=_("welcome to Zulip!"),
-    )
 
     content1_of_greetings_topic_name = _("""
 This **greetings** topic is a great place to say “hi” :wave: to your teammates.
@@ -456,22 +364,6 @@ This **greetings** topic is a great place to say “hi” :wave: to your teammat
     # which are sorted newest-first.
     #
     # Initial messages are configured below.
-
-    # Advertising moving messages.
-    if (
-        moving_messages_channel_name := channel_name_map[OnboardingMessageTypeEnum.moving_messages]
-    ) is not None:
-        welcome_messages += [
-            {
-                "channel_name": moving_messages_channel_name,
-                "topic_name": _("moving messages"),
-                "content": content,
-            }
-            for content in [
-                content1_of_moving_messages_topic_name,
-                content2_of_moving_messages_topic_name,
-            ]
-        ]
 
     # Suggestion to test messaging features.
     # Dependency on knowing how to send messages.
@@ -517,25 +409,6 @@ This **greetings** topic is a great place to say “hi” :wave: to your teammat
                 "content": content,
             }
             for content in [content1_of_greetings_topic_name, content2_of_greetings_topic_name]
-        ]
-
-    if (
-        welcome_to_zulip_channel_name := channel_name_map[
-            OnboardingMessageTypeEnum.welcome_to_zulip
-        ]
-    ) is not None:
-        # Main welcome message, this should be last.
-        welcome_messages += [
-            {
-                "channel_name": welcome_to_zulip_channel_name,
-                "topic_name": _("welcome to Zulip!"),
-                "content": content,
-            }
-            for content in [
-                content1_of_welcome_to_zulip_topic_name,
-                content2_of_welcome_to_zulip_topic_name,
-                content3_of_welcome_to_zulip_topic_name,
-            ]
         ]
 
     # End of message declarations; now we actually send them.

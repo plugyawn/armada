@@ -195,7 +195,7 @@ def invite_users_backend(
     if skipped:
         raise InvitationError(
             _(
-                "Some of those addresses are already using Zulip, "
+                "Some of those addresses are already using Armada, "
                 "so we didn't send them an invitation. We did send "
                 "invitations to everyone else!"
             ),

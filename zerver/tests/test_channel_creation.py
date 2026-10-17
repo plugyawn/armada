@@ -1223,7 +1223,7 @@ class TestCreateStreams(ZulipTestCase):
 
         do_change_realm_plan_type(realm, Realm.PLAN_TYPE_LIMITED, acting_user=admin)
         with self.assertRaisesRegex(
-            JsonableError, "Available on Zulip Cloud Standard. Upgrade to access."
+            JsonableError, "Available on the Standard plan. Upgrade to access."
         ):
             list_to_streams(
                 streams_raw, owner, autocreate=True, request_settings_dict=request_settings_dict

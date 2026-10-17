@@ -8,7 +8,6 @@ from django.core import mail
 from django.utils import translation
 from typing_extensions import override
 
-from zerver.lib.email_notifications import enqueue_welcome_emails
 from zerver.lib.i18n import get_browser_language_code
 from zerver.lib.test_classes import ZulipTestCase
 from zerver.lib.test_helpers import HostRequestMock
@@ -45,13 +44,13 @@ class EmailTranslationTestCase(ZulipTestCase):
         self.login_user(hamlet)
 
         check_translation(
-            "Wir haben eine Anfrage erhalten",
+            "Hallo,",
             "patch",
             "/json/settings",
             {"email": "hamlets-new@zulip.com"},
         )
         check_translation(
-            "Excelente!",
+            "Clique na ligação abaixo",
             "post",
             "/accounts/home/",
             {"email": "new-email@zulip.com"},
@@ -68,10 +67,6 @@ class EmailTranslationTestCase(ZulipTestCase):
                 "invite_expires_in_minutes": invite_expires_in_minutes,
             },
         )
-
-        with self.settings(DEVELOPMENT_LOG_EMAILS=True):
-            enqueue_welcome_emails(hamlet)
-        check_translation("Hier findest du einige Tipps", "")
 
 
 class TranslationTestCase(ZulipTestCase):

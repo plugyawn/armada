@@ -1,4 +1,4 @@
-{{ _("We noticed a recent login for the following Zulip account.") }}
+{{ _("We noticed a recent login for the following Armada account.") }}
 
 {% trans organization_url=realm_url %}Organization: {{ organization_url }}{% endtrans %}
 
@@ -16,7 +16,3 @@
 {% trans reset_link=realm_url + "/accounts/password/reset/" %}
 If you do not recognize this login, or think your account may have been compromised, please reset your password at {{ reset_link }} or contact us immediately at {{ support_email }}.
 {%- endtrans %}
-
-
-{{ _("Thanks,") }}
-{{ _("Zulip Security") }}

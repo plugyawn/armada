@@ -683,29 +683,26 @@ def internal_prep_group_direct_message_for_old_realm(
     administrators = list(realm.get_human_admin_users())
     if realm.zulip_update_announcements_stream is None:
         content = """
-Zulip now supports [configuring]({organization_settings_url}) a channel where Zulip will
-send [updates]({zulip_update_announcements_help_url}) about new Zulip features.
+Armada now supports [configuring]({organization_settings_url}) a channel where Armada will
+send updates about new Armada features.
 These notifications are currently turned off in your organization. If you configure
 a channel within one week, your organization will not miss any update messages.
 """.format(
-            zulip_update_announcements_help_url="/help/configure-automated-notices#zulip-update-announcements",
             organization_settings_url="/#organization/organization-settings",
         )
     else:
         topic_name = get_topic_name_for_zulip_update_announcements(realm)
         content = """
-Starting tomorrow, users in your organization will receive [updates]({zulip_update_announcements_help_url})
-about new Zulip features in #**{zulip_update_announcements_stream}>{topic_name}**.
+Starting tomorrow, users in your organization will receive updates
+about new Armada features in #**{zulip_update_announcements_stream}>{topic_name}**.
 
 If you like, you can [configure]({organization_settings_url}) a different channel for
-these updates (and [move]({move_content_another_stream_help_url}) any updates sent before the
+these updates (and move any updates sent before the
 configuration change), or [turn this feature off]({organization_settings_url}) altogether.
 """.format(
-            zulip_update_announcements_help_url="/help/configure-automated-notices#zulip-update-announcements",
             zulip_update_announcements_stream=realm.zulip_update_announcements_stream.name,
             topic_name=topic_name,
             organization_settings_url="/#organization/organization-settings",
-            move_content_another_stream_help_url="/help/move-content-to-another-channel",
         )
     return internal_prep_group_direct_message(
         realm, sender, remove_single_newlines(content), recipient_users=administrators

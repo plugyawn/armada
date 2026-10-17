@@ -17730,7 +17730,7 @@ paths:
                       - example:
                           {
                             "result": "error",
-                            "msg": "Some of those addresses are already using Zulip, so we didn't send them an invitation. We did send invitations to everyone else!",
+                            "msg": "Some of those addresses are already using Armada, so we didn't send them an invitation. We did send invitations to everyone else!",
                             "errors":
                               [
                                 [

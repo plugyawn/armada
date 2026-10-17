@@ -34,8 +34,6 @@ def get_realm_rendered_description(realm: Realm) -> str:
         realm.rendered_description_version = version
         realm.save(update_fields=["rendered_description", "rendered_description_version"])
 
-    if realm.rendered_description == "":
-        return "<p>The coolest place in the universe.</p>"
     return realm.rendered_description
 
 

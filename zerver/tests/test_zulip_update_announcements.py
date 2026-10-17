@@ -349,7 +349,7 @@ class ZulipUpdateAnnouncementsTest(ZulipTestCase):
         self.assertEqual(realm.zulip_update_announcements_level, 0)
         self.assertIn(
             "Starting tomorrow, users in your organization will receive "
-            "[updates](/help/configure-automated-notices#zulip-update-announcements) about new Zulip features in "
+            "updates about new Armada features in "
             f"#**{realm.zulip_update_announcements_stream}>{realm.ZULIP_UPDATE_ANNOUNCEMENTS_TOPIC_NAME}**",
             group_direct_message.content,
         )

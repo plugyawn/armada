@@ -56,10 +56,12 @@ function clean(root) {
   return root;
 }
 function codeHTML(pre) { const code = pre.querySelector("code") || pre; $$("span", code).forEach((s) => { const c = PYG[s.className]; if (c) s.className = c; else s.replaceWith(...s.childNodes); }); return code.innerHTML.replace(/\n$/, ""); }
+const MATH = (n) => n.matches(".katex-display") || !!n.querySelector(":scope > .katex-display");
 function blockPart(n) {
   if (n.matches("div.codehilite, pre")) return {t: "pre", html: codeHTML(n.matches("pre") ? n : n.querySelector("pre") || n)};
   if (n.matches("table")) { $$("th, td", n).forEach((c) => { if (/right/.test(c.getAttribute("style") || "")) c.className = "r"; c.removeAttribute("style"); }); return {t: "tbl", html: n.outerHTML}; }
   if (n.matches("div.message_inline_image")) { const items = picsOf(n); if (items.length) return {t: "pic", items, html: picHTML(items)}; }
+  if (MATH(n)) return {t: "math", html: n.matches(".katex-display") ? n.outerHTML : n.innerHTML};   /* Onix's display maths stands on the page, centred, as on paper: no block behind it */
   return {t: "blk", html: n.innerHTML};
 }
 const QUESTION = /needs your input to continue/;
@@ -90,7 +92,7 @@ function partsOf(m) {
     if (asking && n.tagName === "UL") { flush(); out.push(askPart(n)); continue; }   /* the question's options are buttons, under the question */
     if (asking && n.tagName === "P" && QUESTION.test(n.textContent)) { n.textContent = "Onix needs your answer to go on."; }
     if (asking && n.tagName === "P" && ASK_CAPTION.test(n.textContent.trim())) n.className = "askcap";   /* the server's words say what answers it: in words, the answer names Onix (or the place's switch is on), so people talking here do not answer it */
-    if (BLOCK(n)) { flush(); const p = blockPart(n), last = out[out.length - 1];
+    if (BLOCK(n) && (plane || !MATH(n))) { flush(); const p = blockPart(n), last = out[out.length - 1];   /* a person's display maths stays in their bubble */
       if (p.t === "pic" && last && last.t === "pic" && last.items && last._end === n.previousElementSibling) { last.items.push(...p.items); last.html = picHTML(last.items); last._end = n; } else { if (p.t === "pic") p._end = n; out.push(p); } }   /* previews side by side are one group */
     else run.push(n); }
   flush(); out.push(...cards.rest());
@@ -109,6 +111,7 @@ function partEl(p, m) {
   else if (p.t === "pic") e = el("div", "blk pic", p.html);
   else if (p.t === "wdg") e = el("div", "blk wdg", p.html);
   else if (p.t === "art") e = el("div", "blk art", p.html);
+  else if (p.t === "math") e = el("div", "blk math", p.html);
   else if (p.t === "pv") e = cardEl(p);
   else if (p.t === "pvm") e = moreEl(p);
   else if (p.t === "rq") { e = el("button", "rq", p.html); e.dataset.quote = p.ref; e.setAttribute("aria-label", "Go to the message this replies to"); }

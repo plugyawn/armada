@@ -551,28 +551,38 @@ run_test("the band says what the model is thinking about until its plan moves on
     assert.equal(run_says({plan: changing, current_activity: "git diff"}), "git diff");
 });
 
-run_test("a formula the server set waits for KaTeX's sheet, fetched then", async () => {
-    const root = document.documentElement;
-    // Nothing so far had maths: the sheet was never fetched.
-    assert.equal(root.dataset.katex, undefined);
-    events.onMessage({
-        message: message(
-            191,
-            ME,
-            '<p>The update:</p><p><span class="katex-display"><span class="katex">' +
-                '<span class="katex-mathml"><math display="block"><semantics><mrow><mover>' +
-                '<mi>h</mi><mo>^</mo></mover></mrow><annotation encoding="application/x-tex">' +
-                "\\hat{h}</annotation></semantics></math></span>" +
-                '<span class="katex-html" aria-hidden="true">h^</span></span></span></p>',
-        ),
-        flags: ["read"],
-    });
-    frame();
-    const row = lane.querySelector('[data-mid="191"]').closest("section");
-    assert.ok(row.querySelector(".katex-display .katex"));
-    for (let i = 0; i < 10; i += 1) {
-        await Promise.resolve();
-    }
-    // The sheet is in: formulas show (beta.css hides them until then).
-    assert.equal(root.dataset.katex, "");
-});
+run_test(
+    "display maths: in a person's bubble, on the page for Onix, after KaTeX's sheet",
+    async () => {
+        const root = document.documentElement;
+        // Nothing so far had maths: the sheet was never fetched.
+        assert.equal(root.dataset.katex, undefined);
+        const display_maths =
+            '<p><span class="katex-display"><span class="katex">' +
+            '<span class="katex-mathml"><math display="block"><semantics><mrow><mover>' +
+            '<mi>h</mi><mo>^</mo></mover></mrow><annotation encoding="application/x-tex">' +
+            "\\hat{h}</annotation></semantics></math></span>" +
+            '<span class="katex-html" aria-hidden="true">h^</span></span></span></p>';
+        const part_of = (id) =>
+            lane.querySelector(`[data-mid="${id}"] .katex-display`).closest("[data-part]").dataset
+                .part;
+        events.onMessage({
+            message: message(191, ME, "<p>The update:</p>" + display_maths),
+            flags: ["read"],
+        });
+        events.onMessage({
+            message: message(192, AGENT, "<p>It tries to learn:</p>" + display_maths),
+            flags: ["read"],
+        });
+        frame();
+        // A person's formula stays in their bubble; Onix's stands on the page,
+        // a part of its own with no block behind it.
+        assert.equal(part_of(191), "b");
+        assert.equal(part_of(192), "math");
+        for (let i = 0; i < 10; i += 1) {
+            await Promise.resolve();
+        }
+        // The sheet is in: formulas show (beta.css hides them until then).
+        assert.equal(root.dataset.katex, "");
+    },
+);

@@ -12,6 +12,7 @@
 
 const assert = require("node:assert/strict");
 
+const question = require("../../../zerver/tests/fixtures/armada_question_message.json");
 const {mock_esm, set_global, zrequire} = require("../lib/namespace.cjs");
 const real_dom = require("../lib/real_dom.cjs");
 const {run_test} = require("../lib/test.cjs");
@@ -147,6 +148,7 @@ set_global("host", noop);
 set_global("fig", String);
 set_global("fitLists", noop);
 set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
+set_global("wk", () => `<span class="mk wk"></span>`);
 set_global(
     "face",
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
@@ -237,6 +239,7 @@ const connection = zrequire("armada/beta/connection.js");
 const partners = zrequire("armada/beta/partners.js");
 const nav = zrequire("armada/beta/nav.js");
 const runs = zrequire("armada/beta/runs.js");
+const agent_turn = zrequire("armada/beta/agent_turn.js");
 
 const ME = 3;
 const IAGO = 5;
@@ -765,4 +768,60 @@ run_test("a place keeps its newest runs, and any older one still live", () => {
         seen.some((r) => r.id === 1),
         "a live run was let go",
     );
+});
+
+// A run's question and its words, in the run's turn, in the order things
+// happened: the question, then what the run wrote after its answer. The
+// run's answer is its result message, made when it started, so by id the
+// question comes after it.
+const asks = (id) => ({...message(id, AGENT, "asks", 0), content: question.rendered});
+const answer_text = (turn) => turn.textContent.indexOf("I picked red.");
+const question_text = (turn) => turn.textContent.indexOf("Which color?");
+
+run_test("a run's question stands in its turn, before what the run wrote after it", () => {
+    const c = open_with("asks", [
+        message(800, ME, "asks", 0),
+        {...message(801, AGENT, "asks", 0), content: "<p>· Working</p>"},
+    ]);
+    c.runs = [
+        {
+            id: 5,
+            status: "running",
+            trigger_message_id: 800,
+            result_message_id: 801,
+            date_created: T0,
+        },
+    ];
+    // The question arrives while the run works, then the run writes its
+    // words after the answer.
+    events.onMessage({message: asks(802), flags: ["read"]});
+    events.onUpdate({
+        message_id: 801,
+        rendered_content: "<p>I picked red.</p>",
+        rendering_only: true,
+    });
+    const turn = turn_of(801);
+    assert.equal(turn_of(802), turn, "the question is in its run's turn");
+    assert.ok(question_text(turn) >= 0 && question_text(turn) < answer_text(turn));
+    assert.equal(lane.querySelectorAll(":scope > section").length, 2, "mine and the run's");
+});
+
+run_test("a question drawn before its run was known joins the run's turn", () => {
+    // The place's runs are read after its messages: the question is drawn
+    // as a turn of its own, after the run's words ...
+    const c = open_with("asks again", [
+        message(810, ME, "asks again", 0),
+        {...message(811, AGENT, "asks again", 0), content: "<p>I picked red.</p>"},
+        {...asks(812), subject: "asks again"},
+    ]);
+    assert.notEqual(turn_of(812), turn_of(811));
+    // ... and joins the run's turn, before its words, once the runs are known.
+    c.runs = [
+        {id: 6, status: "done", trigger_message_id: 810, result_message_id: 811, date_created: T0},
+    ];
+    agent_turn.drawFooters();
+    const turn = turn_of(811);
+    assert.equal(turn_of(812), turn);
+    assert.ok(question_text(turn) < answer_text(turn));
+    assert.equal(lane.querySelectorAll(":scope > section").length, 2);
 });

@@ -5,7 +5,7 @@ import {msgIndex, state, unread} from "./state.js";
 import {dayKey, dayLabel, hhmm, now} from "./time.js";
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isBot, isOnix, nameOf, stoneOf} from "./faces.js";
-import {partEl, partsOf} from "./parts.js";
+import {partEl, partsOf, QUESTION} from "./parts.js";
 import {drawReactions} from "./reactions.js";
 import {receiptButton, RECEIPTS, untick} from "./receipts.js";
 import {drawThreadLine, openThread, repliesOf, threadAppend} from "./threads.js";
@@ -77,8 +77,25 @@ function finish(cl) { if (cl.classList.contains("onix")) return;
   const ts = +cl.dataset.ts, t = el("time", "", (edited(lastPart.dataset.mid) ? "Edited " : "") + hhmm(ts)); t.title = new Date(ts * 1000).toLocaleString();
   const cell = RECEIPTS && cl.classList.contains("me") ? receiptButton(t, lastPart.dataset.mid) : t;   /* my turn: the time and its ticks, one button */
   if (lastPart.classList.contains("bl")) lastPart.append(cell); else { const r = el("div", "rcpt at" + (cl.classList.contains("me") ? " end" : "")); r.append(cell); lastPart.after(r); } }
+/* Onix's question stands in the turn of the run that asked it, after the turn's checklist and any question before it, and
+   before the run's words (the design's still s4-completed: a run's question is a block of its own turn). The run's answer is
+   the message made when the run started, written as it goes, so its final words come after the question was answered: the
+   turn reads in the order things happened. The run is the topic's latest before the question, whose answer is drawn here. */
+const isQuestion = (m) => isOnix(m.sender_id) && QUESTION.test(m.content || "");
+function questionTurn(c, m, container) { if (!c || !c.runs || !isQuestion(m)) return null; let run = null;
+  for (const r of c.runs) if (r.trigger_message_id < m.id && (!run || r.trigger_message_id > run.trigger_message_id)) run = r;
+  const turn = run && run.result_message_id && run.result_message_id < m.id ? c.rows.get(run.result_message_id) : null;
+  return turn && turn.parentNode === container && turn.dataset.mid === String(run.result_message_id) ? turn : null; }
+/* in a run's turn, what the next block or words follow: its last question, else its checklist, its name, its sigil */
+const headOf = (turn) => $$(":scope > [data-part]", turn).filter((x) => x.dataset.mid !== turn.dataset.mid).pop() || $(":scope > .plan", turn) || $(":scope > .who", turn) || $(":scope > .sigil", turn);
+function putQuestion(c, turn, m) { const parts = partsOf(m).map((p) => partEl(p, m)), at = headOf(turn); if (at) at.after(...parts); else turn.prepend(...parts);
+  c.rows.set(m.id, turn); drawReactions(turn, m); hush(turn); return {cl: turn, parts}; }
+/* the place's runs are known now: a question drawn as a turn of its own before they were joins its run's turn */
+function placeQuestions(c) { for (const m of c.msgs) { const row = c.rows.get(m.id); if (!row || row.dataset.mid !== String(m.id) || !isQuestion(m)) continue;
+  const turn = questionTurn(c, m, row.parentNode); if (turn) { removeRow(c, m.id); putQuestion(c, turn, m); } } }
 function appendMessage(c, m, o = {}) {
   const kind = kindOf(m), d = dayKey(m.timestamp);
+  if (!o.thread && kind === "onix") { const cache = msgIndex.get(m.id) || state.P, turn = questionTurn(cache, m, c); if (turn) return putQuestion(cache, turn, m); }
   if (!o.thread && c._day !== d) { const line = el("div", "day", dayLabel(m.timestamp)); line.dataset.day = d; c.append(line); c._day = d; }
   if (o.unreadAt === m.id) c.append(el("div", "unread", "New"));
   let cl = c.lastElementChild;
@@ -229,5 +246,5 @@ function unhug() { for (const x of toHug) if (!x.isConnected) toHug.delete(x); }
 /* every bubble hugs its words again: the lane's width changed, or the faces loaded */
 function rehug() { hugGen++; $$(".cl", lane).forEach((x) => toHug.add(x)); hugAll(); if (owner) owner.hugGen = hugGen; }
 
-export {appendMessage, catchUp, cutRows, dist, drawLane, dropRows, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
+export {appendMessage, catchUp, cutRows, headOf, isQuestion, placeQuestions, dist, drawLane, dropRows, edge, ends, finish, firstRow, grown, haltLane, hugAll, hush, laneMoving, pin,
   rehug, releaseRows, removeRow, sectionOf, show, showLane, shown, stale, syncJump, toHug};

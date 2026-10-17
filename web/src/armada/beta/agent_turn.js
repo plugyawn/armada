@@ -5,7 +5,7 @@ import {msgIndex, state, stats} from "./state.js";
 import {dur} from "./time.js";
 import {feed, lane} from "./frame.js";
 import {loadPics, partEl, partsOf, streamHTML, tpl} from "./parts.js";
-import {dist, edge, finish, grown, hugAll, hush, pin, releaseRows, sectionOf, syncJump, toHug} from "./feed.js";
+import {dist, edge, finish, grown, headOf, hugAll, hush, pin, placeQuestions, releaseRows, sectionOf, syncJump, toHug} from "./feed.js";
 import {runOfMsg} from "./runs.js";
 import {drawTurnPlan} from "./checklist.js";
 import {appendCode, codeBlock, setCode} from "./code_blocks.js";
@@ -59,7 +59,7 @@ function drawFooter(cl, live, r) { const old = $(":scope > .line.foot", cl), htm
 /* the place's runs have been read: every turn takes its footer and its checklist. They land above what is in view, where
    the browser's scroll anchoring would move the scroll position under a pinned feed and unpin it; a pinned feed is
    pinned again in the same task, so its end stays its end. */
-function drawFooters() { for (const cl of $$(".cl.onix[data-mid]", lane)) { const m = state.P.byId.get(+cl.dataset.mid) || state.P.byId.get(cl.dataset.mid); if (m) syncOnix(cl, m); }
+function drawFooters() { placeQuestions(state.P); for (const cl of $$(".cl.onix[data-mid]", lane)) { const m = state.P.byId.get(+cl.dataset.mid) || state.P.byId.get(cl.dataset.mid); if (m) syncOnix(cl, m); }
   if (state.pinned && state.tab === "Chat") pin(); }
 /* the server edits Onix's message as it writes. The new rendering is followed into the same elements: a paragraph that
    grew gets only its new words (they arrive on the ink's fade); a paragraph that changed is rewritten in place; parts
@@ -69,7 +69,7 @@ function morphOnix(cl, m) {
   let wrote = false, lastEl = null;
   parts.forEach((p, i) => { const old = ex[i];
     if (old && old.dataset.part === p.t) { lastEl = old; if (old._src === p.html) return; wrote = true; if (p.t === "ans") morphAns(old, p.html, head); else if (p.t === "pre") setCode(old, p.html); else if (p.t === "pv") fillCard(old, p); else { old.innerHTML = p.html; loadPics(old); } old._src = p.html; return; }
-    const e = partEl(p, m); wrote = true; if (old) { if (head && old.contains(head)) head.remove(); old.replaceWith(e); } else if (lastEl) lastEl.after(e); else { const anchor = $(":scope > .plan", cl) || $(":scope > .who", cl) || $(":scope > .sigil", cl); anchor ? anchor.after(e) : cl.prepend(e); } lastEl = e; if (!M.reduced()) M.appear(e, 0.45); });
+    const e = partEl(p, m); wrote = true; if (old) { if (head && old.contains(head)) head.remove(); old.replaceWith(e); } else if (lastEl) lastEl.after(e); else { const anchor = headOf(cl); anchor ? anchor.after(e) : cl.prepend(e); } lastEl = e; if (!M.reduced()) M.appear(e, 0.45); });
   ex.slice(parts.length).forEach((x) => { if (head && x.contains(head)) head.remove(); x.remove(); });
   return wrote;
 }
@@ -206,7 +206,7 @@ function writeFence(cl, m, w, src, final = false) {
 }
 /* a new part goes after the last one written, or where the answer starts */
 function put(cl, w, e, fade = true) { const after = w.parts[w.parts.length - 1];
-  if (after) after.after(e); else { const anchor = $(":scope > .plan", cl) || $(":scope > .who", cl) || $(":scope > .sigil", cl); anchor ? anchor.after(e) : cl.prepend(e); }
+  if (after) after.after(e); else { const anchor = headOf(cl); anchor ? anchor.after(e) : cl.prepend(e); }   /* after the run's question, if it asked one (feed.js) */
   w.parts.push(e); if (fade && !M.reduced()) M.appear(e, 0.45); }
 function drop(w, e, head) { if (head && e.contains(head)) head.remove(); e.remove(); w.parts.splice(w.parts.indexOf(e), 1); }
 /* o is on the page and n is its new rendering, of the same tag: what only grew gets its new words in before the mark (on

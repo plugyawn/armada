@@ -7,7 +7,7 @@ import {addMsg, dkey, keepEnd, markSeen, placeOfMsg, refreshCtx, tkey} from "./r
 import {band, feed, lane} from "./frame.js";
 import {faceOf, isOnix, nameOf, stoneOf} from "./faces.js";
 import {QUESTION} from "./parts.js";
-import {appendMessage, edge, ends, grown, pin, removeRow, sectionOf, show, shown, stale, syncJump} from "./feed.js";
+import {appendMessage, edge, ends, grown, pin, placeQuestions, removeRow, sectionOf, show, shown, stale, syncJump} from "./feed.js";
 import {drawNav, drawTrail} from "./nav.js";
 import {answered, LIVE_MARKS, namesOnix, runMark, runsSeen, seeRun, settleAsk} from "./runs.js";
 import {drawProg} from "./checklist.js";
@@ -47,7 +47,7 @@ function onMessage(ev) {
   drawTyping(); drawSide();
   if (state.tab !== "Chat") { $$(":scope > .empty", lane).forEach((x) => x.remove()); appendMessage(lane, m); keepEnd(c); return; }
   const row = grown(() => { $$(":scope > .empty", lane).forEach((x) => x.remove()); return appendMessage(lane, m); }, "settle");
-  if (state.pinned) { const last = row.parts.filter((x) => !/^pv/.test(x.dataset.part)).pop(), b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) M.appear(row.cl, 0.3); }
+  if (state.pinned) { const last = row.parts.filter((x) => !/^pv/.test(x.dataset.part)).pop(), b = last && ($(".b", last) || last); if (b && !isOnix(m.sender_id)) { M.release(b, {y: T.rise || 6}, "settle", {id: "in"}); M.appear(b); } else if (isOnix(m.sender_id)) { if (row.cl.dataset.mid === String(m.id)) M.appear(row.cl, 0.3); else row.parts.forEach((x) => M.appear(x, 0.3)); } }   /* a question appears in its run's turn (feed.js) */
   if (!mine && !isOnix(m.sender_id)) { S.play("arrive"); hopOnce(row.cl); }
   keepEnd(c);
 }
@@ -68,7 +68,7 @@ function onRun(ev) {
   const was = marks.get(key), want = live ? runMark(r, ev.status) : null; if (live) { if (was !== want) { marks.set(key, want); drawTrail(key); } } else if (LIVE_MARKS.has(was)) { if (ev.status === "failed" && !(state.place && state.place.key === key)) marks.set(key, "failed"); else marks.delete(key); drawTrail(key); }
   drawHomeRow(key);
   if (!c) return;
-  const wasLive = r.status === "queued" || r.status === "running";
+  const wasLive = r.status === "queued" || r.status === "running", wasResult = r.result_message_id;
   Object.assign(r, {status: ev.status, trigger_message_id: ev.trigger_message_id, result_message_id: ev.result_message_id ?? r.result_message_id, current_activity: ev.current_activity, tool_count: ev.tool_count ?? r.tool_count, date_updated: ev.date_created, date_created: ev.run_date_created ?? r.date_created});
   if (ev.plan) r.plan = ev.plan; if (ev.overview) r.overview = ev.overview; if (ev.usage) r.usage = {...(r.usage || {}), ...ev.usage}; if (ev.duration_seconds != null) { r.duration_seconds = ev.duration_seconds; r.date_finished = ev.date_created; }
   if (ev.agents) r.agents = ev.agents;
@@ -76,7 +76,7 @@ function onRun(ev) {
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }
   if (!shown(c)) { if (r.result_message_id) stale(c, r.result_message_id); return; }
   drawRunState(fresh); drawSide(); drawProg();
-  if (r.result_message_id) { const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
+  if (r.result_message_id) { if (r.result_message_id !== wasResult) placeQuestions(c); const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* a question that came before its run's answer was known joins its turn; what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
 /* a run in a channel's topic means the channel has its repository and the topic its worktree: the server makes both in the

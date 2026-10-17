@@ -4348,10 +4348,17 @@ class ArmadaWorkerTurn:
                     "body": str(error),
                 }
             )
-            failure_message = build_armada_live_transcript_message(
-                task=self.task,
-                status="failed",
-                transcript_events=self.transcript_events,
+            # A turn Codex ended with an error says why in plain words
+            # (zerver/lib/armada_agent.py, ArmadaRunNoticeError).
+            run_notice = getattr(error, "run_notice", None)
+            failure_message = (
+                run_notice
+                if isinstance(run_notice, str) and run_notice
+                else build_armada_live_transcript_message(
+                    task=self.task,
+                    status="failed",
+                    transcript_events=self.transcript_events,
+                )
             )
             try:
                 with self.handler.worker_completion(self.bot_handler, self.message_id):

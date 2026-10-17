@@ -5,6 +5,7 @@ import logging
 import os
 import platform
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -14,6 +15,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Final, Literal, cast
@@ -118,6 +120,47 @@ class ArmadaProcessIsolation:
 
 class ArmadaAgentRuntimeError(RuntimeError):
     pass
+
+
+class ArmadaRunNoticeError(ArmadaAgentRuntimeError):
+    """A turn that Codex ended with an error: the run fails, and its place
+    in the conversation says run_notice, in plain words, rather than
+    "<agent> failed." and the error's raw text."""
+
+    def __init__(self, run_notice: str) -> None:
+        super().__init__(run_notice)
+        self.run_notice = run_notice
+
+
+# "You've hit your usage limit. Try again at Oct 23rd, 2026 2:16 PM."
+ARMADA_CODEX_RETRY_AT_RE = re.compile(
+    r"Try again at ([A-Z][a-z]{2}) (\d{1,2})(?:st|nd|rd|th)?, (\d{4}) (\d{1,2}):(\d{2}) ([AP]M)"
+)
+
+
+def armada_codex_error_notice(words: str, codex_error_info: str | None) -> str:
+    """What a run's place says when Codex ended its turn with an error:
+    for a spent usage limit, until when, as Codex says it; for any other
+    error, its own words, briefly."""
+    if codex_error_info == "usageLimitExceeded":
+        until = ""
+        retry_at = ARMADA_CODEX_RETRY_AT_RE.search(words)
+        if retry_at is not None:
+            month, day, year, hour, minute, half = retry_at.groups()
+            # The time as Codex wrote it, written again: its zone is Codex's,
+            # and nothing here converts it.
+            when = datetime.strptime(
+                f"{month} {day} {year} {hour}:{minute} {half}", "%b %d %Y %I:%M %p"
+            ).replace(tzinfo=timezone.utc)
+            until = f", until {when:%a} {when.day} {when:%b}, {when.hour % 12 or 12}:{when:%M} {half.lower()}"
+        return (
+            f"{ARMADA_AGENT_NAME} can't work right now: the Codex account has reached its "
+            f"usage limit{until}."
+        )
+    words = trim_armada_agent_text(" ".join(words.split()), limit=300)
+    if not words:
+        return f"{ARMADA_AGENT_NAME} couldn't finish: Codex ended the turn with an error."
+    return f"{ARMADA_AGENT_NAME} couldn't finish: {words}"
 
 
 def armada_capture_protocol_message(direction: str, message: dict[str, Any]) -> None:
@@ -1673,6 +1716,11 @@ class ArmadaCodexAppServerTranscriptTranslator:
                 else []
             )
         if method == "error":
+            # The app-server's error: {"error": {"message", "codexErrorInfo",
+            # ...}, "willRetry", ...}; an older shape has "message" alone.
+            error = params.get("error")
+            words = error.get("message") if isinstance(error, dict) else None
+            codex_error_info = error.get("codexErrorInfo") if isinstance(error, dict) else None
             return self.contextualize_events(
                 [
                     {
@@ -1680,9 +1728,15 @@ class ArmadaCodexAppServerTranscriptTranslator:
                         "status": "failed",
                         "title": "Codex runtime error.",
                         "body": trim_armada_agent_text(
-                            str(params.get("message", "") or params.get("error", "")),
+                            str(words or params.get("message", "") or error or ""),
                             limit=1000,
                         ),
+                        "metadata": {
+                            "codex_error_info": codex_error_info
+                            if isinstance(codex_error_info, str)
+                            else None,
+                            "will_retry": params.get("willRetry") is True,
+                        },
                     }
                 ],
                 method=method,
@@ -3410,6 +3464,9 @@ class ArmadaCodexAppServerToolRunner:
         file_change_count = 0
         tool_call_count = 0
         root_turn_completed = False
+        # The error Codex reported for this thread's turn, unless it says
+        # it will retry: what the run's place says if the turn ends on it.
+        turn_error: ArmadaWorkerTranscriptEvent | None = None
         while True:
             if turn_context is not None:
                 queued = self.next_turn_message(turn_context)
@@ -3458,6 +3515,13 @@ class ArmadaCodexAppServerToolRunner:
                 )
                 if isinstance(event_thread_id, str) and event_thread_id != thread_id:
                     continue
+                if (
+                    event.get("kind") == "error"
+                    and isinstance(metadata, dict)
+                    and metadata.get("codex_method") == "error"
+                    and metadata.get("will_retry") is not True
+                ):
+                    turn_error = event
                 if event.get("kind") == "assistant":
                     body = event.get("body")
                     if isinstance(body, str):
@@ -3488,6 +3552,23 @@ class ArmadaCodexAppServerToolRunner:
             if thread_id == self.active_thread_id:
                 with self.state_lock:
                     self.active_turn_id = None
+            completed_status = (
+                completed_turn.get("status") if isinstance(completed_turn, dict) else None
+            )
+            if completed_status == "failed" or (
+                completed_status != "interrupted" and turn_error is not None and not final_text
+            ):
+                # The turn ended on Codex's error: the run fails, saying
+                # why, rather than ending done with no words.
+                error_metadata = turn_error.get("metadata") if turn_error is not None else None
+                raise ArmadaRunNoticeError(
+                    armada_codex_error_notice(
+                        str(turn_error.get("body", "")) if turn_error is not None else "",
+                        error_metadata.get("codex_error_info")
+                        if isinstance(error_metadata, dict)
+                        else None,
+                    )
+                )
             root_turn_completed = True
             if not self.active_descendant_thread_ids(thread_id):
                 return final_text, command_count, file_change_count, tool_call_count

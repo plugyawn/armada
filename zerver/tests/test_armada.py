@@ -1,5 +1,6 @@
 # ruff: noqa: S108
 
+import io
 import json
 import logging
 import queue
@@ -121,8 +122,10 @@ from zerver.lib.armada_agent import (
     ArmadaDisabledAgentRunner,
     ArmadaGeminiInteractionsAddressingIntentClassifier,
     ArmadaProcessIsolation,
+    ArmadaRunNoticeError,
     armada_addressing_context_messages,
     armada_codex_dynamic_tools,
+    armada_codex_error_notice,
     armada_worker_results_from_final_text,
     build_armada_addressing_router_prompt,
     build_armada_codex_developer_instructions,
@@ -9856,3 +9859,167 @@ class ArmadaInteractiveTurnTest(TestCase):
         self.assertEqual(error["code"], -32601)
         assert event is not None
         self.assertIn("no answer arrived", event["title"])
+
+
+class ArmadaCodexErrorTest(TestCase):
+    """A turn Codex ends with an error ends the run as failed, its place
+    saying why in plain words. On runix.chat, runs 16 and 17 met Codex's
+    usage limit and ended done, reading "Codex completed without a final
+    text response." """
+
+    # Production's error notification, as Codex sent it.
+    LIMIT = "You\u2019ve hit your usage limit. Try again at Oct 23rd, 2026 2:16 PM."
+    LIMIT_NOTICE = (
+        "Onix can't work right now: the Codex account has reached its usage limit, "
+        "until Fri 23 Oct, 2:16 pm."
+    )
+
+    def test_the_notice_says_until_when_or_the_error_briefly(self) -> None:
+        self.assertEqual(
+            armada_codex_error_notice(self.LIMIT, "usageLimitExceeded"), self.LIMIT_NOTICE
+        )
+        self.assertEqual(
+            armada_codex_error_notice("You've hit your usage limit.", "usageLimitExceeded"),
+            "Onix can't work right now: the Codex account has reached its usage limit.",
+        )
+        self.assertEqual(
+            armada_codex_error_notice("stream disconnected\n before completion", None),
+            "Onix couldn't finish: stream disconnected before completion",
+        )
+        self.assertEqual(
+            armada_codex_error_notice("", "internalServerError"),
+            "Onix couldn't finish: Codex ended the turn with an error.",
+        )
+
+    def test_an_error_is_read_as_its_words_and_its_kind(self) -> None:
+        translator = ArmadaCodexAppServerTranscriptTranslator()
+        [event] = translator.events_from_message(self.error(self.LIMIT))
+        self.assertEqual(event["body"], self.LIMIT)
+        assert "metadata" in event
+        self.assertEqual(event["metadata"]["codex_error_info"], "usageLimitExceeded")
+        self.assertFalse(event["metadata"]["will_retry"])
+        # The older shape, a message alone.
+        [event] = translator.events_from_message(
+            {"method": "error", "params": {"message": "stream disconnected"}}
+        )
+        self.assertEqual(event["body"], "stream disconnected")
+        assert "metadata" in event
+        self.assertIsNone(event["metadata"]["codex_error_info"])
+
+    def run_turn(self, *notifications: dict[str, object]) -> list[ArmadaWorkerToolResult]:
+        """One turn of an app-server that sends notifications, then ends."""
+        lines = [
+            {"id": 1, "result": {"userAgent": "armada-test"}},
+            {"id": 2, "result": {"thread": {"id": "thread-app"}}},
+            {"id": 3, "result": {"turn": {"id": "turn-app"}}},
+            *notifications,
+        ]
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdin = io.StringIO()
+                self.stdout = iter([json.dumps(line) + "\n" for line in lines])
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                pass
+
+        runner = ArmadaCodexAppServerToolRunner(
+            codex_bin="codex",
+            workdir="/workspace",
+            model="gpt-5.5",
+            sandbox="danger-full-access",
+            approval_policy="never",
+            timeout_seconds=30,
+            output_limit=200,
+            popen_command=lambda command, **kwargs: cast(Popen[str], FakeProcess()),
+        )
+        active_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "@Onix what's up", False)],
+        )
+        return list(runner(active_session, "what's up"))
+
+    @staticmethod
+    def error(message: str, *, will_retry: bool = False) -> dict[str, object]:
+        return {
+            "method": "error",
+            "params": {
+                "threadId": "thread-app",
+                "turnId": "turn-app",
+                "error": {
+                    "message": message,
+                    "codexErrorInfo": "usageLimitExceeded",
+                    "additionalDetails": None,
+                },
+                "willRetry": will_retry,
+            },
+        }
+
+    @staticmethod
+    def completed(status: str) -> dict[str, object]:
+        return {
+            "method": "turn/completed",
+            "params": {"threadId": "thread-app", "turn": {"id": "turn-app", "status": status}},
+        }
+
+    def test_a_turn_ended_on_an_error_fails_the_run_saying_why(self) -> None:
+        with self.assertRaises(ArmadaRunNoticeError) as raised:
+            self.run_turn(self.error(self.LIMIT), self.completed("failed"))
+        self.assertEqual(raised.exception.run_notice, self.LIMIT_NOTICE)
+        # An error with no words of the turn's own after it ends it too.
+        with self.assertRaises(ArmadaRunNoticeError):
+            self.run_turn(self.error(self.LIMIT), self.completed("completed"))
+
+    def test_an_error_codex_retries_past_does_not(self) -> None:
+        answer: dict[str, object] = {
+            "method": "item/completed",
+            "params": {
+                "threadId": "thread-app",
+                "turnId": "turn-app",
+                "item": {"id": "msg-1", "type": "agentMessage", "text": "All well."},
+            },
+        }
+        results = self.run_turn(
+            self.error("Reconnecting...", will_retry=True), answer, self.completed("completed")
+        )
+        self.assertEqual(results, [{"label": "Result", "value": "All well."}])
+        # A stopped turn is the stop's to settle, not an error's.
+        self.assertEqual(
+            self.run_turn(self.error(self.LIMIT), self.completed("interrupted")),
+            [{"label": "Verification", "value": "Codex completed without a final text response."}],
+        )
+
+    def test_the_runs_place_says_the_notice(self) -> None:
+        sent_replies: list[str] = []
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> None:
+                sent_replies.append(response)
+
+        def tool_runner(
+            active_session: ArmadaActiveSessionSummary, task: str, **kwargs: object
+        ) -> NoReturn:
+            raise ArmadaRunNoticeError(self.LIMIT_NOTICE)
+
+        run_store = FakeArmadaWorkerRunStore()
+        with self.assertLogs("zerver.lib.armada", level="ERROR"):
+            make_test_armada_handler(
+                worker_runtime=ArmadaWorkerRuntime(tool_runner), worker_run_store=run_store
+            ).handle_message(
+                {
+                    "id": 202,
+                    "type": "stream",
+                    "display_recipient": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
+                    "content": "@Onix what's up",
+                },
+                FakeBotHandler(),
+            )
+        self.assertEqual(sent_replies[1], self.LIMIT_NOTICE)
+        self.assertEqual(run_store.runs[202]["status"], "failed")
+        self.assertEqual(run_store.runs[202]["error"], self.LIMIT_NOTICE)

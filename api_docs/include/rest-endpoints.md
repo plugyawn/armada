@@ -188,6 +188,8 @@
 * [Unlink a plugin](/api/remove-armada-plugin-link)
 * [Run a widget's action](/api/run-armada-plugin-action)
 * [Push a plugin's widget](/api/push-armada-widget)
+* [Change your own view of a widget](/api/update-armada-widget-preference)
+* [Go back to the team's view of a widget](/api/remove-armada-widget-preference)
 
 ## Specialty endpoints
 

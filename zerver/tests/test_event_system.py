@@ -1387,9 +1387,10 @@ class FetchQueriesTest(ZulipTestCase):
 
         expected_counts = dict(
             alert_words=1,
-            # One query for both: the realm's installs, when it has none.
+            # One query for the three: the realm's installs, when it has none.
             armada_plugin=1,
             armada_widget=1,
+            armada_widget_preference=1,
             channel_folders=1,
             custom_profile_fields=1,
             default_streams=1,

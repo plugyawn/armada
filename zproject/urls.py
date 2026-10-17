@@ -76,6 +76,10 @@ from zerver.views.armada_plugins import (
     post_armada_widget,
 )
 from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
+from zerver.views.armada_widget_preferences import (
+    delete_armada_widget_preference,
+    patch_armada_widget_preference,
+)
 from zerver.views.armada_workspace import (
     delete_armada_workspace_entry_backend,
     get_armada_workspace_descriptor_backend,
@@ -498,6 +502,11 @@ v1_api_and_json_patterns = [
         DELETE=(delete_armada_plugin_mcp, {"intentionally_undocumented"}),
     ),
     rest_path("armada/widgets", POST=post_armada_widget),
+    rest_path(
+        "armada/widgets/<int:install_id>/<str:widget>/preference",
+        PATCH=patch_armada_widget_preference,
+        DELETE=delete_armada_widget_preference,
+    ),
     # INTERIM BETA: partners (zerver/lib/partner.py).
     rest_path("armada/partners", GET=(get_armada_partners, {"intentionally_undocumented"})),
     rest_path("armada/partner", POST=(post_armada_partner, {"intentionally_undocumented"})),

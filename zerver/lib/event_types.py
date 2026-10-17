@@ -1516,3 +1516,32 @@ class ArmadaWidgetRemoveEvent(BaseEvent):
     widget: str
     link_id: int | None
     item: str
+
+
+class ArmadaWidgetPreference(BaseModel):
+    install_id: int
+    widget: str
+    shown: bool | None
+    position: int | None
+    label: str
+    rest_figure: str
+    # A declared facet's key -> the value its rows must have.
+    filters: dict[str, object]
+    # A declared alert's key -> its threshold.
+    alerts: dict[str, object]
+    in_column: bool | None
+    # When the user first opened the widget; None while it is new to them.
+    seen_at: int | None
+
+
+class ArmadaWidgetPreferenceUpdateEvent(BaseEvent):
+    type: Literal["armada_widget_preference"]
+    op: Literal["update"]
+    preference: ArmadaWidgetPreference
+
+
+class ArmadaWidgetPreferenceRemoveEvent(BaseEvent):
+    type: Literal["armada_widget_preference"]
+    op: Literal["remove"]
+    install_id: int
+    widget: str

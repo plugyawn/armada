@@ -51,7 +51,12 @@ from zerver.actions.create_user import do_create_user, do_reactivate_user
 from zerver.actions.streams import bulk_add_subscriptions, bulk_remove_subscriptions
 from zerver.actions.user_settings import do_change_full_name, do_regenerate_api_key
 from zerver.actions.users import do_deactivate_user
-from zerver.lib.armada_plugin_events import send_armada_plugin_event, send_armada_widget_event
+from zerver.lib.armada_plugin_events import (
+    forget_widget_preferences,
+    send_armada_plugin_event,
+    send_armada_widget_event,
+    send_widget_preferences,
+)
 from zerver.lib.armada_plugin_validation import (
     MARKUP,
     ArmadaPluginContractError,
@@ -829,6 +834,7 @@ def remove_plugin(user: UserProfile, install: PluginInstall) -> None:
     if install.state == PluginInstall.DRAFT:
         with transaction.atomic(durable=True):
             send_armada_plugin_event(install, "remove")
+            send_widget_preferences(install, removed=True)
             install.delete()
             do_deactivate_user(install.bot, acting_user=user)
         return
@@ -842,6 +848,7 @@ def remove_plugin(user: UserProfile, install: PluginInstall) -> None:
         do_deactivate_user(install.bot, acting_user=user)
         audit_plugin(install, user, AuditLogEventType.PLUGIN_REMOVED, {"version": install.version})
         send_armada_plugin_event(install, "remove")
+        send_widget_preferences(install, removed=True)
 
 
 def restore_plugin(user: UserProfile, install: PluginInstall) -> None:
@@ -867,6 +874,7 @@ def restore_plugin(user: UserProfile, install: PluginInstall) -> None:
         install.save()
         audit_plugin(install, user, AuditLogEventType.PLUGIN_RESTORED, {"version": install.version})
         send_armada_plugin_event(install, "add")
+        send_widget_preferences(install, removed=False)
 
 
 def retry_plugin(user: UserProfile, install: PluginInstall) -> None:
@@ -1012,6 +1020,7 @@ def update_plugin_version(
         _remove_widget_states(
             install, PluginWidgetState.objects.filter(install=install, widget__in=dropped)
         )
+        forget_widget_preferences(install, dropped)
         install.sha = pinned.sha
         install.manifest = new
         install.name = new["name"]

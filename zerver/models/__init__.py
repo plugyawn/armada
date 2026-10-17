@@ -6,6 +6,7 @@ from zerver.models.armada import Partner as Partner
 from zerver.models.armada import PluginInstall as PluginInstall
 from zerver.models.armada import PluginLink as PluginLink
 from zerver.models.armada import PluginSecret as PluginSecret
+from zerver.models.armada import PluginWidgetPreference as PluginWidgetPreference
 from zerver.models.armada import PluginWidgetState as PluginWidgetState
 from zerver.models.armada import Post as Post
 from zerver.models.bots import AgentMonitor as AgentMonitor

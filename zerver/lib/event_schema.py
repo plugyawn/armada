@@ -24,6 +24,8 @@ from zerver.lib.event_types import (
     ArmadaReadReceiptsEvent,
     ArmadaRunEvent,
     ArmadaStreamEvent,
+    ArmadaWidgetPreferenceRemoveEvent,
+    ArmadaWidgetPreferenceUpdateEvent,
     ArmadaWidgetRemoveEvent,
     ArmadaWidgetUpdateEvent,
     ArmadaWorkspaceChangedEvent,
@@ -264,6 +266,8 @@ check_armada_plugin_remove_event = make_checker(ArmadaPluginRemoveEvent)
 check_armada_post_event = make_checker(ArmadaPostEvent)
 check_armada_run_event = make_checker(ArmadaRunEvent)
 check_armada_stream_event = make_checker(ArmadaStreamEvent)
+check_armada_widget_preference_remove_event = make_checker(ArmadaWidgetPreferenceRemoveEvent)
+check_armada_widget_preference_update_event = make_checker(ArmadaWidgetPreferenceUpdateEvent)
 check_armada_widget_remove_event = make_checker(ArmadaWidgetRemoveEvent)
 check_armada_widget_update_event = make_checker(ArmadaWidgetUpdateEvent)
 check_armada_workspace_changed_event = make_checker(ArmadaWorkspaceChangedEvent)

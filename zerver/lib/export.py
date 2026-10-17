@@ -192,6 +192,7 @@ ALL_ZULIP_TABLES = {
     "zerver_plugininstall",
     "zerver_pluginlink",
     "zerver_pluginsecret",
+    "zerver_pluginwidgetpreference",
     "zerver_pluginwidgetstate",
     "zerver_post",
     "zerver_post_attachments",
@@ -326,6 +327,7 @@ NON_EXPORTED_TABLES = {
     "zerver_plugininstall",
     "zerver_pluginlink",
     "zerver_pluginsecret",
+    "zerver_pluginwidgetpreference",
     "zerver_pluginwidgetstate",
     # For any tables listed below here, it's a bug that they are not present in the export.
     #

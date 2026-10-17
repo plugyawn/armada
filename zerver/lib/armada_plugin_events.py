@@ -1,11 +1,14 @@
 """What clients see of plugins (design/r9/plugins, section 4): the
-armada_plugin and armada_widget events, their /register snapshot, and how
-an event lands in a snapshot.
+armada_plugin, armada_widget and armada_widget_preference events, their
+/register snapshot, and how an event lands in a snapshot.
 
 An install is shown to everyone in the realm, a draft to its maker alone,
 and a link only to whoever can read its channel. A widget's document in
 the nav goes to everyone, and one in a linked place to that channel's
-subscribers. A draft's widgets go to no one: its pushes are a trial's.
+subscribers. A draft's widgets go to no one: its pushes are a trial's. A
+person's preferences for a widget (ROUND2.md, section G) go to that person
+alone, for the installs they see: they leave with a removed install and
+come back with its Undo.
 """
 
 from collections import defaultdict
@@ -14,7 +17,14 @@ from typing import Any
 
 from zerver.lib.stream_subscription import get_user_ids_for_streams
 from zerver.lib.timestamp import datetime_to_timestamp
-from zerver.models import PluginInstall, PluginLink, PluginWidgetState, Stream, UserProfile
+from zerver.models import (
+    PluginInstall,
+    PluginLink,
+    PluginWidgetPreference,
+    PluginWidgetState,
+    Stream,
+    UserProfile,
+)
 from zerver.models.users import active_non_guest_user_ids, active_user_ids
 from zerver.tornado.django_api import send_event_on_commit
 
@@ -140,11 +150,78 @@ def send_armada_widget_event(
     send_event_on_commit(install.realm, event, _scope_user_ids(install, link))
 
 
+def preference_view(preference: PluginWidgetPreference) -> dict[str, Any]:
+    return {
+        "install_id": preference.install_id,
+        "widget": preference.widget,
+        "shown": preference.shown,
+        "position": preference.position,
+        "label": preference.label,
+        "rest_figure": preference.rest_figure,
+        "filters": preference.filters,
+        "alerts": preference.alerts,
+        "in_column": preference.in_column,
+        "seen_at": (
+            datetime_to_timestamp(preference.seen_at) if preference.seen_at is not None else None
+        ),
+    }
+
+
+def send_widget_preference_event(
+    install: PluginInstall, preference: PluginWidgetPreference
+) -> None:
+    send_event_on_commit(
+        install.realm,
+        {
+            "type": "armada_widget_preference",
+            "op": "update",
+            "preference": preference_view(preference),
+        },
+        [preference.user_id],
+    )
+
+
+def send_widget_preference_removal(install: PluginInstall, user_id: int, widget: str) -> None:
+    send_event_on_commit(
+        install.realm,
+        {
+            "type": "armada_widget_preference",
+            "op": "remove",
+            "install_id": install.id,
+            "widget": widget,
+        },
+        [user_id],
+    )
+
+
+def send_widget_preferences(install: PluginInstall, *, removed: bool) -> None:
+    """An install removed, or back from Remove: each person's preferences for
+    it leave their clients with it, and come back with it. The rows stay
+    for the week Undo lasts, and are purged with the install."""
+    for preference in PluginWidgetPreference.objects.filter(install=install):
+        if removed:
+            send_widget_preference_removal(install, preference.user_id, preference.widget)
+        else:
+            send_widget_preference_event(install, preference)
+
+
+def forget_widget_preferences(install: PluginInstall, widgets: Iterable[str]) -> None:
+    """Widgets an update dropped take everyone's preferences for them along
+    (ROUND2.md A9: a widget's key is stable for an install's life)."""
+    preferences = list(
+        PluginWidgetPreference.objects.filter(install=install, widget__in=list(widgets))
+    )
+    for preference in preferences:
+        send_widget_preference_removal(install, preference.user_id, preference.widget)
+    PluginWidgetPreference.objects.filter(id__in=[p.id for p in preferences]).delete()
+
+
 def fetch_armada_plugin_state(
-    user: UserProfile, *, want_plugins: bool, want_widgets: bool
+    user: UserProfile, *, want_plugins: bool, want_widgets: bool, want_preferences: bool = False
 ) -> dict[str, Any]:
-    """The /register snapshot: the installs this person sees, and the widget
-    documents of the places they can see."""
+    """The /register snapshot: the installs this person sees, the widget
+    documents of the places they can see, and their own preferences for
+    those installs' widgets."""
     state: dict[str, Any] = {}
     installs = [
         install
@@ -187,6 +264,17 @@ def fetch_armada_plugin_state(
             ),
             key=_scope_order,
         )
+    if want_preferences:
+        state["armada_widget_preferences"] = (
+            [
+                preference_view(preference)
+                for preference in PluginWidgetPreference.objects.filter(
+                    user=user, install__in=installs
+                ).order_by("install_id", "widget")
+            ]
+            if installs
+            else []
+        )
     return state
 
 
@@ -198,10 +286,32 @@ def _same_scope(entry: dict[str, Any], event: dict[str, Any]) -> bool:
     return all(entry[key] == event[key] for key in ("install_id", "widget", "link_id", "item"))
 
 
+def _apply_widget_preference_event(state: dict[str, Any], event: dict[str, Any]) -> None:
+    same = (
+        (event["preference"]["install_id"], event["preference"]["widget"])
+        if event["op"] == "update"
+        else (event["install_id"], event["widget"])
+    )
+    preferences = [
+        preference
+        for preference in state["armada_widget_preferences"]
+        if (preference["install_id"], preference["widget"]) != same
+    ]
+    if event["op"] == "update":
+        preferences.append(event["preference"])
+    state["armada_widget_preferences"] = sorted(
+        preferences, key=lambda preference: (preference["install_id"], preference["widget"])
+    )
+
+
 def apply_armada_plugin_event(state: dict[str, Any], event: dict[str, Any]) -> None:
-    """An armada_plugin or armada_widget event, applied to a /register
-    snapshot as the client applies it. A queue gets only the event types it
-    registered for, and its snapshot holds each of them."""
+    """An armada_plugin, armada_widget or armada_widget_preference event,
+    applied to a /register snapshot as the client applies it. A queue gets
+    only the event types it registered for, and its snapshot holds each of
+    them."""
+    if event["type"] == "armada_widget_preference":
+        _apply_widget_preference_event(state, event)
+        return
     if event["type"] == "armada_plugin":
         install_id = event["install_id"] if event["op"] == "remove" else event["plugin"]["id"]
         plugins = [plugin for plugin in state["armada_plugins"] if plugin["id"] != install_id]

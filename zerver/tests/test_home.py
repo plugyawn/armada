@@ -141,6 +141,7 @@ class HomeTest(ZulipTestCase):
         "agent_user_ids",
         "repository_stream_ids",
         "armada_plugins",
+        "armada_widget_preferences",
         "armada_widgets",
         "realm_can_access_all_users_group",
         "realm_can_add_custom_emoji_group",

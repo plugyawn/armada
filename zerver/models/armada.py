@@ -290,3 +290,51 @@ class PluginWidgetState(models.Model):
                 nulls_distinct=False,
             ),
         ]
+
+
+class PluginWidgetPreference(models.Model):
+    """How one person wants one of a plugin's widgets drawn for them alone
+    (design/r9/plugins/ROUND2.md, sections D and G): whether it is in
+    their nav, where in the group, under which label, which of its
+    declared figures stands at rest, which rows its declared facets keep,
+    the declared alerts that put a mark in their nav, and whether its list
+    stands in their column. A field left at its default is the team's. It
+    also keeps when they first opened the widget, so that a widget new to
+    them is new on every device until they open it on one.
+
+    The document stays one, shared: a person's view is computed from it and
+    from this row on their own client, and never reaches the plugin
+    (zerver/lib/armada_widget_preferences.py is the only writer)."""
+
+    user = models.ForeignKey(UserProfile, on_delete=CASCADE, related_name="+")
+    install = models.ForeignKey(PluginInstall, on_delete=CASCADE, related_name="+")
+    # The manifest's key for the widget, as "runs".
+    widget = models.CharField(max_length=32)
+    # In this person's nav, or not; None is the team's default.
+    shown = models.BooleanField(null=True)
+    # Its place in this person's widget group, the smallest first; None
+    # keeps the team's order.
+    position = models.PositiveSmallIntegerField(null=True)
+    # This person's name for it; "" is the widget's own.
+    label = models.CharField(max_length=24, default="")
+    # The key of one of the widget's declared figures; "" is its own rest.
+    rest_figure = models.CharField(max_length=32, default="")
+    # A declared facet's key -> the value its rows must have.
+    filters = models.JSONField(default=dict)
+    # A declared alert's key -> the threshold that marks this person's nav.
+    alerts = models.JSONField(default=dict)
+    # Its list in this person's column, or not; None is the team's default.
+    in_column = models.BooleanField(null=True)
+    # When this person first opened the widget, on any of their devices;
+    # None while it is new to them, which their nav draws in the first ink
+    # (ROUND2.md, decision 9). Not part of their view: going back to the
+    # team's view keeps it.
+    seen_at = models.DateTimeField(null=True)
+    date_updated = models.DateTimeField(default=timezone_now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "install", "widget"], name="zerver_pluginwidgetpreference_widget"
+            ),
+        ]

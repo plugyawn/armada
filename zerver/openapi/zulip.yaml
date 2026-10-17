@@ -6615,6 +6615,84 @@ paths:
                             - type: object
                               additionalProperties: false
                               description: |
+                                Event sent to the user alone when they change their own view
+                                of a plugin's widget, and when a plugin they removed comes
+                                back with Undo.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_widget_preference
+                                op:
+                                  type: string
+                                  enum:
+                                    - update
+                                preference:
+                                  $ref: "#/components/schemas/ArmadaWidgetPreference"
+                              example:
+                                {
+                                  "type": "armada_widget_preference",
+                                  "op": "update",
+                                  "preference":
+                                    {
+                                      "install_id": 1,
+                                      "widget": "gpus",
+                                      "shown": null,
+                                      "position": null,
+                                      "label": "",
+                                      "rest_figure": "jobs",
+                                      "filters": {"gpu": "H100"},
+                                      "alerts": {},
+                                      "in_column": null,
+                                      "seen_at": 1792230000,
+                                    },
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
+                                Event sent to the user alone when their view of a plugin's
+                                widget goes back to the team's: they asked, before they had
+                                opened the widget; the plugin was removed; or an update
+                                dropped the widget.
+
+                                **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
+                              properties:
+                                id:
+                                  $ref: "#/components/schemas/EventIdSchema"
+                                type:
+                                  allOf:
+                                    - $ref: "#/components/schemas/EventTypeSchema"
+                                    - enum:
+                                        - armada_widget_preference
+                                op:
+                                  type: string
+                                  enum:
+                                    - remove
+                                install_id:
+                                  type: integer
+                                  description: |
+                                    The ID of the plugin's install.
+                                widget:
+                                  type: string
+                                  description: |
+                                    The widget's key.
+                              example:
+                                {
+                                  "type": "armada_widget_preference",
+                                  "op": "remove",
+                                  "install_id": 1,
+                                  "widget": "gpus",
+                                  "id": 0,
+                                }
+                            - type: object
+                              additionalProperties: false
+                              description: |
                                 Event containing details of a newly created saved snippet.
 
                                 **Changes**: New in Zulip 10.0 (feature level 297).
@@ -19505,6 +19583,18 @@ paths:
                           is subscribed to.
 
                           **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+                      armada_widget_preferences:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ArmadaWidgetPreference"
+                        description: |
+                          Present if `armada_widget_preference` is present in
+                          `fetch_event_types`.
+
+                          The user's own preferences for the widgets of the plugins
+                          they see.
+
+                          **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
                       saved_snippets:
                         type: array
                         items:
@@ -28825,6 +28915,132 @@ paths:
                           How many times the document has changed.
                     example: {"result": "success", "msg": "", "version": 3}
 
+  /armada/widgets/{install_id}/{widget}/preference:
+    patch:
+      operationId: update-armada-widget-preference
+      tags: ["armada"]
+      summary: Change your own view of a widget
+      description: |
+        Change how one of a plugin's widgets is drawn for you alone: whether
+        it is in your nav and where, your label for it, which of its
+        declared figures stands at rest, which rows its declared facets keep,
+        which of its declared alerts mark your nav, and whether its list
+        stands in your column. Only what the widget's manifest declares can
+        be chosen. The widget's document stays the team's; a client draws
+        your view from it and from your preferences. It also records when
+        you first opened the widget, so that a widget new to you is drawn as
+        new on each of your clients until you open it on one.
+
+        A field left out is not changed. Your clients get an
+        `armada_widget_preference` event.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+        - $ref: "#/components/parameters/ArmadaWidgetKey"
+      requestBody:
+        required: false
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                shown:
+                  type: boolean
+                  description: |
+                    Whether the widget is in your nav, whatever the team's default.
+                  example: false
+                position:
+                  type: integer
+                  description: |
+                    Its place in your widget group, the smallest first, from 0 to 999.
+                  example: 0
+                label:
+                  type: string
+                  description: |
+                    Your name for it, at most 24 characters; empty for its own.
+                  example: Free GPUs
+                rest_figure:
+                  type: string
+                  description: |
+                    The key of one of the widget's declared figures to show at rest;
+                    empty for its own.
+                  example: jobs
+                filters:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    For each of the widget's declared facets to filter by, the value
+                    its rows must have; `{}` for every row.
+                  example: {"gpu": "H100"}
+                alerts:
+                  type: object
+                  additionalProperties: {}
+                  description: |
+                    For each of the widget's declared alerts to watch, its threshold,
+                    within the alert's bounds; `{}` for none.
+                  example: {"free_at_least": 4}
+                in_column:
+                  type: boolean
+                  description: |
+                    Whether its list stands in your column where it is linked.
+                  example: false
+                reset:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - shown
+                      - position
+                      - in_column
+                  description: |
+                    Fields to put back to the team's.
+                  example: ["position"]
+                seen:
+                  type: boolean
+                  description: |
+                    `true` once you have opened the widget (the first time is
+                    kept), or `false` to have it drawn as new to you again.
+                  example: true
+            encoding:
+              shown:
+                contentType: application/json
+              position:
+                contentType: application/json
+              filters:
+                contentType: application/json
+              alerts:
+                contentType: application/json
+              in_column:
+                contentType: application/json
+              reset:
+                contentType: application/json
+              seen:
+                contentType: application/json
+      responses:
+        "200":
+          $ref: "#/components/responses/SimpleSuccess"
+    delete:
+      operationId: remove-armada-widget-preference
+      tags: ["armada"]
+      summary: Go back to the team's view of a widget
+      description: |
+        Put every field of your own view of the widget back to the team's.
+        When you first opened the widget is not part of your view, and is
+        kept. Your clients get an `armada_widget_preference` event.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+        - $ref: "#/components/parameters/ArmadaWidgetKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/SimpleSuccess"
+
 components:
   #######################
   # Security definitions
@@ -28991,6 +29207,74 @@ components:
         - made_in_stream_id
         - made_in_topic
         - made_in_message_id
+    ArmadaWidgetPreference:
+      type: object
+      description: |
+        How one of a plugin's widgets is drawn for the user alone. A field
+        at its default is the team's.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-1f71ef).
+      additionalProperties: false
+      properties:
+        install_id:
+          type: integer
+          description: |
+            The ID of the plugin's install.
+        widget:
+          type: string
+          description: |
+            The widget's key in the plugin's manifest.
+        shown:
+          type: boolean
+          nullable: true
+          description: |
+            Whether it is in the user's nav, or `null` for the team's default.
+        position:
+          type: integer
+          nullable: true
+          description: |
+            Its place in the user's widget group, or `null` for the team's order.
+        label:
+          type: string
+          description: |
+            The user's name for it, or empty for its own.
+        rest_figure:
+          type: string
+          description: |
+            The key of the declared figure shown at rest, or empty for its own.
+        filters:
+          type: object
+          additionalProperties: {}
+          description: |
+            A declared facet's key, and the value the widget's rows must have.
+        alerts:
+          type: object
+          additionalProperties: {}
+          description: |
+            A declared alert's key, and the threshold that marks the user's nav.
+        in_column:
+          type: boolean
+          nullable: true
+          description: |
+            Whether its list stands in the user's column, or `null` for the
+            team's default.
+        seen_at:
+          type: integer
+          nullable: true
+          description: |
+            When the user first opened the widget, on any client, as a UNIX
+            timestamp; `null` while it is new to them.
+      required:
+        - install_id
+        - widget
+        - shown
+        - position
+        - label
+        - rest_figure
+        - filters
+        - alerts
+        - in_column
+        - seen_at
     ArmadaWidget:
       type: object
       description: |
@@ -33398,6 +33682,15 @@ components:
   # Shared parameters
   ####################
   parameters:
+    ArmadaWidgetKey:
+      name: widget
+      in: path
+      description: |
+        The widget's key in the plugin's manifest.
+      schema:
+        type: string
+      example: gpus
+      required: true
     ArmadaPluginInstallId:
       name: install_id
       in: path

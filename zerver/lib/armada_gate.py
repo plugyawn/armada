@@ -124,7 +124,7 @@ def get_armada_followup_service_bot_event(
 
     from zerver.lib.armada import (
         ARMADA_FOLLOWUP_TRIGGER,
-        is_armada_plain_mention_alias_message,
+        is_armada_addressed_by_name_message,
         is_armada_request_message,
     )
 
@@ -140,11 +140,13 @@ def get_armada_followup_service_bot_event(
             "user_profile_id": selected_armada_bot_user_id,
         }
 
-    has_plain_armada_alias = is_armada_plain_mention_alias_message(content)
-    if is_armada_request_message(content) and not has_plain_armada_alias:
+    # Named without a mention ("@onix", "Hey Onix, ..."), the agent is
+    # addressed as surely as by a mention, in any topic: no router decides.
+    addressed_by_name = is_armada_addressed_by_name_message(content)
+    if is_armada_request_message(content) and not addressed_by_name:
         return None
 
-    if has_plain_armada_alias:
+    if addressed_by_name:
         return {
             "trigger": ARMADA_FOLLOWUP_TRIGGER,
             "user_profile_id": selected_armada_bot_user_id,

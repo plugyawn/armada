@@ -12,7 +12,11 @@ from typing_extensions import ParamSpec, override
 
 from zerver.actions.create_user import do_create_user
 from zerver.actions.message_send import get_service_bot_events
-from zerver.lib.armada import ARMADA_EMBEDDED_BOT_SERVICE, ARMADA_FOLLOWUP_TRIGGER
+from zerver.lib.armada import (
+    ARMADA_AGENT_NAME,
+    ARMADA_EMBEDDED_BOT_SERVICE,
+    ARMADA_FOLLOWUP_TRIGGER,
+)
 from zerver.lib.bot_config import (
     ConfigError,
     get_bot_configs,
@@ -303,6 +307,52 @@ class TestServiceBotBasics(ZulipTestCase):
             content="@**Onix** hi",
         )
         self.assertEqual(event_dict["embedded_bots"], [])
+
+    @override_settings(
+        EMBEDDED_BOTS_ENABLED=True,
+        ARMADA_ADDRESSING_ROUTER_RUNTIME="disabled",
+    )
+    def test_service_events_for_the_agent_named_without_a_mention(self) -> None:
+        sender = self.example_user("hamlet")
+        owner = self.example_user("cordelia")
+        armada_bot = self.create_test_bot(
+            "onix",
+            owner,
+            full_name=ARMADA_AGENT_NAME,
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        stream = get_stream("Denmark", sender.realm)
+        # Named, the agent answers even where only mentions reach it.
+        Workspace.objects.create(
+            realm=sender.realm,
+            stream_name=stream.name,
+            topic_name="mentions only",
+            response_policy="mentions_only",
+        )
+
+        def events(content: str, topic_name: str = "queues") -> list[dict[str, object]]:
+            return get_service_bot_events(
+                sender=sender,
+                service_bot_tuples=[],
+                active_user_ids=set(),
+                mentioned_user_ids=set(),
+                recipient_type=Recipient.STREAM,
+                recipient_id=stream.recipient_id,
+                stream_name=stream.name,
+                topic_name=topic_name,
+                content=content,
+            )["embedded_bots"]
+
+        followup = [{"trigger": ARMADA_FOLLOWUP_TRIGGER, "user_profile_id": armada_bot.id}]
+        self.assertEqual(events(f"Hey {ARMADA_AGENT_NAME}, what's up"), followup)
+        self.assertEqual(events(f"{ARMADA_AGENT_NAME.lower()}?"), followup)
+        self.assertEqual(
+            events(f"{ARMADA_AGENT_NAME}, can you check the queue?", "mentions only"), followup
+        )
+        self.assertEqual(events(f"I asked {ARMADA_AGENT_NAME} yesterday"), [])
+        self.assertEqual(events(f"thanks, {ARMADA_AGENT_NAME}!"), [])
+        self.assertEqual(events(f"```\n{ARMADA_AGENT_NAME}, run the tests\n```"), [])
 
     @override_settings(
         EMBEDDED_BOTS_ENABLED=True,

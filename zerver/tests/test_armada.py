@@ -943,6 +943,60 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertFalse(is_armada_request_message("@Pearl fix the checkout test"))
         self.assertFalse(is_armada_request_message("@Onixes fix the checkout test"))
 
+    def test_the_agent_is_addressed_by_its_name_said_to_it(self) -> None:
+        agent = ARMADA_AGENT_NAME
+        addressed = [
+            f"Hey {agent}, what's up",
+            f"hey {agent} can you look at the queue?",
+            f"hi {agent.lower()}",
+            f"hello {agent.upper()}!",
+            f"good morning {agent}, check last night's sweep",
+            f"ok {agent}, run it",
+            f"{agent}, can you rerun it with lr 3e-4?",
+            f"{agent}: status?",
+            f"{agent}?",
+            agent,
+            f"what do you think about the retry limit, {agent}?",
+            f"and the staging one, {agent.lower()}",
+            f"{agent}, thanks! now do the admin page",
+            f"> the last alert\n\n{agent}, is this the same as yesterday?",
+            f"~~~\nKeyError: 'slot'\n~~~\n{agent}, what does this mean?",
+        ]
+        talked_about = [
+            f"I asked {agent} yesterday",
+            f"{agent}'s plot looks off",
+            f"{agent}\u2019s plot looks off",
+            f"did {agent} finish?",
+            f"{agent} broke the build again",
+            f"lol {agent} broke the build",
+            f"has anyone tried asking {agent}?",
+            f"thanks to {agent} we shipped",
+            f"{agent}s everywhere",
+            f"hey {agent}-bot is down",
+            f"hey {agent}'s plot",
+            # Thanks, or an ok, needs no answer.
+            f"thanks, {agent}!",
+            f"{agent}, thanks",
+            f"ok {agent}",
+            f"great work, {agent}!",
+            f"thank you, {agent} \U0001f64f",
+            # Code and quotes only cite the name.
+            f"```\n{agent}, run the tests\n```\nthat's what I typed",
+            f"~~~ quote\n{agent}, can you rerun it?\n~~~\nyes, this one",
+            f"> {agent}, can you rerun it?\nthis is what I asked",
+            f"`{agent}, go` is the whole command",
+            f"`@{agent.lower()}` is how you call it",
+            f"~~~\n@{agent.lower()} deploy prod\n~~~\nthis is the command I mean",
+        ]
+        for content in addressed:
+            with self.subTest(content=content):
+                self.assertTrue(is_armada_request_message(content))
+        for content in talked_about:
+            with self.subTest(content=content):
+                self.assertFalse(is_armada_request_message(content))
+        # Not said to it by these rules, so the addressing router decides.
+        self.assertFalse(is_armada_request_message(f"thanks {agent}, now run the full suite"))
+
     def test_clean_armada_task_text_removes_mentions_anywhere(self) -> None:
         self.assertEqual(
             clean_armada_task_text("@Onix fix the checkout test"), "fix the checkout test"
@@ -4636,6 +4690,49 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(sent_replies[0], ARMADA_WORKING_MESSAGE)
         self.assertEqual(sent_replies[1], ARMADA_NO_VISIBLE_RESPONSE_MESSAGE)
         self.assertNotIn("Confirm repo, branch, and target runtime", sent_replies[0])
+
+    def test_embedded_bot_handler_runs_for_its_name_without_a_router(self) -> None:
+        # Said to the agent by name, a message starts a run like a mention,
+        # with no router, even in a topic that answers only mentions.
+        loaded_session = build_armada_active_session_summary_from_messages(
+            armada_session=get_armada_session_payload(),
+            source="server",
+            stream_exists=True,
+            messages=[(10, "**Warn**: armada_worker (120 waiting).", True, "Ops")],
+            response_policy="mentions_only",
+        )
+        dispatcher = Mock()
+
+        class FakeBotHandler:
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                return {"id": 400}
+
+        handler = make_test_armada_handler(
+            active_session_loader=lambda message, bot_handler: loaded_session,
+            worker_dispatcher=dispatcher,
+        )
+        for message_id, content in [
+            (11, f"did {ARMADA_AGENT_NAME} see this?"),
+            (12, f"Hey {ARMADA_AGENT_NAME}, what's up"),
+        ]:
+            handler.handle_message(
+                {
+                    "id": message_id,
+                    "type": "stream",
+                    "display_recipient": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
+                    "content": content,
+                    ARMADA_TRIGGER_MESSAGE_KEY: ARMADA_FOLLOWUP_TRIGGER,
+                },
+                FakeBotHandler(),
+            )
+
+        self.assertEqual(
+            [dispatch.kwargs["message_id"] for dispatch in dispatcher.dispatch.call_args_list], [12]
+        )
+        self.assertEqual(
+            dispatcher.dispatch.call_args.kwargs["content"], f"Hey {ARMADA_AGENT_NAME}, what's up"
+        )
 
     def test_embedded_bot_handler_starts_worker_for_router_addressed_message(self) -> None:
         payload = get_armada_session_payload()

@@ -7,7 +7,7 @@ from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass
-from re import IGNORECASE, compile, sub
+from re import DOTALL, IGNORECASE, MULTILINE, compile, sub
 from typing import Any, Final, Literal, NotRequired, Protocol, TypedDict, cast
 
 from django.core.cache import cache
@@ -28,6 +28,39 @@ ARMADA_AGENT_MENTION: Final = f"@**{ARMADA_AGENT_NAME}**"
 ARMADA_PLAIN_AGENT_MENTION_RE: Final = compile(
     rf"(?<![\w@])@{re.escape(ARMADA_AGENT_NAME)}(?![\w-])", IGNORECASE
 )
+# The agent's name said to it, without a mention: after a greeting ("Hey
+# Onix, what's up", "hi onix"), first and set off ("Onix, can you ...",
+# "Onix?"), or last and set off ("what do you think, Onix?").  A name
+# only talked about ("I asked Onix", "Onix's plot", "did Onix finish?")
+# is none of these.
+ARMADA_AGENT_GREETINGS: Final = (
+    r"hey|hi|hello|hiya|heya|yo|ok|okay|alright|so|dear|please|pls|morning|evening"
+    r"|good\s+(?:morning|afternoon|evening|night)"
+)
+ARMADA_AGENT_NAME_PATTERN: Final = re.escape(ARMADA_AGENT_NAME)
+ARMADA_AGENT_VOCATIVE_RE: Final = compile(
+    rf"\A(?:{ARMADA_AGENT_GREETINGS})(?:\s+there)?[\s,!.]+{ARMADA_AGENT_NAME_PATTERN}"
+    r"(?![\w'\u2019-])"
+    rf"|\A{ARMADA_AGENT_NAME_PATTERN}\s*(?:[,:;!?]|\Z)"
+    rf"|,\s*{ARMADA_AGENT_NAME_PATTERN}\s*[.!?]*\Z",
+    IGNORECASE,
+)
+ARMADA_AGENT_NAME_RE: Final = compile(rf"@?\b{ARMADA_AGENT_NAME_PATTERN}\b", IGNORECASE)
+# Thanks or an "ok" said to the agent needs no answer: a run to say
+# "you're welcome" would take a turn of the agent's model in a topic
+# people share.
+ARMADA_ACKNOWLEDGEMENT_RE: Final = compile(
+    r"\A[\W_]*(?:(?:thanks|thank\s+you|thx|ty|cheers|ok|okay|nice|great|cool|perfect"
+    r"|awesome|lgtm|got\s+it|(?:good|great|nice)\s+(?:job|work|one)|well\s+done)[\W_]*)+\Z",
+    IGNORECASE,
+)
+# What a message's sender says, without the code and quotes it carries.
+ARMADA_FENCED_BLOCK_RE: Final = compile(
+    r"^ {0,3}(?P<fence>`{3,}|~{3,})[^\n]*\n.*?(?:^ {0,3}(?P=fence)[`~]*[ \t]*$|\Z)",
+    MULTILINE | DOTALL,
+)
+ARMADA_QUOTE_LINE_RE: Final = compile(r"^ {0,3}>.*$", MULTILINE)
+ARMADA_INLINE_CODE_RE: Final = compile(r"(`+)[^`]*?\1")
 ARMADA_DEFAULT_STREAM: Final = "pair-programming"
 ARMADA_TOPIC_PREFIX: Final = "armada/"
 ARMADA_DEFAULT_TOPIC: Final = "armada/session"
@@ -2156,11 +2189,34 @@ def build_armada_explicit_steering_event(
 
 
 def is_armada_request_message(content: str) -> bool:
-    return ARMADA_AGENT_MENTION in content or is_armada_plain_mention_alias_message(content)
+    return ARMADA_AGENT_MENTION in content or is_armada_addressed_by_name_message(content)
+
+
+def is_armada_addressed_by_name_message(content: str) -> bool:
+    """Whether the message speaks to the agent by its name without a
+    Zulip mention: "@onix" typed by hand, or the name said to it."""
+    return is_armada_plain_mention_alias_message(content) or is_armada_agent_vocative_message(
+        content
+    )
 
 
 def is_armada_plain_mention_alias_message(content: str) -> bool:
-    return ARMADA_PLAIN_AGENT_MENTION_RE.search(content) is not None
+    return ARMADA_PLAIN_AGENT_MENTION_RE.search(armada_text_said(content)) is not None
+
+
+def is_armada_agent_vocative_message(content: str) -> bool:
+    said = armada_text_said(content)
+    if ARMADA_AGENT_VOCATIVE_RE.search(said) is None:
+        return False
+    return ARMADA_ACKNOWLEDGEMENT_RE.match(ARMADA_AGENT_NAME_RE.sub(" ", said)) is None
+
+
+def armada_text_said(content: str) -> str:
+    """The words a message's sender says: without its code blocks, inline
+    code and quotes, where the agent's name is only cited."""
+    text = ARMADA_FENCED_BLOCK_RE.sub("\n", content)
+    text = ARMADA_QUOTE_LINE_RE.sub("", text)
+    return ARMADA_INLINE_CODE_RE.sub(" ", text).strip()
 
 
 ArmadaMessage = (

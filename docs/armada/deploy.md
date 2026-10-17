@@ -581,8 +581,9 @@ ARMADA_WORKER_BROWSER_DIR = "/opt/armada-browser"   # the agent's browser, 6.9
 `workspace-write` lets an agent change files only inside its topic's
 worktree, with no network; the approval policy stays at its default,
 `on-request`. Without an addressing router, mention the agent
-(`@**Onix**`) to start a run; [The addressing router](#the-addressing-router)
-says how to let it take up messages that do not mention it.
+(`@**Onix**`) or say its name to it ("Onix, can you ...") to start a run;
+[The addressing router](#the-addressing-router) says how to let it take
+up other messages too.
 
 The user ids exist only after step 5. Come back then and print them, as
 `zulip`:
@@ -638,14 +639,16 @@ setting either changes this. Tested by `zerver.tests.test_armada_sessions`.
 
 ### The addressing router
 
-_Tested with mocked requests and live against TypeSafe from a Mac; not yet
-run on a server._ Off by default: Onix then answers only messages that
-mention it. With a router, a message in a topic that does not mention Onix
-is shown to a model, which judges whether it is meant for Onix (a
-follow-up to what it just said, a correction, a request in a topic where
-it works) or for the people there; only the first starts a run, or steers
-the one going. This is for topics whose response policy is ambient, the
-default.
+_Tested with mocked requests and live against TypeSafe from a Mac, and on
+runix.chat._ Off by default: Onix then answers only messages that mention
+it or say its name to it, in any topic: after a greeting ("Hey Onix, ..."),
+first and set off ("Onix, can you ...", "Onix?"), or last and set off
+("what do you think, Onix?"); not thanks alone, and not a name in code or
+a quote. With a router, any other message in a topic is shown to a model,
+which judges whether it is meant for Onix (a follow-up to what it just
+said, a correction, a request in a topic where it works) or for the
+people there; only the first starts a run, or steers the one going. This
+is for topics whose response policy is ambient, the default.
 
 Use TypeSafe's Jev (`"typesafe"`). For each such message the server asks
 Jev one question, with the topic's last six messages, the new message and

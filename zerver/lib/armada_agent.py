@@ -140,22 +140,22 @@ ARMADA_CODEX_RETRY_AT_RE = re.compile(
 
 def armada_codex_error_notice(words: str, codex_error_info: str | None) -> str:
     """What a run's place says when Codex ended its turn with an error:
-    for a spent usage limit, until when, as Codex says it; for any other
-    error, its own words, briefly."""
+    for a spent usage limit, until when, as a global time that each reader
+    sees in their own time zone; for any other error, its own words,
+    briefly."""
     if codex_error_info == "usageLimitExceeded":
-        until = ""
+        until = "until it resets"
         retry_at = ARMADA_CODEX_RETRY_AT_RE.search(words)
         if retry_at is not None:
             month, day, year, hour, minute, half = retry_at.groups()
-            # The time as Codex wrote it, written again: its zone is Codex's,
-            # and nothing here converts it.
+            # Codex writes the time in UTC.
             when = datetime.strptime(
                 f"{month} {day} {year} {hour}:{minute} {half}", "%b %d %Y %I:%M %p"
             ).replace(tzinfo=timezone.utc)
-            until = f", until {when:%a} {when.day} {when:%b}, {when.hour % 12 or 12}:{when:%M} {half.lower()}"
+            until = f"until <time:{when:%Y-%m-%dT%H:%M:%SZ}>"
         return (
             f"{ARMADA_AGENT_NAME} can't work right now: the Codex account has reached its "
-            f"usage limit{until}."
+            f"usage limit, {until}."
         )
     words = trim_armada_agent_text(" ".join(words.split()), limit=300)
     if not words:

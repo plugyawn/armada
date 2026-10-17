@@ -63,6 +63,7 @@ from zerver.lib.armada_agent import (
     ArmadaCodexAppServerToolRunner,
     ArmadaProcessIsolation,
     armada_addressing_context_messages,
+    armada_codex_error_notice,
     armada_codex_thread_version,
     build_armada_codex_turn_prompt,
 )
@@ -6722,6 +6723,23 @@ class ArmadaQuestionMessageTest(ZulipTestCase):
             message_realm=get_realm("zulip"),
         ).rendered_content
         self.assertEqual(rendered, fixture["rendered"])
+
+
+class ArmadaCodexLimitNoticeTest(ZulipTestCase):
+    def test_the_reset_renders_as_a_global_time(self) -> None:
+        # Codex says when its usage limit resets in UTC; the run's message
+        # writes it as a global time, which every reader's client shows in
+        # their own time zone (the beta: web/src/armada/beta/parts.js).
+        notice = armada_codex_error_notice(
+            "You\u2019ve hit your usage limit. Try again at Oct 23rd, 2026 2:16 PM.",
+            "usageLimitExceeded",
+        )
+        rendered = markdown_convert(notice, message_realm=get_realm("zulip")).rendered_content
+        self.assertEqual(
+            rendered,
+            "<p>Onix can't work right now: the Codex account has reached its usage limit, "
+            'until <time datetime="2026-10-23T14:16:00Z">2026-10-23T14:16:00Z</time>.</p>',
+        )
 
 
 class ArmadaWorkspaceMapTest(ZulipTestCase):

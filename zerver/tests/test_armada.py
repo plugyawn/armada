@@ -9869,9 +9869,10 @@ class ArmadaCodexErrorTest(TestCase):
 
     # Production's error notification, as Codex sent it.
     LIMIT = "You\u2019ve hit your usage limit. Try again at Oct 23rd, 2026 2:16 PM."
+    # Codex's time is UTC; each reader sees the global time in their own.
     LIMIT_NOTICE = (
         "Onix can't work right now: the Codex account has reached its usage limit, "
-        "until Fri 23 Oct, 2:16 pm."
+        "until <time:2026-10-23T14:16:00Z>."
     )
 
     def test_the_notice_says_until_when_or_the_error_briefly(self) -> None:
@@ -9880,7 +9881,8 @@ class ArmadaCodexErrorTest(TestCase):
         )
         self.assertEqual(
             armada_codex_error_notice("You've hit your usage limit.", "usageLimitExceeded"),
-            "Onix can't work right now: the Codex account has reached its usage limit.",
+            "Onix can't work right now: the Codex account has reached its usage limit, "
+            "until it resets.",
         )
         self.assertEqual(
             armada_codex_error_notice("stream disconnected\n before completion", None),

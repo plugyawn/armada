@@ -27,6 +27,8 @@ import {forgetReceipts} from "./receipts.js";
 
 /* ---------- live events: one queue ---------- */
 let runWindow = null;
+/* the step a run's overview is of, picked as the server picks it (armada_presentation_current_step): a newer step makes it stale */
+const stepNow = (plan) => plan && plan.length ? (plan.find((s) => s.status === "in_progress") || plan.find((s) => s.status === "pending") || plan.at(-1)).step : null;
 function onMessage(ev) {
   const m = ev.message, key = placeOfMsg(m), c = places.get(key), mine = m.sender_id === state.ME, flags = ev.flags || m.flags || [];
   if (m.type === "stream") { const list = topicsOf.get(m.stream_id), name = m.subject ?? ""; if (list && !list.some((t) => t.name.toLowerCase() === name.toLowerCase())) { list.unshift({name, max_id: m.id}); drawNav(); } }
@@ -72,7 +74,7 @@ function onRun(ev) {
   if (!c) return;
   const wasLive = r.status === "queued" || r.status === "running", wasResult = r.result_message_id;
   Object.assign(r, {status: ev.status, trigger_message_id: ev.trigger_message_id, result_message_id: ev.result_message_id ?? r.result_message_id, current_activity: ev.current_activity, tool_count: ev.tool_count ?? r.tool_count, date_updated: ev.date_created, date_created: ev.run_date_created ?? r.date_created});
-  if (ev.plan) r.plan = ev.plan; if (ev.overview) r.overview = ev.overview; if (ev.usage) r.usage = {...(r.usage || {}), ...ev.usage}; if (ev.duration_seconds != null) { r.duration_seconds = ev.duration_seconds; r.date_finished = ev.date_created; }
+  if (ev.plan) { if (stepNow(r.plan) !== stepNow(ev.plan)) r.overview = null; r.plan = ev.plan; } if (ev.overview) r.overview = ev.overview; if (ev.usage) r.usage = {...(r.usage || {}), ...ev.usage}; if (ev.duration_seconds != null) { r.duration_seconds = ev.duration_seconds; r.date_finished = ev.date_created; }
   if (ev.agents) r.agents = ev.agents;
   if (live && (!runWindow || runWindow.run !== r.id)) runWindow = {run: r.id, msg: r.result_message_id, t0: performance.now(), events: 0, updates: 0};
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }

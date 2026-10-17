@@ -383,6 +383,9 @@ class ArmadaWorkerTranscriptEvent(TypedDict, total=False):
     body: str
     item_id: str
     metadata: dict[str, Any]
+    # What the run is doing now, in the model's words; it becomes the
+    # run's overview (armada_run_card_changes).
+    overview: str
 
 
 ArmadaWorkerTranscriptCallback = Callable[[ArmadaWorkerTranscriptEvent], None]

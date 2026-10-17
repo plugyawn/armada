@@ -144,6 +144,41 @@ class ArmadaRunCardTest(ZulipTestCase):
         assert isinstance(finished_usage, dict)
         self.assertEqual(finished_usage["duration_seconds"], 90.0)
 
+    def test_the_models_reasoning_titles_are_the_overview_of_the_step_they_came_in(self) -> None:
+        def reasoning(title: str) -> dict[str, Any]:
+            return {"kind": "reasoning", "status": "running", "title": title, "overview": title}
+
+        def overview() -> object:
+            return serialize_armada_run_card(self.agent_run)["overview"]
+
+        # Before any plan, a title is the run's overview.
+        self.record("transcript", reasoning("Reading  the request"))
+        self.assertEqual(overview(), "Reading the request")
+        # A plan makes it stale until the model says what it is doing next.
+        self.record("transcript", plan(("Read", "in_progress"), ("Change", "pending")))
+        self.assertIsNone(overview())
+        self.record("transcript", reasoning("Exploring dynamic programming options"))
+        self.assertEqual(overview(), "Exploring dynamic programming options")
+        # Reasoning without a title, and events of other kinds, leave it.
+        self.record("transcript", {"kind": "reasoning", "status": "done", "title": "Reasoning"})
+        self.record("transcript", {"kind": "command", "title": "pytest"})
+        self.assertEqual(overview(), "Exploring dynamic programming options")
+        self.record("transcript", plan(("Read", "completed"), ("Change", "in_progress")))
+        self.assertIsNone(overview())
+        self.record("transcript", reasoning("Examining greedy counters"))
+        self.assertEqual(overview(), "Examining greedy counters")
+
+        stored = AgentRun.objects.get(id=self.agent_run.id)
+        self.assertEqual(stored.card, self.agent_run.card)
+        events = list(AgentRunEvent.objects.filter(run=self.agent_run))
+        self.assertEqual(rebuild_armada_run_card(stored, events), stored.card)
+        # A rebuild reads each title against the plan as it stood then.
+        rebuilt_then = AgentRun(card=rebuild_armada_run_card(stored, events[:3]))
+        self.assertEqual(
+            serialize_armada_run_card(rebuilt_then)["overview"],
+            "Exploring dynamic programming options",
+        )
+
     def test_a_run_without_events_has_an_empty_card(self) -> None:
         self.assertEqual(
             serialize_armada_run_card(self.agent_run),

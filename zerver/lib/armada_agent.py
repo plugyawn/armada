@@ -861,6 +861,31 @@ def armada_codex_item_title(item: dict[str, Any]) -> str:
     return armada_codex_item_text(item)
 
 
+# "**Exploring dynamic programming options**\n\nI'm looking into …": how
+# the model opens each part of a reasoning summary.
+ARMADA_REASONING_TITLE_RE = re.compile(r"\s*\*\*([^*\n]+)\*\*")
+
+
+def armada_reasoning_title(summary_part: str) -> str | None:
+    """The bold title a part of a reasoning summary opens with, if it has
+    one: what the model is thinking about, in its own words."""
+    title = ARMADA_REASONING_TITLE_RE.match(summary_part)
+    if title is None:
+        return None
+    return " ".join(title.group(1).split()) or None
+
+
+def armada_reasoning_item_title(item: dict[str, Any]) -> str | None:
+    """The title of a reasoning item's newest summary part that has one."""
+    summary = item.get("summary")
+    if not isinstance(summary, list):
+        return None
+    for part in reversed(summary):
+        if isinstance(part, str) and (title := armada_reasoning_title(part)):
+            return title
+    return None
+
+
 def armada_codex_plan_steps(item: dict[str, Any]) -> list[dict[str, str]]:
     raw_steps = item.get("plan") or item.get("steps")
     if not isinstance(raw_steps, list):
@@ -1164,7 +1189,18 @@ def armada_transcript_events_from_codex_json_event(
             }
         ]
     if item_type == "reasoning":
-        return [{**base_event, "kind": "reasoning", "title": title or "Reasoning"}]
+        # Only the summary's title is kept, never its text.
+        reasoning_title = armada_reasoning_item_title(item)
+        if reasoning_title is None:
+            return [{**base_event, "kind": "reasoning", "title": title or "Reasoning"}]
+        return [
+            {
+                **base_event,
+                "kind": "reasoning",
+                "title": reasoning_title,
+                "overview": reasoning_title,
+            }
+        ]
     if item_type == "command_execution":
         return [{**base_event, "kind": "command", "title": title or "command"}]
     if item_type == "file_change":
@@ -1285,6 +1321,8 @@ ARMADA_APP_SERVER_ITEM_TYPE_MAP: dict[str, str] = {
 # the translated set with the live-diff surface.
 ARMADA_APP_SERVER_IGNORED_METHODS = frozenset(
     {
+        # A summary part's text arrives as summaryTextDelta.
+        "item/reasoning/summaryPartAdded",
         "mcpServer/startupStatus/updated",
         "remoteControl/status/changed",
         "thread/goal/cleared",
@@ -1416,6 +1454,9 @@ class ArmadaCodexAppServerTranscriptTranslator:
         self.reported_unknown_methods: set[str] = set()
         self.thread_descriptors: dict[str, dict[str, Any]] = {}
         self.latest_direct_assistant_body: dict[str, str] = {}
+        # Each streaming reasoning summary part, by item and index, until its
+        # title is read; None once it has been.
+        self.reasoning_summary_parts: dict[tuple[str, int], str | None] = {}
 
     def collaboration_thread_events(
         self, method: str, params: dict[str, Any], item: dict[str, Any]
@@ -1570,6 +1611,43 @@ class ArmadaCodexAppServerTranscriptTranslator:
                 "status": "done",
                 "title": title,
                 "metadata": {"rate_limits": limits},
+            }
+        ]
+
+    def reasoning_title_events(self, params: dict[str, Any]) -> list[ArmadaWorkerTranscriptEvent]:
+        """A reasoning summary part's title, once, as soon as it has
+        streamed in: the item itself completes only when the model has
+        finished thinking."""
+        item_id = params.get("itemId")
+        part_index = params.get("summaryIndex")
+        delta = params.get("delta")
+        if (
+            not isinstance(item_id, str)
+            or not isinstance(part_index, int)
+            or not isinstance(delta, str)
+        ):
+            return []
+        key = (item_id, part_index)
+        part = self.reasoning_summary_parts.get(key, "")
+        if part is None:
+            return []
+        part += delta
+        title = armada_reasoning_title(part)
+        opening = part.lstrip()
+        if title is None and "**".startswith(opening[:2]) and "\n" not in opening:
+            # Its bold title is still streaming in.
+            self.reasoning_summary_parts[key] = part
+            return []
+        self.reasoning_summary_parts[key] = None
+        if title is None:
+            return []
+        return [
+            {
+                "kind": "reasoning",
+                "status": "running",
+                "title": title,
+                "item_id": item_id,
+                "overview": title,
             }
         ]
 
@@ -1754,6 +1832,12 @@ class ArmadaCodexAppServerTranscriptTranslator:
                 method=method,
                 params=params,
             )
+        if method == "item/reasoning/summaryTextDelta":
+            return self.contextualize_events(
+                self.reasoning_title_events(params),
+                method=method,
+                params=params,
+            )
         if method == "account/rateLimits/updated":
             return self.rate_limit_events(params)
         if method in {"warning", "configWarning"}:
@@ -1784,6 +1868,12 @@ class ArmadaCodexAppServerTranscriptTranslator:
         if not isinstance(item, dict):
             return []
         normalized_item = armada_app_server_normalized_item(item)
+        if method == "item/completed" and normalized_item.get("type") == "reasoning":
+            self.reasoning_summary_parts = {
+                key: part
+                for key, part in self.reasoning_summary_parts.items()
+                if key[0] != normalized_item.get("id")
+            }
         collaboration_events = self.collaboration_thread_events(method, params, normalized_item)
         item_events = self.contextualize_events(
             self.json_translator.events_from_json_event(
@@ -2050,6 +2140,9 @@ class ArmadaCodexAppServerToolRunner:
         # the checklist the topic shows live; the instructions ask for it.
         # Explicit, so a config.toml in CODEX_HOME cannot take it away.
         args.extend(["--config", "tools.update_plan={enabled=true}"])
+        # The reasoning summary's titles are the run's overview, what it is
+        # doing now; gpt-6.1-sol sends no summary unless asked.
+        args.extend(["--config", 'model_reasoning_summary="auto"'])
         # The question tool (`request_user_input`, the source of
         # item/tool/requestUserInput) is refused in Default collaboration
         # mode unless this feature is on; `tools.experimental_request_user_input`

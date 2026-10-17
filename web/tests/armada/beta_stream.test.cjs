@@ -92,6 +92,7 @@ set_global("fig", String);
 set_global("ic", (name) => `<svg class="ic ${name}"></svg>`);
 set_global("wk", () => `<svg class="mk wk"></svg>`);
 set_global("mk", (name) => `<svg class="mk ${name}"></svg>`);
+set_global("smk", (state) => `<span class="mk sm" data-s="${state}"></span>`);
 set_global(
     "face",
     (spec, cls) => `<i class="av ${cls || ""}">${spec.split(" ")[0].split(":")[0]}</i>`,
@@ -508,4 +509,42 @@ run_test("nothing on the way reads layout; a grown row is followed from its obse
     grow([{target: row, borderBoxSize: [{blockSize: 40}]}]);
     grow([{target: row, borderBoxSize: [{blockSize: 64}]}]);
     assert.deepEqual(releases.at(-1), {y: 24});
+});
+
+run_test("the band says what the model is thinking about until its plan moves on", () => {
+    start_run(171);
+    const act = document.querySelector("#act");
+    const step = (words, status) => ({step: words, status});
+    const reading = [step("Read the parser", "in_progress"), step("Change it", "pending")];
+    const changing = [step("Read the parser", "completed"), step("Change it", "in_progress")];
+    const run_says = (fields) => {
+        events.onRun({
+            type: "agent_run",
+            run_id: RUN,
+            event_type: "transcript",
+            status: "running",
+            trigger_message_id: 170,
+            result_message_id: 171,
+            stream: "click",
+            topic: "option groups",
+            current_activity: "",
+            tool_count: 0,
+            plan: null,
+            overview: null,
+            run_date_created: T0,
+            date_created: T0,
+            ...fields,
+        });
+        frame();
+        return act.textContent;
+    };
+    assert.equal(run_says({plan: reading, current_activity: "rg parse_groups"}), "rg parse_groups");
+    // The model's reasoning title, as the server pushes it.
+    const title = "Exploring dynamic programming options";
+    assert.equal(run_says({overview: title, current_activity: title}), title);
+    // A command, and the same step again, leave it.
+    assert.equal(run_says({current_activity: "pytest tests/"}), title);
+    assert.equal(run_says({plan: reading, current_activity: "Plan"}), title);
+    // The next step makes it stale, as the server's card says after a reload.
+    assert.equal(run_says({plan: changing, current_activity: "git diff"}), "git diff");
 });

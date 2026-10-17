@@ -294,6 +294,25 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
             {**event, "id": 2, "has_visible_assistant_text": True},
         )
         self.assertIn(owner.id, send_event.call_args.args[2])
+        self.assertIsNone(event["overview"])
+
+        # The model's reasoning title is pushed as the run's overview.
+        title_event = record_agent_run_event(
+            run=run,
+            event_type="transcript",
+            summary="Checking branch ancestry",
+            payload={
+                "kind": "reasoning",
+                "status": "running",
+                "title": "Checking branch ancestry",
+                "overview": "Checking branch ancestry",
+            },
+        )
+        with patch("zerver.actions.armada.send_event_on_commit") as send_event:
+            send_armada_run_event(run, title_event)
+        event = send_event.call_args.args[1]
+        check_armada_run_event("event", {**event, "id": 3})
+        self.assertEqual(event["overview"], "Checking branch ancestry")
 
         run.codex_thread_id = "root-thread"
         run.save(update_fields=["codex_thread_id"])

@@ -68,8 +68,11 @@ def armada_run_plan_from_payload(payload: object) -> list[dict[str, str]] | None
     return steps or None
 
 
-def armada_run_card_changes(run: AgentRun, event: AgentRunEvent) -> dict[str, Any]:
-    """What this event, the run's newest, changes on the run's card."""
+def armada_run_card_changes(
+    run: AgentRun, event: AgentRunEvent, card: dict[str, Any]
+) -> dict[str, Any]:
+    """What this event, the run's newest, changes on the run's card, which
+    is card until it."""
     payload = event.payload if isinstance(event.payload, dict) else {}
     changes: dict[str, Any] = {}
     if event.event_type in {"usage", "transcript"}:
@@ -85,13 +88,22 @@ def armada_run_card_changes(run: AgentRun, event: AgentRunEvent) -> dict[str, An
             "overview": payload.get("overview"),
             "current_step": payload.get("current_step"),
         }
+    overview = payload.get("overview")
+    if event.event_type == "transcript" and isinstance(overview, str) and overview.strip():
+        # The model's own title for what it is thinking about: an overview
+        # of the plan's current step as it stands, or of a run with no plan.
+        plan = card.get("plan")
+        changes["presentation"] = {
+            "overview": overview,
+            "current_step": armada_presentation_current_step(plan) if plan else None,
+        }
     if event.event_type == "agent":
         if payload.get("kind") in {"error", "session"}:
             # A session or an error can change which threads there are.
             changes["agents"] = serialize_armada_agent_threads(run)
         else:
             thread_id = armada_agent_event_metadata(event).get("codex_thread_id")
-            agents = [dict(agent) for agent in run.card.get("agents", [])]
+            agents = [dict(agent) for agent in card.get("agents", [])]
             for agent in agents:
                 if agent["thread_id"] == thread_id:
                     apply_armada_agent_event(agent, event)
@@ -113,7 +125,7 @@ def record_agent_run_event(
     event = AgentRunEvent.objects.create(
         run=run, event_type=event_type, summary=summary, payload=payload
     )
-    changes = armada_run_card_changes(run, event)
+    changes = armada_run_card_changes(run, event, run.card)
     # Writers can commit out of order; the newest event wins.
     update: dict[str, Any] = {"last_event_id": Greatest(F("last_event_id"), Value(event.id))}
     if changes:
@@ -135,7 +147,7 @@ def rebuild_armada_run_card(run: AgentRun, events: Iterable[AgentRunEvent]) -> d
     card: dict[str, Any] = {}
     for event in ordered:
         if event.event_type != "agent":
-            card.update(armada_run_card_changes(run, event))
+            card.update(armada_run_card_changes(run, event, card))
     if any(event.event_type == "agent" for event in ordered):
         card["agents"] = serialize_armada_agent_threads(run, ordered)
     return card
@@ -164,12 +176,13 @@ def serialize_armada_run_card(run: AgentRun) -> dict[str, object]:
     plan = card.get("plan")
     overview = None
     presentation = card.get("presentation")
-    if plan and isinstance(presentation, dict):
+    if isinstance(presentation, dict):
         text = presentation.get("overview")
+        current_step = armada_presentation_current_step(plan) if plan else None
         if (
             isinstance(text, str)
             and text.strip()
-            and presentation.get("current_step") == armada_presentation_current_step(plan)
+            and presentation.get("current_step") == current_step
         ):
             overview = trim_armada_text(" ".join(text.split()), limit=72)
     return {

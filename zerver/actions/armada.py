@@ -99,7 +99,11 @@ def send_armada_run_event(run: AgentRun, run_event: AgentRunEvent) -> None:
         return
 
     payload = run_event.payload if isinstance(run_event.payload, dict) else {}
-    overview = payload.get("overview") if run_event.event_type == "presentation" else None
+    # The headline worker's overview, or the model's reasoning title, which
+    # comes as a transcript event.
+    overview = (
+        payload.get("overview") if run_event.event_type in {"presentation", "transcript"} else None
+    )
     duration_seconds = (
         round((run.date_finished - run.date_created).total_seconds(), 1)
         if run.date_finished is not None

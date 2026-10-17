@@ -3092,6 +3092,8 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "--config",
                 "tools.update_plan={enabled=true}",
                 "--config",
+                'model_reasoning_summary="auto"',
+                "--config",
                 "features.default_mode_request_user_input=true",
                 "--config",
                 "suppress_unstable_features_warning=true",
@@ -3560,6 +3562,8 @@ class ArmadaSessionDefaultsTest(TestCase):
                 "features.memories=true",
                 "--config",
                 "tools.update_plan={enabled=true}",
+                "--config",
+                'model_reasoning_summary="auto"',
                 "--config",
                 "features.default_mode_request_user_input=true",
                 "--config",
@@ -9594,10 +9598,83 @@ class ArmadaAppServerProtocolCitizenTest(TestCase):
             {"method": "thread/somethingNew", "params": {"a": 2}}
         )
         self.assertEqual(repeat, [])
-        delta = translator.events_from_message(
-            {"method": "item/reasoning/summaryTextDelta", "params": {}}
-        )
+        delta = translator.events_from_message({"method": "item/reasoning/textDelta", "params": {}})
         self.assertEqual(delta, [])
+
+    def test_reasoning_summary_titles_stream_in_as_the_overview(self) -> None:
+        # Shapes as Codex 0.163.0's app-server sent them for gpt-6.1-sol
+        # with model_reasoning_summary="auto".
+        translator = self.make_translator()
+        context = {"threadId": "root-thread", "turnId": "turn-1"}
+
+        def reasoning(method: str, summary: list[str]) -> list[ArmadaWorkerTranscriptEvent]:
+            item = {"id": "rs_1", "type": "reasoning", "summary": summary, "content": []}
+            return translator.events_from_message(
+                {"method": method, "params": {**context, "item": item}}
+            )
+
+        def delta(part_index: int, text: str) -> list[ArmadaWorkerTranscriptEvent]:
+            return translator.events_from_message(
+                {
+                    "method": "item/reasoning/summaryTextDelta",
+                    "params": {
+                        **context,
+                        "itemId": "rs_1",
+                        "summaryIndex": part_index,
+                        "delta": text,
+                    },
+                }
+            )
+
+        [started] = reasoning("item/started", [])
+        self.assertEqual(started["title"], "Reasoning")
+        self.assertNotIn("overview", started)
+        part_added = translator.events_from_message(
+            {
+                "method": "item/reasoning/summaryPartAdded",
+                "params": {**context, "itemId": "rs_1", "summaryIndex": 0},
+            }
+        )
+        self.assertEqual(part_added, [])
+
+        # A title is read as soon as it has streamed in, and once.
+        self.assertEqual(delta(0, "**Exploring dynamic"), [])
+        [title] = delta(0, "  programming options**\n\nI'm looking into")
+        self.assertEqual(
+            {key: title.get(key) for key in ("kind", "status", "title", "item_id", "overview")},
+            {
+                "kind": "reasoning",
+                "status": "running",
+                "title": "Exploring dynamic programming options",
+                "item_id": "rs_1",
+                "overview": "Exploring dynamic programming options",
+            },
+        )
+        self.assertEqual(title["metadata"]["codex_thread_id"], "root-thread")
+        self.assertNotIn("body", title)
+        self.assertEqual(delta(0, " using **negative** endpoints."), [])
+        # A part that opens without a title gives none.
+        self.assertEqual(delta(1, "I'm weighing a **greedy** pass"), [])
+        self.assertEqual(delta(1, "**Examining greedy counters**"), [])
+        [second] = delta(2, "**Examining greedy counters and thresholds**")
+        self.assertEqual(second["overview"], "Examining greedy counters and thresholds")
+
+        # The finished item keeps its newest title, never the summary's text.
+        [completed] = reasoning(
+            "item/completed",
+            [
+                "**Exploring dynamic programming options**\n\nI'm looking into using",
+                "I'm weighing a **greedy** pass",
+                "**Examining greedy counters and thresholds**\n\nI'm exploring a",
+            ],
+        )
+        self.assertEqual(completed["title"], "Examining greedy counters and thresholds")
+        self.assertEqual(completed["overview"], "Examining greedy counters and thresholds")
+        self.assertEqual(completed["body"], "")
+        self.assertEqual(translator.reasoning_summary_parts, {})
+        [untitled] = reasoning("item/completed", ["I'm weighing a **greedy** pass"])
+        self.assertEqual(untitled["title"], "Reasoning")
+        self.assertNotIn("overview", untitled)
 
     def test_context_compaction_items_become_operation_events(self) -> None:
         translator = self.make_translator()

@@ -197,6 +197,19 @@ messages consumers`, then restart the worker as above.
 Codex is signed out, so no agent run can start. A person signs in again
 (`deploy.md`, 6.3), and runs wait in the queue meanwhile.
 
+### codex-quota
+
+The Codex account the agent works through is near its usage limit (a
+warning at 80% of any window) or at it (critical at 100%, or when Codex
+says it may not be used now); the alert names the window and when it
+resets, in UTC. The check reads the limits every 15 minutes through the
+app-server's `account/rateLimits/read`, which spends no turn
+(`sudo armada-ops-check --print` reads them now). At the limit, every run
+fails at once and its place says so: "Onix can't work right now: the
+Codex account has reached its usage limit, until …". Wait for the reset,
+add credits to the account, or sign Codex in to another account
+(`deploy.md`, 6.3).
+
 ### addressing-router
 
 Three or more messages in the last 15 minutes could not be routed: the

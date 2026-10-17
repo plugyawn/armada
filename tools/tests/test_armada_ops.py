@@ -1,5 +1,6 @@
 import io
 import os
+import shutil
 import sys
 import tempfile
 import urllib.parse
@@ -229,6 +230,132 @@ class OpsCheckTests(TestCase):
             self.assertEqual(ops_check.check_disk().status, ops_check.CRITICAL)
             usage.used = 40
             self.assertEqual(ops_check.check_disk().status, ops_check.OK)
+
+
+class CodexQuotaTests(TestCase):
+    """The Codex account's usage limits, read through the app-server
+    without spending a turn. On runix.chat the account reached its limit
+    and runs failed until it reset; nothing said so before."""
+
+    # The app-server's answer to account/rateLimits/read, as read on 17
+    # October 2026, with the use the test asks for.
+    @staticmethod
+    def reading(used: float, *, allowed: bool = True) -> dict[str, object]:
+        window = {"usedPercent": used, "windowDurationMins": 10080, "resetsAt": 1792764987}
+        return {
+            "ordinaryUsageAllowed": allowed,
+            "rateLimits": {"limitId": "codex", "primary": window, "secondary": None},
+            "rateLimitsByLimitId": {"codex": {"limitId": "codex", "primary": window}},
+        }
+
+    def test_warns_at_80_percent_and_is_critical_at_100(self) -> None:
+        self.assertEqual(
+            ops_check.quota_result(self.reading(100, allowed=False)),
+            ops_check.Result(
+                ops_check.CRITICAL,
+                "Codex has used 100% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC",
+                "codex-quota",
+            ),
+        )
+        self.assertEqual(ops_check.quota_result(self.reading(85)).status, ops_check.WARN)
+        self.assertEqual(ops_check.quota_result(self.reading(42.4)).status, ops_check.OK)
+        self.assertEqual(
+            ops_check.quota_result(self.reading(42.4)).detail,
+            "Codex has used 42% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC",
+        )
+        # A five-hour window more used than the week's is the one named.
+        reading = self.reading(30)
+        reading["rateLimitsByLimitId"] = {
+            "codex": {"primary": {"usedPercent": 90, "windowDurationMins": 300}}
+        }
+        self.assertEqual(
+            ops_check.quota_result(reading).detail, "Codex has used 90% of its 5-hour limit"
+        )
+        # No window reported: what Codex says of ordinary use decides.
+        self.assertEqual(
+            ops_check.quota_result({"ordinaryUsageAllowed": False}).status, ops_check.CRITICAL
+        )
+        self.assertEqual(ops_check.quota_result({}).status, ops_check.OK)
+        self.assertEqual(ops_check.window_name(90), "90-minute")
+        self.assertEqual(ops_check.window_name(None), "usage")
+
+    def fake_codex(self, replies: str) -> str:
+        """A stand-in for codex app-server: it reads the requests and
+        writes `replies`, a Python expression of the lines it answers."""
+        directory = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, directory)
+        path = os.path.join(directory, "codex")
+        with open(path, "w") as f:
+            f.write(
+                f"#!{sys.executable}\n"
+                "import json, sys\n"
+                "requests = [json.loads(sys.stdin.readline()) for _ in range(3)]\n"
+                "assert requests[2]['method'] == 'account/rateLimits/read', requests\n"
+                f"for line in {replies}: print(json.dumps(line), flush=True)\n"
+                "sys.stdin.read()\n"
+            )
+        os.chmod(path, 0o700)
+        return path
+
+    def test_reads_the_limits_through_the_app_server(self) -> None:
+        reading = self.reading(85)
+        codex = self.fake_codex(
+            f"[{{'id': 1, 'result': {{}}}}, {{'method': 'remoteControl/status/changed'}}, "
+            f"{{'id': 2, 'result': {reading!r}}}]"
+        )
+        with (
+            mock.patch.object(ops_check, "CODEX", codex),
+            mock.patch.object(ops_check, "as_user", lambda user, *command: list(command)),
+        ):
+            self.assertEqual(ops_check.read_codex_limits(), reading)
+            self.assertEqual(ops_check.check_codex_quota().status, ops_check.WARN)
+
+    def test_a_refusal_or_silence_is_an_error(self) -> None:
+        refusing = self.fake_codex("[{'id': 2, 'error': {'message': 'not signed in'}}]")
+        silent = self.fake_codex("[{'id': 1, 'result': {}}]")
+        ended = self.fake_codex("[]")
+        with open(ended) as f:
+            # It closes its output at once rather than wait for its input.
+            source = f.read().replace("sys.stdin.read()", "sys.exit(0)")
+        with open(ended, "w") as f:
+            f.write(source)
+        with (
+            mock.patch.object(ops_check, "as_user", lambda user, *command: list(command)),
+            mock.patch.object(ops_check, "CODEX_QUOTA_TIMEOUT", 1),
+        ):
+            for codex, refusal in (
+                (refusing, "not signed in"),
+                (silent, "did not report its limits"),
+                (ended, "did not report its limits"),
+            ):
+                with (
+                    mock.patch.object(ops_check, "CODEX", codex),
+                    self.assertRaisesRegex(RuntimeError, refusal),
+                ):
+                    ops_check.read_codex_limits()
+        with mock.patch.object(ops_check, "CODEX", "/nonexistent/codex"):
+            self.assertEqual(ops_check.check_codex_quota().status, ops_check.WARN)
+
+    def test_runs_at_most_every_fifteen_minutes(self) -> None:
+        reads: list[int] = []
+
+        def quota() -> object:
+            reads.append(1)
+            return ops_check.Result(
+                ops_check.OK, "Codex has used 10% of its 7-day limit", "codex-quota"
+            )
+
+        directory = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, directory)
+        with (
+            mock.patch.object(ops_check, "STATE_FILE", os.path.join(directory, "state.json")),
+            mock.patch.dict(ops_check.CHECKS, {"codex-quota": quota}, clear=True),
+            mock.patch.object(sys, "argv", ["armada-ops-check"]),
+        ):
+            for now, expected in ((1000.0, 1), (1890.0, 1), (1910.0, 2)):
+                with mock.patch.object(ops_check.time, "time", return_value=now):
+                    ops_check.main()
+                self.assertEqual(sum(reads), expected)
 
 
 class OpsPostTests(TestCase):

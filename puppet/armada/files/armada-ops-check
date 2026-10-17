@@ -31,6 +31,7 @@ import functools
 import json
 import os
 import pwd
+import select
 import shutil
 import subprocess
 import sys
@@ -58,7 +59,9 @@ OK, WARN, CRITICAL = "ok", "warn", "critical"
 ORDER = {OK: 0, WARN: 1, CRITICAL: 2}
 # A check that is slow or costs a process start runs at most this often;
 # between runs its last result stands.
-CACHED_SECONDS = {"codex-login": 600, "updates": 3600}
+CACHED_SECONDS = {"codex-login": 600, "codex-quota": 900, "updates": 3600}
+# How long Codex may take to start and report the account's limits.
+CODEX_QUOTA_TIMEOUT = 60
 # The runbook section of each check whose name is not a section itself.
 RUNBOOK_SECTIONS = {"health": "processes", "updates": "patching"}
 
@@ -188,6 +191,103 @@ def check_codex_login() -> Result:
         return Result(OK, output.strip().splitlines()[0], "codex-login")
     first_line = output.strip().splitlines()[0] if output.strip() else "no answer"
     return Result(CRITICAL, f"Codex is not signed in: {first_line}", "codex-login")
+
+
+def read_codex_limits() -> dict[str, object]:
+    """The Codex account's usage limits, as the app-server reports them to
+    account/rateLimits/read: a read, which spends no turn. Codex runs as
+    zulip, whose sign-in the agent uses; its launcher needs node on PATH."""
+    process = subprocess.Popen(
+        as_user("zulip", CODEX, "app-server"),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    try:
+        for message in (
+            {
+                "method": "initialize",
+                "id": 1,
+                "params": {"clientInfo": {"name": "armada-ops-check", "version": "1"}},
+            },
+            {"method": "initialized", "params": {}},
+            {"method": "account/rateLimits/read", "id": 2},
+        ):
+            process.stdin.write((json.dumps(message) + "\n").encode())
+        process.stdin.flush()
+        # Read from the pipe itself: a buffered reader could hold the
+        # answer while select waits on the empty pipe under it.
+        deadline = time.monotonic() + CODEX_QUOTA_TIMEOUT
+        unread = b""
+        while (left := deadline - time.monotonic()) > 0:
+            if not select.select([process.stdout], [], [], left)[0]:
+                break
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                break
+            *lines, unread = (unread + chunk).split(b"\n")
+            for line in lines:
+                reply = json.loads(line) if line.strip() else {}
+                if reply.get("id") != 2:
+                    continue
+                if "error" in reply:
+                    raise RuntimeError(f"Codex refused to read its limits: {reply['error']}")
+                result: dict[str, object] = reply["result"]
+                return result
+        raise RuntimeError(f"Codex did not report its limits in {CODEX_QUOTA_TIMEOUT} seconds")
+    finally:
+        process.kill()
+        process.wait()
+
+
+def window_name(minutes: object) -> str:
+    """A limit's window as people say it: 10080 minutes is a 7-day limit."""
+    if not isinstance(minutes, int) or minutes <= 0:
+        return "usage"
+    if minutes % 1440 == 0:
+        return f"{minutes // 1440}-day"
+    if minutes % 60 == 0:
+        return f"{minutes // 60}-hour"
+    return f"{minutes}-minute"
+
+
+def quota_result(reading: dict[str, object]) -> Result:
+    """The account's most used window: warn at 80%, critical at 100% or
+    when Codex says ordinary use is not allowed now, naming the reset."""
+    limits = [reading.get("rateLimits")]
+    by_id = reading.get("rateLimitsByLimitId")
+    if isinstance(by_id, dict):
+        limits.extend(by_id.values())
+    windows = [
+        window
+        for limit in limits
+        if isinstance(limit, dict)
+        for window in (limit.get("primary"), limit.get("secondary"))
+        if isinstance(window, dict) and isinstance(window.get("usedPercent"), int | float)
+    ]
+    blocked = reading.get("ordinaryUsageAllowed") is False
+    if not windows:
+        if blocked:
+            return Result(CRITICAL, "Codex says it may not be used now", "codex-quota")
+        return Result(OK, "Codex reports no usage limit", "codex-quota")
+    worst = max(windows, key=lambda window: float(window["usedPercent"]))
+    used = float(worst["usedPercent"])
+    detail = (
+        f"Codex has used {used:.0f}% of its {window_name(worst.get('windowDurationMins'))} limit"
+    )
+    resets_at = worst.get("resetsAt")
+    if isinstance(resets_at, int):
+        resets = datetime.fromtimestamp(resets_at, timezone.utc)
+        detail += f"; it resets {resets:%a} {resets.day} {resets:%b}, {resets:%H:%M} UTC"
+    status = CRITICAL if used >= 100 or blocked else WARN if used >= 80 else OK
+    return Result(status, detail, "codex-quota")
+
+
+def check_codex_quota() -> Result:
+    if not os.path.exists(CODEX):
+        return Result(WARN, f"{CODEX} is not installed", "codex-quota")
+    return quota_result(read_codex_limits())
 
 
 def check_certificate() -> Result:
@@ -322,6 +422,7 @@ CHECKS: dict[str, Callable[[], Result]] = {
     "health": check_health,
     "queues": check_queues,
     "codex-login": check_codex_login,
+    "codex-quota": check_codex_quota,
     "addressing-router": check_addressing_router,
     "certificate": check_certificate,
     "disk": check_disk,

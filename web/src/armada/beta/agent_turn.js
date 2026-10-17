@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): the agent's turn: one element for the life of an answer. */
 
-import {$, $$, el, T} from "./util.js";
+import {$, $$, el, esc, T} from "./util.js";
 import {msgIndex, state, stats} from "./state.js";
 import {dur} from "./time.js";
 import {feed, lane} from "./frame.js";
@@ -43,7 +43,7 @@ function placeHead(cl, m) { let head = $(".head:not(.gone)", cl); const ans = $$
   head.classList.toggle("first", !p.textContent.trim()); }
 const toolsOf = (r) => (r && r.tool_count ? ` · ${r.tool_count} ${r.tool_count === 1 ? "tool" : "tools"}` : "");
 function footHTML(live, r) {
-  if (live) return `<span>${r && r.waiting ? "Waiting for an answer" : r && r.status === "queued" ? "Queued" : "Working"}${toolsOf(r)}</span>`;
+  if (live) return `<span>${r && r.waiting ? "Waiting for an answer" : r && r.status === "queued" ? "Queued" : r && r.overview ? esc(r.overview) : "Working"}${toolsOf(r)}</span>`;   /* while it works, the model's own title for what it is thinking about, as Codex shows it */
   if (!r) return "";
   const secs = (r.usage && r.usage.duration_seconds) || r.duration_seconds || ((r.date_finished || r.date_updated) - r.date_created);
   if (r.status === "failed") return `${mk("failed")}<span class="c-fail">Failed after ${dur(secs)}</span>`;

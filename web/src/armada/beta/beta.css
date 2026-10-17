@@ -381,3 +381,6 @@ a.placelink:hover { background: color-mix(in srgb, currentColor 18%, transparent
 /* display maths on the page, not in a block: a wide formula scrolls in its own line */
 .blk.math { background: none; padding-left: 0; padding-right: 0; overflow-x: auto; scrollbar-width: none; }
 .blk.math .katex-display { margin: 0; }
+
+/* ---------- a live turn's footer (agent_turn.js): the model's title, on one line, so a long one never moves the turn ---------- */
+.cl > .line.foot > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

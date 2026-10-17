@@ -81,7 +81,8 @@ function onRun(ev) {
   if (runWindow && runWindow.run === r.id) { runWindow.events++; runWindow.msg = r.result_message_id; if (!live) { const secs = (performance.now() - runWindow.t0) / 1000, n = runWindow.events + runWindow.updates; stats.runs.push({run: r.id, seconds: Math.round(secs * 10) / 10, events: n, perSecond: Math.round(n / Math.max(secs, 0.001) * 10) / 10}); runWindow = null; drawLab(); } }
   if (!shown(c)) { if (r.result_message_id) stale(c, r.result_message_id); return; }
   drawRunState(fresh); drawSide(); drawProg();
-  if (r.result_message_id) { if (r.result_message_id !== wasResult) placeQuestions(c); const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m); }   /* a question that came before its run's answer was known joins its turn; what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
+  if (r.result_message_id) { if (r.result_message_id !== wasResult) placeQuestions(c); const cl = sectionOf(r.result_message_id), m = c.byId.get(r.result_message_id); if (cl && m) syncOnix(cl, m);
+    const root = (ev.overview || fresh || wasLive !== live) && m && m.thread_root_message_id && c.byId.get(m.thread_root_message_id), rc = root && sectionOf(root.id); if (rc) drawThreadLine(rc, root); }   /* a reply's thread line follows its run: known, a new title, ended */   /* a question that came before its run's answer was known joins its turn; what the row grows by reaches its ResizeObserver (agent_turn.js), which follows it */
   if (wasLive && !live) { S.play(ev.status === "failed" ? "fail" : "done"); refreshCtx(c, 600); }
 }
 /* a run in a channel's topic means the channel has its repository and the topic its worktree: the server makes both in the

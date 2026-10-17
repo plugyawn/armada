@@ -84,6 +84,7 @@ set_global("M", {
     rest: () => ({top: 0, left: 0}),
     say: noop,
     refuse: noop,
+    leave: noop,
 });
 set_global("S", {play: noop});
 set_global("host", noop);
@@ -586,3 +587,79 @@ run_test(
         assert.equal(root.dataset.katex, "");
     },
 );
+
+run_test("a live turn's footer says what the model is thinking about", () => {
+    const run_id = RUN + 7;
+    events.onMessage({message: message(210, ME, "<p>@Onix check the branch</p>"), flags: ["read"]});
+    events.onMessage({message: message(211, AGENT, "<p>· Working</p>"), flags: ["read"]});
+    const run_says = (fields) =>
+        events.onRun({
+            type: "agent_run",
+            run_id,
+            event_type: "transcript",
+            status: "running",
+            trigger_message_id: 210,
+            result_message_id: 211,
+            stream: "click",
+            topic: "option groups",
+            current_activity: "",
+            tool_count: 0,
+            plan: null,
+            overview: null,
+            run_date_created: T0,
+            date_created: T0,
+            ...fields,
+        });
+    run_says({});
+    frame();
+    const row = lane.querySelector('[data-mid="211"]').closest("section");
+    const foot = () => row.querySelector(".line.foot").textContent.trim();
+    assert.equal(foot(), "Working");
+    // The model's own title, as the server pushes it, written as text.
+    run_says({overview: "Checking branch <ancestry>", tool_count: 2});
+    frame();
+    assert.equal(foot(), "Checking branch <ancestry> · 2 tools");
+    assert.equal(row.querySelector(".line.foot ancestry"), null);
+    run_says({status: "done", event_type: "done", tool_count: 2});
+    frame();
+    assert.match(foot(), /^Ran /);
+});
+
+run_test("a thread's line says what Onix is thinking about in its live reply", () => {
+    const run_id = RUN + 8;
+    events.onMessage({
+        message: message(220, ME, "<p>Can you check the build?</p>"),
+        flags: ["read"],
+    });
+    events.onMessage({
+        message: {...message(221, AGENT, "<p>· Working</p>"), thread_root_message_id: 220},
+        flags: ["read"],
+    });
+    const run_says = (fields) =>
+        events.onRun({
+            type: "agent_run",
+            run_id,
+            event_type: "transcript",
+            status: "running",
+            trigger_message_id: 220,
+            result_message_id: 221,
+            stream: "click",
+            topic: "option groups",
+            current_activity: "",
+            tool_count: 0,
+            plan: null,
+            overview: null,
+            run_date_created: T0,
+            date_created: T0,
+            ...fields,
+        });
+    run_says({});
+    frame();
+    const line = () =>
+        lane.querySelector('[data-mid="220"]').closest("section").querySelector(".tl .sn")
+            .textContent;
+    assert.equal(line(), "Onix: working");
+    run_says({overview: "Reading the plugin contract"});
+    frame();
+    assert.equal(line(), "Onix: Reading the plugin contract");
+});

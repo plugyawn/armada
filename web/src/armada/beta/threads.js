@@ -24,7 +24,9 @@ const wholeWidth = typeof ResizeObserver === "function" ? new ResizeObserver((es
 function drawThreadLine(cl, m) {
   $$(`.tl[data-mid="${m.id}"]`, cl).forEach((x) => x.remove()); const c = state.P, loaded = repliesOf(c, m.id), s = m.reply_summary, n = Math.max(loaded.length, s ? s.reply_count || 0 : 0); if (!n) return;
   const last = loaded[loaded.length - 1], who = s && s.participants ? s.participants.map((p) => p.user_id) : [...new Set(loaded.map((x) => x.sender_id))];
-  const snippet = last ? `${nameOf(last.sender_id).split(/[ ,]/)[0]}: ${plainOf(last.content).replace(/\s+/g, " ").trim().slice(0, 80)}` : s && s.last_sender ? `${nameOf(s.last_sender.user_id).split(/[ ,]/)[0]} replied ${age(s.last_reply_at)} ago` : "";
+  const working = last && c.runs && c.runs.find((r) => r.result_message_id === last.id && (r.status === "queued" || r.status === "running"));   /* a reply still being written says what Onix is thinking about, not the server's placeholder */
+  const said = working ? working.overview || "working" : last ? plainOf(last.content).replace(/\s+/g, " ").trim().slice(0, 80) : "";
+  const snippet = last ? `${nameOf(last.sender_id).split(/[ ,]/)[0]}: ${said}` : s && s.last_sender ? `${nameOf(s.last_sender.user_id).split(/[ ,]/)[0]} replied ${age(s.last_reply_at)} ago` : "";
   const tl = el("div", "tl", `<span class="avs">${who.slice(0, 3).map((i) => faceOf(i, "s18")).join("")}</span><button class="lk${c.open.has(m.id) ? " on" : ""}" data-thread="${m.id}">${n} ${n === 1 ? "reply" : "replies"}</button><span class="sn">${esc(snippet)}</span>`); tl.dataset.mid = m.id;
   const own = $$(`:scope > [data-mid="${m.id}"]:not(.tl):not(.thr-in)`, cl); (own[own.length - 1] || cl.lastElementChild).after(tl); cl.dataset.closed = 1; host(tl); if (wholeWidth && cl.classList.contains("me")) wholeWidth.observe(tl);
 }

@@ -7,6 +7,7 @@ from django.utils.timezone import now as timezone_now
 
 from zerver.lib.armada_sessions import SESSION_RENEWED_KEY
 from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.test_helpers import queries_captured
 
 A_YEAR = timedelta(days=365)
 
@@ -75,6 +76,23 @@ class PersistentSessionTest(ZulipTestCase):
         with time_machine.travel(start + A_YEAR + timedelta(days=1), tick=False):
             result = self.client_get("/json/users/me")
         self.assertEqual(result.status_code, 401)
+
+    def test_an_api_request_does_not_read_the_session(self) -> None:
+        # A request authenticated by an API key that still carries a
+        # session cookie neither reads nor renews that session.
+        start = timezone_now().replace(microsecond=0)
+        with time_machine.travel(start, tick=False):
+            self.login_with_return(self.example_email("hamlet"))
+        hamlet = self.example_user("hamlet")
+        with (
+            time_machine.travel(start + timedelta(days=2), tick=False),
+            queries_captured() as queries,
+        ):
+            result = self.api_get(hamlet, "/api/v1/users/me")
+        self.assert_json_success(result)
+        self.assertFalse([query for query in queries if "django_session" in query.sql])
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, result.cookies)
+        self.assertEqual(self.session_expiry(), start + A_YEAR)
 
     def test_requests_without_a_signed_in_session_get_no_session(self) -> None:
         sessions = Session.objects.count()

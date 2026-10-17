@@ -39,10 +39,12 @@ def stamp_session_on_login(sender: Any, request: HttpRequest, **kwargs: Any) -> 
 
 def renew_session_if_due(request: HttpRequest) -> None:
     session = request.session
+    # Only a session the request has read already: one that signed it in.
     # A request without a session cookie (an API key's, or one from a
-    # person who is not signed in) has no session to renew, and must not
-    # be given one.
-    if session.session_key is None or SESSION_KEY not in session:
+    # person who is not signed in) has no session to renew and must not be
+    # given one, and one that came with a cookie it did not use (an API
+    # key's) must not pay for reading it.
+    if not session.accessed or session.session_key is None or SESSION_KEY not in session:
         return
     renewed = session.get(SESSION_RENEWED_KEY)
     if isinstance(renewed, int) and time.time() - renewed < SESSION_RENEWAL_INTERVAL_SECONDS:

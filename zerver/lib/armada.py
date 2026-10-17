@@ -15,7 +15,7 @@ from django.db import connection
 from django.utils.translation import gettext as _
 
 from zerver.lib.armada_constants import ARMADA_SERVER_CONTRACT_VERSION
-from zerver.lib.exceptions import JsonableError
+from zerver.lib.exceptions import JsonableError, ReactionExistsError
 
 ARMADA_AGENT_NAME: Final = "Onix"
 ARMADA_BOT_SHORT_NAME: Final = "onix"
@@ -24,6 +24,10 @@ ARMADA_EXPLICIT_MENTION_MESSAGE_KEY: Final = "agent_explicit_mention"
 ARMADA_TRIGGER_MESSAGE_KEY: Final = "agent_trigger"
 ARMADA_FOLLOWUP_TRIGGER: Final = "agent_followup"
 ARMADA_ADDRESSING_FAILURE_NOTICE_COOLDOWN_SECONDS: Final = 5 * 60
+# The reaction with which the agent takes a message the addressing router
+# gave it: Zulip's "eyes".
+ARMADA_ROUTED_REACTION_EMOJI_NAME: Final = "eyes"
+ARMADA_ROUTED_REACTION_EMOJI_CODE: Final = "1f440"
 ARMADA_AGENT_MENTION: Final = f"@**{ARMADA_AGENT_NAME}**"
 ARMADA_PLAIN_AGENT_MENTION_RE: Final = compile(
     rf"(?<![\w@])@{re.escape(ARMADA_AGENT_NAME)}(?![\w-])", IGNORECASE
@@ -2682,6 +2686,39 @@ class ArmadaEmbeddedBotHandler:
         )
         return message_id if isinstance(message_id, int) and message_id > 0 else None
 
+    def react_to_routed_message(self, bot_handler: Any, message_id: int) -> None:
+        """Mark a message the router gave the agent with the "eyes" emoji,
+        before the run says anything, so that people see it was taken. A
+        mention, or the agent's name, is already plain to all and gets
+        none. The run starts whether or not the reaction can be added."""
+        from django.db import transaction
+
+        from zerver.actions.reactions import check_add_reaction
+        from zerver.models import Reaction, UserProfile
+
+        user_profile = getattr(bot_handler, "user_profile", None)
+        if not isinstance(user_profile, UserProfile):
+            # A test's stand-in for the agent's account has nothing to react with.
+            return
+        try:
+            with transaction.atomic(durable=True):
+                check_add_reaction(
+                    user_profile,
+                    message_id,
+                    ARMADA_ROUTED_REACTION_EMOJI_NAME,
+                    ARMADA_ROUTED_REACTION_EMOJI_CODE,
+                    Reaction.UNICODE_EMOJI,
+                )
+        except ReactionExistsError:
+            # The same message routed again, as when its delivery is retried.
+            pass
+        except JsonableError as error:
+            logger.warning(
+                "Could not react to message %s, which the router gave the agent: %s",
+                message_id,
+                error.msg,
+            )
+
     def route_ambient_message(
         self,
         *,
@@ -3001,6 +3038,7 @@ class ArmadaEmbeddedBotHandler:
                 # People talking to each other start no Codex process: a run
                 # brings its own runtime up when it starts.
                 return
+            self.react_to_routed_message(bot_handler, message_id)
         steering_event = build_armada_explicit_steering_event(
             content,
             message_id=message_id,

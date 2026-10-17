@@ -4824,22 +4824,24 @@ class ArmadaSessionDefaultsTest(TestCase):
                 return {"id": 400 + len(sent_replies)}
 
         run_store = FakeRunStore()
-        make_test_armada_handler(
-            worker_runtime=ArmadaWorkerRuntime(tool_runner),
-            active_session_loader=active_session_loader,
-            worker_run_store=run_store,
-            addressing_intent_classifier=addressing_intent_classifier,
-        ).handle_message(
-            {
-                "id": 208,
-                "type": "stream",
-                "display_recipient": ARMADA_DEFAULT_STREAM,
-                "topic": ARMADA_DEFAULT_TOPIC,
-                "content": "hey agent, can you check the failing parser test?",
-                ARMADA_TRIGGER_MESSAGE_KEY: ARMADA_FOLLOWUP_TRIGGER,
-            },
-            FakeBotHandler(),
-        )
+        # A stand-in for the agent's account has nothing to react with, and no warning.
+        with self.assertNoLogs("zerver.lib.armada", level="WARNING"):
+            make_test_armada_handler(
+                worker_runtime=ArmadaWorkerRuntime(tool_runner),
+                active_session_loader=active_session_loader,
+                worker_run_store=run_store,
+                addressing_intent_classifier=addressing_intent_classifier,
+            ).handle_message(
+                {
+                    "id": 208,
+                    "type": "stream",
+                    "display_recipient": ARMADA_DEFAULT_STREAM,
+                    "topic": ARMADA_DEFAULT_TOPIC,
+                    "content": "hey agent, can you check the failing parser test?",
+                    ARMADA_TRIGGER_MESSAGE_KEY: ARMADA_FOLLOWUP_TRIGGER,
+                },
+                FakeBotHandler(),
+            )
 
         self.assertEqual(
             classifier_calls,

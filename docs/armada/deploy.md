@@ -640,15 +640,17 @@ setting either changes this. Tested by `zerver.tests.test_armada_sessions`.
 ### The addressing router
 
 _Tested with mocked requests and live against TypeSafe from a Mac; the
-router has run on runix.chat since 17 October._ Off by default: Onix then answers only messages that mention
-it or say its name to it, in any topic: after a greeting ("Hey Onix, ..."),
-first and set off ("Onix, can you ...", "Onix?"), or last and set off
-("what do you think, Onix?"); not thanks alone, and not a name in code or
-a quote. With a router, any other message in a topic is shown to a model,
-which judges whether it is meant for Onix (a follow-up to what it just
-said, a correction, a request in a topic where it works) or for the
-people there; only the first starts a run, or steers the one going. This
-is for topics whose response policy is ambient, the default.
+router has run on runix.chat since 17 October._ Off by default: Onix then
+answers only messages that mention it or say its name to it, in any topic:
+after a greeting ("Hey Onix, ..."), first and set off ("Onix, can you
+...", "Onix?"), or last and set off ("what do you think, Onix?"); not
+thanks alone, and not a name in code or a quote. With a router, any other
+message in a topic is shown to a model, which judges whether it is meant
+for Onix (a follow-up to what it just said, a correction, a request in a
+topic where it works) or for the people there; only the first starts a
+run, or steers the one going, and Onix marks that message with the "eyes"
+emoji (👀) at once, before the run says anything, even if the run is then
+refused. This is for topics whose response policy is ambient, the default.
 
 Use TypeSafe's Jev (`"typesafe"`). For each such message the server asks
 Jev one question, with the topic's last six messages, the new message and

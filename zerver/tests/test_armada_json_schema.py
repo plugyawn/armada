@@ -56,6 +56,25 @@ class JsonSchemaTest(ZulipTestCase):
             self.error({"oneOf": [{"type": "number"}, {"type": "integer"}]}, 1),
             "$: value matches multiple mutually exclusive contract variants",
         )
+        # A value that is no object is meant for the variant of its type.
+        figure: dict[str, Any] = {"oneOf": [{"type": "string", "maxLength": 2}, {"type": "number"}]}
+        self.assertEqual(self.error(figure, "abc"), "$: string exceeds 2 characters")
+        self.assertEqual(
+            self.error(figure, [1]), "$: value does not match any allowed contract variant"
+        )
+        # Two variants of its type: neither is named.
+        self.assertEqual(
+            self.error(
+                {
+                    "oneOf": [
+                        {"type": "string", "maxLength": 1},
+                        {"type": "string", "pattern": "^a$"},
+                    ]
+                },
+                "bc",
+            ),
+            "$: value does not match any allowed contract variant",
+        )
         self.assertIsNone(self.error({"anyOf": [{"type": "number"}, {"type": "integer"}]}, 1))
 
     def test_strings_and_numbers(self) -> None:

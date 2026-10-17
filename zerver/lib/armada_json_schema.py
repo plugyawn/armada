@@ -51,16 +51,26 @@ def _has_type(value: object, expected: str) -> bool:
 def _schema_variant_for_type(
     root: dict[str, Any], variants: list[object], value: object
 ) -> dict[str, Any] | None:
-    if not isinstance(value, dict) or not isinstance(value.get("type"), str):
-        return None
-    value_type = value["type"]
+    """The variant a value that fits none was meant for, whose error names
+    what is wrong with it: the object variant whose "type" property is
+    the value's, or else the one variant of the value's own JSON type."""
+    resolved_variants = []
     for variant in variants:
         if not isinstance(variant, dict):
             continue
         reference = variant.get("$ref")
         resolved = _schema_reference(root, reference) if isinstance(reference, str) else variant
-        if not isinstance(resolved, dict):
-            continue
+        if isinstance(resolved, dict):
+            resolved_variants.append((variant, resolved))
+    if not isinstance(value, dict) or not isinstance(value.get("type"), str):
+        typed = [
+            variant
+            for variant, resolved in resolved_variants
+            if isinstance(resolved.get("type"), str) and _has_type(value, resolved["type"])
+        ]
+        return typed[0] if len(typed) == 1 else None
+    value_type = value["type"]
+    for variant, resolved in resolved_variants:
         properties = resolved.get("properties")
         if not isinstance(properties, dict):
             continue

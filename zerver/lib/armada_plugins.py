@@ -43,7 +43,7 @@ import requests
 from cryptography.fernet import Fernet, MultiFernet
 from django.conf import settings
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.utils.timezone import now as timezone_now
 from django.utils.translation import gettext as _
 
@@ -60,6 +60,7 @@ from zerver.lib.armada_plugin_validation import (
 )
 from zerver.lib.exceptions import JsonableError, ResourceNotFoundError
 from zerver.lib.outgoing_http import OutgoingSession
+from zerver.lib.stream_subscription import get_subscribed_stream_ids_for_user
 from zerver.lib.streams import access_stream_by_id
 from zerver.lib.timestamp import datetime_to_timestamp
 from zerver.models import (
@@ -86,6 +87,20 @@ ARMADA_PLUGIN_DISABLED_TOOLS_LIMIT = 64
 # The team's widgets that show in everyone's nav before new ones are
 # offered in "+" instead (statement 45).
 ARMADA_PLUGIN_SHOWN_WIDGET_LIMIT = 6
+# Recent's lines, by the word the API gives each.
+ARMADA_PLUGIN_RECENT_TYPES: dict[int, str] = {
+    AuditLogEventType.PLUGIN_INSTALLED: "installed",
+    AuditLogEventType.PLUGIN_SETTINGS_CHANGED: "settings_changed",
+    AuditLogEventType.PLUGIN_LINKED: "linked",
+    AuditLogEventType.PLUGIN_UNLINKED: "unlinked",
+    AuditLogEventType.PLUGIN_REMOVED: "removed",
+    AuditLogEventType.PLUGIN_RESTORED: "restored",
+    AuditLogEventType.PLUGIN_MADE: "made",
+    AuditLogEventType.PLUGIN_UPDATED: "updated",
+    AuditLogEventType.PLUGIN_TOOL_CALLED: "tool_called",
+    AuditLogEventType.PLUGIN_STARTED: "started",
+}
+ARMADA_PLUGIN_RECENT_LIMIT = 100
 GITHUB_SOURCE = re.compile(r"^github\.com/[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$")
 SOURCE_PATH = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 COMMIT_SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -343,6 +358,45 @@ def audit_plugin(
         event_time=timezone_now(),
         extra_data={"install_id": install.id, "plugin": install.plugin_id, **extra_data},
     )
+
+
+def plugin_recent(user: UserProfile, install: PluginInstall, *, limit: int) -> list[dict[str, Any]]:
+    """Recent, newest first: who did what to the install. What a line
+    records holds a secret by its name alone, and a line about a channel
+    the person cannot read is left out, as that channel's links are."""
+    if not 0 < limit <= ARMADA_PLUGIN_RECENT_LIMIT:
+        raise JsonableError(
+            _("limit is between 1 and {limit}.").format(limit=ARMADA_PLUGIN_RECENT_LIMIT)
+        )
+    lines = (
+        RealmAuditLog.objects.filter(
+            realm_id=install.realm_id,
+            event_type__in=list(ARMADA_PLUGIN_RECENT_TYPES),
+            modified_user_id=install.bot_id,
+            extra_data__install_id=install.id,
+        )
+        .filter(
+            Q(modified_stream__isnull=True)
+            | Q(modified_stream__invite_only=False)
+            | Q(modified_stream_id__in=get_subscribed_stream_ids_for_user(user))
+        )
+        .order_by("-event_time", "-id")[:limit]
+    )
+    return [
+        {
+            "id": line.id,
+            "type": ARMADA_PLUGIN_RECENT_TYPES[line.event_type],
+            "acting_user_id": line.acting_user_id,
+            "time": datetime_to_timestamp(line.event_time),
+            "stream_id": line.modified_stream_id,
+            "detail": {
+                key: value
+                for key, value in line.extra_data.items()
+                if key not in ("install_id", "plugin")
+            },
+        }
+        for line in lines
+    ]
 
 
 def _shown_widget_count(realm: Realm, exclude_id: int | None) -> int:

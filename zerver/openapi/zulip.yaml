@@ -28340,6 +28340,137 @@ paths:
                             "date_removed": null,
                           },
                       }
+  /armada/plugins/{install_id}/recent:
+    get:
+      operationId: get-armada-plugin-recent
+      tags: ["armada"]
+      summary: Get a plugin's recent activity
+      description: |
+        Who did what to a plugin, newest first: installs and updates,
+        changes to its settings, links, removals and their undoing, the
+        tool actions people ran, and the times its process started.
+
+        A line about a channel the user cannot read is left out. What a
+        line records names a secret but never holds its value.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+        - name: limit
+          in: query
+          description: |
+            The most lines to return, between 1 and 100.
+          schema:
+            type: integer
+            default: 50
+          example: 20
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      recent:
+                        type: array
+                        description: |
+                          The plugin's activity, newest first.
+                        items:
+                          type: object
+                          additionalProperties: false
+                          properties:
+                            id:
+                              type: integer
+                              description: |
+                                The line's ID.
+                            type:
+                              type: string
+                              enum:
+                                - installed
+                                - settings_changed
+                                - linked
+                                - unlinked
+                                - removed
+                                - restored
+                                - made
+                                - updated
+                                - tool_called
+                                - started
+                              description: |
+                                What happened. `made` is a plugin the agent made
+                                for someone; `started` is the first push of a
+                                newly started process.
+                            acting_user_id:
+                              type: integer
+                              nullable: true
+                              description: |
+                                Who did it: a person, or the plugin's own bot
+                                for `started`.
+                            time:
+                              type: integer
+                              description: |
+                                When, as a UNIX timestamp.
+                            stream_id:
+                              type: integer
+                              nullable: true
+                              description: |
+                                The channel the line is about, for a link or a
+                                tool action in a linked place.
+                            detail:
+                              type: object
+                              additionalProperties: {}
+                              description: |
+                                What the line records: for example the version,
+                                the settings before and after, the names of the
+                                secrets set, the link, or the tool and whether
+                                it failed.
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "recent":
+                          [
+                            {
+                              "id": 31,
+                              "type": "linked",
+                              "acting_user_id": 11,
+                              "time": 1760600000,
+                              "stream_id": 3,
+                              "detail":
+                                {
+                                  "link_id": 2,
+                                  "kind": "project",
+                                  "value": "runix/nextlat-scaling",
+                                  "topic": null,
+                                },
+                            },
+                            {
+                              "id": 30,
+                              "type": "installed",
+                              "acting_user_id": 11,
+                              "time": 1760599000,
+                              "stream_id": null,
+                              "detail":
+                                {
+                                  "version": "0.4.1",
+                                  "source_kind": "github",
+                                  "source": "github.com/plugyawn/armada-wandb",
+                                  "source_path": "",
+                                  "sha": "4e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5",
+                                  "settings": {"entity": "runix"},
+                                  "secrets": ["api_key"],
+                                },
+                            },
+                          ],
+                      }
   /armada/plugins/{install_id}/links:
     post:
       operationId: add-armada-plugin-link

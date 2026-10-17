@@ -17,6 +17,10 @@
   New endpoint to start a plugin that failed five times in a row again
   at once. A plugin's state, in its `state` and `detail` fields, is now
   reported by the plugin host, which runs it.
+* [`GET /armada/plugins/{install_id}/recent`](/api/get-armada-plugin-recent):
+  New endpoint for a plugin's recent activity: who installed, changed,
+  linked, removed or updated it, the tool actions people ran, and when
+  its process started.
 * [`POST /armada/plugins/{install_id}/links`](/api/add-armada-plugin-link),
   [`DELETE /armada/plugins/{install_id}/links/{link_id}`](/api/remove-armada-plugin-link):
   New endpoints to link a plugin to a channel or to a topic, and to

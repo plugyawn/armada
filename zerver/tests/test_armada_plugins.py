@@ -444,6 +444,83 @@ class PluginInstallTest(ZulipTestCase):
         self.assertEqual(list(PluginInstall.objects.values_list("plugin_id", flat=True)), ["gpus"])
         self.assertFalse(PluginSecret.objects.exists())
 
+    def recent(self, user: UserProfile, install: PluginInstall, **params: object) -> Any:
+        self.login_user(user)
+        return self.client_get(
+            f"/json/armada/plugins/{install.id}/recent",
+            {name: json.dumps(value) for name, value in params.items()},
+        )
+
+    def test_recent_is_who_did_what_newest_first_without_a_secret(self) -> None:
+        hamlet = self.example_user("hamlet")
+        othello = self.example_user("othello")
+        new_key = "wandb-local-ffeeddccbbaa99887766554433221100"
+        start = timezone_now()
+        with time_machine.travel(start, tick=False):
+            install = self.install(hamlet)
+        with time_machine.travel(start + timedelta(minutes=1), tick=False):
+            self.assert_json_success(self.link(hamlet, install, "Verona"))
+        with time_machine.travel(start + timedelta(minutes=2), tick=False):
+            self.assert_json_success(self.patch(othello, install, secrets={"api_key": new_key}))
+        # A link to a channel Othello cannot read, and a removal and its undoing.
+        self.make_stream("training", invite_only=True)
+        self.subscribe(hamlet, "training")
+        with time_machine.travel(start + timedelta(minutes=3), tick=False):
+            self.assert_json_success(self.link(hamlet, install, "training", "lr-sweep"))
+        with time_machine.travel(start + timedelta(minutes=4), tick=False):
+            self.login_user(hamlet)
+            self.assert_json_success(self.client_delete(f"/json/armada/plugins/{install.id}"))
+            self.assert_json_success(self.client_post(f"/json/armada/plugins/{install.id}/restore"))
+        # Another install's lines are its own.
+        self.install(hamlet, plugin="gpus", settings={"manage_prefix": "x"}, secrets={})
+
+        result = self.recent(hamlet, install)
+        lines = self.assert_json_success(result)["recent"]
+        self.assertEqual(
+            [
+                (line["type"], line["acting_user_id"], line["time"] - datetime_to_timestamp(start))
+                for line in lines
+            ],
+            [
+                ("restored", hamlet.id, 240),
+                ("removed", hamlet.id, 240),
+                ("linked", hamlet.id, 180),
+                ("settings_changed", othello.id, 120),
+                ("linked", hamlet.id, 60),
+                ("installed", hamlet.id, 0),
+            ],
+        )
+        self.assertEqual(lines[-1]["detail"]["secrets"], ["api_key"])
+        self.assertEqual(lines[3]["detail"], {"secrets": ["api_key"]})
+        self.assertEqual(
+            [(line["stream_id"], line["detail"].get("topic")) for line in lines[2::2]],
+            [(self.get_stream_id("training"), "lr-sweep"), (self.get_stream_id("Verona"), None)],
+        )
+        for key in (WANDB_KEY, new_key):
+            self.assertNotIn(key.encode(), result.content)
+
+        # Othello cannot read the private channel, so its line is left out.
+        self.assertEqual(
+            [
+                line["type"]
+                for line in self.assert_json_success(self.recent(othello, install))["recent"]
+            ],
+            ["restored", "removed", "settings_changed", "linked", "installed"],
+        )
+        self.assertEqual(
+            [
+                line["id"]
+                for line in self.assert_json_success(self.recent(hamlet, install, limit=2))[
+                    "recent"
+                ]
+            ],
+            [lines[0]["id"], lines[1]["id"]],
+        )
+        for limit in (0, 101):
+            self.assert_json_error(
+                self.recent(hamlet, install, limit=limit), "limit is between 1 and 100."
+            )
+
     def test_links_take_the_bot_where_it_is_linked(self) -> None:
         hamlet = self.example_user("hamlet")
         install = self.install(hamlet)
@@ -669,6 +746,7 @@ class PluginInstallTest(ZulipTestCase):
                 {"kind": "project", "value": "a/b", "stream_id": self.get_stream_id("Verona")},
             ),
             self.client_delete(f"/json/armada/plugins/{lear.id}/links/{lear_link.id}"),
+            self.client_get(f"/json/armada/plugins/{lear.id}/recent"),
         ):
             self.assert_json_error(result, "No such plugin", status_code=404)
         # A link of another install, or a channel of another realm, is not found either.
@@ -700,6 +778,9 @@ class PluginInstallTest(ZulipTestCase):
         self.assert_json_error(
             self.client_post(f"/json/armada/plugins/{install.id}/retry"), guest_error
         )
+        self.assert_json_error(
+            self.client_get(f"/json/armada/plugins/{install.id}/recent"), guest_error
+        )
 
         bot_error = "Plugins are installed, linked and removed by people, not bots."
         # Neither a bot of a person's nor the plugin's own bot may.
@@ -707,6 +788,9 @@ class PluginInstallTest(ZulipTestCase):
             self.assert_json_error(self.api_get(bot, "/api/v1/armada/plugins"), bot_error)
             self.assert_json_error(
                 self.api_delete(bot, f"/api/v1/armada/plugins/{install.id}"), bot_error
+            )
+            self.assert_json_error(
+                self.api_get(bot, f"/api/v1/armada/plugins/{install.id}/recent"), bot_error
             )
             self.assert_json_error(
                 self.api_post(

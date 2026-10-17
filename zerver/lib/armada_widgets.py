@@ -324,5 +324,6 @@ def run_widget_action(
             "row": row,
             "is_error": is_error,
         },
+        stream_id=state.link.stream_id if state.link is not None else None,
     )
     return {"text": text[:ARMADA_PLUGIN_TOOL_RESULT_LIMIT], "is_error": is_error}

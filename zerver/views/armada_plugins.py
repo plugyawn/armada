@@ -12,6 +12,7 @@ from zerver.lib.armada_plugins import (
     add_plugin_link,
     install_plugin,
     list_plugin_installs,
+    plugin_recent,
     remove_plugin,
     remove_plugin_link,
     restore_plugin,
@@ -111,6 +112,18 @@ def post_armada_plugin_retry(
     install = access_plugin_install(user_profile, install_id)
     retry_plugin(user_profile, install)
     return json_success(request, data={"plugin": serialize_plugin_installs([install])[0]})
+
+
+@typed_endpoint
+def get_armada_plugin_recent(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    install_id: PathOnly[int],
+    limit: Json[int] = 50,
+) -> HttpResponse:
+    install = access_plugin_install(user_profile, install_id)
+    return json_success(request, data={"recent": plugin_recent(user_profile, install, limit=limit)})
 
 
 @typed_endpoint

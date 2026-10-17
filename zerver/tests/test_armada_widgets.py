@@ -894,6 +894,22 @@ class ToolActionTest(ZulipTestCase):
             self.press(self.example_user("cordelia"), index=1, link_id=link.id),
             "Invalid channel ID",
         )
+        # Recent tells that press only to those who can read its channel.
+        recent_url = f"/json/armada/plugins/{self.install.id}/recent"
+        self.login_user(self.hamlet)
+        [press, *_] = self.assert_json_success(self.client_get(recent_url))["recent"]
+        self.assertEqual(
+            (press["type"], press["stream_id"], press["detail"]["link_id"]),
+            ("tool_called", self.get_stream_id("pods"), link.id),
+        )
+        self.login("cordelia")
+        self.assertNotIn(
+            self.get_stream_id("pods"),
+            [
+                line["stream_id"]
+                for line in self.assert_json_success(self.client_get(recent_url))["recent"]
+            ],
+        )
         # A plugin with no tools, turned off, or not answering.
         manifest = self.install.manifest
         tools = manifest["provides"].pop("tools")

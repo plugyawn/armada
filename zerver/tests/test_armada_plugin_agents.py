@@ -647,6 +647,64 @@ class PluginMCPRouteTest(PluginTestCase):
         ).json()
         self.assertEqual(errored["error"]["message"], "unknown tool")
 
+    def test_a_plugins_settings_list_its_tools(self) -> None:
+        self.serve_fake_plugin(self.fake)
+        hamlet = self.example_user("hamlet")
+        self.login_user(hamlet)
+        tools_url = f"/json/armada/plugins/{self.fake.id}/tools"
+        self.assertEqual(
+            self.assert_json_success(self.client_get(tools_url))["tools"],
+            [
+                {
+                    "name": "echo",
+                    "title": None,
+                    "description": "Says back what it was called with, and for whom.",
+                    "disabled": False,
+                },
+                {
+                    "name": "pod_terminate",
+                    "title": None,
+                    "description": "Ends a pod.",
+                    "disabled": True,
+                },
+            ],
+        )
+        # A title of its own, or from earlier revisions' annotations.
+        listed = [
+            {"name": "a", "title": "Alpha", "annotations": {"title": "Old"}},
+            {"name": "b", "annotations": {"title": "Beta"}, "description": 3},
+            {"name": "c", "annotations": "odd"},
+            {"description": "no name"},
+        ]
+        with mock.patch(
+            "zerver.lib.armada_plugin_mcp.ArmadaMCPClient.list_tools", return_value=listed
+        ):
+            tools = self.assert_json_success(self.client_get(tools_url))["tools"]
+        self.assertEqual(
+            [(tool["name"], tool["title"], tool["description"]) for tool in tools],
+            [("a", "Alpha", ""), ("b", "Beta", ""), ("c", None, "")],
+        )
+        # Who may ask, and of what.
+        self.login("polonius")
+        self.assert_json_error(
+            self.client_get(tools_url), "Guests cannot see, install, link or remove plugins."
+        )
+        self.assert_json_error(
+            self.api_get(self.fake.bot, f"/api/v1/armada/plugins/{self.fake.id}/tools"),
+            "Plugins are installed, linked and removed by people, not bots.",
+        )
+        self.login_user(self.lear_user("cordelia"))
+        self.assert_json_error(
+            self.client_get(tools_url, subdomain="lear"), "No such plugin", status_code=404
+        )
+        self.login_user(hamlet)
+        PluginInstall.objects.filter(id=self.fake.id).update(port=1)
+        self.assert_json_error(
+            self.client_get(tools_url), "Fake could not be reached: ConnectionError."
+        )
+        PluginInstall.objects.filter(id=self.fake.id).update(state=PluginInstall.FAILED)
+        self.assert_json_error(self.client_get(tools_url), "Fake is not running.")
+
     def test_who_reaches_a_plugins_tools(self) -> None:
         self.serve_fake_plugin(self.fake)
         tools_list = self.request("tools/list")

@@ -63,6 +63,7 @@ from zerver.views.armada_plugins import (
     delete_armada_plugin_link,
     delete_armada_plugin_mcp,
     get_armada_plugin_recent,
+    get_armada_plugin_tools,
     get_armada_plugins,
     patch_armada_plugin,
     post_armada_plugin,
@@ -482,6 +483,7 @@ v1_api_and_json_patterns = [
     rest_path("armada/plugins/<int:install_id>/restore", POST=post_armada_plugin_restore),
     rest_path("armada/plugins/<int:install_id>/retry", POST=post_armada_plugin_retry),
     rest_path("armada/plugins/<int:install_id>/recent", GET=get_armada_plugin_recent),
+    rest_path("armada/plugins/<int:install_id>/tools", GET=get_armada_plugin_tools),
     rest_path("armada/plugins/<int:install_id>/links", POST=post_armada_plugin_link),
     rest_path(
         "armada/plugins/<int:install_id>/links/<int:link_id>", DELETE=delete_armada_plugin_link

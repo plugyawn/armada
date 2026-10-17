@@ -183,6 +183,7 @@
 * [Undo a plugin's removal](/api/restore-armada-plugin)
 * [Retry a failed plugin](/api/retry-armada-plugin)
 * [Get a plugin's recent activity](/api/get-armada-plugin-recent)
+* [Get a plugin's tools](/api/get-armada-plugin-tools)
 * [Link a plugin to a channel or a topic](/api/add-armada-plugin-link)
 * [Unlink a plugin](/api/remove-armada-plugin-link)
 * [Run a widget's action](/api/run-armada-plugin-action)

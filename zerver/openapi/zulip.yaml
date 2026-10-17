@@ -28471,6 +28471,84 @@ paths:
                             },
                           ],
                       }
+  /armada/plugins/{install_id}/tools:
+    get:
+      operationId: get-armada-plugin-tools
+      tags: ["armada"]
+      summary: Get a plugin's tools
+      description: |
+        The tools a running plugin offers the agent, as the plugin lists
+        them now, with whether the organization turned each off (the
+        plugin's `disabled_tools`, which [updating the
+        plugin](/api/update-armada-plugin) sets).
+
+        A tool's title and description are the plugin's own words, to be
+        shown as plain text.
+
+        Guests and bots cannot use this endpoint.
+
+        **Changes**: New in Zulip 13.0 (feature level ZF-0be29a).
+      parameters:
+        - $ref: "#/components/parameters/ArmadaPluginInstallId"
+      responses:
+        "200":
+          description: Success.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/JsonSuccessBase"
+                  - additionalProperties: false
+                    properties:
+                      result: {}
+                      msg: {}
+                      ignored_parameters_unsupported: {}
+                      tools:
+                        type: array
+                        description: |
+                          The plugin's tools, in its order.
+                        items:
+                          type: object
+                          additionalProperties: false
+                          properties:
+                            name:
+                              type: string
+                              description: |
+                                The tool's name, as the agent calls it.
+                            title:
+                              type: string
+                              nullable: true
+                              description: |
+                                The tool's title, if the plugin gives one.
+                            description:
+                              type: string
+                              description: |
+                                What the tool does, in the plugin's words; may
+                                be empty.
+                            disabled:
+                              type: boolean
+                              description: |
+                                Whether the organization turned the tool off.
+                    example:
+                      {
+                        "result": "success",
+                        "msg": "",
+                        "tools":
+                          [
+                            {
+                              "name": "list_runs",
+                              "title": "List runs",
+                              "description": "The project's runs and their state.",
+                              "disabled": false,
+                            },
+                            {
+                              "name": "compare_runs",
+                              "title": null,
+                              "description": "",
+                              "disabled": true,
+                            },
+                          ],
+                      }
   /armada/plugins/{install_id}/links:
     post:
       operationId: add-armada-plugin-link

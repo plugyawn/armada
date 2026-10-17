@@ -18,7 +18,7 @@ from typing import Any
 import requests
 from django.utils.translation import gettext as _
 
-from zerver.lib.armada_mcp_client import armada_mcp_messages
+from zerver.lib.armada_mcp_client import ArmadaMCPClient, ArmadaMCPError, armada_mcp_messages
 from zerver.lib.armada_plugins import (
     armada_plugin_session,
     armada_plugin_token,
@@ -67,11 +67,59 @@ def access_plugin_tools(user: UserProfile, install_id: int) -> PluginInstall:
     )
     if install is None:
         raise ResourceNotFoundError(_("No such plugin"))
+    check_plugin_tools_running(install)
+    return install
+
+
+def check_plugin_tools_running(install: PluginInstall) -> None:
     if "tools" not in install.manifest["provides"]:
         raise JsonableError(_("{name} has no tools.").format(name=install.name))
     if install.disabled or install.state != PluginInstall.RUNNING:
         raise JsonableError(_("{name} is not running.").format(name=install.name))
-    return install
+
+
+def list_plugin_tools(install: PluginInstall) -> list[dict[str, Any]]:
+    """The tools a running plugin offers, as its settings page lists them
+    for "Tools for Onix": each tool's name, title and description, in
+    the plugin's own words and drawn as text, and whether the team turned
+    it off."""
+    check_plugin_tools_running(install)
+    tools = install.manifest["provides"]["tools"]
+    session = armada_plugin_session(install, timeout=ARMADA_PLUGIN_MCP_TIMEOUT_SECONDS)
+    try:
+        with ArmadaMCPClient(
+            f"{armada_plugin_url(install)}{tools['path']}",
+            token=armada_plugin_token(install),
+            session=session,
+        ) as client:
+            listed = client.list_tools()
+    except ArmadaMCPError as error:
+        raise JsonableError(
+            _("{name} {error}.").format(name=install.name, error=str(error))
+        ) from error
+    return [
+        {
+            "name": tool["name"],
+            "title": _tool_title(tool),
+            "description": tool["description"] if isinstance(tool.get("description"), str) else "",
+            "disabled": tool["name"] in install.disabled_tools,
+        }
+        for tool in listed
+        if isinstance(tool.get("name"), str)
+    ]
+
+
+def _tool_title(tool: dict[str, Any]) -> str | None:
+    """A tool's title: its own, or, in earlier revisions of MCP, its
+    annotations'."""
+    annotations = tool.get("annotations")
+    for title in (
+        tool.get("title"),
+        annotations.get("title") if isinstance(annotations, dict) else None,
+    ):
+        if isinstance(title, str) and title:
+            return title
+    return None
 
 
 def _plugin_request(

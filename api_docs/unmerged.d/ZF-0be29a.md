@@ -31,6 +31,9 @@
 * [`POST /armada/plugins/{install_id}/actions`](/api/run-armada-plugin-action):
   New endpoint to run a widget's action that calls one of the plugin's
   tools, for the user who pressed it.
+* [`GET /armada/plugins/{install_id}/tools`](/api/get-armada-plugin-tools):
+  New endpoint for the tools a running plugin offers the agent, and
+  which of them the organization turned off.
 * `POST /armada/plugins/{install_id}/mcp`, `DELETE /armada/plugins/{install_id}/mcp`:
   New endpoint with which an agent off the server, with an API key,
   uses a plugin's tools: the plugin's Model Context Protocol endpoint

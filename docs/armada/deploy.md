@@ -639,8 +639,8 @@ setting either changes this. Tested by `zerver.tests.test_armada_sessions`.
 
 ### The addressing router
 
-_Tested with mocked requests and live against TypeSafe from a Mac, and on
-runix.chat._ Off by default: Onix then answers only messages that mention
+_Tested with mocked requests and live against TypeSafe from a Mac; the
+router has run on runix.chat since 17 October._ Off by default: Onix then answers only messages that mention
 it or say its name to it, in any topic: after a greeting ("Hey Onix, ..."),
 first and set off ("Onix, can you ...", "Onix?"), or last and set off
 ("what do you think, Onix?"); not thanks alone, and not a name in code or
@@ -652,13 +652,14 @@ is for topics whose response policy is ambient, the default.
 
 Use TypeSafe's Jev (`"typesafe"`). For each such message the server asks
 Jev one question, with the topic's last six messages, the new message and
-its sender, and a short description of Onix: about 680 input tokens, or
-3 US cents per thousand messages at Jev's price, and about a third of a
-second. Onix acts when Jev gives "meant for Onix" a probability of at
+its sender, and a short description of Onix: about 730 input tokens, or
+3 US cents per thousand messages at Jev's price, and about 0.4 seconds. Onix acts when Jev gives "meant for Onix" a probability of at
 least `ARMADA_ADDRESSING_ROUTER_TYPESAFE_THRESHOLD`, 0.9 by default.
-`tools/armada/typesafe_addressing_eval` measures the router on 65
+`tools/armada/typesafe_addressing_eval` measures the router on 78
 labelled chats; at 0.9 it started no run for people talking to each
-other and missed one request to Onix (17 October, `jev-1.13.0`). Run it
+other, answered every greeting to Onix, ignored thanks to it, and missed
+one request, made to Onix and a person at once (17 October,
+`jev-1.13.0`). Run it
 again before changing the threshold, or when `jev-latest` moves to a new
 version (the server logs the version that answered).
 

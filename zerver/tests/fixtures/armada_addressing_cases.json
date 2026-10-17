@@ -1,5 +1,5 @@
 {
-  "about": "Hand-written chat situations, labelled with whom the last message is for: the agent or the people. No real user data. {agent} stands for ARMADA_AGENT_NAME. A message is [sender, sender is a bot, text]; new_message is [sender, text]. Used by tools/armada/typesafe_addressing_eval and by zerver/tests/test_armada_typesafe.py. Each message is at most 240 characters, the router's own limit, so the evaluation sends what the server would. The last 14 cases were written after the request to TypeSafe was settled, and run once to check that the result holds on chats it was not tuned on.",
+  "about": "Hand-written chat situations, labelled with whom the last message is for: the agent or the people. No real user data. {agent} stands for ARMADA_AGENT_NAME. A message is [sender, sender is a bot, text]; only the agent's are from {agent}; new_message is [sender, text]. Used by tools/armada/typesafe_addressing_eval and by zerver/tests/test_armada_typesafe.py. Each message is at most 240 characters, the router's own limit, so the evaluation sends what the server would. The last 14 cases were written after the request to TypeSafe was settled, and run once to check that the result holds on chats it was not tuned on. The 13 after them (greetings, thanks, the agent's name said or talked about, a person greeting a person) were added on 17 October, after a greeting to the agent was missed on runix.chat; the first is that chat.",
   "cases": [
     {
       "id": "follow-up-show-them-here",
@@ -816,6 +816,167 @@
         ["Priya", false, "I think the CI flake is a timezone thing"]
       ],
       "new_message": ["Arjun", "I asked {agent} yesterday and it said the same thing"]
+    },
+    {
+      "id": "greeting-after-bot-alerts",
+      "kind": "greeting",
+      "label": "agent",
+      "channel": "ops",
+      "topic": "queues",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The backlog was a run stuck on a git lock. I cleared the lock and the queue is draining."],
+        ["Ops", true, "**Warn**: armada_worker (104 waiting).\nRunbook: [queues](https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md#queues)"],
+        ["Ops", true, "**Critical**: armada_worker_1 (12 waiting, no consumer).\nRunbook: [queues](https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md#queues)"],
+        ["Ops", true, "**Recovered** (critical before): every queue has a consumer and no backlog."],
+        ["Ops", true, "**Warn**: armada_worker (131 waiting).\nRunbook: [queues](https://github.com/plugyawn/armada/blob/ui-overhaul/docs/armada/operations.md#queues)"]
+      ],
+      "new_message": ["Iago", "Hey {agent}, what's up"]
+    },
+    {
+      "id": "greeting-hi",
+      "kind": "greeting",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "settings redesign",
+      "agent_run_in_progress": false,
+      "messages": [],
+      "new_message": ["Maya", "hi {agent}"]
+    },
+    {
+      "id": "greeting-morning-with-request",
+      "kind": "greeting",
+      "label": "agent",
+      "channel": "ml-training",
+      "topic": "lr sweep",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Kenji", false, "the sweep finished overnight"]
+      ],
+      "new_message": ["Kenji", "good morning {agent}! can you summarize last night's sweep?"]
+    },
+    {
+      "id": "vocative-name-last",
+      "kind": "greeting",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "webhook client",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Lena", false, "the retry limit is 5 right now"]
+      ],
+      "new_message": ["Lena", "is that too low, {agent}?"]
+    },
+    {
+      "id": "vocative-name-alone",
+      "kind": "greeting",
+      "label": "agent",
+      "channel": "infra",
+      "topic": "staging deploy",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "the deploy is stuck again"]
+      ],
+      "new_message": ["Ben", "{agent}?"]
+    },
+    {
+      "id": "thanks-to-agent",
+      "kind": "thanks",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "flaky websocket test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** test_live_updates is flaky again, fix it"],
+        ["{agent}", true, "Fixed: the test now waits for the websocket to connect before it sends."]
+      ],
+      "new_message": ["Ben", "thanks {agent}!"]
+    },
+    {
+      "id": "thanks-to-agent-with-request",
+      "kind": "thanks",
+      "label": "agent",
+      "channel": "web-app",
+      "topic": "flaky websocket test",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["Ben", false, "@**{agent}** test_live_updates is flaky again, fix it"],
+        ["{agent}", true, "Fixed: the test now waits for the websocket to connect before it sends."]
+      ],
+      "new_message": ["Ben", "thanks {agent}, now do the same for test_presence"]
+    },
+    {
+      "id": "thanks-to-agent-name-first",
+      "kind": "thanks",
+      "label": "people",
+      "channel": "docs",
+      "topic": "release 3.2",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Merged the changelog fix into main."]
+      ],
+      "new_message": ["Maya", "{agent}, thanks"]
+    },
+    {
+      "id": "third-person-did-it-finish",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "checkpoint eval",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Started the eval on the new checkpoint; it takes about an hour."],
+        ["Kenji", false, "back from lunch"]
+      ],
+      "new_message": ["Sofia", "Kenji, did {agent} finish?"]
+    },
+    {
+      "id": "third-person-possessive",
+      "kind": "third-person",
+      "label": "people",
+      "channel": "ml-training",
+      "topic": "warmup ablation",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Here is the val loss plot for both runs."]
+      ],
+      "new_message": ["Lena", "@**Kenji** {agent}'s plot looks off to me, can you check the units?"]
+    },
+    {
+      "id": "after-agent-greet-a-person",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "orders migration",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "Done, PR #90 is open against main."]
+      ],
+      "new_message": ["Arjun", "hey @**Maya**, welcome back!"]
+    },
+    {
+      "id": "after-agent-greet-a-person-by-name",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "nightly build",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The nightly build passed."]
+      ],
+      "new_message": ["Lena", "hi Tomás, glad you could join"]
+    },
+    {
+      "id": "after-agent-greet-everyone",
+      "kind": "after-agent",
+      "label": "people",
+      "channel": "web-app",
+      "topic": "nightly build",
+      "agent_run_in_progress": false,
+      "messages": [
+        ["{agent}", true, "The nightly build passed."]
+      ],
+      "new_message": ["Ben", "morning all"]
     }
   ]
 }

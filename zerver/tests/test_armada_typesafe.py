@@ -17,6 +17,7 @@ from zerver.lib.armada import (
     ArmadaEmbeddedBotHandler,
     build_armada_active_session_summary_from_messages,
     get_armada_session_payload,
+    is_armada_request_message,
 )
 from zerver.lib.armada_agent import (
     ARMADA_ADDRESSING_CONTEXT_MESSAGE_CHARACTERS,
@@ -100,8 +101,10 @@ class ArmadaTypeSafeRequestTest(ZulipTestCase):
         self.assertIn(f"agent named {ARMADA_AGENT_NAME}", question["instructions"]["context"])
         self.assertEqual(
             question["instructions"]["question"],
-            f"Is `new_message` asking {ARMADA_AGENT_NAME} to do or answer something now, "
-            "or is it meant for the people in the chat?",
+            f"Is `new_message` addressed to {ARMADA_AGENT_NAME}, so that {ARMADA_AGENT_NAME} "
+            f"should reply (a request, a question, or anything said to {ARMADA_AGENT_NAME}, "
+            "such as a greeting or a follow-up), or is it meant for the people in the "
+            "conversation?",
         )
         # The safe answer is listed first.
         self.assertEqual(list(question["criteria"]), ["people", "agent"])
@@ -164,7 +167,8 @@ class ArmadaTypeSafeLabelledChatsTest(ZulipTestCase):
             with self.subTest(case=case["id"]):
                 self.assertLessEqual(len(case["messages"]), ARMADA_ADDRESSING_CONTEXT_MESSAGES)
                 for sender, is_bot, text in case["messages"]:
-                    self.assertIs(is_bot, sender == "{agent}")
+                    # Other bots speak too, such as the ops check's alerts.
+                    self.assertTrue(is_bot or sender != "{agent}")
                     self.assertLessEqual(
                         len(text.replace("{agent}", ARMADA_AGENT_NAME)),
                         ARMADA_ADDRESSING_CONTEXT_MESSAGE_CHARACTERS,
@@ -177,6 +181,32 @@ class ArmadaTypeSafeLabelledChatsTest(ZulipTestCase):
                 )
                 self.assertIsInstance(case["agent_run_in_progress"], bool)
                 self.assertNotIn(ARMADA_AGENT_NAME, json.dumps(case))
+
+    def test_the_name_rule_decides_only_chats_meant_for_the_agent(self) -> None:
+        # A message that says the agent's name to it never reaches the
+        # router; on the labelled chats that rule starts no run for people.
+        with open(LABELLED_CHATS) as f:
+            cases = json.load(f)["cases"]
+
+        named = {
+            case["id"]: case["label"]
+            for case in cases
+            if is_armada_request_message(
+                case["new_message"][1].replace("{agent}", ARMADA_AGENT_NAME)
+            )
+        }
+        self.assertEqual(
+            named,
+            {
+                "request-name-without-mention": "agent",
+                "mixed-request-naming-a-person": "agent",
+                "greeting-after-bot-alerts": "agent",
+                "greeting-hi": "agent",
+                "greeting-morning-with-request": "agent",
+                "vocative-name-last": "agent",
+                "vocative-name-alone": "agent",
+            },
+        )
 
 
 TYPESAFE_URL = "https://typesafe.example/v1/systemone"

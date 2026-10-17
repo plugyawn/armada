@@ -70,19 +70,21 @@ def build_armada_typesafe_addressing_request(
         "instructions": {
             "context": armada_typesafe_agent_context(agent_name),
             "question": (
-                f"Is `new_message` asking {agent_name} to do or answer something now, "
-                "or is it meant for the people in the chat?"
+                f"Is `new_message` addressed to {agent_name}, so that {agent_name} should "
+                f"reply (a request, a question, or anything said to {agent_name}, such as a "
+                "greeting or a follow-up), or is it meant for the people in the conversation?"
             ),
         },
         "criteria": {
             ARMADA_TYPESAFE_PEOPLE_OPTION: (
-                "Meant for people: talk between people, a question or request to a person, "
-                f"a remark about {agent_name}, or thanks and acknowledgement."
+                "Meant for the people: talk between people, a question, request or greeting "
+                f"to a person, a remark about {agent_name}, or thanks and acknowledgements that "
+                f"need no reply, even to {agent_name}."
             ),
             ARMADA_TYPESAFE_AGENT_OPTION: (
-                f"Asks {agent_name} to do or answer something now: a new request, a question "
-                f"for {agent_name}, or a follow-up or correction to what {agent_name} just said "
-                "or did."
+                f"Addressed to {agent_name}, so that it should reply: a request, a question, a "
+                f"greeting, a follow-up or correction to what {agent_name} just said or did, or "
+                f"anything else said to {agent_name}."
             ),
         },
     }

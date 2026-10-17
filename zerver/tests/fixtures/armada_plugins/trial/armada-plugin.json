@@ -1,0 +1,63 @@
+{
+    "id": "queue",
+    "name": "Eval queue",
+    "version": "0.1.0",
+    "description": "A plugin for the trial's and the check's tests: it does what its setting says.",
+    "glyph": "plugin",
+    "requires": {
+        "armada": ">=1"
+    },
+    "run": {
+        "setup": [
+            "python3",
+            "-c",
+            "open('setup-ran', 'w').write('1')"
+        ],
+        "command": [
+            "python3",
+            "armada_trial_plugin.py"
+        ]
+    },
+    "settings": {
+        "type": "object",
+        "properties": {
+            "behaviour": {
+                "enum": [
+                    "good",
+                    "bad",
+                    "silent",
+                    "exit",
+                    "unhealthy",
+                    "secret",
+                    "chatty",
+                    "patches",
+                    "wide"
+                ],
+                "default": "good",
+                "title": "What it does"
+            }
+        }
+    },
+    "secrets": {
+        "redis_url": {
+            "title": "Redis address",
+            "env": "QUEUE_REDIS_URL"
+        }
+    },
+    "provides": {
+        "widgets": [
+            {
+                "key": "queue",
+                "label": "Eval queue",
+                "in": [
+                    "nav"
+                ],
+                "cadence": 30
+            }
+        ],
+        "tools": {
+            "path": "/mcp"
+        },
+        "posts": true
+    }
+}

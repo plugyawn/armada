@@ -25,6 +25,10 @@
   [`DELETE /armada/plugins/{install_id}/links/{link_id}`](/api/remove-armada-plugin-link):
   New endpoints to link a plugin to a channel or to a topic, and to
   unlink it.
+* `POST /armada/runs`: New endpoint with which a plugin's own bot asks
+  the agent: it starts a run, for the user who installed the plugin, in
+  a place the plugin is linked to. Like Armada's other run endpoints, it
+  is not yet in the API documentation.
 * [`POST /armada/widgets`](/api/push-armada-widget): New endpoint with
   which a plugin's own bot pushes a document, or data, for one of its
   widgets.

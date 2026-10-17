@@ -17,6 +17,7 @@ from zerver.lib.armada_plugin_mcp import (
     forward_mcp_message,
     list_plugin_tools,
 )
+from zerver.lib.armada_plugin_runs import start_plugin_run
 from zerver.lib.armada_plugins import (
     access_plugin_install,
     add_plugin_link,
@@ -217,6 +218,19 @@ def get_armada_plugin_tools(
 ) -> HttpResponse:
     install = access_plugin_install(user_profile, install_id)
     return json_success(request, data={"tools": list_plugin_tools(install)})
+
+
+@typed_endpoint
+def post_armada_plugin_run(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    stream_id: Json[int],
+    topic: str,
+    brief: str,
+) -> HttpResponse:
+    message_id = start_plugin_run(user_profile, stream_id=stream_id, topic=topic, brief=brief)
+    return json_success(request, data={"message_id": message_id})
 
 
 def _mcp_headers(request: HttpRequest) -> dict[str, str]:

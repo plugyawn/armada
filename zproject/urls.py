@@ -72,6 +72,7 @@ from zerver.views.armada_plugins import (
     post_armada_plugin_mcp,
     post_armada_plugin_restore,
     post_armada_plugin_retry,
+    post_armada_plugin_run,
     post_armada_widget,
 )
 from zerver.views.armada_read_receipts import get_armada_read_receipts_backend
@@ -575,6 +576,8 @@ v1_api_and_json_patterns = [
     rest_path(
         "armada/runs",
         GET=(get_armada_runs_backend, {"intentionally_undocumented"}),
+        # A plugin's bot asking the agent (zerver/lib/armada_plugin_runs.py).
+        POST=(post_armada_plugin_run, {"intentionally_undocumented"}),
     ),
     rest_path(
         "armada/runs/<int:run_id>",

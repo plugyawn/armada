@@ -31,7 +31,9 @@ from scripts.lib.armada_worker_slots import (
 from zerver.lib.armada import (
     ARMADA_AGENT_NAME,
     ARMADA_DEFAULT_RESPONSE_POLICY,
+    ARMADA_QUESTION_LEAD,
     ARMADA_REASONING_EFFORTS,
+    ARMADA_UNADDRESSED_WORDS_LIMIT,
     ArmadaActiveSessionSummary,
     ArmadaAddressingIntentClassifier,
     ArmadaAnswerStreamSender,
@@ -50,6 +52,7 @@ from zerver.lib.armada import (
     build_armada_active_session_summary,
     build_armada_active_session_summary_from_messages,
     get_armada_session_payload,
+    is_armada_request_message,
     normalize_armada_response_policy,
     trim_armada_text,
 )
@@ -3930,6 +3933,59 @@ class ArmadaDatabaseWorkerRunStore:
             )
 
         return send
+
+    def unaddressed_words(
+        self,
+        bot_handler: Any,
+        run_message_id: int,
+        *,
+        sender_id: int,
+        before_message_id: int,
+    ) -> list[str]:
+        """What sender_id said in the topic before mentioning the agent in
+        before_message_id that the run has not heard, oldest first: their
+        messages since the run's request, since its latest question, and
+        since their latest message that reached it (one naming the agent,
+        or one that steered the run). Thread replies are side
+        conversations, not words to the run."""
+        user_profile = bot_handler.user_profile
+        assert isinstance(user_profile, UserProfile)
+        mention = Message.objects.filter(
+            id=before_message_id, realm_id=user_profile.realm_id
+        ).first()
+        if mention is None:
+            # Deleted before it was read: there is no topic to look in.
+            return []
+        steered_message_ids = {
+            payload.get("message_id")
+            for payload in AgentRunEvent.objects.filter(
+                run__bot_profile=user_profile,
+                run__trigger_message_id=run_message_id,
+                event_type="steering",
+            ).values_list("payload", flat=True)
+            if isinstance(payload, dict)
+        }
+        newest_first = (
+            messages_for_topic(user_profile.realm_id, mention.recipient_id, mention.topic_name())
+            .filter(
+                id__gt=run_message_id,
+                id__lt=before_message_id,
+                sender_id__in=[sender_id, user_profile.id],
+                thread_root__isnull=True,
+            )
+            .order_by("-id")
+            .values_list("id", "sender_id", "content")[:ARMADA_UNADDRESSED_WORDS_LIMIT]
+        )
+        words: list[str] = []
+        for message_id, message_sender_id, content in newest_first:
+            if message_sender_id == user_profile.id:
+                if content.startswith(ARMADA_QUESTION_LEAD):
+                    break
+                continue
+            if message_id in steered_message_ids or is_armada_request_message(content):
+                break
+            words.append(content.strip())
+        return [word for word in reversed(words) if word]
 
     def steering_events_after(
         self,

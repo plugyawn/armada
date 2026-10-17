@@ -2552,8 +2552,9 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertFalse(tool_was_called)
         self.assertIsNotNone(result["content"])
         assert result["content"] is not None
-        self.assertIn("Onix is not starting.", result["content"])
-        self.assertIn("paused", result["content"])
+        self.assertEqual(
+            result["content"], "Onix won't start a run for this message. The session is paused."
+        )
 
     def test_codex_prompt_includes_task_and_session_context(self) -> None:
         payload = get_armada_session_payload()
@@ -5089,7 +5090,9 @@ class ArmadaSessionDefaultsTest(TestCase):
 
         self.assertEqual(loaded_messages, [message, message])
         self.assertEqual(len(sent_replies), 2)
-        self.assertIn("Onix is not starting.", sent_replies[1])
+        self.assertEqual(
+            sent_replies[1], "Onix won't start a run for this message. The session is paused."
+        )
         self.assertIn("paused", sent_replies[1])
 
     def test_embedded_bot_suppresses_duplicate_worker_post(self) -> None:
@@ -5130,8 +5133,8 @@ class ArmadaSessionDefaultsTest(TestCase):
         )
         self.assertEqual(
             sent_replies[1],
-            "Onix is not starting.\n\n"
-            "Reason: This request was already handled or is no longer claimable.",
+            "Onix won't start a run for this message. "
+            "This request was already handled or is no longer claimable.",
         )
         self.assertEqual(run_store.runs[201]["status"], "done")
         self.assertEqual(run_store.runs[201]["result_message_id"], 301)
@@ -5278,8 +5281,8 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(
             sent_replies,
             [
-                "Onix is not starting.\n\n"
-                "Reason: This request was already handled or is no longer claimable."
+                "Onix won't start a run for this message. "
+                "This request was already handled or is no longer claimable."
             ],
         )
         self.assertEqual(updated_replies, [])
@@ -7352,8 +7355,8 @@ class ArmadaSessionDefaultsTest(TestCase):
         self.assertEqual(len(sent_replies), 1)
         self.assertEqual(
             sent_replies[0],
-            "Onix is not starting.\n\n"
-            "Reason: This request was already handled or is no longer claimable.",
+            "Onix won't start a run for this message. "
+            "This request was already handled or is no longer claimable.",
         )
 
     def test_embedded_bot_records_failed_worker_run(self) -> None:

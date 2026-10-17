@@ -74,6 +74,16 @@ ARMADA_SELECTED_BOT_CONFIG_KEY: Final = "armada_selected"
 ARMADA_SELECTED_BOT_CONFIG_VALUE: Final = "true"
 ARMADA_QUESTION_TIMEOUT_SECONDS: Final = 600
 ARMADA_QUESTION_POLL_SECONDS: Final = 2.0
+# How a run's question message starts (build_armada_question_message).
+ARMADA_QUESTION_LEAD: Final = f"{ARMADA_AGENT_NAME} needs your input to continue:"
+# What a mention with no words steers a live run with when its sender
+# has said nothing since that the run has not heard.
+ARMADA_BARE_MENTION_STEER: Final = (
+    "(A mention with no words: they are calling your attention to the topic's latest "
+    "messages. Read them with armada_read.)"
+)
+# How far back a mention with no words looks for its sender's words.
+ARMADA_UNADDRESSED_WORDS_LIMIT: Final = 50
 
 # This is visible only during the short message-event/run-event handoff before
 # the client mounts the animated live-progress chrome. Keep it visually
@@ -1371,7 +1381,7 @@ def armada_steering_client_user_message_id(event: ArmadaPendingSteeringEvent) ->
 def build_armada_question_message(questions: list[dict[str, Any]]) -> str:
     """The message that asks the people what Codex asked with its
     question tool: each question, its options, and how to answer."""
-    question_lines = [f"{ARMADA_AGENT_NAME} needs your input to continue:", ""]
+    question_lines = [ARMADA_QUESTION_LEAD, ""]
     for question in questions:
         header = str(question.get("header") or "").strip()
         text = str(question.get("question") or "").strip()
@@ -1504,24 +1514,15 @@ def armada_worker_should_start(
 
 
 def build_armada_worker_blocked_message(active_session: ArmadaActiveSessionSummary) -> str:
-    reason = active_session["worker_blocked_reason"] or f"{ARMADA_AGENT_NAME} is not ready."
-    return "\n".join(
-        [
-            f"{ARMADA_AGENT_NAME} is not starting.",
-            "",
-            f"Reason: {reason}",
-        ]
+    return build_armada_worker_start_blocked_message(
+        active_session["worker_blocked_reason"] or f"{ARMADA_AGENT_NAME} is not ready."
     )
 
 
 def build_armada_worker_start_blocked_message(reason: str) -> str:
-    return "\n".join(
-        [
-            f"{ARMADA_AGENT_NAME} is not starting.",
-            "",
-            f"Reason: {reason}",
-        ]
-    )
+    """The notice for a request that starts no run: what happens, then
+    why, in plain sentences."""
+    return f"{ARMADA_AGENT_NAME} won't start a run for this message. {reason}"
 
 
 def build_armada_worker_failed_message(error: str) -> str:
@@ -2561,6 +2562,35 @@ class ArmadaEmbeddedBotHandler:
             return reason.strip()
         return None
 
+    def bare_mention_steering_event(
+        self,
+        bot_handler: Any,
+        run_message_id: int,
+        *,
+        message_id: int,
+        sender_id: int | None,
+    ) -> ArmadaSteeringEvent:
+        """What a mention with no words steers a live run with: its
+        sender's words in the topic that the run has not heard (such as
+        "1" typed under the run's question, then a mention to send it),
+        or else a line asking the agent to read the topic."""
+        unaddressed_words = getattr(self.worker_run_store, "unaddressed_words", None)
+        words = (
+            unaddressed_words(
+                bot_handler,
+                run_message_id,
+                sender_id=sender_id,
+                before_message_id=message_id,
+            )
+            if callable(unaddressed_words) and sender_id is not None
+            else []
+        )
+        return {
+            "instruction": "\n".join(words) or ARMADA_BARE_MENTION_STEER,
+            "message_id": message_id,
+            "explicitly_addressed": True,
+        }
+
     def active_worker_run_message_id(
         self,
         bot_handler: Any,
@@ -2926,6 +2956,21 @@ class ArmadaEmbeddedBotHandler:
             # With no exact parent, normal shared-run admission either starts
             # a fresh thread or explains why the topic is currently busy.
             should_start_worker = True
+        if (
+            steering_event is None
+            and explicitly_addressed
+            and active_run_message_id is not None
+            and active_run_message_id != message_id
+            and not threaded_explicit_request
+        ):
+            # A mention with no words while a run is live is for that run
+            # too: it never starts a second one.
+            steering_event = self.bare_mention_steering_event(
+                bot_handler,
+                active_run_message_id,
+                message_id=message_id,
+                sender_id=requesting_user_id,
+            )
         should_steer_active_run = (
             explicitly_addressed
             and active_run_message_id is not None
@@ -2973,7 +3018,8 @@ class ArmadaEmbeddedBotHandler:
             # Steering, and answering a run's question, is driving the
             # agent as much as starting a run is.
             should_steer_active_run = False
-            response = build_armada_worker_start_blocked_message(
+            response = (
+                f"{ARMADA_AGENT_NAME} won't pass this message to its run. "
                 f"This user is not allowed to steer {ARMADA_AGENT_NAME}'s runs."
             )
 

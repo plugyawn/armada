@@ -23,11 +23,13 @@ from zerver.actions.armada import send_armada_run_event, send_armada_workspace_c
 from zerver.lib.armada import (
     ARMADA_ACTIVE_SESSION_ENDPOINT,
     ARMADA_AGENT_RUNTIME_PACKAGES,
+    ARMADA_BARE_MENTION_STEER,
     ARMADA_CODEX_MCP_TOOLS,
     ARMADA_CONFIG_ENDPOINT,
     ARMADA_DEFAULT_STREAM,
     ARMADA_DEFAULT_TOPIC,
     ARMADA_EMBEDDED_BOT_SERVICE,
+    ARMADA_EXPLICIT_MENTION_MESSAGE_KEY,
     ARMADA_FIRST_RUN_ENDPOINT,
     ARMADA_FIRST_RUN_STARTER_MESSAGE,
     ARMADA_FIRST_RUN_STREAM,
@@ -44,6 +46,7 @@ from zerver.lib.armada import (
     ArmadaTokenUsage,
     ArmadaWorkerLeaseLostError,
     ArmadaWorkerRuntime,
+    ArmadaWorkerTurn,
     build_armada_active_session_summary_from_messages,
     build_armada_question_message,
     get_armada_session_payload,
@@ -7458,3 +7461,205 @@ class ArmadaTrustedUsersTest(ZulipTestCase):
         dispatch_mock.assert_not_called()
         self.assertEqual(AgentMonitor.objects.count(), 1)
         self.assertFalse(AgentRun.objects.filter(session_kind=AgentRun.MONITOR).exists())
+
+
+class ArmadaMentionDuringRunTest(ZulipTestCase):
+    """A mention of the agent while a run is live in the topic is for that
+    run: it steers it, whatever it says, and never starts a second run.
+    On runix.chat a person answered a run's question with "1", then
+    mentioned the agent alone to send it, and was told the topic already
+    had an active run."""
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        self.hamlet = self.example_user("hamlet")
+        self.cordelia = self.example_user("cordelia")
+        self.agent = self.create_test_bot(
+            "onix",
+            self.hamlet,
+            full_name="Onix",
+            bot_type=UserProfile.EMBEDDED_BOT,
+            service_name=ARMADA_EMBEDDED_BOT_SERVICE,
+        )
+        for user in (self.cordelia, self.example_user("othello"), self.agent):
+            self.subscribe(user, "Denmark")
+        self.replies: list[str] = []
+        self.agent_run = AgentRun.objects.create(
+            realm=self.hamlet.realm,
+            bot_profile=self.agent,
+            requesting_user=self.hamlet,
+            trigger_message_id=self.say(self.hamlet, "@**Onix** make a channel for the team"),
+            stream_name="Denmark",
+            topic_name="greetings",
+            status=AgentRun.RUNNING,
+        )
+
+    def say(self, sender: UserProfile, content: str, *, topic: str = "greetings") -> int:
+        # The embedded bot worker is not woken: mention() hands the agent's
+        # handler the message as that worker would.
+        with patch("zerver.worker.embedded_bots.queue_json_publish_rollback_unsafe"):
+            return self.send_stream_message(sender, "Denmark", content, topic_name=topic)
+
+    def mention(
+        self,
+        sender: UserProfile,
+        words: str = "",
+        *,
+        topic: str = "greetings",
+        thread_root_message_id: int | None = None,
+    ) -> int:
+        """sender mentions the agent, then words; the agent's handler gets
+        the message as the embedded bot worker hands it over, the leading
+        mention taken off. No run may start."""
+        message_id = self.say(sender, f"@**Onix** {words}".strip(), topic=topic)
+        Message.objects.filter(id=message_id).update(thread_root_id=thread_root_message_id)
+        test = self
+
+        class BotHandler:
+            user_profile = test.agent
+
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                test.replies.append(response)
+                return {"id": 0}
+
+        with patch("zerver.lib.armada_worker.queue_json_publish_rollback_unsafe") as publish:
+            ArmadaEmbeddedBotHandler(
+                worker_run_store=ArmadaDatabaseWorkerRunStore(),
+                worker_dispatcher=ArmadaQueueWorkerDispatcher(),
+            ).handle_message(
+                {
+                    "id": message_id,
+                    "type": "stream",
+                    "display_recipient": "Denmark",
+                    "topic": topic,
+                    "sender_id": sender.id,
+                    "content": words,
+                    "thread_root_message_id": thread_root_message_id,
+                    ARMADA_EXPLICIT_MENTION_MESSAGE_KEY: True,
+                },
+                BotHandler(),
+            )
+        self.assertFalse(publish.called)
+        self.assertEqual(AgentRun.objects.filter(bot_profile=self.agent).count(), 1)
+        return message_id
+
+    def steers(self) -> list[tuple[int, str]]:
+        steering = AgentRunEvent.objects.filter(run=self.agent_run, event_type="steering")
+        return [
+            (event.payload["message_id"], event.payload["instruction"])
+            for event in steering.order_by("id")
+        ]
+
+    def test_a_bare_mention_steers_with_the_words_the_run_did_not_hear(self) -> None:
+        self.say(self.hamlet, "1")
+        # Another person's words are theirs to send.
+        self.say(self.cordelia, "or 2?")
+        # The agent's own updates are not questions: what was said before
+        # one still counts.
+        self.say(self.agent, "Still working on it.")
+        # A thread is a side conversation, not words to the run.
+        aside = self.say(self.hamlet, "an aside")
+        Message.objects.filter(id=aside).update(thread_root_id=self.agent_run.trigger_message_id)
+        self.say(self.hamlet, "and make it private")
+        first = self.mention(self.hamlet)
+        self.assertEqual(self.steers(), [(first, "1\nand make it private")])
+        self.assertEqual(self.replies, [])
+
+        # What reached the run is not sent again; with nothing new, the
+        # agent is asked to read the topic.
+        second = self.mention(self.hamlet)
+        self.assertEqual(self.steers()[1:], [(second, ARMADA_BARE_MENTION_STEER)])
+
+        # Words after a mention with words of its own are new again.
+        with_words = self.mention(self.hamlet, "use tabs")
+        self.say(self.hamlet, "four of them")
+        third = self.mention(self.hamlet)
+        self.assertEqual(self.steers()[2:], [(with_words, "use tabs"), (third, "four of them")])
+
+        # Each person's mention sends their own words; someone who said
+        # nothing gets the agent's attention all the same.
+        fourth = self.mention(self.cordelia)
+        fifth = self.mention(self.example_user("othello"))
+        self.assertEqual(self.steers()[4:], [(fourth, "or 2?"), (fifth, ARMADA_BARE_MENTION_STEER)])
+        self.assertEqual(self.replies, [])
+
+        # A mention deleted before the agent reads it has no words.
+        self.assertEqual(
+            ArmadaDatabaseWorkerRunStore().unaddressed_words(
+                SimpleNamespace(user_profile=self.agent),
+                self.agent_run.trigger_message_id,
+                sender_id=self.hamlet.id,
+                before_message_id=fifth + 1000,
+            ),
+            [],
+        )
+
+    def test_a_bare_mention_after_an_answer_answers_the_waiting_question(self) -> None:
+        # Said before the question: not its answer.
+        self.say(self.hamlet, "New channel?")
+        question = {
+            "id": "name",
+            "header": "New channel",
+            "question": "What would you like to name the new channel?",
+            "options": [
+                {"label": "team-chat", "description": "A general place for your team to talk."},
+                {"label": "projects", "description": "A channel for planning your work."},
+            ],
+        }
+        test = self
+
+        class RunBotHandler:
+            user_profile = test.agent
+
+            def send_reply(self, message: dict[str, object], response: str) -> dict[str, int]:
+                # The run posts its question; the person types "1", then
+                # mentions the agent alone to send it.
+                question_id = test.say(test.agent, response)
+                test.say(test.hamlet, "1")
+                test.mention(test.hamlet)
+                return {"id": question_id}
+
+        store = ArmadaDatabaseWorkerRunStore()
+        turn = ArmadaWorkerTurn(
+            ArmadaEmbeddedBotHandler(worker_run_store=store),
+            {
+                "id": self.agent_run.trigger_message_id,
+                "type": "stream",
+                "display_recipient": "Denmark",
+                "topic": "greetings",
+            },
+            RunBotHandler(),
+            content="@**Onix** make a channel for the team",
+            active_session=None,
+            message_id=self.agent_run.trigger_message_id,
+            stream="Denmark",
+            topic="greetings",
+            post_started_progress=False,
+        )
+        turn.steering_events_after = store.steering_events_after
+        self.assertEqual(turn.request_user_answers([question]), {"name": ["1"]})
+        self.assertEqual(self.replies, [])
+
+    def test_what_a_mention_still_cannot_do_is_said_plainly(self) -> None:
+        # Driving runs is for trusted people only, steering included.
+        with self.settings(ARMADA_WORKER_TRUSTED_USERS_ONLY=True):
+            self.say(self.hamlet, "1")
+            self.mention(self.hamlet)
+        # A thread is a side conversation; with no earlier one to branch
+        # from, it would need a run of its own.
+        self.mention(self.hamlet, "why?", thread_root_message_id=self.agent_run.trigger_message_id)
+        # Another topic needs a run of its own, past the realm's limit.
+        with self.settings(ARMADA_WORKER_MAX_ACTIVE_RUNS_PER_REALM=1):
+            self.mention(self.hamlet, "and this one", topic="other work")
+        self.assertEqual(self.steers(), [])
+        self.assertEqual(
+            self.replies,
+            [
+                "Onix won't pass this message to its run. "
+                "This user is not allowed to steer Onix's runs.",
+                "Onix won't start a run for this message. This topic already has an active run.",
+                "Onix won't start a run for this message. "
+                "Onix already has the maximum number of active runs in this realm.",
+            ],
+        )

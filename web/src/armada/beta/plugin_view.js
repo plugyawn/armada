@@ -21,11 +21,12 @@
    which arrives with this one. */
 
 import {findKey} from "./paste_guard.js";
+import {recentLine} from "./plugin_recent.js";
 
 /* What it uses of the page is handed in when it arrives (chunks.js); plugins.js hands in the store and its seams. */
 export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf, ready, isObj, text}) {
   return function bindPluginView(P) {
-    const {api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf} = P;
+    const {api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf, when} = P;
 
     /* ---------- a sparkline: the values in a fixed 64 × 20 cell, the latest point a dot ---------- */
     /* a figure on a fixed scale (a percentage) gives its domain, so an idle machine is a flat line at the foot and not its
@@ -458,13 +459,12 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* the team's installs in full, as their pages need them (GET armada/plugins): settings, whether each secret is set, links, tools turned off */
     const full = new Map(); let loaded = false, failed = "";
     async function load() { try { const r = await api("GET", "armada/plugins"); full.clear(); for (const x of r.plugins) full.set(x.id, x); loaded = true; failed = ""; } catch (e) { failed = e.message; } }
-    /* ---- what waits for the server (PL3, PL6): each is a seam the server's route fills, and says so until it does ---- */
-    /* Recent: the install's audit lines (RealmAuditLog), newest first; GET armada/plugins/<id>/recent is not served yet */
-    const recent = new Map();
-    async function loadRecent(id) { try { recent.set(id, (await api("GET", `armada/plugins/${id}/recent`)).recent); } catch (e) { recent.set(id, null); } }
-    /* Tools for Onix: what the plugin's MCP server lists; GET armada/plugins/<id>/tools is not served yet */
-    const tools = new Map();
-    async function loadTools(id) { try { tools.set(id, (await api("GET", `armada/plugins/${id}/tools`)).tools); } catch (e) { tools.set(id, null); } }
+    /* ---- what the page asks the server for when it opens (PL4) ---- */
+    /* Recent: the install's lines (RealmAuditLog), newest first; and Tools for Onix: what the plugin's MCP server lists
+       (name, title, description, turned off). Each keeps why it could not be read, which the page says in its place. */
+    const recent = new Map(), tools = new Map(), unread = new Map();
+    async function loadRecent(id) { try { recent.set(id, (await api("GET", `armada/plugins/${id}/recent`)).recent || []); } catch (e) { recent.set(id, null); unread.set(`recent:${id}`, e.message); } }
+    async function loadTools(id) { try { tools.set(id, (await api("GET", `armada/plugins/${id}/tools`)).tools || []); } catch (e) { tools.set(id, null); unread.set(`tools:${id}`, e.message); } }
     /* the store's index (plugyawn/armada-plugins, PL6): its entries are what can be installed; there are none until it is read */
     const INDEX = {name: "plugyawn/armada-plugins", entries: []};
     /* ---- end of what waits for the server ---- */
@@ -531,8 +531,9 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       for (const k of settingKeys(m).filter((k2) => isPostsSetting(m, k2))) out.push(r(esc(props[k].title), esc(props[k].description || "When something happens in a place it is linked to."), controlHTML(k, props[k], x.settings[k])));
       return out.length ? `<h2>Where it shows</h2><div class="rows">${out.join("")}</div>` : ""; }
     function toolsHTML(x) { const pv = x.manifest.provides || {}; if (!pv.tools) return ""; const list = tools.get(x.id), off = new Set(x.disabled_tools || []);
-      const rows = list ? list.map((t) => `<li>${ic("term")}<span class="t"><code>${esc(t.name)}</code> ${esc(t.description || "")}</span><span class="e"><button class="switch${off.has(t.name) ? "" : " on"}" role="switch" aria-checked="${!off.has(t.name)}" aria-label="${esc(t.name)}" data-tool="${esc(t.name)}"></button></span></li>`).join("")
-        : `<li>${ic("term")}<span class="t">${list === null ? "Its tools are listed here once Armada asks the plugin for them, which the beta does not yet." : "Asking the plugin for its tools"}</span><span class="e"></span></li>`;
+      /* each by its title (its name where it has none), its description beside it: the plugin's own words, as text */
+      const rows = list && list.length ? list.map((t) => `<li>${ic("term")}<span class="t">${t.title ? `<b>${esc(t.title)}</b>` : `<code>${esc(t.name)}</code>`}${t.description ? ` ${esc(t.description)}` : ""}</span><span class="e"><button class="switch${off.has(t.name) ? "" : " on"}" role="switch" aria-checked="${!off.has(t.name)}" aria-label="${esc(t.title || t.name)}" data-tool="${esc(t.name)}"></button></span></li>`).join("")
+        : `<li>${ic("term")}<span class="t">${list === null ? esc(unread.get(`tools:${x.id}`) || "") : list ? "It offers no tools now." : "Asking the plugin for its tools"}</span><span class="e"></span></li>`;
       return `<h2>Tools for Onix<span class="m">given to Codex as an MCP server</span></h2><ul class="ls">${rows}</ul>`; }
     function failHTML(x) { if (x.state !== "failed" && x.state !== "waiting") return "";
       return `<div class="rows">${r(x.state === "failed" ? `${mk("failed")} Stopped` : "Waiting", esc(x.detail || (x.state === "failed" ? "It stopped five times in a row." : "A setting or a secret it needs is missing.")), x.state === "failed" ? '<button class="lk" data-retry-plugin>Retry</button>' : "")}</div>`; }
@@ -543,8 +544,10 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     }
     function pageSideHTML(x) {
       const list = recent.get(x.id);
-      const lines = list ? list.slice(0, 12).map((ln) => `<li>${ln.acting_user_id ? faceOf(ln.acting_user_id, "s20") : face(x.manifest.glyph)}<span class="t">${esc(ln.text || ln.type)}</span><span class="e"><span class="d">${esc(hhmm(ln.time))}</span></span></li>`).join("")
-        : `<li>${ic("trace")}<span class="t">${list === null ? "Not in the beta yet" : "Loading"}</span><span class="e"></span></li>`;
+      const ctx = {nameOf, secretTitle: (name) => ((x.manifest.secrets || {})[name] || {}).title || name, streamName: (sid) => (streams.get(sid) || {}).name || ""};
+      const lines = list && list.length ? list.slice(0, 12).map((ln) => { const line = recentLine(ln, ctx);
+        return `<li>${line.mark ? mk(line.mark) : ln.acting_user_id ? faceOf(ln.acting_user_id, "s20") : face(x.manifest.glyph)}<span class="t">${line.words}</span><span class="e"><span class="d">${esc(when(ln.time))}</span></span></li>`; }).join("")
+        : `<li>${ic("trace")}<span class="t">${list === null ? esc(unread.get(`recent:${x.id}`) || "") : list ? "Nothing yet" : "Loading"}</span><span class="e"></span></li>`;
       const rm = x.date_removed ? `<div class="rm"><span>Removed. Its settings are kept for 7 days.</span><button class="lk" data-wrestore>Undo</button></div>` : `<div class="rm"><span>Takes back everything it added.</span><button class="lk danger" data-wremove>Remove</button></div>`;
       return `<section class="sec" id="sec-recent"><ul class="ls">${lines}</ul></section><section class="sec"><div class="sh"><span>Version</span></div><ul class="ls"><li>${ic("commit")}<span class="t"><b>${esc(x.version)}</b>${x.sha ? ` <code>${esc(x.sha.slice(0, 7))}</code>` : ""}</span><span class="e"></span></li></ul></section><section class="sec foot">${rm}</section>`;
     }

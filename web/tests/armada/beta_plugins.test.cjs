@@ -1821,3 +1821,108 @@ run_test(
         await settle();
     },
 );
+
+run_test("a plugin's page: Recent in words, and its tools by their titles", async () => {
+    const full = {
+        ...wandb(),
+        manifest: WANDB_MANIFEST,
+        settings: {entity: "runix", posts: "both"},
+        secrets: [{name: "api_key", title: "API key", required: true, set: true, hint: "7f3a"}],
+        detail: "",
+        installed_by: ME,
+        disabled_tools: ["compare_runs"],
+        date_installed: seconds(),
+        date_removed: null,
+        sha: "9b1f0c4a",
+    };
+    answers.set("GET /json/armada/plugins", {result: "success", plugins: [full]});
+    answers.set("GET /json/armada/plugins/8/recent", {
+        result: "success",
+        recent: [
+            {
+                id: 3,
+                type: "tool_called",
+                acting_user_id: ME,
+                time: seconds(),
+                stream_id: null,
+                detail: {tool: "compare_runs", is_error: false},
+            },
+            {
+                id: 2,
+                type: "settings_changed",
+                acting_user_id: ME,
+                time: seconds(),
+                stream_id: null,
+                detail: {secrets: ["api_key"]},
+            },
+            {
+                id: 1,
+                type: "started",
+                acting_user_id: WANDB_BOT,
+                time: seconds(),
+                stream_id: null,
+                detail: {version: "0.4.0"},
+            },
+        ],
+    });
+    answers.set("GET /json/armada/plugins/8/tools", {
+        result: "success",
+        tools: [
+            {
+                name: "compare_runs",
+                title: "Compare runs",
+                description: "two runs, metric by metric",
+                disabled: true,
+            },
+            {name: "link_run", title: null, description: "", disabled: false},
+        ],
+    });
+    const page = plugins.pluginPlaceFromKey("plugin:8");
+    beta_state.state.place = page;
+    plugins.openPlugins(page);
+    await settle();
+    const side = document.createElement("div");
+    side.innerHTML = plugins.pluginsSideHTML();
+    assert.deepEqual(
+        [...side.querySelectorAll("#sec-recent li > .t")].map((t) => t.textContent),
+        ["Iago used compare_runs", "Iago set API key", "Started 0.4.0"],
+    );
+    const box = find("#plugins");
+    const tools = [...box.querySelectorAll("[data-tool]")].map((b) => b.closest("li"));
+    assert.deepEqual(
+        tools.map((li) => li.querySelector(".t").textContent),
+        ["Compare runs two runs, metric by metric", "link_run"],
+    );
+    assert.deepEqual(
+        tools.map((li) => li.querySelector("[data-tool]").getAttribute("aria-label")),
+        ["Compare runs", "link_run"],
+    );
+
+    // A route that refuses says why, in its place.
+    answers.set("GET /json/armada/plugins/8/recent", {result: "error", msg: "No such plugin"});
+    answers.set("GET /json/armada/plugins/8/tools", {
+        result: "error",
+        msg: "Weights & Biases is not running.",
+    });
+    plugins.openPlugins(page);
+    await settle();
+    side.innerHTML = plugins.pluginsSideHTML();
+    assert.equal(side.querySelector("#sec-recent li > .t").textContent, "No such plugin");
+    assert.match(box.textContent, /Tools for Onix.*Weights & Biases is not running\./);
+    // Nothing in Recent yet, and no tools offered.
+    answers.set("GET /json/armada/plugins/8/recent", {result: "success", recent: []});
+    answers.set("GET /json/armada/plugins/8/tools", {result: "success", tools: []});
+    plugins.openPlugins(page);
+    await settle();
+    side.innerHTML = plugins.pluginsSideHTML();
+    assert.equal(side.querySelector("#sec-recent li > .t").textContent, "Nothing yet");
+    assert.match(box.textContent, /It offers no tools now\./);
+    for (const key of [
+        "GET /json/armada/plugins",
+        "GET /json/armada/plugins/8/recent",
+        "GET /json/armada/plugins/8/tools",
+    ]) {
+        answers.delete(key);
+    }
+    beta_state.state.place = place;
+});

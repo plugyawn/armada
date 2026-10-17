@@ -14,7 +14,7 @@
 
 import {$, $$, esc, press} from "./util.js";
 import {pluginBots, state, streams} from "./state.js";
-import {hhmm, now} from "./time.js";
+import {dayKey, hhmm, now, shortDay} from "./time.js";
 import {api} from "./connection.js";
 import {main, nav, outline, side} from "./frame.js";
 import {send} from "./send.js";
@@ -191,6 +191,9 @@ const setOpenWidget = (id) => { openWidget = id; for (const r of $$(".row.wg", g
 const pluginsPage = () => ({installs, widgets, scopeOf, rowsOf, listsOf, markOf, rowOn, figureText, glyphOf, staleOf, restOf, navWidgets, linkHere,
   setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawWidgets, refreshPlace,
   prefOf, setPreference, teamWidgets, seen, inMyNav, inMyColumn, markOpened,
+  /* a line's time, as the column writes a run's: the hour today, else the day (handed in, so that the chunk does not
+     import time.js, which costs the first load 8 kB once a chunk shares it) */
+  when: (ts) => (dayKey(ts) === dayKey(now() / 1000) ? hhmm(ts) : shortDay(ts)),
   artifactView: () => loadedChunk("artifact"), sceneView: () => loadedChunk("scene"),
   api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf});
 /* the chunk's view, made once it has arrived (null before: a press then waits for it, and does nothing if another press,

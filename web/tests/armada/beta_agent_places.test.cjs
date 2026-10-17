@@ -371,6 +371,7 @@ run_test("a question asked before the place's runs are read is live at once", ()
     // As on runix.chat: a run's events were seen for #general > greetings
     // before the place was held (runs 9 and 10), and the place's own runs
     // are not read yet when run 11 starts and asks.
+    beta_state.streams.set(3, {stream_id: 3, name: "general"});
     const key = routing.tkey(3, "greetings again");
     runs.runsSeen.set(key, [{id: 10, status: "done", trigger_message_id: 48}]);
     const c = open(routing.placeFromKey(key));

@@ -5837,7 +5837,9 @@ class ArmadaSessionEndpointTest(ZulipTestCase):
                 ["agent, Choose a random 15 digit number.", "I picked 123456789012345."],
             )
 
-        AgentRun.objects.filter(id=run.id).update(codex_thread_version=armada_codex_thread_version())
+        AgentRun.objects.filter(id=run.id).update(
+            codex_thread_version=armada_codex_thread_version()
+        )
         active_session = load_armada_active_session_from_zulip(
             message, SimpleNamespace(user_profile=armada_bot)
         )

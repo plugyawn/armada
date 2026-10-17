@@ -806,6 +806,11 @@ ARMADA_PLUGIN_LOCAL_SOURCES = False
 # with, which is Zulip's own (scripts/lib/install-uv).
 ARMADA_PLUGIN_DIR = "/srv/armada/plugins"
 ARMADA_PLUGIN_UV = "/usr/local/bin/uv"
+# The Chromium that draws a plugin's preview when it is checked
+# (zerver/lib/armada_plugin_check.py). Unset, it is the agent's
+# (ARMADA_WORKER_BROWSER_DIR); a development machine without one names
+# its own Chrome here.
+ARMADA_PLUGIN_PREVIEW_BROWSER: str | None = None
 
 # Partners (zerver/lib/partner.py): how use becomes experience, and the
 # levels at which a partner changes. Levels are computed from experience

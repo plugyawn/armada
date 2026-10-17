@@ -1450,6 +1450,7 @@ _ARMADA_ENV_OVERRIDES: Final[dict[str, Callable[[str], object]]] = {
     "ARMADA_WORKER_CODEX_EPHEMERAL": _armada_parse_bool,
     "ARMADA_WORKER_CODEX_MEMORIES": _armada_parse_bool,
     "ARMADA_WORKER_BROWSER_DIR": _armada_parse_optional_string,
+    "ARMADA_PLUGIN_PREVIEW_BROWSER": _armada_parse_optional_string,
     "ARMADA_CODEX_SKILLS_DIR": _armada_parse_optional_string,
     "ARMADA_WORKER_TRUSTED_USERS_ONLY": _armada_parse_bool,
     "ARMADA_WORKER_TRUSTED_USER_IDS": _armada_parse_int_list,

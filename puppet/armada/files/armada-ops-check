@@ -279,7 +279,12 @@ def quota_result(reading: dict[str, object]) -> Result:
     resets_at = worst.get("resetsAt")
     if isinstance(resets_at, int):
         resets = datetime.fromtimestamp(resets_at, timezone.utc)
-        detail += f"; it resets {resets:%a} {resets.day} {resets:%b}, {resets:%H:%M} UTC"
+        # UTC reads the same everywhere, the terminal included; the global
+        # time shows each reader of the post the reset in their own zone.
+        detail += (
+            f"; it resets {resets:%a} {resets.day} {resets:%b}, {resets:%H:%M} UTC"
+            f" (<time:{resets:%Y-%m-%dT%H:%M:%SZ}> your time)"
+        )
     status = CRITICAL if used >= 100 or blocked else WARN if used >= 80 else OK
     return Result(status, detail, "codex-quota")
 

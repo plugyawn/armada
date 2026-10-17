@@ -253,7 +253,8 @@ class CodexQuotaTests(TestCase):
             ops_check.quota_result(self.reading(100, allowed=False)),
             ops_check.Result(
                 ops_check.CRITICAL,
-                "Codex has used 100% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC",
+                "Codex has used 100% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC"
+                " (<time:2026-10-23T14:16:27Z> your time)",
                 "codex-quota",
             ),
         )
@@ -261,7 +262,8 @@ class CodexQuotaTests(TestCase):
         self.assertEqual(ops_check.quota_result(self.reading(42.4)).status, ops_check.OK)
         self.assertEqual(
             ops_check.quota_result(self.reading(42.4)).detail,
-            "Codex has used 42% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC",
+            "Codex has used 42% of its 7-day limit; it resets Fri 23 Oct, 14:16 UTC"
+            " (<time:2026-10-23T14:16:27Z> your time)",
         )
         # A five-hour window more used than the week's is the one named.
         reading = self.reading(30)

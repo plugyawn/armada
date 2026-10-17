@@ -113,6 +113,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       const e = float("widget", id, "", viewHTML(x), x.label);
       Object.assign(sheet, {install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")});
       if (x.s && x.s.document) mountBlocks(e, x.s.document); else host(e);
+      P.markOpened(id);
       if (kbd) ($("[data-wopen], .wb button, .wb [tabindex]", e) || e).focus(); else ready();
     }
 
@@ -148,6 +149,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
       const x = navEntry(id); if (!x) return;
       if (!sheet || sheet.kind !== "widget" || sheet.id !== id) { float("widget", id, "", "", x.label); Object.assign(sheet, {install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")}); }
       sheet.mode = "edit"; sheet.el.classList.add("ed"); sheet.el.innerHTML = editHTML(x); if (x.s && x.s.document) mountBlocks($(".ew", sheet.el), x.s.document); else host(sheet.el);
+      P.markOpened(id);
       if (kbd) ($(".eo select, .eo input, .eo button", sheet.el) || sheet.el).focus(); else ready();
     }
     /* Done: the widget again, as I now see it */

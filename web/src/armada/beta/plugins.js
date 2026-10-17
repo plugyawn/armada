@@ -5,11 +5,12 @@
    label, its figure at rest, the rows I keep, my alerts) as armada_widget_preference events, drawn through
    widget_view.js. All three are in /register's snapshot (zerver/lib/armada_plugin_events.py). What is drawn at load is
    here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as the widget's sizer;
-   the "+" its last row), the slots of the list a linked widget adds to its place's column (from the snapshot), a
-   plugin's words on the plane, and the place for its commands in Jump to. The list's rows and those commands are the
-   chunk's, fetched when the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside
-   the nav, an item that borrows the column, and the Plugins place with each plugin's page. An update patches what is
-   drawn in place: a figure rolls in its cell, a mark changes into another, and nothing else moves. */
+   the "+" its last row; a widget new to me in the first ink until I open it), the slots of the list a linked widget
+   adds to its place's column (from the snapshot), a plugin's words on the plane, and the place for its commands in Jump
+   to. The list's rows and those commands are the chunk's, fetched when the page is idle. What a press opens is
+   plugin_view.js, a chunk (chunks.js): the sheet beside the nav, an item that borrows the column, and the Plugins place
+   with each plugin's page. An update patches what is drawn in place: a figure rolls in its cell, a mark changes into
+   another, and nothing else moves. */
 
 import {$, $$, esc, press} from "./util.js";
 import {pluginBots, state, streams} from "./state.js";
@@ -45,6 +46,12 @@ function applyPlugins(r) {
   for (const x of r.armada_widget_preferences || []) prefs.set(`${x.install_id}/${x.widget}`, x);
   if (groupEl) { drawWidgets(); watchStale(); }
 }
+
+/* ---------- a widget new to me (ROUND2.md, decision 9): its row in the first ink until I open it ----------
+   When I first opened it is part of my preference for it (seen_at), so every one of my clients agrees: opened on one,
+   it is no longer new on any. Opening it writes that at once, as any change to my view is written. */
+const isNewToMe = (id) => { const p = prefs.get(id); return !p || p.seen_at == null; };
+function markOpened(id) { if (!isNewToMe(id)) return; const i = id.indexOf("/"); setPreference(+id.slice(0, i), id.slice(i + 1), {seen: true}); }
 
 /* ---------- a widget's document, read ---------- */
 /* a list item's state is one of the run marks, by the sprite's names; the beta's kit names two of them as the conversation does */
@@ -104,7 +111,7 @@ const restCell = (rest) => (rest.kind === "figure" ? `<span class="wv fig">${fig
 const restLabel = (label, rest) => `${label}${rest.kind === "figure" ? `: ${rest.text}` : rest.kind === "needs" ? ": needs you" : rest.kind === "failed" ? ": failed" : rest.kind === "paused" ? `: ${rest.tip}` : ""}`;
 let groupEl = null, groupSig = "";
 function rowHTML(x, at) { const rest = restOf(x.p, x.w, x.s, at, x.alert);
-  return `<button class="row wg" data-w="${esc(x.id)}" aria-haspopup="dialog" aria-expanded="${openWidget === x.id}" aria-label="${esc(restLabel(x.label, rest))}"${rest.tip ? ` data-tip="${esc(rest.tip)}"` : ""}>${ic(glyphOf(x.p.glyph))}<span class="lab">${esc(x.label)}</span><span class="wf"><i class="sz">${esc(sizerOf(x))}</i>${restCell(rest)}</span></button>`; }
+  return `<button class="row wg${isNewToMe(x.id) ? " new-in" : ""}" data-w="${esc(x.id)}" aria-haspopup="dialog" aria-expanded="${openWidget === x.id}" aria-label="${esc(restLabel(x.label, rest))}"${rest.tip ? ` data-tip="${esc(rest.tip)}"` : ""}>${ic(glyphOf(x.p.glyph))}<span class="lab">${esc(x.label)}</span><span class="wf"><i class="sz">${esc(sizerOf(x))}</i>${restCell(rest)}</span></button>`; }
 /* the group's last row, always there (ROUND2.md, section E): the "+" and the word Widgets in the second ink, with no count,
    which would read as unread; its menu holds what I hid, what the team offers, and making one */
 const plusRowHTML = () => `<button class="row wg plus" data-w="plus" aria-haspopup="menu" aria-expanded="${openWidget === "plus"}">${ic("plus")}<span class="lab">Widgets</span></button>`;
@@ -120,6 +127,7 @@ const rowEl = (id) => $$(".row.wg", groupEl).find((r) => r.dataset.w === id) || 
 function patchRow(x, at) {
   const r = rowEl(x.id); if (!r) return; const rest = restOf(x.p, x.w, x.s, at, x.alert), cell = $(".wf", r), was = r._rest || readRest(cell);
   r.setAttribute("aria-label", restLabel(x.label, rest)); if (rest.tip) r.dataset.tip = rest.tip; else delete r.dataset.tip; r._rest = rest;
+  r.classList.toggle("new-in", isNewToMe(x.id));
   if (was.kind === rest.kind && was.text === rest.text) return;
   const old = $(":scope > .wv, :scope > .mk", cell);
   if (was.kind === "figure" && rest.kind === "figure" && old) { M.figure(old, rest.text); return; }
@@ -176,7 +184,7 @@ const setOpenWidget = (id) => { openWidget = id; for (const r of $$(".row.wg", g
    artifact's blocks are drawn by the artifact's own chunk (and a scene by the scene's), which arrive with it */
 const pluginsPage = () => ({installs, widgets, scopeOf, rowsOf, listsOf, markOf, rowOn, figureText, glyphOf, staleOf, restOf, navWidgets, linkHere,
   setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawWidgets, refreshPlace,
-  prefOf, setPreference, teamWidgets, seen, inMyNav, inMyColumn,
+  prefOf, setPreference, teamWidgets, seen, inMyNav, inMyColumn, markOpened,
   artifactView: () => loadedChunk("artifact"), sceneView: () => loadedChunk("scene"),
   api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf});
 /* the chunk's view, made once it has arrived (null before: a press then waits for it, and does nothing if another press,
@@ -219,8 +227,11 @@ function drawPreferences(install_id, widget) {
    and a refusal puts back what was there and says why */
 async function setPreference(install_id, widget, changes, from) {
   const key = `${install_id}/${widget}`, was = prefs.get(key) || null, reset = [], params = {};
-  const next = {install_id, widget, shown: null, position: null, label: "", rest_figure: "", filters: {}, alerts: {}, in_column: null, ...was};
-  for (const [field, value] of Object.entries(changes)) { next[field] = value;
+  const next = {install_id, widget, shown: null, position: null, label: "", rest_figure: "", filters: {}, alerts: {}, in_column: null, seen_at: null, ...was};
+  for (const [field, value] of Object.entries(changes)) {
+    /* seen: true once I open it (the server keeps the first time), false to make it new to me again */
+    if (field === "seen") { next.seen_at = value ? next.seen_at ?? Math.floor(now() / 1000) : null; params.seen = JSON.stringify(value); continue; }
+    next[field] = value;
     if (value === null) reset.push(field); else params[field] = typeof value === "string" ? value : JSON.stringify(value); }
   if (reset.length) params.reset = JSON.stringify(reset);
   prefs.set(key, next); drawPreferences(install_id, widget);

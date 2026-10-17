@@ -1647,3 +1647,137 @@ run_test(
         beta_state.state.place = place;
     },
 );
+
+// One of my preferences as the server sends it: the team's view, but for what is given.
+const preference = (install_id, widget, extra = {}) => ({
+    install_id,
+    widget,
+    shown: null,
+    position: null,
+    label: "",
+    rest_figure: "",
+    filters: {},
+    alerts: {},
+    in_column: null,
+    seen_at: null,
+    ...extra,
+});
+const isNew = (label) => rowOf(label).classList.contains("new-in");
+
+run_test(
+    "a widget new to me: its row in the first ink until I open it, on any of my devices",
+    async () => {
+        // What I have opened, on any device, is not new; what I have not is.
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "update",
+            preference: preference(7, "gpus", {seen_at: 1_792_000_000}),
+        });
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 8,
+            widget: "runs",
+        });
+        assert.deepEqual(
+            rows().map((r) => [
+                r.querySelector(".lab").textContent,
+                r.classList.contains("new-in"),
+            ]),
+            [
+                ["Training", true],
+                ["GPUs", false],
+            ],
+        );
+        // Opening it is mine at once, and written to the server.
+        await pressOn(rowOf("Training"));
+        assert.equal(isNew("Training"), false);
+        assert.deepEqual(requests.at(-1), {
+            method: "PATCH",
+            path: "/json/armada/widgets/8/runs/preference",
+            body: {seen: "true"},
+        });
+        dom.press("Escape");
+        // Opened again, nothing more is sent.
+        const sent = requests.length;
+        await pressOn(rowOf("Training"));
+        dom.press("Escape");
+        assert.equal(requests.length, sent);
+
+        // A widget arriving is new; its row's menu is not opening it, Edit is.
+        plugins.onPluginEvent({
+            type: "armada_plugin",
+            op: "add",
+            plugin: {
+                ...gpus(),
+                id: 10,
+                plugin: "uptime",
+                name: "Uptime",
+                glyph: "globe",
+                bot_user_id: 43,
+                widgets: [{key: "up", label: "Uptime", in: ["nav"], cadence: 60}],
+                widget_defaults: {up: {nav: "shown", column: true}},
+            },
+        });
+        await settle();
+        assert.deepEqual(
+            rows().map((r) => r.querySelector(".lab").textContent),
+            ["Uptime", "Training", "GPUs"],
+        );
+        assert.equal(isNew("Uptime"), true);
+        rowOf("Uptime").dispatchEvent(
+            new dom.window.MouseEvent("contextmenu", {bubbles: true, cancelable: true, button: 2}),
+        );
+        await settle();
+        assert.equal(isNew("Uptime"), true);
+        await pressOn(sheet().querySelector("[data-wedit]"));
+        assert.equal(isNew("Uptime"), false);
+        assert.deepEqual(requests.at(-1).body, {seen: "true"});
+        dom.press("Escape");
+
+        // Made new again on another of my devices, it is new here; opened there, it is not.
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "update",
+            preference: preference(10, "up"),
+        });
+        assert.equal(isNew("Uptime"), true);
+        // (Any time is a time: even the epoch.)
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "update",
+            preference: preference(10, "up", {seen_at: 0}),
+        });
+        assert.equal(isNew("Uptime"), false);
+        // A refusal puts back what was there, and says why.
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 10,
+            widget: "up",
+        });
+        answers.set("PATCH /json/armada/widgets/10/up/preference", {
+            result: "error",
+            msg: "Uptime is removed.",
+        });
+        await pressOn(rowOf("Uptime"));
+        assert.equal(isNew("Uptime"), true);
+        assert.equal(said.at(-1), "Uptime is removed.");
+        answers.delete("PATCH /json/armada/widgets/10/up/preference");
+        dom.press("Escape");
+        plugins.onPluginEvent({type: "armada_plugin", op: "remove", install_id: 10});
+        for (const [install_id, widget] of [
+            [7, "gpus"],
+            [8, "runs"],
+            [10, "up"],
+        ]) {
+            plugins.onPreferenceEvent({
+                type: "armada_widget_preference",
+                op: "remove",
+                install_id,
+                widget,
+            });
+        }
+        await settle();
+    },
+);

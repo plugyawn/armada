@@ -48,14 +48,14 @@ import {prefetchChunks} from "./chunks.js";
 import {onSubmessage, wireWidgets} from "./widgets.js";
 import {onArtifactEvent, wireArtifacts} from "./artifacts.js";
 import {onSubscription, wireChannels} from "./channels.js";
-import {onPluginEvent, onWidgetEvent, wirePlugins} from "./plugins.js";
+import {onPluginEvent, onPreferenceEvent, onWidgetEvent, wirePlugins} from "./plugins.js";
 
 /* event dispatch (connection.js): what each event type the page registers for does; a module's own types are named here */
 on("message", onMessage); on("update_message", onUpdate); on("agent_run", onRun); on("agent_stream", onAgentStream); on("reaction", onReaction);
 on("update_message_flags", onFlags); on("delete_message", onDelete); on("typing", onTyping); on("workspace_changed", onWorkspaceChanged);
 on("armada_partner", onPartner); on("read_receipts", onReadReceipts); on("restart", onRestart);
 on("armada_post", onPost); on("submessage", (ev) => { onSubmessage(ev); onArtifactEvent(ev); }); on("realm", onRealm); on("user_group", onUserGroup); on("stream", onStream); on("realm_user", onRealmUser); on("presence", onPresence);
-on("scheduled_messages", onScheduled); on("reminders", onReminders); on("armada_plugin", onPluginEvent); on("armada_widget", onWidgetEvent);
+on("scheduled_messages", onScheduled); on("reminders", onReminders); on("armada_plugin", onPluginEvent); on("armada_widget", onWidgetEvent); on("armada_widget_preference", onPreferenceEvent);
 on("subscription", onSubscription);
 let fileIn = null;
 /* what Tab stops on, in document order: what the browser would stop on, shown and not inert */

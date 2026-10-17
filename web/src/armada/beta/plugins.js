@@ -1,13 +1,15 @@
 /* INTERIM BETA (README.md): plugins (design/r9/plugins, sections 4 and 5). A plugin draws no HTML of its own: each of
    its widgets is a document in Armada's artifact vocabulary, with `rest` (its one line in the nav) and `list` blocks
    (tools/armada/plugin_contract.json), which the plugin pushes and the server forwards as armada_widget events; the
-   installs come as armada_plugin events. Both are in /register's snapshot (zerver/lib/armada_plugin_events.py). What is
-   drawn at load is here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as
-   the widget's sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), a plugin's
-   words on the plane, and the place for its commands in Jump to. The list's rows and those commands are the chunk's,
-   fetched when the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav,
-   an item that borrows the column, and the Plugins place with each plugin's page. An update patches what is drawn in
-   place: a figure rolls in its cell, a mark changes into another, and nothing else moves. */
+   installs come as armada_plugin events, and my own view of each widget (in my nav or not, its place in the group, my
+   label, its figure at rest, the rows I keep, my alerts) as armada_widget_preference events, drawn through
+   widget_view.js. All three are in /register's snapshot (zerver/lib/armada_plugin_events.py). What is drawn at load is
+   here: the nav's widget group at rest (a glyph, the label, one trailing thing in a cell as wide as the widget's
+   sizer), the slots of the list a linked widget adds to its place's column (from the snapshot), a plugin's words on the
+   plane, and the place for its commands in Jump to. The list's rows and those commands are the chunk's, fetched when
+   the page is idle. What a press opens is plugin_view.js, a chunk (chunks.js): the sheet beside the nav, an item that
+   borrows the column, and the Plugins place with each plugin's page. An update patches what is drawn in place: a figure
+   rolls in its cell, a mark changes into another, and nothing else moves. */
 
 import {$, $$, esc, press} from "./util.js";
 import {pluginBots, state, streams} from "./state.js";
@@ -21,12 +23,15 @@ import {openPlace, placeFromKey} from "./routing.js";
 import {drawHeader} from "./header.js";
 import {faceOf} from "./faces.js";
 import {closeArtifact, dataAt, isObj, text} from "./artifacts.js";
+import {byMyOrder, inMyColumn, inMyNav, viewOf} from "./widget_view.js";
 
 /* ---------- what the server holds ---------- */
 const installs = new Map();   /* install id -> the install as everyone sees it: name, glyph, state, widgets declared, widget_defaults, links */
 const widgets = new Map();    /* scope -> the latest document for one widget and scope: {install_id, widget, link_id, item, document, fed_at, stale, ...} */
 const scopeOf = (install_id, widget, link_id, item) => `${install_id}/${widget}/${link_id || 0}/${item || ""}`;
 const scopeOfState = (s) => scopeOf(s.install_id, s.widget, s.link_id, s.item);
+const prefs = new Map();      /* "<install>/<widget>" -> my own view of the widget (armada_widget_preference), mine alone */
+const prefOf = (install_id, widget) => prefs.get(`${install_id}/${widget}`) || null;
 const STALE_CADENCES = 3, DEFAULT_CADENCE = 60;   /* zerver/lib/armada_widgets.py: a widget not fed for three times its cadence is stale */
 
 function keepInstall(p) { installs.set(p.id, p); for (const [bot, x] of pluginBots) if (x.install_id === p.id && bot !== p.bot_user_id) pluginBots.delete(bot);
@@ -34,9 +39,10 @@ function keepInstall(p) { installs.set(p.id, p); for (const [bot, x] of pluginBo
 function dropInstall(id) { installs.delete(id); for (const [bot, x] of pluginBots) if (x.install_id === id) pluginBots.delete(bot); for (const [k, s] of widgets) if (s.install_id === id) widgets.delete(k); }
 /* /register's snapshot (connection.js): every install I see and the documents of the places I can see */
 function applyPlugins(r) {
-  installs.clear(); pluginBots.clear(); widgets.clear();
+  installs.clear(); pluginBots.clear(); widgets.clear(); prefs.clear();
   for (const p of r.armada_plugins || []) keepInstall(p);
   for (const s of r.armada_widgets || []) widgets.set(scopeOfState(s), s);
+  for (const x of r.armada_widget_preferences || []) prefs.set(`${x.install_id}/${x.widget}`, x);
   if (groupEl) { drawWidgets(); watchStale(); }
 }
 
@@ -60,11 +66,12 @@ function staleOf(s, declared, at = now() / 1000) { return !!s.stale || at - s.fe
 /* the one trailing thing of a widget's nav row, by the nav's own priority: needs you, failed, then the paused mark of a
    widget not heard from, then its figure. An install that failed says so before any document; one waiting for its
    settings shows the dashed ring until it has sent one. */
-function restOf(p, declared, s, at) {
+function restOf(p, declared, s, at, alert = null) {
   if (p.state === "failed") return {kind: "failed", text: "", tip: `${p.name} stopped. Its page has its last lines.`};
   if (!s) return p.state === "waiting" ? {kind: "queued", text: "", tip: `${p.name} waits for its settings`} : {kind: "none", text: "", tip: ""};
   const doc = s.document || {}, rest = isObj(doc.rest) ? doc.rest : null, news = rest && rest.news ? dataAt(doc.data || {}, rest.news) : null;
   if (news === "needs") return {kind: "needs", text: "", tip: ""};
+  if (alert) return {kind: "needs", text: "", tip: `${alert.title}: ${alert.threshold}`};   /* one of my alerts is met: news for me alone */
   if (news === "failed") return {kind: "failed", text: "", tip: ""};
   if (staleOf(s, declared, at)) return {kind: "paused", text: "", tip: `Last heard ${hhmm(s.fed_at)}`};
   const v = rest ? figureText(dataAt(doc.data || {}, rest.figure)) : "";
@@ -76,30 +83,40 @@ function restOf(p, declared, s, at) {
    install first, so that one that arrives takes the group's top and leaves every other row where it was */
 function navWidgets() {
   const out = [];
+  for (const x of teamWidgets()) if (inMyNav(x.w, (x.p.widget_defaults || {})[x.w.key], x.pref)) out.push(seen(x, null));
+  return byMyOrder(out, (x) => x.pref);
+}
+/* every widget of every install that runs, newest install first, with my preference for it */
+function teamWidgets() {
+  const out = [];
   for (const p of [...installs.values()].sort((a, b) => b.id - a.id)) { if (p.disabled || p.state === "draft") continue;
-    for (const w of p.widgets || []) { if (!(w.in || []).includes("nav")) continue; const d = (p.widget_defaults || {})[w.key];
-      if ((d ? d.nav : w.team_default || "shown") !== "shown") continue;
-      out.push({p, w, id: `${p.id}/${w.key}`, s: widgets.get(scopeOf(p.id, w.key, null, ""))}); } }
+    for (const w of p.widgets || []) out.push({p, w, id: `${p.id}/${w.key}`, pref: prefOf(p.id, w.key)}); }
   return out;
+}
+/* a widget as I see it in one scope: its document passed through my view (zerver keeps one document; my label, figure,
+   rows and alerts are drawn from it here), and my label */
+function seen(x, link) {
+  const raw = widgets.get(scopeOf(x.p.id, x.w.key, link ? link.id : null, "")), v = viewOf(x.w, raw ? raw.document : null, x.pref);
+  return {...x, link, label: v.label, alert: v.alert, s: raw ? {...raw, document: v.doc} : undefined};
 }
 const sizerOf = (x) => { const r = x.s && x.s.document && isObj(x.s.document.rest) ? x.s.document.rest : null; return r && typeof r.sizer === "string" ? r.sizer : "88"; };
 const restCell = (rest) => (rest.kind === "figure" ? `<span class="wv fig">${fig(rest.text)}</span>` : rest.kind === "none" ? "" : mk(rest.kind));
 const restLabel = (label, rest) => `${label}${rest.kind === "figure" ? `: ${rest.text}` : rest.kind === "needs" ? ": needs you" : rest.kind === "failed" ? ": failed" : rest.kind === "paused" ? `: ${rest.tip}` : ""}`;
 let groupEl = null, groupSig = "";
-function rowHTML(x, at) { const rest = restOf(x.p, x.w, x.s, at);
-  return `<button class="row wg" data-w="${esc(x.id)}" aria-haspopup="dialog" aria-expanded="${openWidget === x.id}" aria-label="${esc(restLabel(x.w.label, rest))}"${rest.tip ? ` data-tip="${esc(rest.tip)}"` : ""}>${ic(glyphOf(x.p.glyph))}<span class="lab">${esc(x.w.label)}</span><span class="wf"><i class="sz">${esc(sizerOf(x))}</i>${restCell(rest)}</span></button>`; }
+function rowHTML(x, at) { const rest = restOf(x.p, x.w, x.s, at, x.alert);
+  return `<button class="row wg" data-w="${esc(x.id)}" aria-haspopup="dialog" aria-expanded="${openWidget === x.id}" aria-label="${esc(restLabel(x.label, rest))}"${rest.tip ? ` data-tip="${esc(rest.tip)}"` : ""}>${ic(glyphOf(x.p.glyph))}<span class="lab">${esc(x.label)}</span><span class="wf"><i class="sz">${esc(sizerOf(x))}</i>${restCell(rest)}</span></button>`; }
 /* the group, drawn whole when its rows change (an install, a widget shown or hidden, a new sizer); else each row's trailing
    thing changes where it stands */
 function drawWidgets() {
-  if (!groupEl) return; const list = navWidgets(), at = now() / 1000, sig = list.map((x) => `${x.id}|${x.w.label}|${x.p.glyph}|${sizerOf(x)}`).join(";");
+  if (!groupEl) return; const list = navWidgets(), at = now() / 1000, sig = list.map((x) => `${x.id}|${x.label}|${x.p.glyph}|${sizerOf(x)}`).join(";");
   if (sig !== groupSig) { groupSig = sig; groupEl.innerHTML = list.map((x) => rowHTML(x, at)).join(""); host(groupEl); snapCells(); return; }
   for (const x of list) patchRow(x, at);
 }
 const rowEl = (id) => $$(".row.wg", groupEl).find((r) => r.dataset.w === id) || null;
 /* a figure rolls in its cell; a mark changes into another where it stands; a figure and a mark cross over in the cell */
 function patchRow(x, at) {
-  const r = rowEl(x.id); if (!r) return; const rest = restOf(x.p, x.w, x.s, at), cell = $(".wf", r), was = r._rest || readRest(cell);
-  r.setAttribute("aria-label", restLabel(x.w.label, rest)); if (rest.tip) r.dataset.tip = rest.tip; else delete r.dataset.tip; r._rest = rest;
+  const r = rowEl(x.id); if (!r) return; const rest = restOf(x.p, x.w, x.s, at, x.alert), cell = $(".wf", r), was = r._rest || readRest(cell);
+  r.setAttribute("aria-label", restLabel(x.label, rest)); if (rest.tip) r.dataset.tip = rest.tip; else delete r.dataset.tip; r._rest = rest;
   if (was.kind === rest.kind && was.text === rest.text) return;
   const old = $(":scope > .wv, :scope > .mk", cell);
   if (was.kind === "figure" && rest.kind === "figure" && old) { M.figure(old, rest.text); return; }
@@ -129,9 +146,7 @@ function linkHere(p, place) { const links = (p.links || []).filter((l) => l.stre
   return links.find((l) => l.topic != null) || links[0] || null; }
 function columnWidgets(place) {
   const out = []; if (!place || place.kind !== "topic") return out;
-  for (const p of [...installs.values()].sort((a, b) => a.id - b.id)) { if (p.disabled || p.state === "draft") continue; const link = linkHere(p, place); if (!link) continue;
-    for (const w of p.widgets || []) { if (!(w.in || []).includes("column")) continue; const d = (p.widget_defaults || {})[w.key]; if (d && d.column === false) continue;
-      out.push({p, w, link, s: widgets.get(scopeOf(p.id, w.key, link.id, ""))}); } }
+  for (const x of teamWidgets().sort((a, b) => a.p.id - b.p.id)) { const link = linkHere(x.p, place); if (!link || !inMyColumn(x.w, (x.p.widget_defaults || {})[x.w.key], x.pref)) continue; out.push(seen(x, link)); }
   return out;
 }
 /* how many rows a linked list holds in the column, at most three: its document's, else its declaration's, from the
@@ -145,7 +160,7 @@ function pluginSectionsHTML(place) {
   const v = view(); if (v) return v.sectionsHTML(place);
   const list = columnWidgets(place); if (!list.length) return "";
   if (!sectionsAsked) { sectionsAsked = true; viewReady().then(() => { sectionsAsked = false; drawSide(); }, () => { sectionsAsked = false; }); }
-  return list.map((x) => `<section class="sec slots plug" data-wscope="${esc(scopeOf(x.p.id, x.w.key, x.link.id, ""))}" style="--slots:${slotsOf(x)}"><div class="sh"><span>${esc(x.w.label)}</span><span class="e"></span></div><ul class="ls"></ul></section>`).join("");
+  return list.map((x) => `<section class="sec slots plug" data-wscope="${esc(scopeOf(x.p.id, x.w.key, x.link.id, ""))}" style="--slots:${slotsOf(x)}"><div class="sh"><span>${esc(x.label)}</span><span class="e"></span></div><ul class="ls"></ul></section>`).join("");
 }
 /* a document for a list in view: the chunk patches its rows; until it is here, the column is drawn again, from the
    snapshot */
@@ -158,6 +173,7 @@ const setOpenWidget = (id) => { openWidget = id; for (const r of $$(".row.wg", g
    artifact's blocks are drawn by the artifact's own chunk (and a scene by the scene's), which arrive with it */
 const pluginsPage = () => ({installs, widgets, scopeOf, rowsOf, listsOf, markOf, rowOn, figureText, glyphOf, staleOf, restOf, navWidgets, linkHere,
   setOpenWidget, get openWidget() { return openWidget; }, rowEl, columnWidgets, slotsOf, showWidget, outline, get place() { return state.place; }, drawWidgets, refreshPlace,
+  prefOf, setPreference, teamWidgets, seen,
   artifactView: () => loadedChunk("artifact"), sceneView: () => loadedChunk("scene"),
   api, press, send, openPlace, placeFromKey, side, main, streams, drawSide, drawHeader, closeArtifact, faceOf});
 /* the chunk's view, made once it has arrived (null before: a press then waits for it, and does nothing if another press,
@@ -185,6 +201,29 @@ function onWidgetEvent(ev) {
   if (!ev.link_id && !ev.item) drawWidgets(); else if (!ev.item) patchColumn(scope);
   const v = view(); if (v) v.update(scope); watchStale();
 }
+/* my own view of a widget changed (here or on another of my devices): the nav, the column and the open sheet are
+   drawn from it again, each in place where its rows are the same */
+function onPreferenceEvent(ev) {
+  if (ev.op === "remove") prefs.delete(`${ev.install_id}/${ev.widget}`); else prefs.set(`${ev.preference.install_id}/${ev.preference.widget}`, ev.preference);
+  drawPreferences(ev.op === "remove" ? ev.install_id : ev.preference.install_id, ev.op === "remove" ? ev.widget : ev.preference.widget);
+}
+function drawPreferences(install_id, widget) {
+  drawWidgets(); if (state.place && state.place.kind === "topic") drawSide();
+  const v = view(); if (v) v.update(scopeOf(install_id, widget, null, ""));
+}
+/* a change to my view, whole in the frame of the press: written here at once, then sent; the server's event confirms it,
+   and a refusal puts back what was there and says why */
+async function setPreference(install_id, widget, changes, from) {
+  const key = `${install_id}/${widget}`, was = prefs.get(key) || null, reset = [], params = {};
+  const next = {install_id, widget, shown: null, position: null, label: "", rest_figure: "", filters: {}, alerts: {}, in_column: null, ...was};
+  for (const [field, value] of Object.entries(changes)) { next[field] = value;
+    if (value === null) reset.push(field); else params[field] = typeof value === "string" ? value : JSON.stringify(value); }
+  if (reset.length) params.reset = JSON.stringify(reset);
+  prefs.set(key, next); drawPreferences(install_id, widget);
+  try { await api("PATCH", `armada/widgets/${install_id}/${widget}/preference`, params); }
+  catch (e) { if (prefs.get(key) === next) { if (was) prefs.set(key, was); else prefs.delete(key); drawPreferences(install_id, widget); } M.say(from && from.isConnected ? from : nav, e.message, 2400); }
+}
+
 /* the Plugins place in view, drawn again when an install changes */
 function refreshPlace() { if (!state.place || state.place.kind !== "plugins") return; const v = view(); if (v) v.refresh(); }
 
@@ -217,6 +256,6 @@ function wirePlugins() {
     e.preventDefault(); const r = rows[Math.max(0, Math.min(rows.length - 1, to))]; M.focusKbd(r); });
 }
 
-export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onWidgetEvent, openPlugins, pluginHash, pluginItems,
+export {applyPlugins, closeWidgetViews, glyphOf, installs, listsOf, markOf, onPluginEvent, onPreferenceEvent, onWidgetEvent, prefs, setPreference, openPlugins, pluginHash, pluginItems,
   pluginPlaceFromHash, pluginPlaceFromKey, pluginsHead, pluginSectionsHTML, pluginsSideHTML, pluginWho, restOf, rowsOf, view as pluginView, widgets,
   wirePlugins};

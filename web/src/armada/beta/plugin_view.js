@@ -91,8 +91,8 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     function openSheet(id, kbd) {
       const x = navEntry(id); if (!x) return; closeSheet(true);
       const rows = $$("nav .row.wg"), below = rows.length - 1 - rows.findIndex((r) => r.dataset.w === id);
-      const e = el("div", "wsheet raised", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.w.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`);
-      e.setAttribute("role", "dialog"); e.setAttribute("aria-label", x.w.label); e.tabIndex = -1; e.dataset.w = id; e.style.setProperty("--below", String(Math.max(0, below)));
+      const e = el("div", "wsheet raised", `<div class="ch">${ic(P.glyphOf(x.p.glyph))}<span>${esc(x.label)}</span><button class="lk" data-wopen>Open</button></div><div class="wb">${sheetBodyHTML(x)}</div>`);
+      e.setAttribute("role", "dialog"); e.setAttribute("aria-label", x.label); e.tabIndex = -1; e.dataset.w = id; e.style.setProperty("--below", String(Math.max(0, below)));
       document.body.append(e); sheet = {id, el: e, install_id: x.p.id, key: x.w.key, scope: P.scopeOf(x.p.id, x.w.key, null, "")}; P.setOpenWidget(id);
       if (x.s && x.s.document) mountBlocks(e, x.s.document); else host(e);
       M.release(e, {y: T["pane-rise"] || 4}, "touch"); M.appear(e, 0.6);
@@ -156,7 +156,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
         const doc = x.s && x.s.document, block = P.listsOf(doc)[0] || null, rows = block ? P.rowsOf(doc, block) : [], slots = P.slotsOf(x);
         const stale = x.s && P.staleOf(x.s, x.w), cap = stale ? `<span class="m" data-tip="${esc(`Last heard ${hhmm(x.s.fed_at)}`)}">${mk("paused")}</span>` : block && block.caption ? `<span class="m">${esc(block.caption)}</span>` : "";
         const body = rows.length ? rows.map((row) => colRowHTML(x, row)).join("") : `<li>${ic(P.glyphOf(x.p.glyph))}<span class="t">${x.s ? "Nothing here now" : `Waiting for ${esc(x.p.name)}`}</span><span class="e"></span></li>`;
-        return `<section class="sec slots plug" data-wscope="${esc(x.scope)}" style="--slots:${slots}"><div class="sh"><span>${esc(x.w.label)}</span><span class="e">${cap}</span></div><ul class="ls">${body}</ul></section>`; }).join("");
+        return `<section class="sec slots plug" data-wscope="${esc(x.scope)}" style="--slots:${slots}"><div class="sh"><span>${esc(x.label)}</span><span class="e">${cap}</span></div><ul class="ls">${body}</ul></section>`; }).join("");
     }
     /* a document for a list in view: its rows change in place when they are the same rows; else the column is drawn again,
        which keeps every section's slots, so nothing outside the list moves */
@@ -180,7 +180,7 @@ export default function pluginViewChunk({$, $$, el, esc, T, state, hhmm, nameOf,
     /* Jump to: Plugins, each plugin by name, and one command a widget in the nav ("Show GPUs") */
     function items() {
       const out = [{key: "plugins", label: "Plugins", glyph: ic("plugin"), cap: ""}];
-      for (const x of P.navWidgets()) out.push({cmd: () => P.showWidget(x.id, true), label: `Show ${x.w.label}`, glyph: ic(P.glyphOf(x.p.glyph)), cap: x.p.name});
+      for (const x of P.navWidgets()) out.push({cmd: () => P.showWidget(x.id, true), label: `Show ${x.label}`, glyph: ic(P.glyphOf(x.p.glyph)), cap: x.p.name});
       for (const p of P.installs.values()) if (p.state !== "draft") out.push({key: `plugin:${p.id}`, label: p.name, glyph: ic(P.glyphOf(p.glyph)), cap: "Plugin"});
       return out;
     }

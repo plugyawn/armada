@@ -1018,3 +1018,104 @@ run_test(
         beta_state.state.place = place;
     },
 );
+
+run_test(
+    "my own view: hidden, labelled, placed, its figure, alerts and rows, whole at once",
+    async () => {
+        await viewLoaded();
+        const mine = (changes) => ({
+            type: "armada_widget_preference",
+            op: "update",
+            preference: {
+                install_id: 7,
+                widget: "gpus",
+                shown: null,
+                position: null,
+                label: "",
+                rest_figure: "",
+                filters: {},
+                alerts: {},
+                in_column: null,
+                ...changes,
+            },
+        });
+        const labels = () => rows().map((r) => r.querySelector(".lab").textContent);
+        plugins.onPreferenceEvent(mine({shown: false}));
+        assert.deepEqual(labels(), ["Training"]);
+        // Mine, first in my group, under my label, with another of its figures.
+        plugins.onPreferenceEvent(
+            mine({shown: true, position: 0, label: "Pods", rest_figure: "jobs"}),
+        );
+        assert.deepEqual(labels(), ["Pods", "Training"]);
+        assert.equal(trail("Pods").textContent, "2 jobs");
+        assert.equal(rowOf("Pods").querySelector(".sz").textContent, "88 jobs");
+        // One of my alerts is met: the needs-you mark, saying which.
+        plugins.onPreferenceEvent(mine({label: "Pods", alerts: {free_at_least: 4}}));
+        assert.ok(trail("Pods").matches(".mk.needs"));
+        assert.equal(rowOf("Pods").dataset.tip, "When this many are free: 4");
+        // The sheet shows only the rows my facets keep.
+        plugins.onPreferenceEvent(mine({label: "Pods", filters: {gpu: "H100"}}));
+        await pressOn(rowOf("Pods"));
+        assert.deepEqual(
+            [...sheet().querySelectorAll(".wl > li")].map((li) => li.dataset.row),
+            ["nlscale-a", "nlscale-c", "lr-3e-4-b", "data-mix-sweep"],
+        );
+        assert.equal(sheet().getAttribute("aria-label"), "Pods");
+        // And as the filter changes, the open sheet follows.
+        plugins.onPreferenceEvent(mine({label: "Pods", filters: {gpu: "A100"}}));
+        assert.deepEqual(
+            [...sheet().querySelectorAll(".wl > li")].map((li) => li.dataset.row),
+            ["nlscale-b"],
+        );
+        dom.press("Escape");
+        // W&B's list leaves my column, and only mine.
+        plugins.onPreferenceEvent({
+            ...mine({in_column: false}),
+            preference: {...mine({in_column: false}).preference, install_id: 8, widget: "runs"},
+        });
+        assert.equal(section(), null);
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 8,
+            widget: "runs",
+        });
+        assert.ok(section());
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 7,
+            widget: "gpus",
+        });
+        assert.deepEqual(labels(), ["Training", "GPUs"]);
+
+        // A change of mine is whole in the frame of the press, then sent; a
+        // refusal puts back what was there.
+        const done = plugins.setPreference(7, "gpus", {shown: false, position: null});
+        assert.deepEqual(labels(), ["Training"]);
+        await done;
+        assert.deepEqual(requests.at(-1), {
+            method: "PATCH",
+            path: "/json/armada/widgets/7/gpus/preference",
+            body: {shown: "false", reset: '["position"]'},
+        });
+        answers.set("PATCH /json/armada/widgets/7/gpus/preference", {
+            result: "error",
+            msg: "GPUs is removed.",
+            code: "BAD_REQUEST",
+        });
+        const refused = plugins.setPreference(7, "gpus", {shown: true, label: "Pods"});
+        assert.deepEqual(labels(), ["Training", "Pods"]);
+        await refused;
+        assert.deepEqual(labels(), ["Training"]);
+        assert.equal(said.at(-1), "GPUs is removed.");
+        answers.delete("PATCH /json/armada/widgets/7/gpus/preference");
+        plugins.onPreferenceEvent({
+            type: "armada_widget_preference",
+            op: "remove",
+            install_id: 7,
+            widget: "gpus",
+        });
+        assert.deepEqual(labels(), ["Training", "GPUs"]);
+    },
+);

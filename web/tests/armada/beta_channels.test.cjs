@@ -14,7 +14,8 @@
 // channels I am not in, asked for (GET streams) only when it opens. Join
 // is one press: the row says Joining at once and Open once I am in, and
 // keeps its place; the nav takes the channel when the event comes; Open
-// opens its first place. A channel's members are asked for once and kept
+// opens its first place. New arrives with the channels chunk; a press
+// that comes before it opens New when it arrives. A channel's members are asked for once and kept
 // by the same event as people join and leave. Deleted with
 // web/src/armada/beta/.
 
@@ -186,12 +187,13 @@ mock_esm("../../src/armada/beta/frame.js", {
 });
 // The header and the column draw what a place says of itself, which these
 // tests do not read.
-mock_esm("../../src/armada/beta/header.js", {drawHeader: noop});
+mock_esm("../../src/armada/beta/header.js", {drawHeader: noop, repoPath: noop});
 mock_esm("../../src/armada/beta/column.js", {drawSide: noop});
 
 const beta_state = zrequire("armada/beta/state.js");
 const routing = zrequire("armada/beta/routing.js");
 const channels = zrequire("armada/beta/channels.js");
+const chunks = zrequire("armada/beta/chunks.js");
 
 beta_state.state.ME = ME;
 beta_state.state.meName = "Cordelia";
@@ -211,6 +213,16 @@ beta_state.state.P.loaded = true;
 zrequire("armada/beta/nav.js").drawNav();
 channels.applyChannels({repository_stream_ids: [30]});
 channels.wireChannels();
+// New arrives with the channels chunk (channel_new.js), when the test lets
+// it.
+let chunk_arrives;
+const chunk_here = new Promise((resolve) => {
+    chunk_arrives = resolve;
+});
+chunks.setChunkLoader("channels", async () => {
+    await chunk_here;
+    return zrequire("armada/beta/channel_view.js");
+});
 // A press is told from its own click by the time it went down, which the
 // fake clock starts at 0.
 clock.tick(1);
@@ -247,6 +259,18 @@ function close_new() {
 }
 const PUBLIC = "Anyone here can find it and join.";
 const PRIVATE = "Only the people in it can see it.";
+
+run_test("a press on the + before New has arrived opens it when it does", async () => {
+    serve();
+    field.focus();
+    press_on(plus);
+    assert.equal(surface(), null);
+    chunk_arrives();
+    await settle();
+    assert.equal(document.activeElement, name_field());
+    close_new();
+    assert.equal(surface(), null);
+});
 
 run_test("the + opens New channel with its name field ready, and sends nothing", () => {
     serve();

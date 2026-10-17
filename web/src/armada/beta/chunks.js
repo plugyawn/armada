@@ -1,6 +1,6 @@
 /* INTERIM BETA (README.md): what the page loads on first use. The lightbox, an artifact's document, a scene, what a
-   plugin's widget opens (plugin_view.js) and the nav's cards for channels and topics (channel_view.js) are not part of the
-   first load: each is a chunk (webpack splits an import() into one), asked for once and kept. Once the page
+   plugin's widget opens (plugin_view.js), and the nav's cards for channels and topics with New from its "+"
+   (channel_view.js, channel_new.js) are not part of the first load: each is a chunk (webpack splits an import() into one), asked for once and kept. Once the page
    has drawn its first place and goes idle they are fetched and run, so a press never waits on the network; a press
    that comes before (prefetchChunks() not yet run, or a slow network) shows nothing new and does its work when its
    chunk is in.
@@ -19,7 +19,7 @@ import {katexSheet} from "./parts.js";
 import {bound, dataAt, isObj, text, words} from "./artifacts.js";
 import {openPlace, placeFromKey, tkey, topicLabel} from "./routing.js";
 import {loadTopics} from "./nav.js";
-import {loadMembers, membersChanged} from "./channels.js";
+import {isRepository, loadMembers, membersChanged, openWhenIn} from "./channels.js";
 import {holds} from "./hover.js";
 import {runsSeen} from "./runs.js";
 import {repoPath} from "./header.js";
@@ -36,7 +36,7 @@ const LOAD = {
 /* read when a chunk arrives, never while the modules load (they import each other in cycles) */
 const page = () => ({$, $$, clamp, el, esc, press, T, state, dayLabel, hhmm, age, nameOf, ready, katexSheet, loadPics, picHTML, bound, dataAt, isObj, text, words,
   api, streams, repoStreams, members, marks, places, topicsOf, worktrees, runsSeen, people, faceOf, presOf, isOnix, openPlace, placeFromKey, tkey, topicLabel,
-  loadTopics, loadMembers, membersChanged, holds, repoPath, nav, navScroll, startThread});
+  loadTopics, loadMembers, membersChanged, holds, repoPath, nav, navScroll, startThread, openWhenIn, isRepository});
 const asked = new Map(), loaded = new Map();
 /* the chunk, once it has run: a press reads it here and acts in its own frame */
 const loadedChunk = (name) => loaded.get(name) || null;
